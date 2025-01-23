@@ -6,7 +6,7 @@ package alg.algs002;
  * 2、双向链表反转
  * 3、删除链表中指定元素
  */
-public class ListReverse {
+public class ReverseLinkedList {
 
     public static void main(String[] args) {
 
@@ -37,7 +37,7 @@ public class ListReverse {
     }
 
     /**
-     * todo 递归反转单链表
+     * 递归反转单链表
      *
      * @param head 链表头节点
      * @return 反转后的链表头节点
