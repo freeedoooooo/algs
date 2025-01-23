@@ -1,4 +1,4 @@
-package algs002;
+package alg.algs002;
 
 /**
  * 1、单向链表反转
