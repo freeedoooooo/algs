@@ -1,4 +1,4 @@
-package alg.algs001;
+package practice.algs001;
 
 import util.MyArrayUtil;
 
@@ -6,7 +6,6 @@ import util.MyArrayUtil;
  * 快速排序
  * 【推荐】荷兰国旗问题
  */
-@Deprecated
 public class QuickSort {
 
     public static void main(String[] args) {

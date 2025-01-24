@@ -1,6 +1,6 @@
-package alg.algs002;
+package leetcode;
 
-import model.ListNode;
+import util.collection.ListNode;
 
 /**
  * 测试链接：<a href="https://leetcode.cn/problems/add-two-numbers/">力扣-2.两数相加</a>

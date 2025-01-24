@@ -1,4 +1,4 @@
-package model;
+package util.collection;
 
 /**
  * 队列，由数组实现，必须限制数据量

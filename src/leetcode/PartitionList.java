@@ -1,6 +1,6 @@
-package alg.algs002;
+package leetcode;
 
-import model.ListNode;
+import util.collection.ListNode;
 
 /**
  * 测试链接 : <a href="https://leetcode.cn/problems/partition-list/">86.分割链表</a>

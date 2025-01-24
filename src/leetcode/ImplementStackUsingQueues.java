@@ -1,4 +1,4 @@
-package alg.algs002;
+package leetcode;
 
 import java.util.LinkedList;
 import java.util.Queue;

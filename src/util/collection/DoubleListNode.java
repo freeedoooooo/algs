@@ -1,4 +1,4 @@
-package model;
+package util.collection;
 
 /**
  * 双向链表节点

@@ -1,4 +1,4 @@
-package alg.algs002;
+package leetcode;
 
 // 设计循环双端队列
 // 测试链接 : https://leetcode.cn/problems/design-circular-deque/
