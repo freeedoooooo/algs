@@ -1,5 +1,8 @@
 package alg.algs002;
 
+import model.DoubleListNode;
+import model.ListNode;
+
 /**
  * 测试链接 : <a href="https://leetcode.cn/problems/reverse-linked-list/">力口-206.反转链表</a>
  * 1、单向链表反转
@@ -79,25 +82,6 @@ public class ReverseLinkedList {
             head = next;
         }
         return pre;
-    }
-
-    public static class ListNode {
-        public int val;
-        public ListNode next;
-
-        ListNode(int x) {
-            val = x;
-        }
-    }
-
-    public static class DoubleListNode {
-        public int val;
-        public DoubleListNode pre;
-        public DoubleListNode next;
-
-        DoubleListNode(int x) {
-            val = x;
-        }
     }
 
 }

@@ -1,5 +1,7 @@
 package alg.algs002;
 
+import model.ListNode;
+
 /**
  * 测试链接 : <a href="https://leetcode.cn/problems/merge-two-sorted-lists/">力扣-21.合并两个有序链表</a>
  */
@@ -62,11 +64,6 @@ public class MergeTwoSortedLists {
 
         // 返回合并后的链表头节点
         return head;
-    }
-
-    public static class ListNode {
-        public int val;
-        public ListNode next;
     }
 
 }
