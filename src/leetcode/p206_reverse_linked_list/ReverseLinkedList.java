@@ -1,4 +1,4 @@
-package leetcode;
+package leetcode.p206_reverse_linked_list;
 
 import util.collection.DoubleListNode;
 import util.collection.ListNode;

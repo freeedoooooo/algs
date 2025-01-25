@@ -1,4 +1,4 @@
-package leetcode;
+package leetcode.p021_merge_two_sorted_lists;
 
 import util.collection.ListNode;
 

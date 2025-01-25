@@ -1,4 +1,4 @@
-package leetcode;
+package leetcode.p162_find_peek_element;
 
 /**
  * 测试链接：<a href="https://leetcode.cn/problems/find-peak-element/">力扣-162.寻找峰值</a>
