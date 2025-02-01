@@ -1,7 +1,7 @@
 package leetcode.p912_sort_an_array;
 
-import practice.algs001.MergeSort;
-import practice.algs001.QuickSort;
+import practice.algs01_sort.MergeSort;
+import practice.algs01_sort.QuickSort;
 import util.MyArrayUtil;
 
 // 归并排序 & 随机快排
