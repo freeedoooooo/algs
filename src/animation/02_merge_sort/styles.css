@@ -1,0 +1,20 @@
+#original-container, #temporary-container {
+    display: flex;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.bar {
+    width: 10px; /* 调整宽度以适应更大的数组 */
+    height: 50px;
+    background-color: lightblue;
+    margin: 0 2px;
+    display: flex;
+    align-items: flex-end;
+}
+
+.bar div {
+    width: 100%;
+    background-color: blue;
+    transition: height 1s ease; /* 动画速度为每秒变动一次 */
+}
