@@ -1,5 +1,7 @@
 package practice.algs01_sort;
 
+import java.util.PriorityQueue;
+
 // 堆结构和堆排序
 // 测试链接 : https://leetcode.cn/problems/sort-an-array/
 public class HeapSort {
@@ -54,9 +56,9 @@ public class HeapSort {
         arr[j] = tmp;
     }
 
-    // 从顶到底建立大根堆，O(n * logn)
-    // 依次弹出堆内最大值并排好序，O(n * logn)
-    // 整体时间复杂度O(n * logn)
+    // 从顶到底建立大根堆，O(n * logN)
+    // 依次弹出堆内最大值并排好序，O(n * logN)
+    // 整体时间复杂度O(n * logN)
     public static void heapSort1(int[] arr) {
         int n = arr.length;
         for (int i = 0; i < n; i++) {
@@ -71,8 +73,8 @@ public class HeapSort {
     }
 
     // 从底到顶建立大根堆，O(n)
-    // 依次弹出堆内最大值并排好序，O(n * logn)
-    // 整体时间复杂度O(n * logn)
+    // 依次弹出堆内最大值并排好序，O(n * logN)
+    // 整体时间复杂度O(n * logN)
     public static void heapSort2(int[] arr) {
         int n = arr.length;
         for (int i = n - 1; i >= 0; i--) {
@@ -83,6 +85,28 @@ public class HeapSort {
             size = size - 1;
             swap(arr, 0, size);
             heapify(arr, 0, size);
+        }
+    }
+
+    // 补充问题
+    public void sortArrDistanceLessK(int[] arr, int k) {
+        // 定义一个小根堆
+        PriorityQueue<Integer> heap = new PriorityQueue<>();
+        // 将 0 ~ k 放入堆中
+        int index = 0;
+        for (; index <= Math.min(k, arr.length - 1); index++) {
+            heap.add(arr[index]);
+        }
+        int i = 0;
+        for (; index < arr.length; i++, index++) {
+            // 将当前值放入堆中
+            heap.add(arr[index]);
+            // 弹出最小值
+            arr[i] = heap.poll();
+        }
+        // 弹出堆中剩余的值
+        while (!heap.isEmpty()) {
+            arr[i++] = heap.poll();
         }
     }
 
