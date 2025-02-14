@@ -35,7 +35,7 @@ public class MergeTwoSortedLists {
     /**
      * 方法2，遍历列表
      */
-    public static ListNode mergeTwoLists(ListNode head1, ListNode head2) {
+    public static ListNode mergeTwoListsIteration(ListNode head1, ListNode head2) {
         // 如果其中一个链表为空，直接返回另一个链表
         if (head1 == null) {
             return head2;
