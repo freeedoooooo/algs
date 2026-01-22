@@ -5,7 +5,7 @@ package alg.algs001;
  * 二分查找及应用
  * 局部最小（二分的核心思想，是要找到一种排他性的判断标准）
  */
-public class BinarySearch {
+public class FindPeekElement {
 
     public static void main(String[] args) {
         int[] array = {1, 3, 5, 7, 7, 8, 9, 12, 15};
