@@ -31,7 +31,7 @@ public class InsertionSort {
      *
      * @param arr 待排序的整数数组
      */
-    private static void insertionSort(int[] arr) {
+    public static void insertionSort(int[] arr) {
         // 如果数组为空或只有一个元素，则不需要排序，直接返回
         if (arr == null || arr.length <= 1) {
             return;
