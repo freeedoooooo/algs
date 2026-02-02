@@ -1,4 +1,4 @@
-package alg.algs001;
+package practice.algs001;
 
 /**
  * 归并排序

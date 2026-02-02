@@ -1,7 +1,7 @@
-package alg.algs002;
+package leetcode;
 
-import model.DoubleListNode;
-import model.ListNode;
+import util.collection.DoubleListNode;
+import util.collection.ListNode;
 
 /**
  * 测试链接 : <a href="https://leetcode.cn/problems/reverse-linked-list/">力口-206.反转链表</a>

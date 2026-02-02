@@ -1,4 +1,4 @@
-package alg.algs001;
+package leetcode;
 
 /**
  * 测试链接：<a href="https://leetcode.cn/problems/find-peak-element/">力扣-162.寻找峰值</a>

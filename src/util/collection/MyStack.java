@@ -1,4 +1,4 @@
-package model;
+package util.collection;
 
 /**
  * 栈，由数组实现，必须限制数量

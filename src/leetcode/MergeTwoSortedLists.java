@@ -1,6 +1,6 @@
-package alg.algs002;
+package leetcode;
 
-import model.ListNode;
+import util.collection.ListNode;
 
 /**
  * 测试链接 : <a href="https://leetcode.cn/problems/merge-two-sorted-lists/">力扣-21.合并两个有序链表</a>
