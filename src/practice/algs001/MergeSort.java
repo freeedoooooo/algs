@@ -2,7 +2,7 @@ package practice.algs001;
 
 /**
  * 归并排序
- * 1、递归实现
+ * 1、递归实现，【！！！注意】执行顺序相当于二叉树的【后序遍历】
  * 2、迭代实现
  */
 public class MergeSort {
