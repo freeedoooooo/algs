@@ -1,4 +1,4 @@
-package leetcode;
+package leetcode.p641_design_circular_deque;
 
 // 设计循环双端队列
 // 测试链接 : https://leetcode.cn/problems/design-circular-deque/

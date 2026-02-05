@@ -1,4 +1,4 @@
-package leetcode;
+package leetcode.p912_sort_an_array;
 
 import practice.algs001.MergeSort;
 import practice.algs001.QuickSort;

@@ -1,4 +1,4 @@
-package leetcode;
+package leetcode.p155_min_stack;
 
 import java.util.Stack;
 

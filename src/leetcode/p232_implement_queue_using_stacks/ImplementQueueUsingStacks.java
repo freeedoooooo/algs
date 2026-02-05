@@ -1,4 +1,4 @@
-package leetcode;
+package leetcode.p232_implement_queue_using_stacks;
 
 import java.util.Stack;
 

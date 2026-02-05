@@ -1,4 +1,4 @@
-package leetcode;
+package leetcode.p493_reverse_pairs;
 
 import java.util.Arrays;
 

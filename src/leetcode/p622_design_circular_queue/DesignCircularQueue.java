@@ -1,4 +1,4 @@
-package leetcode;
+package leetcode.p622_design_circular_queue;
 
 /**
  * 测试链接 : <a href="https://leetcode.cn/problems/design-circular-queue/">622.设计循环队列</a>

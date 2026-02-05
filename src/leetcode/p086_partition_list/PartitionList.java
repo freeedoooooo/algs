@@ -1,4 +1,4 @@
-package leetcode;
+package leetcode.p086_partition_list;
 
 import util.collection.ListNode;
 
