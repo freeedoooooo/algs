@@ -4,7 +4,7 @@ import practice.algs01_sort.MergeSort;
 import practice.algs01_sort.QuickSort;
 import util.MyArrayUtil;
 
-// 归并排序 & 随机快排
+// 归并排序 & 随机快排 & 堆排序
 // 测试链接 : https://leetcode.cn/problems/sort-an-array/
 public class SortAnArray {
 
