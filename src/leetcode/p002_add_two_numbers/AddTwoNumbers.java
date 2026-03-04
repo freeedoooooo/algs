@@ -1,15 +1,30 @@
 package leetcode.p002_add_two_numbers;
 
-import util.collection.ListNode;
-
 /**
- * 测试链接：<a href="https://leetcode.cn/problems/add-two-numbers/">力扣-2.两数相加</a>
+ * 两数相加
+ * 测试链接：https://leetcode.cn/problems/add-two-numbers
  * 给你两个 非空 的链表，表示两个非负的整数
  * 它们每位数字都是按照 逆序 的方式存储的，并且每个节点只能存储 一位 数字
  * 请你将两个数相加，并以相同形式返回一个表示和的链表。
  * 你可以假设除了数字 0 之外，这两个数都不会以 0 开头
+ *
+ * @author hurui
  */
 public class AddTwoNumbers {
+
+    public static class ListNode {
+        public int val;
+        public ListNode next;
+
+        public ListNode(int val) {
+            this.val = val;
+        }
+
+        public ListNode(int val, ListNode next) {
+            this.val = val;
+            this.next = next;
+        }
+    }
 
     public static ListNode addTwoNumbers(ListNode l1, ListNode l2) {
         // 如果其中一个链表为空，直接返回另一个链表
@@ -61,6 +76,24 @@ public class AddTwoNumbers {
 
         // 返回结果链表的头节点（跳过虚拟头节点）
         return head.next;
+    }
+
+    public static void main(String[] args) {
+        ListNode l1 = new ListNode(9, new ListNode(9, new ListNode(9)));
+        ListNode l2 = new ListNode(1);
+        ListNode expected = new ListNode(0, new ListNode(0, new ListNode(0, new ListNode(1))));
+        ListNode result = addTwoNumbers(l1, l2);
+        // 打印 expected
+        while (expected != null) {
+            System.out.print(expected.val + " ");
+            expected = expected.next;
+        }
+        System.out.println();
+        // 打印 result
+        while (result != null) {
+            System.out.print(result.val + " ");
+            result = result.next;
+        }
     }
 
 }
