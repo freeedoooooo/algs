@@ -26,7 +26,7 @@ public class LinkedListCycleII {
      * a + a + b + b = a + b + b + c + (k - 1) * (b + c) =>
      * a = c + (k - 1) * (b + c)
      * 即：从头结点到入环点的距离，等于从相遇点到入环点的距离c，加上k-1倍环长距离
-     * 当快慢指针相遇时，让头结点与慢指针同时向后一步步走
+     * 当快慢指针相遇时，让头结点与慢指针同时向后一步一步走
      * 那么两个指针一定会在入环点相遇
      */
     public static ListNode detectCycle(ListNode head) {
