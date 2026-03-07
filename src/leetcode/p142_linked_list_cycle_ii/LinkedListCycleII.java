@@ -4,17 +4,15 @@ package leetcode.p142_linked_list_cycle_ii;
 // 测试链接 : https://leetcode.cn/problems/linked-list-cycle-ii/
 public class LinkedListCycleII {
 
-    // 不要提交这个类
     public static class ListNode {
         public int val;
         public ListNode next;
     }
 
-    // 提交如下的方法
-    // 快慢指针，思路有点像追击问题
-
     /**
-     * 快慢指针,慢指针每次一步，快指针每次两步
+     * 快慢指针，思路有点像追击问题
+     * 【证明】
+     * 快慢指针，慢指针每次一步，快指针每次两步
      * 由题可知：两个指针相遇一定是在环内，相遇时的慢指针一定未走完一环
      * 快指针已经走完k环
      * 设：从头结点到入环点的距离为a，入环点到相遇点的距离为b，
