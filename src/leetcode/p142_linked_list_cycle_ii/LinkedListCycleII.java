@@ -1,7 +1,11 @@
 package leetcode.p142_linked_list_cycle_ii;
 
-// 返回链表的第一个入环节点
-// 测试链接 : https://leetcode.cn/problems/linked-list-cycle-ii/
+/**
+ * 返回链表的第一个入环节点
+ * 测试链接 : https://leetcode.cn/problems/linked-list-cycle-ii
+ *
+ * @author hurui
+ */
 public class LinkedListCycleII {
 
     public static class ListNode {
@@ -31,6 +35,7 @@ public class LinkedListCycleII {
         if (head == null || head.next == null || head.next.next == null) {
             return null;
         }
+        // 避免 while 条件无法执行，快、慢指针先各走一步
         ListNode slow = head.next;
         ListNode fast = head.next.next;
         // 第一阶段，判断是否有环
@@ -43,8 +48,8 @@ public class LinkedListCycleII {
             slow = slow.next;
             fast = fast.next.next;
         }
-        // 第二阶段：找到环的起始节点
-        // 将快指针重新指向链表头节点
+        // 第二阶段：找到入环节点
+        // 将快指针重新指向链表头节点，让快、慢指针同时向前走，并且都一次走一步，再次相遇的节点就是入环节点
         fast = head;
         while (slow != fast) {
             // 快、慢指针，都改为移动一步，再次相遇的节点就是入环节点
