@@ -4,7 +4,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Stack;
 
-// 不用递归，用迭代的方式实现二叉树的三序遍历
+/**
+ * 不用递归，用迭代的方式实现二叉树的三序遍历
+ */
 public class BinaryTreeTraversalIteration {
 
     public static class TreeNode {
@@ -15,9 +17,12 @@ public class BinaryTreeTraversalIteration {
         public TreeNode(int v) {
             val = v;
         }
+
     }
 
-    // 先序打印所有节点，非递归版
+    /**
+     * 先序打印所有节点，非递归版
+     */
     public static void preOrder(TreeNode head) {
         if (head != null) {
             Stack<TreeNode> stack = new Stack<>();
@@ -39,7 +44,9 @@ public class BinaryTreeTraversalIteration {
         }
     }
 
-    // 中序打印所有节点，非递归版
+    /**
+     * 中序打印所有节点，非递归版
+     */
     public static void inOrder(TreeNode head) {
         // 如果根节点为空，则直接返回，无需遍历
         if (head != null) {
@@ -50,13 +57,18 @@ public class BinaryTreeTraversalIteration {
             while (!stack.isEmpty() || head != null) {
                 // 1. 先沿着左子树一路向下，将沿途的所有节点压入栈中
                 if (head != null) {
-                    stack.push(head); // 将当前节点压入栈
-                    head = head.left; // 继续访问左子树
+                    // 将当前节点压入栈
+                    stack.push(head);
+                    // 继续访问左子树
+                    head = head.left;
                 } else {
                     // 2. 当左子树访问完毕后，弹出栈顶节点并打印其值，然后访问右子树
-                    head = stack.pop(); // 弹出栈顶节点
-                    System.out.print(head.val + " "); // 打印当前节点的值
-                    head = head.right; // 转向右子树
+                    // 弹出栈顶节点
+                    head = stack.pop();
+                    // 打印当前节点的值
+                    System.out.print(head.val + " ");
+                    // 转向右子树
+                    head = head.right;
                 }
             }
 
@@ -65,15 +77,17 @@ public class BinaryTreeTraversalIteration {
         }
     }
 
-    // 后序打印所有节点，非递归版
-    // 这是用两个栈的方法
+    /**
+     * 后序打印所有节点，非递归版
+     * 这是用两个栈的方法
+     */
     public static void posOrderTwoStacks(TreeNode head) {
         // 如果根节点为空，则直接返回，无需遍历
         if (head != null) {
             // 定义两个栈：
             // stack 用于模拟递归调用过程，按“根 -> 右 -> 左”的顺序压入节点。
-            // collect 用于收集后序遍历的结果，最终需要逆序输出。
             Stack<TreeNode> stack = new Stack<>();
+            // collect 用于收集后序遍历的结果，最终需要逆序输出。
             Stack<TreeNode> collect = new Stack<>();
 
             // 将根节点压入 stack，开始遍历
@@ -99,7 +113,9 @@ public class BinaryTreeTraversalIteration {
 
             // 此时 collect 栈中的节点顺序为“根 -> 右 -> 左”，需要逆序输出才能得到后序遍历结果
             while (!collect.isEmpty()) {
-                System.out.print(collect.pop().val + " "); // 依次弹出并打印节点值
+                // 依次弹出并打印节点值
+                TreeNode popNode = collect.pop();
+                System.out.print(popNode.val + " ");
             }
 
             // 遍历结束后，打印换行符
@@ -107,28 +123,30 @@ public class BinaryTreeTraversalIteration {
         }
     }
 
-    // 后序打印所有节点，非递归版
-    // 这是用一个栈的方法
+    /**
+     * 后序打印所有节点，非递归版
+     * 这是用一个栈的方法
+     */
     @Deprecated
-    public static void posOrderOneStack(TreeNode h) {
-        if (h != null) {
+    public static void posOrderOneStack(TreeNode head) {
+        if (head != null) {
             Stack<TreeNode> stack = new Stack<>();
-            stack.push(h);
+            stack.push(head);
             // 如果始终没有打印过节点，h就一直是头节点
             // 一旦打印过节点，h就变成打印节点
             // 之后h的含义 : 上一次打印的节点
             while (!stack.isEmpty()) {
                 TreeNode cur = stack.peek();
-                if (cur.left != null && h != cur.left && h != cur.right) {
+                if (cur.left != null && head != cur.left && head != cur.right) {
                     // 有左树且左树没处理过
                     stack.push(cur.left);
-                } else if (cur.right != null && h != cur.right) {
+                } else if (cur.right != null && head != cur.right) {
                     // 有右树且右树没处理过
                     stack.push(cur.right);
                 } else {
                     // 左树、右树 没有 或者 都处理过了
                     System.out.print(cur.val + " ");
-                    h = stack.pop();
+                    head = stack.pop();
                 }
             }
             System.out.println();
@@ -223,6 +241,7 @@ public class BinaryTreeTraversalIteration {
     // 用一个栈完成后序遍历
     // 提交时函数名改为postorderTraversal
     // 测试链接 : https://leetcode.cn/problems/binary-tree-postorder-traversal/
+    @Deprecated
     public static List<Integer> postorderTraversalOneStack(TreeNode h) {
         List<Integer> ans = new ArrayList<>();
         if (h != null) {
