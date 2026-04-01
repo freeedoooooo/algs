@@ -7,6 +7,15 @@
 > - 生成 Jupyter Notebook 的讲解结构
 > - 从“会做题”升级到“会讲题、会应用、会扩展”
 
+> 输出格式要求：
+>
+> - 默认输出为 `Jupyter Notebook`，即 `.ipynb` 文件
+> - 不要只输出一份纯 Markdown 文档
+> - 讲解内容放在 `Markdown cell`
+> - 代码、demo、调试输出放在 `Code cell`
+> - 如果需要图解，优先使用 notebook 中可直接展示的形式，例如纯文本图、Markdown 表格、Mermaid、逐步打印状态
+> - 最终成品应当能直接在 Jupyter Notebook 中阅读、运行和继续补充
+
 ---
 
 ## 1. 基本信息
@@ -18,6 +27,8 @@
 - 题型：
 - 难度：
 - 推荐优先级：
+
+建议在 notebook 中把这一部分放在开头的 `Markdown cell`。
 
 ---
 
@@ -137,6 +148,8 @@
 ## 6. 关键图解 / 过程演示
 
 这一节建议手动画或者用文字模拟。
+
+在 notebook 中，这一节优先写成单独的 `Markdown cell`，必要时再配合 `Code cell` 做状态打印演示。
 
 可以写：
 
@@ -283,6 +296,11 @@ graph TD
 
 ## 7. Python 题解
 
+这一节在 notebook 中建议拆成两个部分：
+
+- 一个 `Markdown cell` 说明思路
+- 一个或多个 `Code cell` 放可运行代码
+
 ### 7.1 标准版本
 
 ```python
@@ -408,6 +426,8 @@ class Solution:
 
 建议一定补一个最小可运行 demo。
 
+这一节在 notebook 中应当使用 `Code cell`，这样可以直接运行并展示输出。
+
 ### 13.1 Demo 目标
 
 说明你要模拟什么现实场景。
@@ -498,3 +518,9 @@ demo()
 6. 一个小 demo
 
 这样整理出来的内容，才更适合 AI 时代长期复习，而不是只适合“当场刷过一次题”。
+
+补充一点：
+
+- 这份模板的目标产物默认是 `Jupyter Notebook (.ipynb)`
+- 如果用它生成题解，应该按 notebook 的 cell 结构组织内容，而不是把所有内容塞进单个 Markdown 文件
+- 推荐顺序是：标题与摘要 `Markdown cell` -> 思路讲解 `Markdown cell` -> 题解代码 `Code cell` -> 图解 `Markdown cell` -> demo `Code cell`
