@@ -14,7 +14,7 @@
 | 2 | 🔴高 | 🟢低 | ✅ | p021 | Merge Two Sorted Lists | 合并两个有序链表 | 链表 | 将两个递增链表合并为一个新的递增链表 |
 | 3 | 🟡中 | 🟡中 | ✅ | p086 | Partition List | 分隔链表 | 链表 | 按给定值 `x` 将链表分成小于 `x` 和大于等于 `x` 的两部分，并保持相对顺序 |
 | 4 | 🔴高 | 🟢低 | ✅ | p094 | Binary Tree Inorder Traversal | 二叉树的中序遍历 | 二叉树遍历 | 按左、根、右的顺序返回二叉树节点值 |
-| 5 | 🟡中 | 🟡中 |  | p138 | Copy List with Random Pointer | 复制带随机指针的链表 | 链表 | 复制一个带 `random` 随机指针的复杂链表 |
+| 5 | 🟡中 | 🟡中 | ✅ | p138 | Copy List with Random Pointer | 复制带随机指针的链表 | 链表 | 复制一个带 `random` 随机指针的复杂链表 |
 | 6 | 🔴高 | 🟡中 |  | p142 | Linked List Cycle II | 环形链表 II | 链表 / 快慢指针 | 判断链表是否有环，并返回入环的第一个节点 |
 | 7 | 🟡中 | 🟢低 |  | p144 | Binary Tree Preorder Traversal | 二叉树的前序遍历 | 二叉树遍历 | 按根、左、右的顺序返回二叉树节点值 |
 | 8 | 🟡中 | 🟢低 |  | p145 | Binary Tree Postorder Traversal | 二叉树的后序遍历 | 二叉树遍历 | 按左、右、根的顺序返回二叉树节点值 |
