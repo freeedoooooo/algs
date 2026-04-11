@@ -27,7 +27,7 @@
 | 15 | 🟡中 | 🟢低 | ✔ | p232 | Implement Queue using Stacks | 用栈实现队列 | 栈与队列设计 | 只使用栈操作实现先进先出的队列 |
 | 16 | 🟡中 | 🟢低 | ✔ | p234 | Palindrome Linked List | 回文链表 | 链表 / 快慢指针 | 判断一个链表是否为回文结构 |
 | 17 | ⚪ 低 | 🔴高 | ✔ | p493 | Reverse Pairs | 翻转对 | 归并排序 / 分治 | 统计数组中满足 `i < j` 且 `nums[i] > 2 * nums[j]` 的翻转对数量 |
-| 18 | ⚪ 低 | 🟡中 |  | p622 | Design Circular Queue | 设计循环队列 | 队列设计 | 使用固定长度数组实现循环队列 |
-| 19 | ⚪ 低 | 🟡中 |  | p641 | Design Circular Deque | 设计循环双端队列 | 双端队列设计 | 使用固定长度数组实现循环双端队列 |
-| 20 | 🟡中 | 🟡中 |  | p912 | Sort an Array | 排序数组 | 排序 | 对整数数组进行排序 |
-| 21 | ⚪ 低 | 🟡中 |  | p1804 | Implement Trie II (Prefix Tree) | 实现 Trie II（前缀树） | 前缀树 | 实现支持插入、删除、精确计数和前缀计数的 Trie |
+| 18 | ⚪ 低 | 🟡中 | ✔ | p622 | Design Circular Queue | 设计循环队列 | 队列设计 | 使用固定长度数组实现循环队列 |
+| 19 | ⚪ 低 | 🟡中 | ✔ | p641 | Design Circular Deque | 设计循环双端队列 | 双端队列设计 | 使用固定长度数组实现循环双端队列 |
+| 20 | 🟡中 | 🟡中 | ✔ | p912 | Sort an Array | 排序数组 | 排序 | 对整数数组进行排序 |
+| 21 | ⚪ 低 | 🟡中 | ✔ | p1804 | Implement Trie II (Prefix Tree) | 实现 Trie II（前缀树） | 前缀树 | 实现支持插入、删除、精确计数和前缀计数的 Trie |
