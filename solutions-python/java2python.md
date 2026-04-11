@@ -17,10 +17,10 @@
 | 5 | 🟡中 | 🟡中 | ✅ | p138 | Copy List with Random Pointer | 复制带随机指针的链表 | 链表 | 复制一个带 `random` 随机指针的复杂链表 |
 | 6 | 🔴高 | 🟡中 | ✅ | p142 | Linked List Cycle II | 环形链表 II | 链表 / 快慢指针 | 判断链表是否有环，并返回入环的第一个节点 |
 | 7 | 🟡中 | 🟢低 | ✅ | p144 | Binary Tree Preorder Traversal | 二叉树的前序遍历 | 二叉树遍历 | 按根、左、右的顺序返回二叉树节点值 |
-| 8 | 🟡中 | 🟢低 |  | p145 | Binary Tree Postorder Traversal | 二叉树的后序遍历 | 二叉树遍历 | 按左、右、根的顺序返回二叉树节点值 |
-| 9 | 🟡中 | 🟡中 |  | p148 | Sort List | 排序链表 | 链表 / 归并排序 | 在 `O(n log n)` 时间复杂度下对链表进行排序 |
-| 10 | 🔴高 | 🟡中 |  | p155 | Min Stack | 最小栈 | 栈 | 设计支持 `push/pop/top/getMin` 且取最小值为 `O(1)` 的栈 |
-| 11 | 🔴高 | 🟢低 |  | p160 | Intersection of Two Linked Lists | 相交链表 | 链表 | 找出两个单链表开始相交的第一个节点 |
+| 8 | 🟡中 | 🟢低 | ✔ | p145 | Binary Tree Postorder Traversal | 二叉树的后序遍历 | 二叉树遍历 | 按左、右、根的顺序返回二叉树节点值 |
+| 9 | 🟡中 | 🟡中 | ✔ | p148 | Sort List | 排序链表 | 链表 / 归并排序 | 在 `O(n log n)` 时间复杂度下对链表进行排序 |
+| 10 | 🔴高 | 🟡中 | ✔ | p155 | Min Stack | 最小栈 | 栈 | 设计支持 `push/pop/top/getMin` 且取最小值为 `O(1)` 的栈 |
+| 11 | 🔴高 | 🟢低 | ✔ | p160 | Intersection of Two Linked Lists | 相交链表 | 链表 | 找出两个单链表开始相交的第一个节点 |
 | 12 | 🟡中 | 🟡中 |  | p162 | Find Peak Element | 寻找峰值 | 二分查找 | 在数组中用 `O(log n)` 时间找到任意一个峰值位置 |
 | 13 | 🔴高 | 🟢低 |  | p206 | Reverse Linked List | 反转链表 | 链表 | 将单链表原地反转并返回新的头节点 |
 | 14 | ⚪ 低 | 🟢低 |  | p225 | Implement Stack using Queues | 用队列实现栈 | 栈与队列设计 | 只使用队列操作实现后进先出的栈 |
