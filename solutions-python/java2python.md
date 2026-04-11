@@ -21,8 +21,8 @@
 | 9 | 🟡中 | 🟡中 | ✔ | p148 | Sort List | 排序链表 | 链表 / 归并排序 | 在 `O(n log n)` 时间复杂度下对链表进行排序 |
 | 10 | 🔴高 | 🟡中 | ✔ | p155 | Min Stack | 最小栈 | 栈 | 设计支持 `push/pop/top/getMin` 且取最小值为 `O(1)` 的栈 |
 | 11 | 🔴高 | 🟢低 | ✔ | p160 | Intersection of Two Linked Lists | 相交链表 | 链表 | 找出两个单链表开始相交的第一个节点 |
-| 12 | 🟡中 | 🟡中 |  | p162 | Find Peak Element | 寻找峰值 | 二分查找 | 在数组中用 `O(log n)` 时间找到任意一个峰值位置 |
-| 13 | 🔴高 | 🟢低 |  | p206 | Reverse Linked List | 反转链表 | 链表 | 将单链表原地反转并返回新的头节点 |
+| 12 | 🟡中 | 🟡中 | ✔ | p162 | Find Peak Element | 寻找峰值 | 二分查找 | 在数组中用 `O(log n)` 时间找到任意一个峰值位置 |
+| 13 | 🔴高 | 🟢低 | ✔ | p206 | Reverse Linked List | 反转链表 | 链表 | 将单链表原地反转并返回新的头节点 |
 | 14 | ⚪ 低 | 🟢低 |  | p225 | Implement Stack using Queues | 用队列实现栈 | 栈与队列设计 | 只使用队列操作实现后进先出的栈 |
 | 15 | 🟡中 | 🟢低 |  | p232 | Implement Queue using Stacks | 用栈实现队列 | 栈与队列设计 | 只使用栈操作实现先进先出的队列 |
 | 16 | 🟡中 | 🟢低 |  | p234 | Palindrome Linked List | 回文链表 | 链表 / 快慢指针 | 判断一个链表是否为回文结构 |
