@@ -13,7 +13,7 @@
 
 所有 Python notebook 统一参考：
 
-- [leetcode_explanation_template.md](/D:/PROJECT_HU/github/freeedoooooo/algs/solutions-python/leetcode_explanation_template.md)
+- [leetcode_explanation_template.md](solutions-python/leetcode_explanation_template.md)
 
 整理时，notebook 至少包含这些部分：
 
@@ -33,8 +33,8 @@
 
 `top100` 是独立题单，按 Top100 清单顺序逐题整理。
 
-- 清单文件：[top100.md](/D:/PROJECT_HU/github/freeedoooooo/algs/solutions-python/top100.md)
-- 输出目录：[solutions-python/top100](/D:/PROJECT_HU/github/freeedoooooo/algs/solutions-python/top100)
+- 清单文件：[top100.md](solutions-python/top100.md)
+- 输出目录：[solutions-python/top100](solutions-python/top100/)
 
 执行规则：
 
@@ -45,15 +45,15 @@
 
 当前已产出：
 
-- [p031_next_permutation.ipynb](/D:/PROJECT_HU/github/freeedoooooo/algs/solutions-python/top100/p031_next_permutation.ipynb)
+- [p031_next_permutation.ipynb](solutions-python/top100/p031_next_permutation.ipynb)
 
 ## Java2Python 任务线
 
 `java2python` 也是独立题单，它的目标不是直接按 Top100 走，而是参考已有 Java 历史题解，把对应题目迁移整理成 Python notebook。
 
-- 清单文件：[java2python.md](/D:/PROJECT_HU/github/freeedoooooo/algs/solutions-python/java2python.md)
-- 输出目录：[solutions-python/java2python](/D:/PROJECT_HU/github/freeedoooooo/algs/solutions-python/java2python)
-- Java 参考目录：[solutions-java](/D:/PROJECT_HU/github/freeedoooooo/algs/solutions-java)
+- 清单文件：[java2python.md](solutions-python/java2python.md)
+- 输出目录：[solutions-python/java2python](solutions-python/java2python/)
+- Java 参考目录：[solutions-java](solutions-java/)
 
 执行规则：
 
@@ -67,13 +67,13 @@
 
 当前已产出：
 
-- [p002_add_two_numbers.ipynb](/D:/PROJECT_HU/github/freeedoooooo/algs/solutions-python/java2python/p002_add_two_numbers.ipynb)
-- [p021_merge_two_sorted_lists.ipynb](/D:/PROJECT_HU/github/freeedoooooo/algs/solutions-python/java2python/p021_merge_two_sorted_lists.ipynb)
-- [p086_partition_list.ipynb](/D:/PROJECT_HU/github/freeedoooooo/algs/solutions-python/java2python/p086_partition_list.ipynb)
-- [p094_binary_tree_inorder_traversal.ipynb](/D:/PROJECT_HU/github/freeedoooooo/algs/solutions-python/java2python/p094_binary_tree_inorder_traversal.ipynb)
-- [p138_copy_list_with_random_pointer.ipynb](/D:/PROJECT_HU/github/freeedoooooo/algs/solutions-python/java2python/p138_copy_list_with_random_pointer.ipynb)
-- [p142_linked_list_cycle_ii.ipynb](/D:/PROJECT_HU/github/freeedoooooo/algs/solutions-python/java2python/p142_linked_list_cycle_ii.ipynb)
-- [p144_binary_tree_preorder_traversal.ipynb](/D:/PROJECT_HU/github/freeedoooooo/algs/solutions-python/java2python/p144_binary_tree_preorder_traversal.ipynb)
+- [p002_add_two_numbers.ipynb](solutions-python/java2python/p002_add_two_numbers.ipynb)
+- [p021_merge_two_sorted_lists.ipynb](solutions-python/java2python/p021_merge_two_sorted_lists.ipynb)
+- [p086_partition_list.ipynb](solutions-python/java2python/p086_partition_list.ipynb)
+- [p094_binary_tree_inorder_traversal.ipynb](solutions-python/java2python/p094_binary_tree_inorder_traversal.ipynb)
+- [p138_copy_list_with_random_pointer.ipynb](solutions-python/java2python/p138_copy_list_with_random_pointer.ipynb)
+- [p142_linked_list_cycle_ii.ipynb](solutions-python/java2python/p142_linked_list_cycle_ii.ipynb)
+- [p144_binary_tree_preorder_traversal.ipynb](solutions-python/java2python/p144_binary_tree_preorder_traversal.ipynb)
 
 ## 进度更新约定
 
