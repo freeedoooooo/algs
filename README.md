@@ -61,9 +61,11 @@
 2. 先阅读 `solutions-java` 中对应题目的历史实现和思路。
 3. `java2python` 的整理必须明确参考原来的 Java 方案，不能脱离原实现另写一套思路。
 4. 每个 `java2python` notebook 都要包含原始 Java 代码、Java 方案解析，以及对应的 Python 转写与讲解。
-5. 再把题解迁移整理成 Python notebook。
-6. 生成的 notebook 只放到 `solutions-python/java2python/`。
-7. 完成一道题后，只更新 `java2python.md` 的 `进度` 列。
+5. 每个 `java2python` notebook 都要对照 [leetcode_explanation_template.md](solutions-python/leetcode_explanation_template.md) 补充完整，而不只是做 Java 代码到 Python 代码的直接转换。
+6. 这条要求同时适用于后续新题和已经完成的 `java2python` 题目；已完成但内容不完整的 notebook 也需要按模板补齐。
+7. 再把题解迁移整理成 Python notebook。
+8. 生成的 notebook 只放到 `solutions-python/java2python/`。
+9. 完成一道题后，只更新 `java2python.md` 的 `进度` 列。
 
 当前已产出：
 
