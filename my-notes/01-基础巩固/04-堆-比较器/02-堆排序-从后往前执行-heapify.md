@@ -190,7 +190,7 @@ public static void heapSort2(int[] arr) {
 }
 ```
 
-## 和记忆点
+## 记忆点
 - 建堆：从后往前 `heapify`
 - 排序：堆顶和末尾交换
 - 缩小堆，再 `heapify`

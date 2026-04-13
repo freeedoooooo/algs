@@ -274,7 +274,7 @@ long mergeSmallSum(int[] arr, int l, int m, int r) {
 }
 ```
 
-## 和记忆点
+## 记忆点
 - 小和不是一个个位置暴力往左看。
 - 真正的高效点在 `merge`。
 - 一旦左值小于等于右值，就批量结算贡献。

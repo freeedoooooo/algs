@@ -145,7 +145,7 @@ void quickSort2(int[] arr, int l, int r) {
 }
 ```
 
-## 和记忆点
+## 记忆点
 - 2.0：partition 返回一个区间。
 - 这个区间就是所有等于 `pivot` 的元素。
 - 后续递归只排两边，不排中间。

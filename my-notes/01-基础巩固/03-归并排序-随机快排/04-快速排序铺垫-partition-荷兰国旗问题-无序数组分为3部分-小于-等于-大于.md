@@ -229,7 +229,7 @@ public static int[] dutchNationalFlag(int[] arr, int l, int r, int pivot) {
 
 返回的 `[low, high]` 就是“等于区”的左右边界。
 
-## 和记忆点
+## 记忆点
 - 小于：换到左边，`low++`，`i++`
 - 等于：跳过，`i++`
 - 大于：换到右边，`high--`，`i` 不动
