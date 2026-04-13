@@ -13,7 +13,7 @@
 
 所有 Python notebook 统一参考：
 
-- [leetcode_explanation_template.md](/D:/PROJECT/Project_HU/freeedoooooo/algs/solutions-python/leetcode_explanation_template.md)
+- [leetcode_explanation_template.md](solutions-python/leetcode_explanation_template.md)
 
 整理时，notebook 至少包含这些部分：
 
@@ -33,8 +33,8 @@
 
 `top100` 是独立题单，按 Top100 清单顺序逐题整理。
 
-- 清单文件：[top100.md](/D:/PROJECT/Project_HU/freeedoooooo/algs/solutions-python/top100.md)
-- 输出目录：[solutions-python/top100](/D:/PROJECT/Project_HU/freeedoooooo/algs/solutions-python/top100)
+- 清单文件：[top100.md](solutions-python/top100.md)
+- 输出目录：[solutions-python/top100](solutions-python/top100/)
 
 执行规则：
 
@@ -45,31 +45,37 @@
 
 当前已产出：
 
-- [p031_next_permutation.ipynb](/D:/PROJECT/Project_HU/freeedoooooo/algs/solutions-python/top100/p031_next_permutation.ipynb)
+- [p031_next_permutation.ipynb](solutions-python/top100/p031_next_permutation.ipynb)
 
 ## Java2Python 任务线
 
 `java2python` 也是独立题单，它的目标不是直接按 Top100 走，而是参考已有 Java 历史题解，把对应题目迁移整理成 Python notebook。
 
-- 清单文件：[java2python.md](/D:/PROJECT/Project_HU/freeedoooooo/algs/solutions-python/java2python.md)
-- 输出目录：[solutions-python/java2python](/D:/PROJECT/Project_HU/freeedoooooo/algs/solutions-python/java2python)
-- Java 参考目录：[solutions-java](/D:/PROJECT/Project_HU/freeedoooooo/algs/solutions-java)
+- 清单文件：[java2python.md](solutions-python/java2python.md)
+- 输出目录：[solutions-python/java2python](solutions-python/java2python/)
+- Java 参考目录：[solutions-java](solutions-java/)
 
 执行规则：
 
 1. 只参考 `java2python.md` 的任务顺序推进。
 2. 先阅读 `solutions-java` 中对应题目的历史实现和思路。
-3. 再把题解迁移整理为 Python notebook。
-4. 生成的 notebook 只放到 `solutions-python/java2python/`。
-5. 完成一道题后，只更新 `java2python.md` 的 `进度` 列。
+3. `java2python` 的整理必须明确参考原来的 Java 方案，不能脱离原实现另写一套思路。
+4. 每个 `java2python` notebook 都要包含原始 Java 代码、Java 方案解析，以及对应的 Python 转写与讲解。
+5. 每个 `java2python` notebook 都要对照 [leetcode_explanation_template.md](solutions-python/leetcode_explanation_template.md) 补充完整，而不只是做 Java 代码到 Python 代码的直接转换。
+6. 这条要求同时适用于后续新题和已经完成的 `java2python` 题目；已完成但内容不完整的 notebook 也需要按模板补齐。
+7. 再把题解迁移整理成 Python notebook。
+8. 生成的 notebook 只放到 `solutions-python/java2python/`。
+9. 完成一道题后，只更新 `java2python.md` 的 `进度` 列。
 
 当前已产出：
 
-- [p002_add_two_numbers.ipynb](/D:/PROJECT/Project_HU/freeedoooooo/algs/solutions-python/java2python/p002_add_two_numbers.ipynb)
-- [p021_merge_two_sorted_lists.ipynb](/D:/PROJECT/Project_HU/freeedoooooo/algs/solutions-python/java2python/p021_merge_two_sorted_lists.ipynb)
-- [p086_partition_list.ipynb](/D:/PROJECT/Project_HU/freeedoooooo/algs/solutions-python/java2python/p086_partition_list.ipynb)
-- [p094_binary_tree_inorder_traversal.ipynb](/D:/PROJECT/Project_HU/freeedoooooo/algs/solutions-python/java2python/p094_binary_tree_inorder_traversal.ipynb)
-- [p138_copy_list_with_random_pointer.ipynb](/D:/PROJECT/Project_HU/freeedoooooo/algs/solutions-python/java2python/p138_copy_list_with_random_pointer.ipynb)
+- [p002_add_two_numbers.ipynb](solutions-python/java2python/p002_add_two_numbers.ipynb)
+- [p021_merge_two_sorted_lists.ipynb](solutions-python/java2python/p021_merge_two_sorted_lists.ipynb)
+- [p086_partition_list.ipynb](solutions-python/java2python/p086_partition_list.ipynb)
+- [p094_binary_tree_inorder_traversal.ipynb](solutions-python/java2python/p094_binary_tree_inorder_traversal.ipynb)
+- [p138_copy_list_with_random_pointer.ipynb](solutions-python/java2python/p138_copy_list_with_random_pointer.ipynb)
+- [p142_linked_list_cycle_ii.ipynb](solutions-python/java2python/p142_linked_list_cycle_ii.ipynb)
+- [p144_binary_tree_preorder_traversal.ipynb](solutions-python/java2python/p144_binary_tree_preorder_traversal.ipynb)
 
 ## 进度更新约定
 
