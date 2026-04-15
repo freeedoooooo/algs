@@ -42,40 +42,38 @@ markdown_extensions:
 
 nav:
   - 首页: index.md
-  - 算法笔记:
-      - 总览: my-notes/README.md
-      - 基础巩固:
-          - 导航页: sections/foundation-basics.md
-          - 总览: my-notes/01-基础巩固/README.md
-          - 01 选择排序、二分法、异或运算: my-notes/01-基础巩固/01-选择排序-二分法-异或运算/README.md
-          - 02 链表、栈、队列、递归行为、哈希表、有序表: my-notes/01-基础巩固/02-链表-栈-队列-递归行为-哈希表-有序表/README.md
-          - 03 归并排序、随机快排: my-notes/01-基础巩固/03-归并排序-随机快排/README.md
-          - 04 堆、比较器: my-notes/01-基础巩固/04-堆-比较器/README.md
-          - 05 前缀树、桶排序、排序总结: my-notes/01-基础巩固/05-前缀树-桶排序-排序总结/README.md
-          - 06 链表相关面试题: my-notes/01-基础巩固/06-链表相关面试题/README.md
-          - 07 二叉树的基本算法: my-notes/01-基础巩固/07-二叉树的基本算法/README.md
-          - 08 二叉树的递归套路: my-notes/01-基础巩固/08-二叉树的递归套路/README.md
-          - 09 打表技巧和矩阵处理技巧: my-notes/01-基础巩固/09-打表技巧和矩阵处理技巧/README.md
-          - 10 并查集结构和图相关的算法: my-notes/01-基础巩固/10-并查集结构和图相关的算法/README.md
-          - 11 暴力递归: my-notes/01-基础巩固/11-暴力递归/README.md
-          - 12 动态规划: my-notes/01-基础巩固/12-动态规划/README.md
-          - 13 暴力递归到动态规划 1: my-notes/01-基础巩固/13-暴力递归到动态规划1/README.md
-          - 14 暴力递归到动态规划 2: my-notes/01-基础巩固/14-暴力递归到动态规划2/README.md
-          - 15 暴力递归到动态规划 3: my-notes/01-基础巩固/15-暴力递归到动态规划3/README.md
-          - 16 暴力递归到动态规划: my-notes/01-基础巩固/16-暴力递归到动态规划/README.md
-      - 基础提升:
-          - 导航页: sections/foundation-advanced.md
-          - 总览: my-notes/02-基础提升/README.md
-          - 01 哈希函数与哈希表: my-notes/02-基础提升/01-哈希函数与哈希表/README.md
-          - 02 有序表、并查集: my-notes/02-基础提升/02-有序表-并查集/README.md
-          - 03 KMP、Manacher 算法: my-notes/02-基础提升/03-KMP-Manacher算法/README.md
-          - 04 滑动窗口、单调栈结构等: my-notes/02-基础提升/04-滑动窗口-单调栈结构等/README.md
-          - 05 二叉树的 Morris 遍历: my-notes/02-基础提升/05-二叉树的Morris遍历/README.md
-          - 06 大数据题目: my-notes/02-基础提升/06-大数据题目/README.md
-          - 07 暴力递归: my-notes/02-基础提升/07-暴力递归/README.md
-      - 中级提升:
-          - 导航页: sections/intermediate.md
-          - 总览: my-notes/03-中级提升/README.md
-      - 大厂真题:
-          - 导航页: sections/big-tech.md
-          - 总览: my-notes/09-大厂真题/README.md
+  - 基础巩固:
+      - 导航页: sections/foundation-basics.md
+      - 总览: my-notes/01-基础巩固/README.md
+      - 01 选择排序、二分法、异或运算: my-notes/01-基础巩固/01-选择排序-二分法-异或运算/README.md
+      - 02 链表、栈、队列、递归行为、哈希表、有序表: my-notes/01-基础巩固/02-链表-栈-队列-递归行为-哈希表-有序表/README.md
+      - 03 归并排序、随机快排: my-notes/01-基础巩固/03-归并排序-随机快排/README.md
+      - 04 堆、比较器: my-notes/01-基础巩固/04-堆-比较器/README.md
+      - 05 前缀树、桶排序、排序总结: my-notes/01-基础巩固/05-前缀树-桶排序-排序总结/README.md
+      - 06 链表相关面试题: my-notes/01-基础巩固/06-链表相关面试题/README.md
+      - 07 二叉树的基本算法: my-notes/01-基础巩固/07-二叉树的基本算法/README.md
+      - 08 二叉树的递归套路: my-notes/01-基础巩固/08-二叉树的递归套路/README.md
+      - 09 打表技巧和矩阵处理技巧: my-notes/01-基础巩固/09-打表技巧和矩阵处理技巧/README.md
+      - 10 并查集结构和图相关的算法: my-notes/01-基础巩固/10-并查集结构和图相关的算法/README.md
+      - 11 暴力递归: my-notes/01-基础巩固/11-暴力递归/README.md
+      - 12 动态规划: my-notes/01-基础巩固/12-动态规划/README.md
+      - 13 暴力递归到动态规划 1: my-notes/01-基础巩固/13-暴力递归到动态规划1/README.md
+      - 14 暴力递归到动态规划 2: my-notes/01-基础巩固/14-暴力递归到动态规划2/README.md
+      - 15 暴力递归到动态规划 3: my-notes/01-基础巩固/15-暴力递归到动态规划3/README.md
+      - 16 暴力递归到动态规划: my-notes/01-基础巩固/16-暴力递归到动态规划/README.md
+  - 基础提升:
+      - 导航页: sections/foundation-advanced.md
+      - 总览: my-notes/02-基础提升/README.md
+      - 01 哈希函数与哈希表: my-notes/02-基础提升/01-哈希函数与哈希表/README.md
+      - 02 有序表、并查集: my-notes/02-基础提升/02-有序表-并查集/README.md
+      - 03 KMP、Manacher 算法: my-notes/02-基础提升/03-KMP-Manacher算法/README.md
+      - 04 滑动窗口、单调栈结构等: my-notes/02-基础提升/04-滑动窗口-单调栈结构等/README.md
+      - 05 二叉树的 Morris 遍历: my-notes/02-基础提升/05-二叉树的Morris遍历/README.md
+      - 06 大数据题目: my-notes/02-基础提升/06-大数据题目/README.md
+      - 07 暴力递归: my-notes/02-基础提升/07-暴力递归/README.md
+  - 中级提升:
+      - 导航页: sections/intermediate.md
+      - 总览: my-notes/03-中级提升/README.md
+  - 大厂真题:
+      - 导航页: sections/big-tech.md
+      - 总览: my-notes/09-大厂真题/README.md
