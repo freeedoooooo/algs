@@ -9,9 +9,9 @@
 ## 已新增文件
 
 - `.github/workflows/deploy-site.yml`
-- `mkdocs.yml`
-- `requirements-site.txt`
-- `scripts/build_site.py`
+- `website/mkdocs.yml`
+- `website/requirements.txt`
+- `website/scripts/build_site.py`
 
 ## 你需要在 GitHub 上做的事
 
@@ -35,14 +35,14 @@
 如果你想本地预览站点，可以先安装依赖：
 
 ```bash
-pip install -r requirements-site.txt
+pip install -r website/requirements.txt
 ```
 
 然后执行：
 
 ```bash
-python scripts/build_site.py
-mkdocs serve
+python website/scripts/build_site.py
+mkdocs serve -f website/mkdocs.yml
 ```
 
 默认会启动一个本地预览地址，方便你先检查页面效果。
