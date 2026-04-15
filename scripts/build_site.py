@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import shutil
 from pathlib import Path
 
@@ -23,6 +24,10 @@ CONTENT_DIRS = [
 NOTEBOOK_DIRS = [
     "solutions-python/top100",
     "solutions-python/java2python",
+]
+
+JAVA_SOURCE_DIRS = [
+    "solutions-java",
 ]
 
 
@@ -50,7 +55,24 @@ def copy_content_tree(relative_dir: str) -> None:
         dest.parent.mkdir(parents=True, exist_ok=True)
         if src.suffix.lower() == ".ipynb":
             continue
+        if src.suffix.lower() == ".md":
+            content = src.read_text(encoding="utf-8")
+            content = rewrite_markdown_links(content)
+            dest.write_text(content, encoding="utf-8")
+            continue
         shutil.copy2(src, dest)
+
+
+def rewrite_markdown_links(content: str) -> str:
+    pattern = re.compile(r"(\[[^\]]+\]\(([^)#]+?\.java)(#[^)]+)?\))")
+
+    def replace(match: re.Match[str]) -> str:
+        full_match = match.group(1)
+        java_path = match.group(2)
+        anchor = match.group(3) or ""
+        return full_match.replace(f"{java_path}{anchor}", f"{java_path}.md{anchor}")
+
+    return pattern.sub(replace, content)
 
 
 def convert_notebook(src: Path, dest_md: Path) -> None:
@@ -85,6 +107,32 @@ def convert_notebook_tree(relative_dir: str) -> None:
         rel_path = src.relative_to(src_root)
         dest_md = (dest_root / rel_path).with_suffix(".md")
         convert_notebook(src, dest_md)
+
+
+def convert_java_file(src: Path, dest_md: Path) -> None:
+    source = src.read_text(encoding="utf-8")
+    title = src.stem
+    content = "\n".join(
+        [
+            f"# {title}",
+            "",
+            f"源码路径：`{src.relative_to(ROOT).as_posix()}`",
+            "",
+            "```java",
+            source.rstrip(),
+            "```",
+        ]
+    )
+    write_markdown(dest_md, content)
+
+
+def convert_java_tree(relative_dir: str) -> None:
+    src_root = ROOT / relative_dir
+    dest_root = DOCS_DIR / relative_dir
+    for src in src_root.rglob("*.java"):
+        rel_path = src.relative_to(src_root)
+        dest_md = (dest_root / rel_path).with_suffix(src.suffix + ".md")
+        convert_java_file(src, dest_md)
 
 
 def notebook_title_from_name(stem: str) -> str:
@@ -148,6 +196,19 @@ def build_string_algs_index() -> None:
     write_markdown(DOCS_DIR / "string-algs" / "index.md", content)
 
 
+def build_solutions_java_index() -> None:
+    content = """# solutions-java
+
+这里整理当前仓库里的 Java 历史实现源码页，主要用于：
+
+- 给算法笔记中的源码引用提供可点击入口
+- 保留 Java 版本实现，方便与 Python 题解对照阅读
+
+当前内容以源码浏览为主。
+"""
+    write_markdown(DOCS_DIR / "solutions-java" / "index.md", content)
+
+
 def main() -> None:
     reset_docs_dir()
     copy_root_files()
@@ -155,8 +216,11 @@ def main() -> None:
         copy_content_tree(relative_dir)
     for relative_dir in NOTEBOOK_DIRS:
         convert_notebook_tree(relative_dir)
+    for relative_dir in JAVA_SOURCE_DIRS:
+        convert_java_tree(relative_dir)
 
     build_solutions_python_index()
+    build_solutions_java_index()
     build_string_algs_index()
     build_notebook_index(
         "solutions-python/top100",
