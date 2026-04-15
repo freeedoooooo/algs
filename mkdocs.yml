@@ -1,0 +1,56 @@
+site_name: algs
+site_description: 个人算法笔记、LeetCode 题解与 Java/Python 对照整理
+site_url: ""
+repo_url: ""
+docs_dir: .site-docs
+site_dir: site
+use_directory_urls: true
+
+theme:
+  name: material
+  language: zh
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+nav:
+  - 首页: index.md
+  - 部署说明: SITE_DEPLOYMENT.md
+  - Python 题解:
+      - 总览: solutions-python/index.md
+      - Top100 总表: solutions-python/top100.md
+      - Java 转 Python 总表: solutions-python/java2python.md
+      - LeetCode 讲解模板: solutions-python/leetcode_explanation_template.md
+      - 刷题策略: solutions-python/leetcode_practice_strategy.md
+      - Top100 Notebook 列表: solutions-python/top100/index.md
+      - Java 转 Python Notebook 列表: solutions-python/java2python/index.md
+  - 算法笔记:
+      - 总览: my-notes/README.md
+  - 字符串专题:
+      - 总览: string-algs/index.md

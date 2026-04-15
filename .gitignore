@@ -31,3 +31,26 @@ bin/
 # 其他配置
 *.iml
 .idea
+
+# Site build outputs
+.site-docs/
+site/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.pyo
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.venv/
+venv/
+env/
+ENV/
+pip-wheel-metadata/
+*.egg-info/
