@@ -1,5 +1,5 @@
-site_name: algs
-site_description: 个人算法笔记、LeetCode 题解与 Java/Python 对照整理
+site_name: 我的算法笔记
+site_description: 基于 my-notes 整理的个人算法学习网站
 site_url: ""
 repo_url: ""
 docs_dir: ../.site-docs
@@ -41,23 +41,9 @@ markdown_extensions:
 
 nav:
   - 首页: index.md
-  - 仓库说明: repo-readme.md
-  - Python 题解整理:
-      - 总览: solutions-python/index.md
-      - Top100 路线:
-          - 总表: solutions-python/top100.md
-          - Notebook 列表: solutions-python/top100/index.md
-      - Java 转 Python 路线:
-          - 总表: solutions-python/java2python.md
-          - Notebook 列表: solutions-python/java2python/index.md
-      - 学习方法:
-          - LeetCode 讲解模板: solutions-python/leetcode_explanation_template.md
-          - 刷题策略: solutions-python/leetcode_practice_strategy.md
   - 算法笔记:
       - 总览: my-notes/README.md
       - 基础巩固: my-notes/01-基础巩固/README.md
       - 基础提升: my-notes/02-基础提升/README.md
       - 中级提升: my-notes/03-中级提升/README.md
       - 大厂真题: my-notes/09-大厂真题/README.md
-  - 字符串专题:
-      - 总览: string-algs/index.md
