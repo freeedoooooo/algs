@@ -208,7 +208,7 @@ def build_chapter_pages() -> None:
             lines = [
                 f"# {title}",
                 "",
-                f"- [查看本章总览](../my-notes/{section_dir}/{chapter_dir.name}/README.md)",
+                f"- [查看本章总览](../../my-notes/{section_dir}/{chapter_dir.name}/README.md)",
                 "",
                 "## 本章具体内容",
                 "",
@@ -224,7 +224,7 @@ def build_chapter_pages() -> None:
             else:
                 for article in article_files:
                     lines.append(
-                        f"- [{article.stem}](../my-notes/{section_dir}/{chapter_dir.name}/{article.name})"
+                        f"- [{article.stem}](../../my-notes/{section_dir}/{chapter_dir.name}/{article.name})"
                     )
 
             write_markdown(
