@@ -56,7 +56,10 @@ SECTION_PAGES = {
         "summary": "更贴近综合题和真实面试表达，适合在完成基础训练后，做方法串联和题感提升。",
         "intro": "如果你已经不满足于“会做题”，而想进一步建立题型迁移能力，这一部分会更有帮助。",
         "items": [
-            ("中级提升总览", ""),
+            ("01 题目 1 LRU", "01-题目1-LRU.md"),
+            ("02 题目 2 中等难度", "02-题目2-中等难度.md"),
+            ("03 题目 3 跳步问题", "03-题目3-跳步问题.md"),
+            ("04 题目 4 力扣原题", "04-题目4-力扣原题.md"),
         ],
     },
     "09-大厂真题": {
@@ -65,7 +68,12 @@ SECTION_PAGES = {
         "summary": "按更接近真实面试场景的方式整理题目，用于把前面的知识体系迁移到面试实战中。",
         "intro": "这一部分更适合在前面内容看过一轮以后回头刷，能更清楚地感受到知识点在真实题目中的组合方式。",
         "items": [
-            ("大厂真题总览", ""),
+            ("01 题目 1", "01-题目1.md"),
+            ("02 题目 2", "02-题目2.md"),
+            ("03 题目 3", "03-题目3.md"),
+            ("04 题目 4", "04-题目4.md"),
+            ("05 题目 5", "05-题目5.md"),
+            ("06 题目 6", "06-题目6.md"),
         ],
     },
 }
@@ -174,18 +182,55 @@ def build_section_pages() -> None:
             "",
         ]
 
-        if meta["items"] == [("中级提升总览", "")] or meta["items"] == [("大厂真题总览", "")]:
-            lines.extend(
-                [
-                    "这部分当前更适合作为一个整体入口来读，先从总览页进入会更自然。",
-                    "",
-                ]
-            )
-        else:
-            for item_title, item_dir in meta["items"]:
-                lines.append(f"- [{item_title}](../my-notes/{section_dir}/{item_dir}/README.md)")
+        for item_title, item_target in meta["items"]:
+            if item_target.endswith(".md"):
+                lines.append(f"- [{item_title}](../my-notes/{section_dir}/{item_target})")
+            else:
+                lines.append(f"- [{item_title}](../my-notes/{section_dir}/{item_target}/README.md)")
 
         write_markdown(DOCS_DIR / "sections" / slug, "\n".join(lines))
+
+
+def chapter_slug(section_dir: str, chapter_dir: str) -> str:
+    section_prefix = section_dir.split("-", 1)[0]
+    return f"{section_prefix}-{chapter_dir}.md"
+
+
+def build_chapter_pages() -> None:
+    for section_dir in ("01-基础巩固", "02-基础提升"):
+        section_root = ROOT / NOTES_DIR / section_dir
+        for chapter_dir in sorted([p for p in section_root.iterdir() if p.is_dir()]):
+            readme_path = chapter_dir / "README.md"
+            article_files = sorted(
+                [p for p in chapter_dir.glob("*.md") if p.name.lower() != "readme.md"]
+            )
+            title = chapter_dir.name
+            lines = [
+                f"# {title}",
+                "",
+                f"- [查看本章总览](../my-notes/{section_dir}/{chapter_dir.name}/README.md)",
+                "",
+                "## 本章具体内容",
+                "",
+            ]
+
+            if not article_files:
+                lines.extend(
+                    [
+                        "这一章当前主要通过总览页进入。",
+                        "",
+                    ]
+                )
+            else:
+                for article in article_files:
+                    lines.append(
+                        f"- [{article.stem}](../my-notes/{section_dir}/{chapter_dir.name}/{article.name})"
+                    )
+
+            write_markdown(
+                DOCS_DIR / "sections" / "chapters" / chapter_slug(section_dir, chapter_dir.name),
+                "\n".join(lines),
+            )
 
 
 def rewrite_markdown_links(content: str) -> str:
@@ -245,6 +290,7 @@ def main() -> None:
     reset_docs_dir()
     build_homepage()
     build_section_pages()
+    build_chapter_pages()
     copy_notes_tree()
     convert_java_tree()
 
