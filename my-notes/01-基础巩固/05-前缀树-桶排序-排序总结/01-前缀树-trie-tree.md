@@ -1,4 +1,4 @@
-# 前缀树（trie tree）
+# 前缀树（Trie Tree）
 
 [返回章节](README.md) | [返回分类](../README.md) | [返回总目录](../../README.md)
 
