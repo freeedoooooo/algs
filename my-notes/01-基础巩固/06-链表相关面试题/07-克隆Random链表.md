@@ -7,6 +7,30 @@
 - 所属章节：06 链表相关面试题
 - 原始条目：☒ 克隆Random链表
 
+## 原题说明
+有一种特殊的链表节点结构如下：
+
+```java
+class Node {
+    int value;
+    Node next;
+    Node rand;
+}
+```
+
+其中：
+
+- `next` 和普通单链表一样，指向下一个节点
+- `rand` 可以指向链表中的任意一个节点
+- `rand` 也可以指向 `null`
+
+现在给定这类无环链表的头节点 `head`，要求你复制整条链表，并返回复制后新链表的头节点。
+
+要求：
+
+- 时间复杂度 `O(N)`
+- 额外空间复杂度 `O(1)`
+
 ## 一句话结论
 这题难的不是“复制节点值”，而是“把节点之间那套复杂的指向关系也原样复制出来”。
 它真正想练的是：
@@ -58,6 +82,28 @@ A -> B -> C
 - `A.random = C`
 - `B.random = A`
 - `C.random = null`
+
+如果把它画得更清楚一点，可以拆成“next 关系”和“random 关系”两层看：
+
+```text
+next 链：
+head -> A -> B -> C -> null
+```
+
+```text
+random 指向：
+A --rand--> C
+B --rand--> A
+C --rand--> null
+```
+
+也可以压成一张表：
+
+| 节点 | next | random |
+| --- | --- | --- |
+| `A` | `B` | `C` |
+| `B` | `C` | `A` |
+| `C` | `null` | `null` |
 
 如果你只是把值复制成：
 
@@ -232,10 +278,31 @@ A -> B -> C
 - `B.random = A`
 - `C.random = null`
 
+先把原始结构完整画出来：
+
+```text
+next 链：
+head -> A -> B -> C -> null
+```
+
+```text
+random 指向：
+A --rand--> C
+B --rand--> A
+C --rand--> null
+```
+
 ### 第 1 步：穿插
 
 ```text
 A -> A' -> B -> B' -> C -> C'
+```
+
+把它画完整一点，其实是：
+
+```text
+next 链：
+head -> A -> A' -> B -> B' -> C -> C' -> null
 ```
 
 此时天然有：
@@ -269,6 +336,20 @@ A -> A' -> B -> B' -> C -> C'
 
 - `C'.random = null`
 
+这一轮结束后，可以把新老节点的 random 对应关系画成：
+
+```text
+原链表 random：
+A  --rand--> C
+B  --rand--> A
+C  --rand--> null
+
+新链表 random：
+A' --rand--> C'
+B' --rand--> A'
+C' --rand--> null
+```
+
 ### 第 3 步：拆开
 最后把交错结构拆成两条链：
 
@@ -285,6 +366,24 @@ A' -> B' -> C'
 ```
 
 并且它们的 `random` 关系完全对应。
+
+拆开后如果再把图画完整，就是：
+
+```text
+原链表：
+head -> A -> B -> C -> null
+A --rand--> C
+B --rand--> A
+C --rand--> null
+```
+
+```text
+新链表：
+copyHead -> A' -> B' -> C' -> null
+A' --rand--> C'
+B' --rand--> A'
+C' --rand--> null
+```
 
 ## 这题到底在练什么能力
 这题不只是复制题，它实际上在练 4 个层次的能力：
