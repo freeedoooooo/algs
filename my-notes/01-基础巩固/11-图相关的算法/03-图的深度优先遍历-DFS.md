@@ -396,9 +396,10 @@ DFS 关心“当前这条路还能走多深”
 所以它既是图算法模板，也是回溯类题目的底层骨架。
 
 ## 代码 / 伪代码
-课程里最常见的非递归模板如下：
+课程里最常见的`非递归模板`与`递归模板`如下：
 
 ```java
+// 非递归写法
 void dfs(Node start) {
     Stack<Node> stack = new Stack<>();
     Set<Node> visited = new HashSet<>();
@@ -419,6 +420,38 @@ void dfs(Node start) {
         }
     }
 }
+
+// 递归写法
+void dfs(Node node) {
+    // 1. 边界检查（可选，取决于调用方是否保证 node 不为空）
+    if (node == null) {
+        return;
+    }
+
+    // 2. 访问当前节点（可以在这里打印，或者做业务逻辑）
+    System.out.println(node.value);
+
+    // 3. 遍历所有邻居
+    for (Node next : node.nexts) {
+        // 4. 如果邻居没被访问过，就递归进入
+        if (!visited.contains(next)) {
+            visited.add(next); // ✅ 关键：入递归前标记
+            dfs(next);         // ✅ 关键：向深处走
+        }
+    }
+}
+
+// 递归外部调用入口
+void dfsMain(Node start) {
+    if (start == null) return;
+    
+    // 初始化 visited 集合
+    visited = new HashSet<>(); 
+    
+    visited.add(start); // 起点先标记
+    dfs(start);         // 开始递归
+}
+
 ```
 
 把这段代码翻成流程话术，就是：
