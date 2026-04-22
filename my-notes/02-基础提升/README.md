@@ -7,7 +7,7 @@
 
 ## 章节目录
 - [01 哈希函数与哈希表](01-哈希函数-哈希表/README.md)
-- [02 有序表、并查集](02-有序表-并查集/README.md)
+- [02 有序表、并查集](02-并查集/README.md)
 - [03 KMP、Manacher算法](03-KMP-Manacher算法/README.md)
 - [04 滑动窗口、单调栈结构等](04-滑动窗口-单调栈结构等/README.md)
 - [05 二叉树的Morris遍历](05-二叉树的Morris遍历/README.md)
