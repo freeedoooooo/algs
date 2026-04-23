@@ -226,6 +226,18 @@ graph LR
 - 说明加这条边不会成环
 - 选中
 
+```mermaid
+graph LR
+    A((A)) ---|1| B((B))
+    B ---|2| C((C))
+    A ---|3| C
+    C ---|4| D((D))
+    B ---|5| D
+    A ---|6| D
+
+    linkStyle 0 stroke:#16a34a,stroke-width:4px
+```
+
 ```text
 并查集：{A,B} {C} {D}
 已选边：A-B
@@ -235,6 +247,19 @@ graph LR
 
 - `B` 和 `C` 不在同一集合
 - 继续选中
+
+```mermaid
+graph LR
+    A((A)) ---|1| B((B))
+    B ---|2| C((C))
+    A ---|3| C
+    C ---|4| D((D))
+    B ---|5| D
+    A ---|6| D
+
+    linkStyle 0 stroke:#16a34a,stroke-width:4px
+    linkStyle 1 stroke:#16a34a,stroke-width:4px
+```
 
 ```text
 并查集：{A,B,C} {D}
@@ -253,18 +278,40 @@ graph LR
     A((A)) ---|1| B((B))
     B ---|2| C((C))
     A ---|3| C
+    C ---|4| D((D))
+    B ---|5| D
+    A ---|6| D
 
-    style A fill:#eef7ff,stroke:#3b82f6,stroke-width:1px
-    style B fill:#eef7ff,stroke:#3b82f6,stroke-width:1px
-    style C fill:#eef7ff,stroke:#3b82f6,stroke-width:1px
+    linkStyle 0 stroke:#16a34a,stroke-width:4px
+    linkStyle 1 stroke:#16a34a,stroke-width:4px
+    linkStyle 2 stroke:#dc2626,stroke-width:4px,stroke-dasharray: 6 4
 ```
 
-上图里，`A-B-C` 已经把 `A` 和 `C` 连起来了，再补 `A-C` 就会围成一个三角形环。
+上图里：
+
+- 绿色边是已经选中的路线
+- 红色虚线边是当前正在考虑、但因为成环被丢弃的边
+
+此时 `A-B-C` 已经把 `A` 和 `C` 连起来了，再补 `A-C` 就会围成一个三角形环。
 
 ### 第 4 条边：`C-D (4)`
 
 - `C` 和 `D` 不在同一集合
 - 选中
+
+```mermaid
+graph LR
+    A((A)) ---|1| B((B))
+    B ---|2| C((C))
+    A ---|3| C
+    C ---|4| D((D))
+    B ---|5| D
+    A ---|6| D
+
+    linkStyle 0 stroke:#16a34a,stroke-width:4px
+    linkStyle 1 stroke:#16a34a,stroke-width:4px
+    linkStyle 3 stroke:#16a34a,stroke-width:4px
+```
 
 ```text
 并查集：{A,B,C,D}
@@ -279,8 +326,23 @@ graph LR
 graph LR
     A((A)) ---|1| B((B))
     B ---|2| C((C))
+    A ---|3| C
     C ---|4| D((D))
+    B ---|5| D
+    A ---|6| D
+
+    linkStyle 0 stroke:#16a34a,stroke-width:4px
+    linkStyle 1 stroke:#16a34a,stroke-width:4px
+    linkStyle 2 stroke:#9ca3af,stroke-width:2px,stroke-dasharray: 5 5
+    linkStyle 3 stroke:#16a34a,stroke-width:4px
+    linkStyle 4 stroke:#9ca3af,stroke-width:2px,stroke-dasharray: 5 5
+    linkStyle 5 stroke:#9ca3af,stroke-width:2px,stroke-dasharray: 5 5
 ```
+
+这里用完整图来看会更清楚：
+
+- 绿色实线：最终进入最小生成树的边
+- 灰色虚线：原图里存在，但最后没有被选中的边
 
 总权值为：
 
@@ -365,23 +427,6 @@ Kruskal 负责“按小到大选边”
 - 道路规划
 - 电力线路设计
 - 聚类问题中的图建模
-
-## 和 Prim 的区别
-这两个算法都能求最小生成树，但视角不一样。
-
-| 维度 | Kruskal | Prim |
-|---|---|---|
-| 思考角度 | 从边出发 | 从点出发 |
-| 核心动作 | 选当前最便宜且合法的边 | 从已解锁区域向外扩展最小边 |
-| 常用搭档 | 并查集 | 优先队列 |
-| 更常见的感觉 | 挑边 | 扩点 |
-
-你可以先这样记：
-
-```text
-Kruskal：全局看边，挑最便宜的边
-Prim：从一个点出发，逐步往外扩
-```
 
 ## 代码模板
 ```java
