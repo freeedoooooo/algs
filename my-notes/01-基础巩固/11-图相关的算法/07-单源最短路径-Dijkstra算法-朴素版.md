@@ -80,6 +80,14 @@
 ## 图解：一步一步跑 Dijkstra
 下面用一张简单的有向带权图来跑一遍。
 
+先别急着盯公式，先统一盯住每一轮的 3 件事：
+
+- 现在未锁定的点里，谁的距离最小
+- 为什么这一次轮到它被锁定
+- 它出发后，能把哪些点的距离继续变小
+
+把这个节奏抓住，`Dijkstra` 就会一下子顺很多。
+
 ### 原图
 
 ```mermaid
@@ -98,6 +106,11 @@ graph LR
 到 A、B、C、D 的最短距离
 ```
 
+为了让过程更清楚，后面统一用这两个词：
+
+- 锁定：这个点的最短距离已经最终确定，后面不会再改
+- 更新：尝试用当前锁定点去缩短别的点的距离
+
 ### 初始状态
 
 - `distance[A] = 0`
@@ -109,6 +122,13 @@ A = 0
 B = inf
 C = inf
 D = inf
+```
+
+现在只有一件事最确定：
+
+```text
+起点 A 到自己的距离一定是 0
+所以第一轮一定先从 A 开始
 ```
 
 ### 第 1 步：先锁定 `A`
@@ -142,6 +162,9 @@ C = 1
 D = inf
 ```
 
+这一步结束后，虽然 `B` 已经有了一个距离 `3`，但别急着把它当最终答案。  
+因为我们已经看到 `C = 1`，它比 `B = 3` 更近，下一轮很可能先轮到 `C`，而 `C` 也许还能帮我们把 `B` 变得更短。
+
 ### 第 2 步：锁定当前最小未锁定点 `C`
 
 现在还没锁定的点里：
@@ -151,6 +174,9 @@ D = inf
 - `D = inf`
 
 最小的是 `C`，所以锁定 `C`。
+
+为什么 `C` 现在就能锁定？  
+因为未锁定点里它已经最小了，而边权都非负，所以就算你想“绕一圈再回到 `C`”，总距离也只会更大，不可能再比 `1` 更小。
 
 然后用 `C` 去更新邻居：
 
@@ -180,6 +206,14 @@ C = 1   (已锁定)
 B = 2
 D = 6
 ```
+
+这里是整段图解里最关键的一次更新：
+
+- 原来我们记录的 `B = 3`，路径是 `A -> B`
+- 现在经过 `C`，得到新路径 `A -> C -> B`，长度变成 `2`
+
+这就说明：  
+`distance[x]` 不是一开始写上去就不动，而是在不断比较、不断变短，直到某个点被锁定为止。
 
 ### 第 3 步：锁定当前最小未锁定点 `B`
 
@@ -219,6 +253,14 @@ B = 2   (已锁定)
 D = 4
 ```
 
+这一轮再看一次“更新”到底在干什么：
+
+- 原来 `D = 6`，对应路径 `A -> C -> D`
+- 现在经过 `B`，得到 `A -> C -> B -> D`，长度是 `4`
+
+于是 `D` 又被缩短了。  
+这也是为什么 `Dijkstra` 不是“从起点直接看一圈就结束”，而是要一轮一轮地拿当前最近的点继续往外扩。
+
 ### 第 4 步：锁定 `D`
 
 这时只剩下 `D`，直接锁定即可。
@@ -247,6 +289,36 @@ A = 0
 C = 1
 B = 2
 D = 4
+```
+
+如果把整段过程压缩成一张表，就是：
+
+| 轮次 | 锁定点 | 关键更新 | 距离表 |
+|---|---|---|---|
+| 1 | `A` | `B: inf -> 3`，`C: inf -> 1` | `A=0, B=3, C=1, D=inf` |
+| 2 | `C` | `B: 3 -> 2`，`D: inf -> 6` | `A=0, B=2, C=1, D=6` |
+| 3 | `B` | `D: 6 -> 4` | `A=0, B=2, C=1, D=4` |
+| 4 | `D` | 无 | `A=0, B=2, C=1, D=4` |
+
+所以这个例子的锁定顺序是：
+
+```text
+A -> C -> B -> D
+```
+
+最终最短距离和对应路径分别是：
+
+- `A -> A = 0`
+- `A -> C = 1`
+- `A -> C -> B = 2`
+- `A -> C -> B -> D = 4`
+
+如果你读到这里脑子里能稳定复述出下面这句话，图解部分就算真正吃透了：
+
+```text
+每一轮都先挑“当前最近的未锁定点”
+把它定死
+再拿它去尝试缩短别人的距离
 ```
 
 ## 这里最关键的动作：松弛
@@ -355,28 +427,48 @@ distance[to] = min(distance[to], distance[cur] + weight)
 
 ```java
 Map<Node, Integer> dijkstra(Node from) {
+    // distanceMap 记录:
+    // 从起点 from 出发，到每个节点当前已知的最短距离
     Map<Node, Integer> distanceMap = new HashMap<>();
+
+    // 起点到自己的距离一定是 0
     distanceMap.put(from, 0);
 
+    // selected 表示已经“锁定答案”的节点
+    // 进入这个集合的节点，最短距离就不会再改
     Set<Node> selected = new HashSet<>();
+
+    // 先从当前距离最小的未锁定节点开始
     Node minNode = getMinDistanceAndUnselectedNode(distanceMap, selected);
 
+    // 只要还能找到这样的节点，就继续做
     while (minNode != null) {
+        // minNode 到起点的最短距离已经确定
         int distance = distanceMap.get(minNode);
 
+        // 用 minNode 的所有出边去做“松弛”
         for (Edge edge : minNode.edges) {
             Node to = edge.to;
+
+            // 如果 to 之前从来没被记录过
+            // 说明这是第一次找到从 from 到 to 的路径
             if (!distanceMap.containsKey(to)) {
                 distanceMap.put(to, distance + edge.weight);
             } else {
+                // 如果 to 之前有记录
+                // 就比较“旧距离”和“经过 minNode 的新距离”谁更短
                 distanceMap.put(to, Math.min(distanceMap.get(to), distance + edge.weight));
             }
         }
 
+        // minNode 已经完成使命，正式锁定
         selected.add(minNode);
+
+        // 继续找下一个“当前距离最小的未锁定节点”
         minNode = getMinDistanceAndUnselectedNode(distanceMap, selected);
     }
 
+    // 返回 from 到所有可达节点的最短距离表
     return distanceMap;
 }
 ```
@@ -395,7 +487,42 @@ Map<Node, Integer> dijkstra(Node from) {
 找出当前距离最小的那个
 ```
 
-也就是说，朴素版慢就慢在这里。
+对应代码可以直接写成：
+
+```java
+Node getMinDistanceAndUnselectedNode(Map<Node, Integer> distanceMap, Set<Node> selected) {
+    Node minNode = null;
+    int minDistance = Integer.MAX_VALUE;
+
+    // 遍历所有已经出现在 distanceMap 里的节点
+    for (Map.Entry<Node, Integer> entry : distanceMap.entrySet()) {
+        Node node = entry.getKey();
+        int distance = entry.getValue();
+
+        // 只在“未锁定节点”里挑最小值
+        if (!selected.contains(node) && distance < minDistance) {
+            minNode = node;
+            minDistance = distance;
+        }
+    }
+
+    return minNode;
+}
+```
+
+这段方法可以这样理解：
+
+- `distanceMap` 里装的是“目前已经摸到的节点”和它们的当前最短距离
+- `selected` 里装的是“已经锁定、以后不再改”的节点
+- 这个方法每次都从 `distanceMap` 里挑出一个“距离最小且还没锁定”的节点返回
+
+如果最后返回的是 `null`，表示两种可能：
+
+- 所有可达节点都已经锁定完了
+- 剩下的节点根本不可达，`distanceMap` 里已经没有新的候选点了
+
+也就是说，朴素版慢就慢在这里。  
+因为它每一轮都要线性扫描一遍 `distanceMap`，去手动找当前最小未锁定点。
 
 ## 易错点
 - 边权只要出现负数，就不能直接用 `Dijkstra`。
