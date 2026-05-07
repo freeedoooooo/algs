@@ -77,7 +77,7 @@ SECTION_PAGES = {
     },
 }
 
-CHAPTER_SECTION_DIRS = ("01-基础巩固", "02-基础提升")
+IGNORED_NOTE_DIRS = {"assets"}
 
 
 def reset_docs_dir() -> None:
@@ -104,6 +104,18 @@ def pretty_name(name: str) -> str:
     if "-" in name:
         return name.split("-", 1)[1].strip()
     return name
+
+
+def iter_note_section_dirs() -> list[Path]:
+    notes_root = ROOT / NOTES_DIR
+    return sorted(
+        [
+            p
+            for p in notes_root.iterdir()
+            if p.is_dir() and not p.name.startswith(".") and p.name not in IGNORED_NOTE_DIRS
+        ],
+        key=lambda p: p.name,
+    )
 
 
 def build_generated_readme(src_dir: Path) -> str | None:
@@ -261,8 +273,8 @@ def chapter_slug(section_dir: str, chapter_dir: str) -> str:
 
 
 def build_chapter_pages() -> None:
-    for section_dir in CHAPTER_SECTION_DIRS:
-        section_root = ROOT / NOTES_DIR / section_dir
+    for section_root in iter_note_section_dirs():
+        section_dir = section_root.name
         for chapter_dir in sorted([p for p in section_root.iterdir() if p.is_dir()]):
             article_files = sorted(
                 [p for p in chapter_dir.glob("*.md") if p.name.lower() != "readme.md"]
