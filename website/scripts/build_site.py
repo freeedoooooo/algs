@@ -9,7 +9,6 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 DOCS_DIR = ROOT / ".site-docs"
 NOTES_DIR = "my-notes"
 JAVA_SOURCE_DIR = "solutions-java"
-
 IGNORED_NOTE_DIRS = {"assets"}
 
 
@@ -43,11 +42,11 @@ def iter_note_section_dirs() -> list[Path]:
     notes_root = ROOT / NOTES_DIR
     return sorted(
         [
-            p
-            for p in notes_root.iterdir()
-            if p.is_dir() and not p.name.startswith(".") and p.name not in IGNORED_NOTE_DIRS
+            path
+            for path in notes_root.iterdir()
+            if path.is_dir() and not path.name.startswith(".") and path.name not in IGNORED_NOTE_DIRS
         ],
-        key=lambda p: p.name,
+        key=lambda path: path.name,
     )
 
 
@@ -56,7 +55,21 @@ def section_title(section_root: Path) -> str:
 
 
 def section_chapter_dirs(section_root: Path) -> list[Path]:
-    return sorted([p for p in section_root.iterdir() if p.is_dir()], key=lambda p: p.name)
+    return sorted([path for path in section_root.iterdir() if path.is_dir()], key=lambda path: path.name)
+
+
+def section_article_files(section_root: Path) -> list[Path]:
+    return sorted(
+        [path for path in section_root.glob("*.md") if path.name.lower() != "readme.md"],
+        key=lambda path: path.name,
+    )
+
+
+def section_entry_count(section_root: Path) -> int:
+    chapter_dirs = section_chapter_dirs(section_root)
+    if chapter_dirs:
+        return len(chapter_dirs)
+    return len(section_article_files(section_root))
 
 
 def section_slug(section_root: Path) -> str:
@@ -64,18 +77,8 @@ def section_slug(section_root: Path) -> str:
 
 
 def build_generated_readme(src_dir: Path) -> str | None:
-    title = first_heading(src_dir / "README.md") or pretty_name(src_dir.name)
-    lines = [
-        f"# {title}",
-        "",
-        "该目录原始仓库中没有 `README.md`，构建时自动生成一个总览页，方便站点内导航。",
-        "",
-        "## 目录",
-        "",
-    ]
-
     entries: list[tuple[str, str]] = []
-    for child in sorted(src_dir.iterdir()):
+    for child in sorted(src_dir.iterdir(), key=lambda path: path.name):
         if child.name.lower() == "readme.md":
             continue
         if child.is_dir():
@@ -88,34 +91,42 @@ def build_generated_readme(src_dir: Path) -> str | None:
     if not entries:
         return None
 
+    title = first_heading(src_dir / "README.md") or pretty_name(src_dir.name)
+    lines = [
+        f"# {title}",
+        "",
+        "该目录原始仓库中没有 `README.md`，构建时自动生成一个总览页，方便站点内导航。",
+        "",
+        "## 目录",
+        "",
+    ]
     for label, target in entries:
         lines.append(f"- [{label}]({target})")
-
     return "\n".join(lines)
 
 
 def ensure_generated_readmes() -> None:
     src_root = ROOT / NOTES_DIR
     dest_root = DOCS_DIR / NOTES_DIR
-    for src in src_root.rglob("*"):
-        if not src.is_dir():
+    for src_dir in src_root.rglob("*"):
+        if not src_dir.is_dir():
             continue
-        src_readme = src / "README.md"
-        if src_readme.exists():
+        if (src_dir / "README.md").exists():
             continue
-        generated = build_generated_readme(src)
+        generated = build_generated_readme(src_dir)
         if generated is None:
             continue
-        dest_readme = dest_root / src.relative_to(src_root) / "README.md"
+        dest_readme = dest_root / src_dir.relative_to(src_root) / "README.md"
         write_markdown(dest_readme, generated)
 
 
 def build_homepage() -> None:
-    section_cards = []
+    section_cards: list[str] = []
     quick_links = ["- [笔记总览](my-notes/README.md)"]
+
     for section_root in iter_note_section_dirs():
-        chapters = section_chapter_dirs(section_root)
         title = section_title(section_root)
+        entry_count = section_entry_count(section_root)
         section_cards.append(
             "\n".join(
                 [
@@ -123,16 +134,14 @@ def build_homepage() -> None:
                     "",
                     "    ---",
                     "",
-                    f"    该目录包含 {len(chapters)} 个章节，点击进入目录页继续浏览。",
+                    f"    该目录包含 {entry_count} 个条目，点击进入目录页继续浏览。",
                     "",
                     f"    [进入这一部分](sections/{section_slug(section_root)})",
                     "",
                 ]
             )
         )
-        quick_links.append(
-            f"- [{title} 总览](my-notes/{section_root.name}/README.md)"
-        )
+        quick_links.append(f"- [{title} 总览](my-notes/{section_root.name}/README.md)")
 
     content = """# 我的算法笔记
 
@@ -150,7 +159,6 @@ def build_homepage() -> None:
 """
     content += "\n".join(section_cards)
     content += """
-
 </div>
 
 ## 推荐阅读顺序
@@ -185,9 +193,9 @@ def build_notes_overview() -> None:
 
     for section_root in iter_note_section_dirs():
         title = section_title(section_root)
-        chapter_count = len(section_chapter_dirs(section_root))
+        entry_count = section_entry_count(section_root)
         lines.append(
-            f"- **{title}**：共 {chapter_count} 个章节，可从 [目录页](../sections/{section_slug(section_root)}) 进入"
+            f"- **{title}**：共 {entry_count} 个条目，可从 [目录页](../sections/{section_slug(section_root)}) 进入"
         )
 
     write_markdown(DOCS_DIR / NOTES_DIR / "README.md", "\n".join(lines))
@@ -197,11 +205,13 @@ def build_section_pages() -> None:
     for section_root in iter_note_section_dirs():
         section_dir = section_root.name
         title = section_title(section_root)
-        chapters = section_chapter_dirs(section_root)
+        chapter_dirs = section_chapter_dirs(section_root)
+        article_files = section_article_files(section_root)
+
         lines = [
             f"# {title}",
             "",
-            "这里汇总当前一级目录下的所有章节，便于从总览快速进入具体笔记。",
+            "这里汇总当前一级目录下的所有条目，便于从总览快速进入具体笔记。",
             "",
             f"- [查看该目录原始总览](../my-notes/{section_dir}/README.md)",
             "",
@@ -209,11 +219,17 @@ def build_section_pages() -> None:
             "",
         ]
 
-        for chapter_dir in chapters:
-            chapter_title = first_heading(chapter_dir / "README.md") or pretty_name(chapter_dir.name)
-            lines.append(
-                f"- [{chapter_title}](../my-notes/{section_dir}/{chapter_dir.name}/README.md)"
-            )
+        if chapter_dirs:
+            for chapter_dir in chapter_dirs:
+                chapter_title = first_heading(chapter_dir / "README.md") or pretty_name(chapter_dir.name)
+                lines.append(
+                    f"- [{chapter_title}](../my-notes/{section_dir}/{chapter_dir.name}/README.md)"
+                )
+        elif article_files:
+            for article in article_files:
+                lines.append(f"- [{article.stem}](../my-notes/{section_dir}/{article.name})")
+        else:
+            lines.append("当前目录暂无可展示条目。")
 
         write_markdown(DOCS_DIR / "sections" / section_slug(section_root), "\n".join(lines))
 
@@ -228,10 +244,10 @@ def build_chapter_pages() -> None:
         section_dir = section_root.name
         for chapter_dir in section_chapter_dirs(section_root):
             article_files = sorted(
-                [p for p in chapter_dir.glob("*.md") if p.name.lower() != "readme.md"]
+                [path for path in chapter_dir.glob("*.md") if path.name.lower() != "readme.md"],
+                key=lambda path: path.name,
             )
-            readme_path = chapter_dir / "README.md"
-            title = first_heading(readme_path) or pretty_name(chapter_dir.name)
+            title = first_heading(chapter_dir / "README.md") or pretty_name(chapter_dir.name)
             lines = [
                 f"# {title}",
                 "",
@@ -241,18 +257,13 @@ def build_chapter_pages() -> None:
                 "",
             ]
 
-            if not article_files:
-                lines.extend(
-                    [
-                        "这一章当前主要通过总览页进入。",
-                        "",
-                    ]
-                )
-            else:
+            if article_files:
                 for article in article_files:
                     lines.append(
                         f"- [{article.stem}](../../my-notes/{section_dir}/{chapter_dir.name}/{article.name})"
                     )
+            else:
+                lines.append("这一章当前主要通过总览页进入。")
 
             write_markdown(
                 DOCS_DIR / "sections" / "chapters" / chapter_slug(section_dir, chapter_dir.name),
@@ -315,9 +326,9 @@ def convert_java_tree() -> None:
 
 def main() -> None:
     reset_docs_dir()
-    build_homepage()
     copy_notes_tree()
     ensure_generated_readmes()
+    build_homepage()
     build_notes_overview()
     build_section_pages()
     build_chapter_pages()
