@@ -77,6 +77,8 @@ SECTION_PAGES = {
     },
 }
 
+CHAPTER_SECTION_DIRS = ("01-基础巩固", "02-基础提升")
+
 
 def reset_docs_dir() -> None:
     if DOCS_DIR.exists():
@@ -87,6 +89,68 @@ def reset_docs_dir() -> None:
 def write_markdown(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content.rstrip() + "\n", encoding="utf-8")
+
+
+def first_heading(path: Path) -> str | None:
+    if not path.exists() or path.suffix.lower() != ".md":
+        return None
+    match = re.search(r"^#\s+(.+)$", path.read_text(encoding="utf-8"), re.M)
+    if match:
+        return match.group(1).strip()
+    return None
+
+
+def pretty_name(name: str) -> str:
+    if "-" in name:
+        return name.split("-", 1)[1].strip()
+    return name
+
+
+def build_generated_readme(src_dir: Path) -> str | None:
+    title = first_heading(src_dir / "README.md") or pretty_name(src_dir.name)
+    lines = [
+        f"# {title}",
+        "",
+        "该目录原始仓库中没有 `README.md`，构建时自动生成一个总览页，方便站点内导航。",
+        "",
+        "## 目录",
+        "",
+    ]
+
+    entries: list[tuple[str, str]] = []
+    for child in sorted(src_dir.iterdir()):
+        if child.name.lower() == "readme.md":
+            continue
+        if child.is_dir():
+            label = first_heading(child / "README.md") or pretty_name(child.name)
+            entries.append((label, f"{child.name}/README.md"))
+        elif child.suffix.lower() == ".md":
+            label = first_heading(child) or child.stem
+            entries.append((label, child.name))
+
+    if not entries:
+        return None
+
+    for label, target in entries:
+        lines.append(f"- [{label}]({target})")
+
+    return "\n".join(lines)
+
+
+def ensure_generated_readmes() -> None:
+    src_root = ROOT / NOTES_DIR
+    dest_root = DOCS_DIR / NOTES_DIR
+    for src in src_root.rglob("*"):
+        if not src.is_dir():
+            continue
+        src_readme = src / "README.md"
+        if src_readme.exists():
+            continue
+        generated = build_generated_readme(src)
+        if generated is None:
+            continue
+        dest_readme = dest_root / src.relative_to(src_root) / "README.md"
+        write_markdown(dest_readme, generated)
 
 
 def build_homepage() -> None:
@@ -181,11 +245,12 @@ def build_section_pages() -> None:
             "",
         ]
 
-        for item_title, item_target in meta["items"]:
-            if item_target.endswith(".md"):
-                lines.append(f"- [{item_title}](../my-notes/{section_dir}/{item_target})")
-            else:
-                lines.append(f"- [{item_title}](../my-notes/{section_dir}/{item_target}/README.md)")
+        section_root = ROOT / NOTES_DIR / section_dir
+        for chapter_dir in sorted(p for p in section_root.iterdir() if p.is_dir()):
+            chapter_title = first_heading(chapter_dir / "README.md") or pretty_name(chapter_dir.name)
+            lines.append(
+                f"- [{chapter_title}](../my-notes/{section_dir}/{chapter_dir.name}/README.md)"
+            )
 
         write_markdown(DOCS_DIR / "sections" / slug, "\n".join(lines))
 
@@ -196,19 +261,14 @@ def chapter_slug(section_dir: str, chapter_dir: str) -> str:
 
 
 def build_chapter_pages() -> None:
-    for section_dir in ("01-基础巩固", "02-基础提升"):
+    for section_dir in CHAPTER_SECTION_DIRS:
         section_root = ROOT / NOTES_DIR / section_dir
         for chapter_dir in sorted([p for p in section_root.iterdir() if p.is_dir()]):
             article_files = sorted(
                 [p for p in chapter_dir.glob("*.md") if p.name.lower() != "readme.md"]
             )
             readme_path = chapter_dir / "README.md"
-            title = chapter_dir.name
-            if readme_path.exists():
-                readme_text = readme_path.read_text(encoding="utf-8")
-                match = re.search(r"^#\s+(.+)$", readme_text, re.M)
-                if match:
-                    title = match.group(1).strip()
+            title = first_heading(readme_path) or pretty_name(chapter_dir.name)
             lines = [
                 f"# {title}",
                 "",
@@ -293,9 +353,10 @@ def convert_java_tree() -> None:
 def main() -> None:
     reset_docs_dir()
     build_homepage()
+    copy_notes_tree()
+    ensure_generated_readmes()
     build_section_pages()
     build_chapter_pages()
-    copy_notes_tree()
     convert_java_tree()
 
 
