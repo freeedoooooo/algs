@@ -10,73 +10,6 @@ DOCS_DIR = ROOT / ".site-docs"
 NOTES_DIR = "my-notes"
 JAVA_SOURCE_DIR = "solutions-java"
 
-SECTION_PAGES = {
-    "01-基础巩固": {
-        "slug": "foundation-basics.md",
-        "title": "基础巩固",
-        "summary": "从数据结构、排序、链表、树、递归到动态规划，适合作为算法体系的第一阶段。",
-        "intro": "这里更偏“打地基”。如果你希望把常见面试题背后的基础模块真正串起来，这一部分最适合慢慢啃。",
-        "items": [
-            ("01 选择排序、二分法、异或运算", "01-选择排序-二分法-异或运算"),
-            ("02 链表、栈、队列、递归行为、哈希表、有序表", "02-链表-队列-栈-哈希表-递归复杂度"),
-            ("03 归并排序、随机快排", "03-归并排序-随机快排"),
-            ("04 堆、比较器", "04-堆排序-优先级队列"),
-            ("05 前缀树、桶排序、排序总结", "05-非比较排序-排序总结"),
-            ("06 链表相关面试题", "06-链表相关面试题"),
-            ("07 二叉树的基本算法", "07-二叉树的基本算法"),
-            ("08 二叉树的递归套路", "08-二叉树的递归套路"),
-            ("09 数据归纳与矩阵处理技巧", "09-数据归纳与矩阵处理技巧"),
-            ("10 并查集结构和图相关的算法", "10-图论铺垫-贪心算法-并查集"),
-            ("11 图相关的算法", "11-图相关的算法"),
-            ("12 暴力递归到动态规划1-递归尝试", "12-暴力递归到动态规划1-递归尝试"),
-            ("13 暴力递归到动态规划2-尝试模型", "13-暴力递归到动态规划2-尝试模型"),
-            ("14 暴力递归到动态规划2-暴力递归改动态规划", "14-暴力递归到动态规划2-暴力递归改动态规划"),
-            ("15 暴力递归到动态规划3-动态规划的进一步优化", "15-暴力递归到动态规划3-动态规划的进一步优化"),
-        ],
-    },
-    "02-基础提升": {
-        "slug": "foundation-advanced.md",
-        "title": "基础提升",
-        "summary": "进入专题化训练阶段，开始系统接触哈希、并查集、KMP、单调栈、Morris 遍历等常见进阶主题。",
-        "intro": "这一部分更适合在基础打稳以后看，它不是单题训练，而是按专题去建立“工具箱”。",
-        "items": [
-            ("01 哈希函数与哈希表", "01-哈希函数-哈希表"),
-            ("02 有序表、并查集", "02-并查集"),
-            ("03 KMP、Manacher 算法", "03-KMP-Manacher算法"),
-            ("04 滑动窗口、单调栈结构等", "04-滑动窗口-单调栈结构等"),
-            ("05 二叉树的 Morris 遍历", "05-二叉树的Morris遍历"),
-            ("06 大数据题目", "06-大数据题目"),
-            ("07 暴力递归", "07-暴力递归"),
-        ],
-    },
-    "03-中级提升": {
-        "slug": "intermediate.md",
-        "title": "中级提升",
-        "summary": "更贴近综合题和真实面试表达，适合在完成基础训练后，做方法串联和题感提升。",
-        "intro": "如果你已经不满足于“会做题”，而想进一步建立题型迁移能力，这一部分会更有帮助。",
-        "items": [
-            ("01 题目 1 LRU", "01-题目1-LRU.md"),
-            ("02 题目 2 中等难度", "02-题目2-中等难度.md"),
-            ("03 题目 3 跳步问题", "03-题目3-跳步问题.md"),
-            ("04 题目 4 力扣原题", "04-题目4-力扣原题.md"),
-        ],
-    },
-    "09-大厂真题": {
-        "slug": "big-tech.md",
-        "title": "大厂真题",
-        "summary": "按更接近真实面试场景的方式整理题目，用于把前面的知识体系迁移到面试实战中。",
-        "intro": "这一部分更适合在前面内容看过一轮以后回头刷，能更清楚地感受到知识点在真实题目中的组合方式。",
-        "items": [
-            ("01 题目 1", "01-题目1.md"),
-            ("02 题目 2", "02-题目2.md"),
-            ("03 题目 3", "03-题目3.md"),
-            ("04 题目 4", "04-题目4.md"),
-            ("05 题目 5", "05-题目5.md"),
-            ("06 题目 6", "06-题目6.md"),
-        ],
-    },
-}
-
 IGNORED_NOTE_DIRS = {"assets"}
 
 
@@ -116,6 +49,18 @@ def iter_note_section_dirs() -> list[Path]:
         ],
         key=lambda p: p.name,
     )
+
+
+def section_title(section_root: Path) -> str:
+    return first_heading(section_root / "README.md") or pretty_name(section_root.name)
+
+
+def section_chapter_dirs(section_root: Path) -> list[Path]:
+    return sorted([p for p in section_root.iterdir() if p.is_dir()], key=lambda p: p.name)
+
+
+def section_slug(section_root: Path) -> str:
+    return f"{section_root.name}.md"
 
 
 def build_generated_readme(src_dir: Path) -> str | None:
@@ -166,6 +111,29 @@ def ensure_generated_readmes() -> None:
 
 
 def build_homepage() -> None:
+    section_cards = []
+    quick_links = ["- [笔记总览](my-notes/README.md)"]
+    for section_root in iter_note_section_dirs():
+        chapters = section_chapter_dirs(section_root)
+        title = section_title(section_root)
+        section_cards.append(
+            "\n".join(
+                [
+                    f"-   **{title}**",
+                    "",
+                    "    ---",
+                    "",
+                    f"    该目录包含 {len(chapters)} 个章节，点击进入目录页继续浏览。",
+                    "",
+                    f"    [进入这一部分](sections/{section_slug(section_root)})",
+                    "",
+                ]
+            )
+        )
+        quick_links.append(
+            f"- [{title} 总览](my-notes/{section_root.name}/README.md)"
+        )
+
     content = """# 我的算法笔记
 
 > 一个围绕 `my-notes` 持续整理的个人算法学习站点。
@@ -179,47 +147,18 @@ def build_homepage() -> None:
 ## 从这里开始
 
 <div class="grid cards" markdown>
-
--   **基础巩固**
-
-    ---
-
-    从排序、链表、二叉树、递归到动态规划，适合先把地基打稳。
-
-    [进入这一部分](sections/foundation-basics.md)
-
--   **基础提升**
-
-    ---
-
-    按专题补强常见算法工具箱，比如 KMP、并查集、单调栈、Morris。
-
-    [进入这一部分](sections/foundation-advanced.md)
-
--   **中级提升**
-
-    ---
-
-    更偏综合应用和面试表达，适合在基础题型熟悉后继续往上走。
-
-    [进入这一部分](sections/intermediate.md)
-
--   **大厂真题**
-
-    ---
-
-    把前面的知识点放进真实面试场景里，看组合、看变化、看套路。
-
-    [进入这一部分](sections/big-tech.md)
+"""
+    content += "\n".join(section_cards)
+    content += """
 
 </div>
 
 ## 推荐阅读顺序
 
-1. 如果你刚开始补算法，建议先从 [基础巩固](sections/foundation-basics.md) 开始。
-2. 看完一轮基础内容，再进入 [基础提升](sections/foundation-advanced.md) 建立专题工具箱。
-3. 接着用 [中级提升](sections/intermediate.md) 训练综合题感和表达方式。
-4. 最后结合 [大厂真题](sections/big-tech.md) 去接近真实面试节奏。
+1. 如果你刚开始补算法，建议先从最前面的基础目录开始。
+2. 看完一轮基础内容，再进入后面的专题目录。
+3. 接着用中级目录训练综合题感和表达方式。
+4. 最后结合大厂真题去接近真实面试节奏。
 
 ## 这个站点更适合谁
 
@@ -229,27 +168,40 @@ def build_homepage() -> None:
 
 ## 快速入口
 
-- [笔记总览](my-notes/README.md)
-- [基础巩固总览](my-notes/01-基础巩固/README.md)
-- [基础提升总览](my-notes/02-基础提升/README.md)
-- [中级提升总览](my-notes/03-中级提升/README.md)
-- [大厂真题总览](my-notes/09-大厂真题/README.md)
 """
+    content += "\n".join(quick_links)
     write_markdown(DOCS_DIR / "index.md", content)
 
 
+def build_notes_overview() -> None:
+    lines = [
+        "# 笔记总览",
+        "",
+        "这里按当前仓库真实目录自动生成，便于你在改名、挪目录后仍然保持站点可浏览。",
+        "",
+        "## 一级目录",
+        "",
+    ]
+
+    for section_root in iter_note_section_dirs():
+        title = section_title(section_root)
+        chapter_count = len(section_chapter_dirs(section_root))
+        lines.append(
+            f"- **{title}**：共 {chapter_count} 个章节，可从 [目录页](../sections/{section_slug(section_root)}) 进入"
+        )
+
+    write_markdown(DOCS_DIR / NOTES_DIR / "README.md", "\n".join(lines))
+
+
 def build_section_pages() -> None:
-    for section_dir, meta in SECTION_PAGES.items():
-        slug = meta["slug"]
-        title = meta["title"]
-        summary = meta["summary"]
-        intro = meta["intro"]
+    for section_root in iter_note_section_dirs():
+        section_dir = section_root.name
+        title = section_title(section_root)
+        chapters = section_chapter_dirs(section_root)
         lines = [
             f"# {title}",
             "",
-            summary,
-            "",
-            intro,
+            "这里汇总当前一级目录下的所有章节，便于从总览快速进入具体笔记。",
             "",
             f"- [查看该目录原始总览](../my-notes/{section_dir}/README.md)",
             "",
@@ -257,14 +209,13 @@ def build_section_pages() -> None:
             "",
         ]
 
-        section_root = ROOT / NOTES_DIR / section_dir
-        for chapter_dir in sorted(p for p in section_root.iterdir() if p.is_dir()):
+        for chapter_dir in chapters:
             chapter_title = first_heading(chapter_dir / "README.md") or pretty_name(chapter_dir.name)
             lines.append(
                 f"- [{chapter_title}](../my-notes/{section_dir}/{chapter_dir.name}/README.md)"
             )
 
-        write_markdown(DOCS_DIR / "sections" / slug, "\n".join(lines))
+        write_markdown(DOCS_DIR / "sections" / section_slug(section_root), "\n".join(lines))
 
 
 def chapter_slug(section_dir: str, chapter_dir: str) -> str:
@@ -275,7 +226,7 @@ def chapter_slug(section_dir: str, chapter_dir: str) -> str:
 def build_chapter_pages() -> None:
     for section_root in iter_note_section_dirs():
         section_dir = section_root.name
-        for chapter_dir in sorted([p for p in section_root.iterdir() if p.is_dir()]):
+        for chapter_dir in section_chapter_dirs(section_root):
             article_files = sorted(
                 [p for p in chapter_dir.glob("*.md") if p.name.lower() != "readme.md"]
             )
@@ -367,6 +318,7 @@ def main() -> None:
     build_homepage()
     copy_notes_tree()
     ensure_generated_readmes()
+    build_notes_overview()
     build_section_pages()
     build_chapter_pages()
     convert_java_tree()

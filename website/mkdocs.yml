@@ -42,16 +42,4 @@ markdown_extensions:
 
 nav:
   - 首页: index.md
-  - 基础巩固:
-      - 开始阅读: sections/foundation-basics.md
-      - 总览: my-notes/01-基础巩固/README.md
-  - 基础提升:
-      - 开始阅读: sections/foundation-advanced.md
-      - 总览: my-notes/02-基础提升/README.md
-  - 中级提升:
-      - 开始阅读: sections/intermediate.md
-      - 总览: my-notes/03-中级提升/README.md
-  - 大厂真题:
-      - 开始阅读: sections/big-tech.md
-      - 总览: my-notes/09-大厂真题/README.md
   - 笔记总览: my-notes/README.md
