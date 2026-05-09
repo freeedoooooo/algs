@@ -1,0 +1,21 @@
+﻿{
+    "Timestamp":  "2026-05-09T20:58:13.2068367+08:00",
+    "AdbPath":  "D:\\leidian\\LDPlayer9\\adb.exe",
+    "LdConsolePath":  "D:\\leidian\\LDPlayer9\\ldconsole.exe",
+    "LdConsoleList2":  "0,�׵�ģ����,0,0,0,-1,-1,1920,1080,280",
+    "Devices":  [
+                    {
+                        "Serial":  "emulator-5554",
+                        "State":  "device",
+                        "RawDeviceLine":  "emulator-5554          device product:NX809J model:NX809J device:star2qltechn transport_id:1",
+                        "CurrentFocus":  "",
+                        "ResumedActivity":  "",
+                        "InterestingProcess":  [
+
+                                               ],
+                        "UserPackages":  [
+
+                                         ]
+                    }
+                ]
+}
