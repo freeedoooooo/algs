@@ -71,6 +71,10 @@ function Invoke-External {
 
     [void]$process.Start()
 
+    # 并行读取标准输出和标准错误，避免大输出时缓冲区写满导致子进程假死。
+    $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+    $stderrTask = $process.StandardError.ReadToEndAsync()
+
     if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
         try {
             $process.Kill()
@@ -81,8 +85,11 @@ function Invoke-External {
         throw "命令执行超时(${TimeoutSeconds}秒): $FilePath $($ArgumentList -join ' ')"
     }
 
-    $stdoutText = $process.StandardOutput.ReadToEnd()
-    $stderrText = $process.StandardError.ReadToEnd()
+    $stdoutTask.Wait()
+    $stderrTask.Wait()
+
+    $stdoutText = $stdoutTask.Result
+    $stderrText = $stderrTask.Result
     $combinedText = (@($stdoutText, $stderrText) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join [Environment]::NewLine
     $output = @($combinedText -split "`r?`n" | Where-Object { $_ -ne "" })
 
