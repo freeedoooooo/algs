@@ -11,29 +11,28 @@ $ErrorActionPreference = "Stop"
 function Resolve-AdbPath {
     param([string]$Hint)
 
-    # 先优先使用用户手动传入的 adb 路径。
     if ($Hint -and (Test-Path -LiteralPath $Hint)) {
         return (Resolve-Path -LiteralPath $Hint).Path
     }
 
-    # 再按常见安装位置逐个尝试。
     $candidates = @(
+        "D:\leidian\LDPlayer9\adb.exe",
         (Join-Path $env:ProgramFiles "Android\platform-tools\adb.exe"),
         (Join-Path ${env:ProgramFiles(x86)} "Android\platform-tools\adb.exe"),
         "C:\Program Files\LDPlayer\adb.exe",
         "C:\Program Files\LDPlayer\LDPlayer9\adb.exe",
         "C:\Program Files\dnplayerext2\adb.exe"
-    )
+    ) | Where-Object { $_ }
 
     foreach ($candidate in $candidates) {
-        if ($candidate -and (Test-Path -LiteralPath $candidate)) {
+        if (Test-Path -LiteralPath $candidate) {
             return (Resolve-Path -LiteralPath $candidate).Path
         }
     }
 
-    $cmd = Get-Command adb -ErrorAction SilentlyContinue
-    if ($cmd) {
-        return $cmd.Source
+    $command = Get-Command adb -ErrorAction SilentlyContinue
+    if ($command) {
+        return $command.Source
     }
 
     return $null
@@ -42,43 +41,33 @@ function Resolve-AdbPath {
 function Invoke-External {
     param(
         [Parameter(Mandatory = $true)][string]$FilePath,
-        [Parameter(Mandatory = $true)][string[]]$ArgumentList,
-        [int]$TimeoutSeconds = 20
+        [string[]]$ArgumentList = @()
     )
 
-    # 直接调用外部程序，保持兼容性和简单性。
     $output = & $FilePath @ArgumentList 2>&1 | ForEach-Object { $_.ToString() }
     $exitCode = $LASTEXITCODE
 
-    $stdout = @()
-    $stderr = @()
-    foreach ($line in $output) {
-        if ($line -like "*error:*" -or $line -like "*failed:*") {
-            $stderr += $line
-        } else {
-            $stdout += $line
-        }
-    }
-
-    [pscustomobject]@{
+    return [pscustomobject]@{
         ExitCode = $exitCode
-        StdOut   = (($stdout -join [Environment]::NewLine).Trim())
-        StdErr   = (($stderr -join [Environment]::NewLine).Trim())
+        Output   = @($output)
+        StdOut   = (($output -join [Environment]::NewLine).Trim())
     }
 }
 
 function Get-Devices {
     param([string]$Adb)
 
-    # 读取已连接的模拟器列表。
-    $result = Invoke-External -FilePath $Adb -ArgumentList @("devices", "-l") -TimeoutSeconds 15
+    $result = Invoke-External -FilePath $Adb -ArgumentList @("devices", "-l")
     if ($result.ExitCode -ne 0) {
-        throw "执行 adb devices 失败：$($result.StdErr)"
+        throw "adb devices failed: $($result.StdOut)"
     }
 
     $devices = @()
-    foreach ($line in ($result.StdOut -split "`r?`n")) {
-        if (-not $line -or $line -like "List of devices attached*") {
+    foreach ($line in $result.Output) {
+        if ([string]::IsNullOrWhiteSpace($line)) {
+            continue
+        }
+        if ($line -like "List of devices attached*") {
             continue
         }
 
@@ -94,19 +83,44 @@ function Get-Devices {
         }
     }
 
-    return $devices
+    return @($devices)
 }
 
-function Invoke-Shell {
+function Invoke-AdbShell {
     param(
         [string]$Adb,
         [string]$Serial,
-        [string[]]$Args,
-        [int]$TimeoutSeconds = 20
+        [string[]]$Args
     )
 
-    # 在指定模拟器里执行 shell 命令。
-    Invoke-External -FilePath $Adb -ArgumentList (@("-s", $Serial, "shell") + $Args) -TimeoutSeconds $TimeoutSeconds
+    return Invoke-External -FilePath $Adb -ArgumentList (@("-s", $Serial, "shell") + $Args)
+}
+
+function Test-BootCompleted {
+    param(
+        [string]$Adb,
+        [string]$Serial,
+        [int]$Attempts = 3,
+        [int]$DelaySeconds = 1
+    )
+
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        $boot = Invoke-AdbShell -Adb $Adb -Serial $Serial -Args @("getprop", "sys.boot_completed")
+        $bootCompleted = @(
+            (($boot.StdOut | Out-String) -split "\r?\n") |
+                Where-Object { $_.Trim() -eq "1" }
+        ).Count -gt 0
+
+        if ($bootCompleted) {
+            return $true
+        }
+
+        if ($attempt -lt $Attempts) {
+            Start-Sleep -Seconds $DelaySeconds
+        }
+    }
+
+    return $false
 }
 
 function Test-Device {
@@ -116,7 +130,6 @@ function Test-Device {
         [string[]]$Packages
     )
 
-    # 逐台检查模拟器状态。
     $issues = New-Object System.Collections.Generic.List[string]
 
     if ($Device.State -ne "device") {
@@ -126,25 +139,23 @@ function Test-Device {
             State  = $Device.State
             Booted = $false
             Apps   = @()
-            Issues = $issues
+            Issues = [string[]]$issues
         }
     }
 
-    # 读取系统启动完成状态。
-    $boot = Invoke-Shell -Adb $Adb -Serial $Device.Serial -Args @("getprop", "sys.boot_completed") -TimeoutSeconds 15
-    $bootCompleted = ($boot.StdOut -match "1")
+    $bootCompleted = Test-BootCompleted -Adb $Adb -Serial $Device.Serial
     if (-not $bootCompleted) {
         $issues.Add("boot_not_completed")
     }
 
-    # 选填：检查指定 App 是否仍在运行。
     $apps = @()
     foreach ($pkg in $Packages) {
-        $check = Invoke-Shell -Adb $Adb -Serial $Device.Serial -Args @("pidof", $pkg) -TimeoutSeconds 15
+        $check = Invoke-AdbShell -Adb $Adb -Serial $Device.Serial -Args @("pidof", $pkg)
         $running = -not [string]::IsNullOrWhiteSpace($check.StdOut)
         if (-not $running) {
             $issues.Add("app_missing:$pkg")
         }
+
         $apps += [pscustomobject]@{
             Package = $pkg
             Running = $running
@@ -156,46 +167,52 @@ function Test-Device {
         Serial = $Device.Serial
         State  = $Device.State
         Booted = $bootCompleted
-        Apps   = $apps
-        Issues = $issues
+        Apps   = @($apps)
+        Issues = [string[]]$issues
     }
 }
 
 $adb = Resolve-AdbPath -Hint $AdbPath
 if (-not $adb) {
-    throw "未找到 adb.exe，请传入 -AdbPath，或者把 adb 加入 PATH。"
+    throw "adb.exe was not found. Pass -AdbPath or add adb to PATH."
 }
 
-Write-Host "正在使用 adb：$adb"
+if ($PollSeconds -lt 1) {
+    throw "-PollSeconds must be greater than or equal to 1."
+}
+
+Write-Host "Using adb: $adb"
 
 do {
-    $devices = Get-Devices -Adb $adb
-    if (-not $devices.Count) {
-        Write-Host "没有找到已连接的模拟器。"
+    $devices = @(Get-Devices -Adb $adb)
+    if ($devices.Count -eq 0) {
+        Write-Host "No connected emulator/device found." -ForegroundColor Yellow
     }
 
-    $checks = foreach ($device in $devices) {
-        Test-Device -Adb $adb -Device $device -Packages $Packages
-    }
+    $checks = @(
+        foreach ($device in $devices) {
+            Test-Device -Adb $adb -Device $device -Packages $Packages
+        }
+    )
 
     $summary = [pscustomobject]@{
         Timestamp = (Get-Date).ToString("o")
         AdbPath   = $adb
-        Devices   = $checks
+        Devices   = @($checks)
     }
 
     $summary | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $ReportPath -Encoding UTF8
 
     foreach ($item in $checks) {
         if ($item.Issues.Count -gt 0) {
-            Write-Host "[警告] $($item.Serial) $($item.Issues -join ', ')" -ForegroundColor Yellow
+            Write-Host "[WARN] $($item.Serial) $($item.Issues -join ', ')" -ForegroundColor Yellow
         } else {
-            Write-Host "[正常] $($item.Serial)" -ForegroundColor Green
+            Write-Host "[OK]   $($item.Serial)" -ForegroundColor Green
         }
     }
 
-    $bad = @($checks | Where-Object { $_.Issues.Count -gt 0 })
-    if ($bad.Count -gt 0) {
+    $hasIssues = @($checks | Where-Object { $_.Issues.Count -gt 0 }).Count -gt 0
+    if ($hasIssues) {
         exit 1
     }
 
