@@ -189,7 +189,8 @@ function Invoke-External {
     param(
         [Parameter(Mandatory = $true)][string]$FilePath,
         [string[]]$ArgumentList = @(),
-        [int]$TimeoutSeconds = 20
+        [int]$TimeoutSeconds = 20,
+        [System.Text.Encoding]$OutputEncoding = $null
     )
 
     # 统一通过独立进程调用外部程序，并增加超时保护。
@@ -202,6 +203,10 @@ function Invoke-External {
     $psi.RedirectStandardError = $true
     $psi.CreateNoWindow = $true
     $psi.Arguments = ConvertTo-ArgumentString -ArgumentList $ArgumentList
+    if ($OutputEncoding) {
+        $psi.StandardOutputEncoding = $OutputEncoding
+        $psi.StandardErrorEncoding = $OutputEncoding
+    }
 
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo = $psi
@@ -360,7 +365,7 @@ Write-Step "开始巡检雷电模拟器"
 $devices = @(Get-Devices -Adb $resolvedAdbPath)
 
 Write-Step "读取雷电多开列表"
-$console = Invoke-External -FilePath $resolvedLdConsolePath -ArgumentList @("list2") -TimeoutSeconds 10
+$console = Invoke-External -FilePath $resolvedLdConsolePath -ArgumentList @("list2") -TimeoutSeconds 10 -OutputEncoding ([System.Text.Encoding]::GetEncoding(936))
 
 $inspected = @(
     foreach ($device in $devices) {
