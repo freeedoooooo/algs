@@ -242,9 +242,38 @@ function Get-Devices {
     param([string]$Adb)
 
     Write-Step "读取 adb 设备列表"
-    $result = Invoke-External -FilePath $Adb -ArgumentList @("devices", "-l") -TimeoutSeconds 10
+    $deviceArgs = @("devices", "-l")
+    $result = Invoke-External -FilePath $Adb -ArgumentList $deviceArgs -TimeoutSeconds 10
+    $fallbackReasons = New-Object System.Collections.Generic.List[string]
+
     if ($result.ExitCode -ne 0) {
-        throw "执行 adb devices 失败: $($result.StdOut)"
+        $fallbackReasons.Add("退出码=$($result.ExitCode)")
+    }
+
+    if ($result.StdOut -match "^Usage:\s+adb devices \[-l\]") {
+        $fallbackReasons.Add("当前 adb 不接受 -l 参数")
+    }
+
+    $nonHeaderLines = @(
+        $result.Output |
+            Where-Object {
+                -not [string]::IsNullOrWhiteSpace($_) -and
+                $_ -notlike "List of devices attached*"
+            }
+    )
+
+    if ($nonHeaderLines.Count -eq 0) {
+        $fallbackReasons.Add("devices -l 未返回任何设备行")
+    }
+
+    if ($fallbackReasons.Count -gt 0) {
+        Write-DebugLog "adb devices -l 不可用或结果为空，原因: $($fallbackReasons -join '；')"
+        Write-DebugLog "回退执行 adb devices"
+        $deviceArgs = @("devices")
+        $result = Invoke-External -FilePath $Adb -ArgumentList $deviceArgs -TimeoutSeconds 10
+        if ($result.ExitCode -ne 0) {
+            throw "执行 adb devices 失败: $($result.StdOut)"
+        }
     }
 
     $devices = @()
@@ -265,6 +294,7 @@ function Get-Devices {
             Serial = $parts[0]
             State  = $parts[1]
             Raw    = $line.Trim()
+            Source = ($deviceArgs -join " ")
         }
     }
 
