@@ -39,25 +39,86 @@ function ConvertTo-ArgumentString {
     return ($escaped -join ' ')
 }
 
+function Get-LDPlayerInstallDirsFromRegistry {
+    $roots = @(
+        "HKCU:\Software\leidian",
+        "HKLM:\Software\leidian",
+        "HKLM:\Software\WOW6432Node\leidian",
+        "HKCU:\Software\ChangZhi2",
+        "HKLM:\Software\ChangZhi2",
+        "HKLM:\Software\WOW6432Node\ChangZhi2"
+    )
+    $valueNames = @("InstallDir", "InstallPath", "Path", "Dir", "LdPlayerPath")
+    $dirs = New-Object System.Collections.Generic.List[string]
+
+    foreach ($root in $roots) {
+        if (-not (Test-Path -LiteralPath $root)) {
+            continue
+        }
+
+        $items = @(Get-Item -LiteralPath $root -ErrorAction SilentlyContinue)
+        $items += @(Get-ChildItem -LiteralPath $root -Recurse -ErrorAction SilentlyContinue)
+
+        foreach ($item in $items) {
+            try {
+                $props = Get-ItemProperty -LiteralPath $item.PSPath -ErrorAction SilentlyContinue
+                foreach ($name in $valueNames) {
+                    $value = $props.$name
+                    if (-not [string]::IsNullOrWhiteSpace($value) -and (Test-Path -LiteralPath $value)) {
+                        $dirs.Add((Resolve-Path -LiteralPath $value).Path)
+                    }
+                }
+            } catch {
+            }
+        }
+    }
+
+    return @($dirs | Select-Object -Unique)
+}
+
 function Resolve-AdbPath {
     param([string]$Hint)
 
-    # 优先使用手工传入的 adb 路径，其次尝试常见安装位置和 PATH。
+    # 优先使用手工传入的 adb 路径，其次尝试注册表、常见安装位置和 PATH。
     if ($Hint -and (Test-Path -LiteralPath $Hint)) {
         return (Resolve-Path -LiteralPath $Hint).Path
     }
 
-    $candidates = @(
-        "D:\leidian\LDPlayer9\adb.exe",
-        (Join-Path $env:ProgramFiles "Android\platform-tools\adb.exe"),
-        (Join-Path ${env:ProgramFiles(x86)} "Android\platform-tools\adb.exe"),
-        "C:\Program Files\LDPlayer\adb.exe",
-        "C:\Program Files\LDPlayer\LDPlayer9\adb.exe",
-        "C:\Program Files\dnplayerext2\adb.exe"
-    ) | Where-Object { $_ }
+    $dirs = New-Object System.Collections.Generic.List[string]
+    foreach ($dir in Get-LDPlayerInstallDirsFromRegistry) {
+        $dirs.Add($dir)
+    }
+
+    $commonDirs = @(
+        "D:\leidian\LDPlayer9",
+        "D:\leidian",
+        "C:\leidian\LDPlayer9",
+        "C:\leidian",
+        "C:\Program Files\LDPlayer\LDPlayer9",
+        "C:\Program Files\LDPlayer",
+        "C:\Program Files\dnplayerext2",
+        "D:\LDPlayer",
+        "C:\LDPlayer"
+    )
+
+    foreach ($dir in $commonDirs) {
+        if (Test-Path -LiteralPath $dir) {
+            $dirs.Add((Resolve-Path -LiteralPath $dir).Path)
+        }
+    }
+
+    $candidates = New-Object System.Collections.Generic.List[string]
+    foreach ($dir in @($dirs | Select-Object -Unique)) {
+        $candidates.Add((Join-Path $dir "adb.exe"))
+    }
+
+    $candidates.Add((Join-Path $env:ProgramFiles "Android\platform-tools\adb.exe"))
+    if (${env:ProgramFiles(x86)}) {
+        $candidates.Add((Join-Path ${env:ProgramFiles(x86)} "Android\platform-tools\adb.exe"))
+    }
 
     foreach ($candidate in $candidates) {
-        if (Test-Path -LiteralPath $candidate) {
+        if (-not [string]::IsNullOrWhiteSpace($candidate) -and (Test-Path -LiteralPath $candidate)) {
             return (Resolve-Path -LiteralPath $candidate).Path
         }
     }
@@ -258,7 +319,7 @@ if ($PollSeconds -lt 1) {
     throw "-PollSeconds 必须大于等于 1。"
 }
 
-Write-Step "当前使用的 adb 路径: $adb"
+Write-Step "自动定位到 adb.exe: $adb"
 
 do {
     Write-Step "开始新一轮监控"

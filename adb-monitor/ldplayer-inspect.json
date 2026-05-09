@@ -1,8 +1,8 @@
 ﻿{
-    "Timestamp":  "2026-05-09T21:59:35.3907763+08:00",
+    "Timestamp":  "2026-05-09T22:09:24.1688873+08:00",
     "AdbPath":  "D:\\leidian\\LDPlayer9\\adb.exe",
     "LdConsolePath":  "D:\\leidian\\LDPlayer9\\ldconsole.exe",
-    "LdConsoleList2":  "0,雷电模拟器,4654752,526278,1,14276,12448,1920,1080,280",
+    "LdConsoleList2":  "0,�׵�ģ����,0,0,0,-1,-1,1920,1080,280",
     "Devices":  [
                     {
                         "Serial":  "emulator-5554",
@@ -11,15 +11,15 @@
                         "CurrentFocus":  "mCurrentFocus=Window{bdf5c95 u0 com.android.launcher3/com.android.launcher3.Launcher}",
                         "ResumedActivity":  "mResumedActivity: ActivityRecord{263cdcf u0 com.android.launcher3/.Launcher t4}",
                         "InterestingProcess":  [
-                                                   "u0_a33        2408  1433 3242804 103108 0                   0 S com.android.launcher3",
+                                                   "u0_a33        2408  1433 3253508 117448 0                   0 S com.android.launcher3",
                                                    "u0_a50        4031  1433 3291200  80400 0                   0 S com.google.android.gms.unstable",
-                                                   "u0_a17        4204  1433 3906288 108004 0                   0 S com.android.flysilkworm",
+                                                   "u0_a17        4204  1433 3905548 106472 0                   0 S com.android.flysilkworm",
                                                    "u0_a17        4254  1433 3541132  26044 0                   0 S com.android.flysilkworm:filedownloader",
                                                    "u0_a56        6313  1434 1047484  35860 0                   0 S com.android.chrome",
-                                                   "u0_a53        6594  1433 3290924 133404 0                   0 S com.android.vending",
-                                                   "u0_a53        6661  1433 3188200  89940 0                   0 S com.android.vending:background",
-                                                   "u0_a53        6773  1433 3178512  91476 0                   0 S com.android.vending:instant_app_installer",
-                                                   "u0_a50        7615  1433 3249904 134252 0                   0 S com.google.android.gms"
+                                                   "u0_a53        6594  1433 3290924 133496 0                   0 S com.android.vending",
+                                                   "u0_a53        6661  1433 3188200  89908 0                   0 S com.android.vending:background",
+                                                   "u0_a53        6773  1433 3178512  91728 0                   0 S com.android.vending:instant_app_installer",
+                                                   "u0_a50        7615  1433 3249904 134256 0                   0 S com.google.android.gms"
                                                ],
                         "UserPackages":  [
                                              "package:com.google.android.ext.services",

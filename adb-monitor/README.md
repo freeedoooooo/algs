@@ -2,6 +2,8 @@
 
 这个目录里放了 2 个 PowerShell 脚本，用来在 Windows 本地检查雷电模拟器和 `adb` 的运行状态。
 
+默认情况下，脚本会先自动查找雷电模拟器安装目录，再定位 `adb.exe` 和 `ldconsole.exe`。如果自动查找失败，你也可以通过参数手工传入路径。
+
 适用场景：
 
 - 快速确认当前连上了哪些模拟器
@@ -47,7 +49,7 @@ adb -s emulator-5554 shell dumpsys activity activities
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\ldplayer-inspect.ps1
 ```
 
-如果你的 `adb.exe` 或 `ldconsole.exe` 不在默认路径，可以手动传入：
+如果自动查找失败，可以手动传入：
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\ldplayer-inspect.ps1 -AdbPath "D:\leidian\LDPlayer9\adb.exe" -LdConsolePath "D:\leidian\LDPlayer9\ldconsole.exe"
@@ -102,13 +104,13 @@ Set-ExecutionPolicy -Scope Process Bypass
 - 每次调用 `adb` 和 `ldconsole` 都有超时控制
 - 命令超时后会直接报错退出，不会一直挂住
 - 执行过程中会打印中文日志，方便看到卡在第几步
+- 默认会自动查找雷电安装目录，不再依赖写死路径
 
 ## 建议排查顺序
 
 如果脚本运行不符合预期，建议按下面顺序看：
 
-1. 先确认 `adb.exe` 路径是否正确
-2. 执行 `adb devices -l` 看设备是否在线
-3. 运行 `ldplayer-inspect.ps1` 看巡检输出
-4. 如果巡检正常，再运行 `ldplayer-monitor.ps1 -Once`
-5. 最后查看生成的 `json` 文件确认采集结果
+1. 先确认 `adb devices -l` 能否正常执行
+2. 运行 `ldplayer-inspect.ps1` 看自动定位到的路径和巡检输出
+3. 如果巡检正常，再运行 `ldplayer-monitor.ps1 -Once`
+4. 最后查看生成的 `json` 文件确认采集结果

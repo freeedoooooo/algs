@@ -1,6 +1,6 @@
 ﻿param(
-    [string]$AdbPath = "D:\leidian\LDPlayer9\adb.exe",
-    [string]$LdConsolePath = "D:\leidian\LDPlayer9\ldconsole.exe",
+    [string]$AdbPath = "",
+    [string]$LdConsolePath = "",
     [string]$ReportPath = ".\ldplayer-inspect.json"
 )
 
@@ -43,9 +43,146 @@ function Require-Path {
         [string]$Label
     )
 
-    if (-not (Test-Path -LiteralPath $PathValue)) {
+    if (-not $PathValue -or -not (Test-Path -LiteralPath $PathValue)) {
         throw "未找到 ${Label}: $PathValue"
     }
+}
+
+function Get-ExistingPath {
+    param([string[]]$Candidates)
+
+    foreach ($candidate in $Candidates) {
+        if ([string]::IsNullOrWhiteSpace($candidate)) {
+            continue
+        }
+
+        if (Test-Path -LiteralPath $candidate) {
+            return (Resolve-Path -LiteralPath $candidate).Path
+        }
+    }
+
+    return $null
+}
+
+function Get-LDPlayerInstallDirsFromRegistry {
+    $roots = @(
+        "HKCU:\Software\leidian",
+        "HKLM:\Software\leidian",
+        "HKLM:\Software\WOW6432Node\leidian",
+        "HKCU:\Software\ChangZhi2",
+        "HKLM:\Software\ChangZhi2",
+        "HKLM:\Software\WOW6432Node\ChangZhi2"
+    )
+    $valueNames = @("InstallDir", "InstallPath", "Path", "Dir", "LdPlayerPath")
+    $dirs = New-Object System.Collections.Generic.List[string]
+
+    foreach ($root in $roots) {
+        if (-not (Test-Path -LiteralPath $root)) {
+            continue
+        }
+
+        $items = @(Get-Item -LiteralPath $root -ErrorAction SilentlyContinue)
+        $items += @(Get-ChildItem -LiteralPath $root -Recurse -ErrorAction SilentlyContinue)
+
+        foreach ($item in $items) {
+            try {
+                $props = Get-ItemProperty -LiteralPath $item.PSPath -ErrorAction SilentlyContinue
+                foreach ($name in $valueNames) {
+                    $value = $props.$name
+                    if (-not [string]::IsNullOrWhiteSpace($value) -and (Test-Path -LiteralPath $value)) {
+                        $dirs.Add((Resolve-Path -LiteralPath $value).Path)
+                    }
+                }
+            } catch {
+            }
+        }
+    }
+
+    return @($dirs | Select-Object -Unique)
+}
+
+function Get-LDPlayerInstallDirs {
+    $dirs = New-Object System.Collections.Generic.List[string]
+
+    foreach ($dir in Get-LDPlayerInstallDirsFromRegistry) {
+        $dirs.Add($dir)
+    }
+
+    $commonDirs = @(
+        "D:\leidian\LDPlayer9",
+        "D:\leidian",
+        "C:\leidian\LDPlayer9",
+        "C:\leidian",
+        "C:\Program Files\LDPlayer\LDPlayer9",
+        "C:\Program Files\LDPlayer",
+        "C:\Program Files\dnplayerext2",
+        "D:\LDPlayer",
+        "C:\LDPlayer"
+    )
+
+    foreach ($dir in $commonDirs) {
+        if (Test-Path -LiteralPath $dir) {
+            $dirs.Add((Resolve-Path -LiteralPath $dir).Path)
+        }
+    }
+
+    return @($dirs | Select-Object -Unique)
+}
+
+function Resolve-AdbPath {
+    param([string]$Hint)
+
+    # 优先使用手工传入的 adb 路径，其次从注册表、常见目录和 PATH 自动查找。
+    if ($Hint -and (Test-Path -LiteralPath $Hint)) {
+        return (Resolve-Path -LiteralPath $Hint).Path
+    }
+
+    $candidates = New-Object System.Collections.Generic.List[string]
+    foreach ($dir in Get-LDPlayerInstallDirs) {
+        $candidates.Add((Join-Path $dir "adb.exe"))
+    }
+
+    $candidates.Add((Join-Path $env:ProgramFiles "Android\platform-tools\adb.exe"))
+    if (${env:ProgramFiles(x86)}) {
+        $candidates.Add((Join-Path ${env:ProgramFiles(x86)} "Android\platform-tools\adb.exe"))
+    }
+
+    $resolved = Get-ExistingPath -Candidates @($candidates)
+    if ($resolved) {
+        return $resolved
+    }
+
+    $command = Get-Command adb -ErrorAction SilentlyContinue
+    if ($command) {
+        return $command.Source
+    }
+
+    return $null
+}
+
+function Resolve-LdConsolePath {
+    param(
+        [string]$Hint,
+        [string]$ResolvedAdbPath
+    )
+
+    # 优先使用手工传入的 ldconsole 路径，其次根据 adb 所在目录和常见安装目录自动推导。
+    if ($Hint -and (Test-Path -LiteralPath $Hint)) {
+        return (Resolve-Path -LiteralPath $Hint).Path
+    }
+
+    $candidates = New-Object System.Collections.Generic.List[string]
+
+    if ($ResolvedAdbPath) {
+        $adbDir = Split-Path -Parent $ResolvedAdbPath
+        $candidates.Add((Join-Path $adbDir "ldconsole.exe"))
+    }
+
+    foreach ($dir in Get-LDPlayerInstallDirs) {
+        $candidates.Add((Join-Path $dir "ldconsole.exe"))
+    }
+
+    return Get-ExistingPath -Candidates @($candidates)
 }
 
 function Invoke-External {
@@ -210,22 +347,27 @@ function Get-UserPackages {
     return @($pmResult.Output | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
 }
 
+$resolvedAdbPath = Resolve-AdbPath -Hint $AdbPath
+$resolvedLdConsolePath = Resolve-LdConsolePath -Hint $LdConsolePath -ResolvedAdbPath $resolvedAdbPath
+
 Write-Step "校验 adb.exe 和 ldconsole.exe 路径"
-Require-Path -PathValue $AdbPath -Label "adb.exe"
-Require-Path -PathValue $LdConsolePath -Label "ldconsole.exe"
+Require-Path -PathValue $resolvedAdbPath -Label "adb.exe"
+Require-Path -PathValue $resolvedLdConsolePath -Label "ldconsole.exe"
+Write-Step "自动定位到 adb.exe: $resolvedAdbPath"
+Write-Step "自动定位到 ldconsole.exe: $resolvedLdConsolePath"
 
 Write-Step "开始巡检雷电模拟器"
-$devices = @(Get-Devices -Adb $AdbPath)
+$devices = @(Get-Devices -Adb $resolvedAdbPath)
 
 Write-Step "读取雷电多开列表"
-$console = Invoke-External -FilePath $LdConsolePath -ArgumentList @("list2") -TimeoutSeconds 10
+$console = Invoke-External -FilePath $resolvedLdConsolePath -ArgumentList @("list2") -TimeoutSeconds 10
 
 $inspected = @(
     foreach ($device in $devices) {
         Write-Step "开始巡检设备 $($device.Serial)"
-        $focus = Get-FocusInfo -Adb $AdbPath -Serial $device.Serial
-        $processes = Get-InterestingProcesses -Adb $AdbPath -Serial $device.Serial
-        $packages = Get-UserPackages -Adb $AdbPath -Serial $device.Serial
+        $focus = Get-FocusInfo -Adb $resolvedAdbPath -Serial $device.Serial
+        $processes = Get-InterestingProcesses -Adb $resolvedAdbPath -Serial $device.Serial
+        $packages = Get-UserPackages -Adb $resolvedAdbPath -Serial $device.Serial
 
         [pscustomobject]@{
             Serial             = $device.Serial
@@ -241,8 +383,8 @@ $inspected = @(
 
 $report = [pscustomobject]@{
     Timestamp      = (Get-Date).ToString("o")
-    AdbPath        = $AdbPath
-    LdConsolePath  = $LdConsolePath
+    AdbPath        = $resolvedAdbPath
+    LdConsolePath  = $resolvedLdConsolePath
     LdConsoleList2 = $console.StdOut
     Devices        = @($inspected)
 }
