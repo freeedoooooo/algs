@@ -1,5 +1,5 @@
 ﻿{
-    "Timestamp":  "2026-05-09T22:15:11.6600978+08:00",
+    "Timestamp":  "2026-05-09T22:19:09.4968214+08:00",
     "AdbPath":  "D:\\leidian\\LDPlayer9\\adb.exe",
     "LdConsolePath":  "D:\\leidian\\LDPlayer9\\ldconsole.exe",
     "LdConsoleList2":  "0,雷电模拟器,4654752,526278,1,14276,12448,1920,1080,280",
@@ -11,16 +11,14 @@
                         "CurrentFocus":  "mCurrentFocus=Window{bdf5c95 u0 com.android.launcher3/com.android.launcher3.Launcher}",
                         "ResumedActivity":  "mResumedActivity: ActivityRecord{263cdcf u0 com.android.launcher3/.Launcher t4}",
                         "InterestingProcess":  [
-                                                   "u0_a33        2408  1433 3252412 118572 0                   0 R com.android.launcher3",
-                                                   "u0_a50        4031  1433 3291220  81832 0                   0 S com.google.android.gms.unstable",
-                                                   "u0_a17        4204  1433 3903980 106764 0                   0 S com.android.flysilkworm",
-                                                   "u0_a17        4254  1433 3541132  26044 0                   0 S com.android.flysilkworm:filedownloader",
-                                                   "u0_a56        6313  1434 1047484  35860 0                   0 S com.android.chrome",
-                                                   "u0_a53        6594  1433 3290924 133496 0                   0 S com.android.vending",
-                                                   "u0_a53        6661  1433 3188200  89908 0                   0 S com.android.vending:background",
-                                                   "u0_a53        6773  1433 3178512  91628 0                   0 S com.android.vending:instant_app_installer",
-                                                   "u0_a50        7615  1433 3274672 146840 0                   0 S com.google.android.gms",
-                                                   "u0_a50       14980  1433 3286384 163608 0                   0 S com.google.android.gms.persistent"
+                                                   "u0_a33        2408  1433 3252808 118104 0                   0 S com.android.launcher3",
+                                                   "u0_a50        4031  1433 3292284  84888 0                   0 S com.google.android.gms.unstable",
+                                                   "u0_a17        4204  1433 3903600 103900 0                   0 S com.android.flysilkworm",
+                                                   "u0_a17        4254  1433 3546568  49428 0                   0 S com.android.flysilkworm:filedownloader",
+                                                   "u0_a56        6313  1434 1051128  55052 0                   0 S com.android.chrome",
+                                                   "u0_a53        6594  1433 3296256 118648 0                   0 S com.android.vending",
+                                                   "u0_a53        6773  1433 3186508  85468 0                   0 S com.android.vending:instant_app_installer",
+                                                   "u0_a50        7615  1433 3271932 141160 0                   0 S com.google.android.gms"
                                                ],
                         "UserPackages":  [
                                              "package:com.google.android.ext.services",

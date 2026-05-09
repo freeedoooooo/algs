@@ -294,13 +294,34 @@ function Get-FocusInfo {
         [string]$Serial
     )
 
-    # 读取当前前台窗口和恢复中的 Activity，方便定位当前界面。
+    # 优先只抓取焦点相关的目标行，减少输出量；失败时再回退到完整 dumpsys。
     Write-Step "读取设备 $Serial 的前台界面信息"
-    $window = Invoke-AdbShell -Adb $Adb -Serial $Serial -ShellArgs @("dumpsys", "window", "windows")
-    $activity = Invoke-AdbShell -Adb $Adb -Serial $Serial -ShellArgs @("dumpsys", "activity", "activities")
+    $focusLine = $null
+    $resumedLine = $null
 
-    $focusLine = $window.Output | Where-Object { $_ -match "mCurrentFocus=" } | Select-Object -First 1
-    $resumedLine = $activity.Output | Where-Object { $_ -match "mResumedActivity:" } | Select-Object -First 1
+    try {
+        $focusResult = Invoke-AdbShell -Adb $Adb -Serial $Serial -ShellArgs @("sh", "-c", "dumpsys window windows | grep mCurrentFocus")
+        $focusLine = $focusResult.Output | Select-Object -First 1
+    } catch {
+        Write-DebugLog "轻量读取当前焦点失败，回退到完整 dumpsys window。"
+    }
+
+    if (-not $focusLine) {
+        $window = Invoke-AdbShell -Adb $Adb -Serial $Serial -ShellArgs @("dumpsys", "window", "windows")
+        $focusLine = $window.Output | Where-Object { $_ -match "mCurrentFocus=" } | Select-Object -First 1
+    }
+
+    try {
+        $resumedResult = Invoke-AdbShell -Adb $Adb -Serial $Serial -ShellArgs @("sh", "-c", "dumpsys activity activities | grep mResumedActivity")
+        $resumedLine = $resumedResult.Output | Select-Object -First 1
+    } catch {
+        Write-DebugLog "轻量读取恢复中的 Activity 失败，回退到完整 dumpsys activity。"
+    }
+
+    if (-not $resumedLine) {
+        $activity = Invoke-AdbShell -Adb $Adb -Serial $Serial -ShellArgs @("dumpsys", "activity", "activities")
+        $resumedLine = $activity.Output | Where-Object { $_ -match "mResumedActivity:" } | Select-Object -First 1
+    }
 
     return [pscustomobject]@{
         CurrentFocus    = [string]($focusLine | ForEach-Object { $_.Trim() })
