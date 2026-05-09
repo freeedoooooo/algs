@@ -3,7 +3,7 @@
     [int]$PollSeconds = 30,
     [switch]$Once,
     [string[]]$Packages = @(),
-    [string]$ReportPath = ".\ldplayer-monitor.json"
+    [string]$ReportPath = ".\ldplayer-monitor.md"
 )
 
 $ErrorActionPreference = "Stop"
@@ -79,7 +79,6 @@ function Get-LDPlayerInstallDirsFromRegistry {
 function Resolve-AdbPath {
     param([string]$Hint)
 
-    # 优先使用手工传入的 adb 路径，其次尝试注册表、常见安装位置和 PATH。
     if ($Hint -and (Test-Path -LiteralPath $Hint)) {
         return (Resolve-Path -LiteralPath $Hint).Path
     }
@@ -138,7 +137,6 @@ function Invoke-External {
         [int]$TimeoutSeconds = 20
     )
 
-    # 对外部命令统一增加超时保护，避免 adb 无响应时脚本一直挂住。
     Write-DebugLog "执行外部命令: $FilePath $($ArgumentList -join ' ')"
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -154,7 +152,6 @@ function Invoke-External {
 
     [void]$process.Start()
 
-    # 并行读取标准输出和标准错误，避免大输出时缓冲区写满导致子进程假死。
     $stdoutTask = $process.StandardOutput.ReadToEndAsync()
     $stderrTask = $process.StandardError.ReadToEndAsync()
 
@@ -186,7 +183,6 @@ function Invoke-External {
 function Get-Devices {
     param([string]$Adb)
 
-    # 读取 adb 当前识别到的设备列表。
     Write-Step "读取 adb 设备列表"
     $result = Invoke-External -FilePath $Adb -ArgumentList @("devices", "-l") -TimeoutSeconds 10
     if ($result.ExitCode -ne 0) {
@@ -224,7 +220,6 @@ function Invoke-AdbShell {
         [string[]]$ShellArgs
     )
 
-    # 在指定模拟器上执行 adb shell 子命令。
     Write-DebugLog "执行 adb shell, 设备: $Serial, 参数: $($ShellArgs -join ' ')"
     return Invoke-External -FilePath $Adb -ArgumentList (@("-s", $Serial, "shell") + $ShellArgs) -TimeoutSeconds 15
 }
@@ -237,7 +232,6 @@ function Test-BootCompleted {
         [int]$DelaySeconds = 1
     )
 
-    # 有些模拟器刚连上时第一次读取 boot 属性不稳定，这里做短重试。
     for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
         Write-Step "检查设备 $Serial 的启动完成状态，第 $attempt 次尝试"
         $boot = Invoke-AdbShell -Adb $Adb -Serial $Serial -ShellArgs @("getprop", "sys.boot_completed")
@@ -265,7 +259,6 @@ function Test-Device {
         [string[]]$Packages
     )
 
-    # 针对单台设备执行完整检查：设备状态、系统启动状态、目标 App 进程状态。
     Write-Step "开始检查设备 $($Device.Serial)"
     $issues = New-Object System.Collections.Generic.List[string]
 
@@ -310,6 +303,80 @@ function Test-Device {
     }
 }
 
+function Convert-MonitorReportToMarkdown {
+    param(
+        [pscustomobject]$Summary,
+        [int]$PollSeconds,
+        [bool]$OnceMode,
+        [string[]]$Packages
+    )
+
+    $jsonText = $Summary | ConvertTo-Json -Depth 6
+    $lines = New-Object System.Collections.Generic.List[string]
+    $modeText = if ($OnceMode) { "单次执行" } else { "持续轮询" }
+    $packageText = if ($Packages -and $Packages.Count -gt 0) { $Packages -join ", " } else { "未指定" }
+    $hasIssues = @($Summary.Devices | Where-Object { $_.Issues.Count -gt 0 }).Count -gt 0
+    $overallStatus = if ($hasIssues) { "有异常" } else { "正常" }
+
+    $lines.Add("# 雷电模拟器监控报告")
+    $lines.Add("")
+    $lines.Add("- 生成时间: $($Summary.Timestamp)")
+    $lines.Add("- 执行模式: $modeText")
+    $lines.Add("- 轮询间隔(秒): $PollSeconds")
+    $lines.Add("- adb 路径: $($Summary.AdbPath)")
+    $lines.Add("- 检查包名: $packageText")
+    $lines.Add("- 总体状态: $overallStatus")
+    $lines.Add("")
+
+    $lines.Add("## 设备概览")
+    $lines.Add("")
+    if (-not $Summary.Devices -or $Summary.Devices.Count -eq 0) {
+        $lines.Add("- 未发现已连接的模拟器或设备")
+    } else {
+        $lines.Add("| 设备 | 连接状态 | 启动完成 | 异常 |")
+        $lines.Add("| --- | --- | --- | --- |")
+        foreach ($device in $Summary.Devices) {
+            $bootedText = if ($device.Booted) { "是" } else { "否" }
+            $issuesText = if ($device.Issues.Count -gt 0) { $device.Issues -join ", " } else { "无" }
+            $lines.Add("| $($device.Serial) | $($device.State) | $bootedText | $issuesText |")
+        }
+    }
+    $lines.Add("")
+
+    foreach ($device in $Summary.Devices) {
+        $lines.Add("## $($device.Serial)")
+        $lines.Add("")
+        $lines.Add("- 连接状态: $($device.State)")
+        $lines.Add("- 启动完成: $(if ($device.Booted) { '是' } else { '否' })")
+        $lines.Add("- 异常: $(if ($device.Issues.Count -gt 0) { $device.Issues -join ', ' } else { '无' })")
+        $lines.Add("")
+        $lines.Add("### 应用检查")
+        if (-not $device.Apps -or $device.Apps.Count -eq 0) {
+            $lines.Add("- 本次未指定需要检查的应用包名")
+        } else {
+            $lines.Add("")
+            $lines.Add("| 包名 | 是否运行 | PID |")
+            $lines.Add("| --- | --- | --- |")
+            foreach ($app in $device.Apps) {
+                $runningText = if ($app.Running) { "是" } else { "否" }
+                $pidText = if ([string]::IsNullOrWhiteSpace($app.Pid)) { "-" } else { $app.Pid }
+                $lines.Add("| $($app.Package) | $runningText | $pidText |")
+            }
+        }
+        $lines.Add("")
+    }
+
+    $lines.Add("## 附注：原始 JSON")
+    $lines.Add("")
+    $lines.Add('```json')
+    foreach ($line in ($jsonText -split "`r?`n")) {
+        $lines.Add($line)
+    }
+    $lines.Add('```')
+
+    return (($lines.ToArray()) -join [Environment]::NewLine)
+}
+
 $adb = Resolve-AdbPath -Hint $AdbPath
 if (-not $adb) {
     throw "未找到 adb.exe，请通过 -AdbPath 传入，或者先把 adb 加入 PATH。"
@@ -341,7 +408,8 @@ do {
     }
 
     Write-Step "写入监控结果到 $ReportPath"
-    $summary | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $ReportPath -Encoding UTF8
+    $markdownReport = Convert-MonitorReportToMarkdown -Summary $summary -PollSeconds $PollSeconds -OnceMode ([bool]$Once) -Packages $Packages
+    $markdownReport | Set-Content -LiteralPath $ReportPath -Encoding UTF8
 
     foreach ($item in $checks) {
         if ($item.Issues.Count -gt 0) {

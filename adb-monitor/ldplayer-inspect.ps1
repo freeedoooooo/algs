@@ -1,7 +1,7 @@
 ﻿param(
     [string]$AdbPath = "",
     [string]$LdConsolePath = "",
-    [string]$ReportPath = ".\ldplayer-inspect.json"
+    [string]$ReportPath = ".\ldplayer-inspect.md"
 )
 
 $ErrorActionPreference = "Stop"
@@ -132,7 +132,6 @@ function Get-LDPlayerInstallDirs {
 function Resolve-AdbPath {
     param([string]$Hint)
 
-    # 优先使用手工传入的 adb 路径，其次从注册表、常见目录和 PATH 自动查找。
     if ($Hint -and (Test-Path -LiteralPath $Hint)) {
         return (Resolve-Path -LiteralPath $Hint).Path
     }
@@ -166,7 +165,6 @@ function Resolve-LdConsolePath {
         [string]$ResolvedAdbPath
     )
 
-    # 优先使用手工传入的 ldconsole 路径，其次根据 adb 所在目录和常见安装目录自动推导。
     if ($Hint -and (Test-Path -LiteralPath $Hint)) {
         return (Resolve-Path -LiteralPath $Hint).Path
     }
@@ -193,7 +191,6 @@ function Invoke-External {
         [System.Text.Encoding]$OutputEncoding = $null
     )
 
-    # 统一通过独立进程调用外部程序，并增加超时保护。
     Write-DebugLog "执行外部命令: $FilePath $($ArgumentList -join ' ')"
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -213,7 +210,6 @@ function Invoke-External {
 
     [void]$process.Start()
 
-    # 并行读取标准输出和标准错误，避免大输出时缓冲区写满导致子进程假死。
     $stdoutTask = $process.StandardOutput.ReadToEndAsync()
     $stderrTask = $process.StandardError.ReadToEndAsync()
 
@@ -245,7 +241,6 @@ function Invoke-External {
 function Get-Devices {
     param([string]$Adb)
 
-    # 读取 adb 当前识别到的设备列表。
     Write-Step "读取 adb 设备列表"
     $result = Invoke-External -FilePath $Adb -ArgumentList @("devices", "-l") -TimeoutSeconds 10
     if ($result.ExitCode -ne 0) {
@@ -283,7 +278,6 @@ function Invoke-AdbShell {
         [string[]]$ShellArgs
     )
 
-    # 在指定设备上执行 adb shell 命令。
     Write-DebugLog "执行 adb shell, 设备: $Serial, 参数: $($ShellArgs -join ' ')"
     return Invoke-External -FilePath $Adb -ArgumentList (@("-s", $Serial, "shell") + $ShellArgs) -TimeoutSeconds 15
 }
@@ -294,7 +288,6 @@ function Get-FocusInfo {
         [string]$Serial
     )
 
-    # 优先只抓取焦点相关的目标行，减少输出量；失败时再回退到完整 dumpsys。
     Write-Step "读取设备 $Serial 的前台界面信息"
     $focusLine = $null
     $resumedLine = $null
@@ -335,7 +328,6 @@ function Get-InterestingProcesses {
         [string]$Serial
     )
 
-    # 只筛选排查时常关注的关键进程，避免 ps 输出过多。
     Write-Step "读取设备 $Serial 的关键进程"
     $psResult = Invoke-AdbShell -Adb $Adb -Serial $Serial -ShellArgs @("ps")
     $patterns = @(
@@ -367,10 +359,125 @@ function Get-UserPackages {
         [string]$Serial
     )
 
-    # 读取用户安装的第三方应用，方便确认目标 App 是否已安装。
     Write-Step "读取设备 $Serial 的第三方安装包"
     $pmResult = Invoke-AdbShell -Adb $Adb -Serial $Serial -ShellArgs @("pm", "list", "packages", "-3")
     return @($pmResult.Output | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+}
+
+function Convert-LdConsoleList2ToObjects {
+    param([string]$Text)
+
+    $items = @()
+    foreach ($line in ($Text -split "`r?`n")) {
+        if ([string]::IsNullOrWhiteSpace($line)) {
+            continue
+        }
+
+        $parts = $line.Split(",")
+        if ($parts.Count -lt 10) {
+            $items += [pscustomobject]@{
+                Raw = $line.Trim()
+            }
+            continue
+        }
+
+        $items += [pscustomobject]@{
+            Index            = $parts[0]
+            Name             = $parts[1]
+            TopWindowHandle  = $parts[2]
+            BindWindowHandle = $parts[3]
+            AndroidStarted   = ($parts[4] -eq "1")
+            PlayerPid        = $parts[5]
+            VBoxPid          = $parts[6]
+            Width            = $parts[7]
+            Height           = $parts[8]
+            Dpi              = $parts[9]
+            Raw              = $line.Trim()
+        }
+    }
+
+    return @($items)
+}
+
+function Add-MarkdownBulletSection {
+    param(
+        [System.Collections.Generic.List[string]]$Lines,
+        [string]$Title,
+        [string[]]$Items,
+        [string]$EmptyText = "无"
+    )
+
+    $Lines.Add("### $Title")
+    if (-not $Items -or $Items.Count -eq 0) {
+        $Lines.Add("- $EmptyText")
+        return
+    }
+
+    foreach ($item in $Items) {
+        $Lines.Add("- $item")
+    }
+}
+
+function Convert-InspectReportToMarkdown {
+    param(
+        [pscustomobject]$Report,
+        [object[]]$LdConsoleItems
+    )
+
+    $jsonText = $Report | ConvertTo-Json -Depth 6
+    $lines = New-Object System.Collections.Generic.List[string]
+
+    $lines.Add("# 雷电模拟器巡检报告")
+    $lines.Add("")
+    $lines.Add("- 生成时间: $($Report.Timestamp)")
+    $lines.Add("- adb 路径: $($Report.AdbPath)")
+    $lines.Add("- ldconsole 路径: $($Report.LdConsolePath)")
+    $lines.Add("- 设备数量: $($Report.Devices.Count)")
+    $lines.Add("")
+
+    $lines.Add("## 雷电多开列表")
+    $lines.Add("")
+    if (-not $LdConsoleItems -or $LdConsoleItems.Count -eq 0) {
+        $lines.Add("- 未读取到实例列表")
+    } else {
+        $lines.Add("| 索引 | 名称 | Android已启动 | 主进程PID | VBoxPID | 分辨率 | DPI |")
+        $lines.Add("| --- | --- | --- | --- | --- | --- | --- |")
+        foreach ($item in $LdConsoleItems) {
+            if ($item.PSObject.Properties.Name -contains "Index") {
+                $started = if ($item.AndroidStarted) { "是" } else { "否" }
+                $resolution = "$($item.Width)x$($item.Height)"
+                $lines.Add("| $($item.Index) | $($item.Name) | $started | $($item.PlayerPid) | $($item.VBoxPid) | $resolution | $($item.Dpi) |")
+            } else {
+                $lines.Add("- 原始数据: $($item.Raw)")
+            }
+        }
+    }
+    $lines.Add("")
+
+    $lines.Add("## 设备详情")
+    $lines.Add("")
+    foreach ($device in $Report.Devices) {
+        $lines.Add("### $($device.Serial)")
+        $lines.Add("")
+        $lines.Add("- 状态: $($device.State)")
+        $lines.Add("- 当前焦点: $($device.CurrentFocus)")
+        $lines.Add("- 恢复中的 Activity: $($device.ResumedActivity)")
+        $lines.Add("")
+        Add-MarkdownBulletSection -Lines $lines -Title "关键进程" -Items $device.InterestingProcess
+        $lines.Add("")
+        Add-MarkdownBulletSection -Lines $lines -Title "第三方安装包" -Items $device.UserPackages
+        $lines.Add("")
+    }
+
+    $lines.Add("## 附注：原始 JSON")
+    $lines.Add("")
+    $lines.Add('```json')
+    foreach ($line in ($jsonText -split "`r?`n")) {
+        $lines.Add($line)
+    }
+    $lines.Add('```')
+
+    return (($lines.ToArray()) -join [Environment]::NewLine)
 }
 
 $resolvedAdbPath = Resolve-AdbPath -Hint $AdbPath
@@ -416,7 +523,9 @@ $report = [pscustomobject]@{
 }
 
 Write-Step "写入巡检结果到 $ReportPath"
-$report | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $ReportPath -Encoding UTF8
+$ldConsoleItems = Convert-LdConsoleList2ToObjects -Text $console.StdOut
+$markdownReport = Convert-InspectReportToMarkdown -Report $report -LdConsoleItems $ldConsoleItems
+$markdownReport | Set-Content -LiteralPath $ReportPath -Encoding UTF8
 
 Write-Host "雷电多开列表:"
 Write-Host $console.StdOut
