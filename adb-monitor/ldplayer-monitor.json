@@ -1,16 +1,16 @@
 ﻿{
-    "Timestamp":  "2026-05-09T21:35:01.1406856+08:00",
+    "Timestamp":  "2026-05-09T21:52:58.4269042+08:00",
     "AdbPath":  "D:\\leidian\\LDPlayer9\\adb.exe",
     "Devices":  [
                     {
                         "Serial":  "emulator-5554",
                         "State":  "device",
-                        "Booted":  false,
+                        "Booted":  true,
                         "Apps":  [
 
                                  ],
                         "Issues":  [
-                                       "boot_not_completed"
+
                                    ]
                     }
                 ]
