@@ -9,9 +9,9 @@
 - `monitor-runner.ps1`
   后台循环执行器，按秒读取配置并周期性调用 `ldplayer-monitor.ps1`。
 - `start-monitor.ps1`
-  按 `monitor.config` 注册并启动 Windows 计划任务。
+  启动后台监控进程。
 - `stop-monitor.ps1`
-  停止并删除计划任务。
+  停止后台监控进程。
 - `monitor.config`
   统一配置 `adb` 路径、模拟器路径、发现策略、健康检查参数、日志策略、定时策略。
 - `log/`
@@ -52,14 +52,10 @@
   `sys.boot_completed` 检查重试次数。
 - `boot_check_delay_seconds`
   启动完成检查失败后的重试间隔秒数。
-- `task_name`
-  计划任务名称。
-- `task_description`
-  Windows 计划任务描述。
 - `schedule_interval_seconds`
   定时执行间隔，单位秒。
-- `schedule_start_time`
-  计划任务首次启动时间，格式必须是 `HH:mm:ss`。
+- `runner_pid_file`
+  后台监控进程 PID 文件。
 - `log_rotate_size_mb`
   主日志达到多少 MB 后自动轮转，默认 `10`。
 - `log_retention_hours`

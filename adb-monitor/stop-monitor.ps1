@@ -63,32 +63,37 @@ function Resolve-PathFromBase {
     return [System.IO.Path]::GetFullPath((Join-Path $BaseDirectory $Value))
 }
 
-function Get-RunnerProcesses {
-    param([string]$RunnerScriptPath)
-
-    $escapedPath = [System.Management.Automation.WildcardPattern]::Escape($RunnerScriptPath)
-    return @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-        $_.Name -ieq "powershell.exe" -and
-        $_.CommandLine -like "*$escapedPath*"
-    })
-}
-
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $configFullPath = Resolve-PathFromBase -BaseDirectory $scriptRoot -Value $ConfigPath
+$configDirectory = Split-Path -Parent $configFullPath
 $config = Get-ConfigMap -Path $configFullPath
-$taskName = Get-ConfigValue -Config $config -Key "task_name" -DefaultValue "LDPlayerHealthMonitor"
-$runnerScriptPath = Join-Path $scriptRoot "monitor-runner.ps1"
+$runnerPidFile = Resolve-PathFromBase -BaseDirectory $configDirectory -Value (Get-ConfigValue -Config $config -Key "runner_pid_file" -DefaultValue ".\monitor.pid")
 
-$existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-if (-not $existingTask) {
-    Write-Host "Task not found: $taskName"
-} else {
-    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
-    Write-Host "Task removed: $taskName"
+$stopped = $false
+if (Test-Path -LiteralPath $runnerPidFile) {
+    $pidText = Get-Content -LiteralPath $runnerPidFile -Raw -ErrorAction SilentlyContinue
+    $runnerId = 0
+    if ([int]::TryParse($pidText.Trim(), [ref]$runnerId)) {
+        $proc = Get-Process -Id $runnerId -ErrorAction SilentlyContinue
+        if ($proc) {
+            Stop-Process -Id $runnerId -Force -ErrorAction SilentlyContinue
+            Write-Host "Runner stopped: PID $runnerId"
+            $stopped = $true
+        }
+    }
+
+    Remove-Item -LiteralPath $runnerPidFile -Force -ErrorAction SilentlyContinue
 }
 
-$runnerProcesses = @(Get-RunnerProcesses -RunnerScriptPath $runnerScriptPath)
+$runnerProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+    $_.Name -ieq "powershell.exe" -and $_.CommandLine -like "*monitor-runner.ps1*"
+})
 foreach ($process in $runnerProcesses) {
     Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
     Write-Host "Runner stopped: PID $($process.ProcessId)"
+    $stopped = $true
+}
+
+if (-not $stopped) {
+    Write-Host "Runner not found."
 }

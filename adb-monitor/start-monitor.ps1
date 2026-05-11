@@ -63,38 +63,12 @@ function Resolve-PathFromBase {
     return [System.IO.Path]::GetFullPath((Join-Path $BaseDirectory $Value))
 }
 
-function Get-NextStartBoundary {
-    param([string]$TimeText)
-
-    if ($TimeText -notmatch '^\d{2}:\d{2}:\d{2}$') {
-        throw "schedule_start_time must use HH:mm:ss format."
-    }
-
-    $parts = $TimeText.Split(":")
-    $hour = [int]$parts[0]
-    $minute = [int]$parts[1]
-    $second = [int]$parts[2]
-    if ($hour -gt 23 -or $minute -gt 59 -or $second -gt 59) {
-        throw "schedule_start_time must be a valid 24-hour time."
-    }
-
-    $now = Get-Date
-    $start = Get-Date -Year $now.Year -Month $now.Month -Day $now.Day -Hour $hour -Minute $minute -Second $second
-    if ($start -le $now) {
-        $start = $start.AddDays(1)
-    }
-
-    return $start
-}
-
-function Get-RunnerProcesses {
+function Get-RunnerProcess {
     param([string]$RunnerScriptPath)
 
-    $escapedPath = [System.Management.Automation.WildcardPattern]::Escape($RunnerScriptPath)
-    return @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-        $_.Name -ieq "powershell.exe" -and
-        $_.CommandLine -like "*$escapedPath*"
-    })
+    return Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+        $_.Name -ieq "powershell.exe" -and $_.CommandLine -like "*monitor-runner.ps1*"
+    } | Select-Object -First 1
 }
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -102,11 +76,8 @@ $configFullPath = Resolve-PathFromBase -BaseDirectory $scriptRoot -Value $Config
 $configDirectory = Split-Path -Parent $configFullPath
 $config = Get-ConfigMap -Path $configFullPath
 
-$taskName = Get-ConfigValue -Config $config -Key "task_name" -DefaultValue "LDPlayerHealthMonitor"
 $intervalSeconds = [int](Get-ConfigValue -Config $config -Key "schedule_interval_seconds" -DefaultValue "10")
-$startTimeText = Get-ConfigValue -Config $config -Key "schedule_start_time" -DefaultValue "00:00:00"
-$taskDescription = Get-ConfigValue -Config $config -Key "task_description" -DefaultValue "LDPlayer health monitor task"
-
+$runnerPidFile = Resolve-PathFromBase -BaseDirectory $configDirectory -Value (Get-ConfigValue -Config $config -Key "runner_pid_file" -DefaultValue ".\monitor.pid")
 if ($intervalSeconds -lt 1) {
     throw "schedule_interval_seconds must be >= 1."
 }
@@ -116,32 +87,23 @@ if (-not (Test-Path -LiteralPath $runnerScriptPath)) {
     throw "Runner script not found: $runnerScriptPath"
 }
 
-$startBoundary = Get-NextStartBoundary -TimeText $startTimeText
+$existingRunner = Get-RunnerProcess -RunnerScriptPath $runnerScriptPath
+if ($existingRunner) {
+    Set-Content -LiteralPath $runnerPidFile -Value $existingRunner.ProcessId -Encoding ASCII
+    Write-Host "Runner already running: PID $($existingRunner.ProcessId)"
+    Write-Host "PID file: $runnerPidFile"
+    exit 0
+}
+
 $powershellPath = (Get-Command powershell.exe -ErrorAction Stop).Source
-$actionArguments = @(
+$process = Start-Process -FilePath $powershellPath -ArgumentList @(
     "-NoProfile",
     "-ExecutionPolicy", "Bypass",
-    "-File", "`"$runnerScriptPath`"",
-    "-ConfigPath", "`"$configFullPath`""
-) -join " "
+    "-File", $runnerScriptPath,
+    "-ConfigPath", $configFullPath
+) -WorkingDirectory $configDirectory -PassThru -WindowStyle Hidden
 
-$action = New-ScheduledTaskAction -Execute $powershellPath -Argument $actionArguments -WorkingDirectory $configDirectory
-$trigger = New-ScheduledTaskTrigger -Once -At $startBoundary
-$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-
-$existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-if ($existingTask) {
-    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
-}
-
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Description $taskDescription | Out-Null
-$runningProcesses = @(Get-RunnerProcesses -RunnerScriptPath $runnerScriptPath)
-if ($runningProcesses.Count -eq 0) {
-    Start-ScheduledTask -TaskName $taskName
-} else {
-    Write-Host "Runner already running. Skip immediate start."
-}
-
-Write-Host "Task registered: $taskName"
-Write-Host "Next schedule start: $($startBoundary.ToString('yyyy-MM-dd HH:mm:ss'))"
+Set-Content -LiteralPath $runnerPidFile -Value $process.Id -Encoding ASCII
+Write-Host "Runner started: PID $($process.Id)"
+Write-Host "PID file: $runnerPidFile"
 Write-Host "Interval seconds: $intervalSeconds"
