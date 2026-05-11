@@ -127,7 +127,7 @@ $process = Start-Process -FilePath $powershellPath -ArgumentList @(
     "-ExecutionPolicy", "Bypass",
     "-File", $runnerScriptPath,
     "-ConfigPath", $configFullPath
-) -WorkingDirectory $configDirectory -PassThru -WindowStyle Hidden
+) -WorkingDirectory $configDirectory -PassThru
 
 Set-Content -LiteralPath $runnerPidFile -Value $process.Id -Encoding ASCII
 Write-LogLine -LogPath $logPath -Message "Runner started: PID $($process.Id)"

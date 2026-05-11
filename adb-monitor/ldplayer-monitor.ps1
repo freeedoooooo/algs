@@ -19,9 +19,13 @@ function Write-WarnLog {
 
 function Write-MonitorLine {
     param(
-        [Parameter(Mandatory = $true)][string]$Message,
+        [AllowEmptyString()][string]$Message,
         [string]$ForegroundColor = ""
     )
+
+    if ($null -eq $Message) {
+        $Message = ""
+    }
 
     if ([string]::IsNullOrWhiteSpace($ForegroundColor)) {
         Write-Host $Message
