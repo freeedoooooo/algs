@@ -38,6 +38,22 @@ function Write-MonitorLine {
     }
 }
 
+function Get-MonitorLineColor {
+    param([string]$Message)
+
+    if ($Message -match '\[ERROR\]') {
+        return "Red"
+    }
+    if ($Message -match '\[WARN\]') {
+        return "Yellow"
+    }
+    if ($Message -match '\[STEP\]') {
+        return "Cyan"
+    }
+
+    return ""
+}
+
 function ConvertTo-ArgumentString {
     param([string[]]$ArgumentList)
 
@@ -464,9 +480,10 @@ function Remove-StaleLogs {
     )
 
     $cutoff = (Get-Date).AddHours(-1 * $RetentionHours)
+    $baseName = [System.IO.Path]::GetFileNameWithoutExtension($CurrentLogFileName)
     Get-ChildItem -LiteralPath $DirectoryPath -File -ErrorAction SilentlyContinue |
         Where-Object {
-            $_.Name -like "ldplayer-monitor*.log" -and
+            $_.Name -like "$baseName*.log" -and
             $_.Name -ne $CurrentLogFileName -and
             $_.LastWriteTime -lt $cutoff
         } |
@@ -480,7 +497,22 @@ function Write-LogLines {
     )
 
     foreach ($line in $Lines) {
-        Write-MonitorLine -Message $line
+        Write-MonitorLine -Message $line -ForegroundColor (Get-MonitorLineColor -Message $line)
+    }
+}
+
+function Format-DeviceReason {
+    param([string]$Reason)
+
+    switch ($Reason) {
+        "boot_not_completed" { return "boot not completed" }
+        "no_devices_found" { return "no devices found" }
+        default {
+            if ($Reason -like "state=*") {
+                return $Reason.Substring(6)
+            }
+            return $Reason
+        }
     }
 }
 
@@ -488,6 +520,7 @@ function New-RunSummary {
     param(
         [datetime]$RunTime,
         [string]$ConfigFilePath,
+        [string]$LogFilePath,
         [string]$ResolvedAdbPath,
         [string]$ResolvedLdPlayerPath,
         [object[]]$Checks,
@@ -524,6 +557,7 @@ function New-RunSummary {
     return [pscustomobject]@{
         Timestamp        = $RunTime.ToString("o")
         ConfigFilePath   = $ConfigFilePath
+        LogFilePath      = $LogFilePath
         AdbPath          = $ResolvedAdbPath
         LdPlayerPath     = $ResolvedLdPlayerPath
         Status           = $status
@@ -542,25 +576,27 @@ function Convert-SummaryToLogLines {
     $prefix = "[{0}]" -f $Summary.Timestamp
     $lines = New-Object System.Collections.Generic.List[string]
 
-    $lines.Add("$prefix [INFO] monitor run start")
-    $lines.Add("$prefix [INFO] config_path=$($Summary.ConfigFilePath)")
-    $lines.Add("$prefix [INFO] adb_path=$($Summary.AdbPath)")
-    $lines.Add("$prefix [INFO] ldplayer_path=$($Summary.LdPlayerPath)")
-    $lines.Add("$prefix [INFO] status=$($Summary.Status) connected_devices=$($Summary.TotalCount) healthy_devices=$($Summary.HealthyCount) unhealthy_devices=$($Summary.UnhealthyCount)")
+    $resultLevel = if ($Summary.Status -eq "healthy") { "INFO" } else { "WARN" }
+
+    $lines.Add("$prefix [INFO] run start")
+    $lines.Add("$prefix [INFO] config $($Summary.ConfigFilePath)")
+    $lines.Add("$prefix [INFO] paths ldplayer=$($Summary.LdPlayerPath) adb=$($Summary.AdbPath)")
+    $lines.Add("$prefix [$resultLevel] result $($Summary.Status), healthy $($Summary.HealthyCount) / total $($Summary.TotalCount)")
 
     foreach ($device in $Summary.HealthyDevices) {
-        $lines.Add("$prefix [INFO] healthy_device=$device")
+        $lines.Add("$prefix [INFO] device $device healthy")
     }
 
     foreach ($device in $Summary.UnhealthyDevices) {
-        $lines.Add("$prefix [WARN] unhealthy_device=$($device.Serial) reason=$($device.Reason)")
+        $lines.Add("$prefix [WARN] device $($device.Serial) $(Format-DeviceReason -Reason $device.Reason)")
     }
 
     if (-not [string]::IsNullOrWhiteSpace($Summary.ErrorMessage)) {
         $lines.Add("$prefix [ERROR] $($Summary.ErrorMessage)")
     }
 
-    $lines.Add("$prefix [INFO] monitor run end")
+    $lines.Add("$prefix [INFO] log $($Summary.LogFilePath)")
+    $lines.Add("$prefix [INFO] run end")
     $lines.Add("")
     return $lines
 }
@@ -582,14 +618,6 @@ $script:AdbDevicesTimeoutSeconds = [int](Get-ConfigValue -Config $config -Key "a
 $script:AdbShellTimeoutSeconds = [int](Get-ConfigValue -Config $config -Key "adb_shell_timeout_seconds" -DefaultValue "15")
 $script:BootCheckAttempts = [int](Get-ConfigValue -Config $config -Key "boot_check_attempts" -DefaultValue "3")
 $script:BootCheckDelaySeconds = [int](Get-ConfigValue -Config $config -Key "boot_check_delay_seconds" -DefaultValue "1")
-
-$adbHint = $AdbPath
-if ([string]::IsNullOrWhiteSpace($adbHint)) {
-    $adbHint = Get-ConfigValue -Config $config -Key "adb_path"
-}
-if (-not [string]::IsNullOrWhiteSpace($adbHint)) {
-    $adbHint = Resolve-PathFromBase -BaseDirectory $configDirectory -Value $adbHint
-}
 
 $ldPlayerHint = $LdPlayerPath
 if ([string]::IsNullOrWhiteSpace($ldPlayerHint)) {
@@ -648,17 +676,19 @@ $errorMessage = ""
 $exitCode = 0
 
 try {
-    Write-Step "Load config from $configFullPath"
-    $resolvedAdb = Resolve-AdbPath -Hint $adbHint
-    if (-not $resolvedAdb) {
-        throw "adb.exe not found. Configure adb_path in monitor.config or add adb to PATH."
+    $resolvedLdPlayerPath = Resolve-LDPlayerPath -Hint $ldPlayerHint -ResolvedAdbPath ""
+    $adbHint = $AdbPath
+    if ([string]::IsNullOrWhiteSpace($adbHint) -and -not [string]::IsNullOrWhiteSpace($resolvedLdPlayerPath)) {
+        $adbHint = Join-Path $resolvedLdPlayerPath "adb.exe"
     }
 
-    $resolvedLdPlayerPath = Resolve-LDPlayerPath -Hint $ldPlayerHint -ResolvedAdbPath $resolvedAdb
+    $resolvedAdb = Resolve-AdbPath -Hint $adbHint
+    if (-not $resolvedAdb) {
+        throw "adb.exe not found under ldplayer_path or PATH."
+    }
 
-    Write-Step "Use adb at $resolvedAdb"
-    if (-not [string]::IsNullOrWhiteSpace($resolvedLdPlayerPath)) {
-        Write-Step "Use LDPlayer path $resolvedLdPlayerPath"
+    if ([string]::IsNullOrWhiteSpace($resolvedLdPlayerPath)) {
+        $resolvedLdPlayerPath = Resolve-LDPlayerPath -Hint $ldPlayerHint -ResolvedAdbPath $resolvedAdb
     }
 
     $devices = @(Get-Devices -Adb $resolvedAdb)
@@ -674,31 +704,8 @@ try {
     $exitCode = 1
 }
 
-$summary = New-RunSummary -RunTime $runTime -ConfigFilePath $configFullPath -ResolvedAdbPath $resolvedAdb -ResolvedLdPlayerPath $resolvedLdPlayerPath -Checks $checks -ErrorMessage $errorMessage
+$summary = New-RunSummary -RunTime $runTime -ConfigFilePath $configFullPath -LogFilePath $logFilePath -ResolvedAdbPath $resolvedAdb -ResolvedLdPlayerPath $resolvedLdPlayerPath -Checks $checks -ErrorMessage $errorMessage
 $logLines = Convert-SummaryToLogLines -Summary $summary
 Write-LogLines -LogFilePath $logFilePath -Lines $logLines
 Remove-StaleLogs -DirectoryPath $logDirectory -CurrentLogFileName $logFileName -RetentionHours $retentionHours
-
-if ($summary.Status -eq "healthy") {
-    Write-MonitorLine -Message "[RESULT] healthy emulators: $($summary.HealthyCount) / $($summary.TotalCount)" -ForegroundColor Green
-} else {
-    Write-WarnLog "healthy emulators: $($summary.HealthyCount) / $($summary.TotalCount)"
-}
-
-if (-not [string]::IsNullOrWhiteSpace($summary.AdbPath)) {
-    Write-MonitorLine -Message "[INFO] adb path: $($summary.AdbPath)"
-}
-if (-not [string]::IsNullOrWhiteSpace($summary.LdPlayerPath)) {
-    Write-MonitorLine -Message "[INFO] ldplayer path: $($summary.LdPlayerPath)"
-}
-
-foreach ($item in $summary.UnhealthyDevices) {
-    Write-WarnLog "$($item.Serial) $($item.Reason)"
-}
-
-if (-not [string]::IsNullOrWhiteSpace($summary.ErrorMessage)) {
-    Write-WarnLog $summary.ErrorMessage
-}
-
-Write-MonitorLine -Message "[LOG] $logFilePath"
 exit $exitCode

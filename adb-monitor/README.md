@@ -13,7 +13,7 @@
 - `stop-monitor.ps1`
   停止后台监控进程。
 - `monitor.config`
-  统一配置 `adb` 路径、模拟器路径、发现策略、健康检查参数、日志策略、定时策略。
+  统一配置模拟器路径、发现策略、健康检查参数、日志策略、定时策略。
 - `log/`
   监控日志目录。平时只追加一个主日志文件，达到轮转条件后再归档。
 
@@ -28,10 +28,8 @@
 
 `monitor.config` 采用 `key=value` 格式。
 
-- `adb_path`
-  可留空。留空时脚本会自动查找 `adb.exe`。
 - `ldplayer_path`
-  可留空。留空时脚本会优先用 `adb.exe` 所在目录推断模拟器安装目录。
+  模拟器安装目录。脚本会默认使用这个目录下的 `adb.exe`。
 - `common_ldplayer_dirs`
   常见雷电安装目录列表，使用分号分隔。
 - `log_directory`
@@ -85,8 +83,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\stop-monitor.ps1
 
 ## 日志规则
 
-- 监控日志默认写入 `.\log\ldplayer-monitor.log`
+- 监控日志默认写入 `.\log\monitor.log`
 - 每次执行都会把结果追加到同一个 `.log` 文件，而不是一轮一个文件
 - 主日志达到 `log_rotate_size_mb` 后，会轮转成带时间戳的归档日志
 - 每次运行后会自动清理 72 小时以前的归档日志
-- 日志里会记录配置文件路径、`adb` 路径、模拟器安装目录、连接设备数和异常原因
+- 日志里会记录配置文件路径、`adb` 路径、模拟器安装目录、健康结果和异常原因
