@@ -1,8 +1,6 @@
 param(
-    [string]$AdbPath = "",
-    [int]$PollSeconds = 30,
-    [switch]$Once,
-    [string]$ReportPath = ".\ldplayer-monitor.md"
+    [string]$ConfigPath = ".\config.txt",
+    [string]$AdbPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,9 +10,9 @@ function Write-Step {
     Write-Host "[STEP] $Message" -ForegroundColor Cyan
 }
 
-function Write-DebugLog {
+function Write-WarnLog {
     param([string]$Message)
-    Write-Host "[LOG] $Message" -ForegroundColor DarkGray
+    Write-Host "[WARN] $Message" -ForegroundColor Yellow
 }
 
 function ConvertTo-ArgumentString {
@@ -35,6 +33,68 @@ function ConvertTo-ArgumentString {
     }
 
     return ($escaped -join ' ')
+}
+
+function Get-ConfigMap {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        throw "Config file not found: $Path"
+    }
+
+    $config = @{}
+    foreach ($rawLine in Get-Content -LiteralPath $Path -Encoding UTF8) {
+        $line = $rawLine.Trim()
+        if ([string]::IsNullOrWhiteSpace($line)) {
+            continue
+        }
+        if ($line.StartsWith("#") -or $line.StartsWith(";")) {
+            continue
+        }
+
+        $separatorIndex = $line.IndexOf("=")
+        if ($separatorIndex -lt 1) {
+            continue
+        }
+
+        $key = $line.Substring(0, $separatorIndex).Trim().ToLowerInvariant()
+        $value = $line.Substring($separatorIndex + 1).Trim()
+        $config[$key] = $value
+    }
+
+    return $config
+}
+
+function Get-ConfigValue {
+    param(
+        [hashtable]$Config,
+        [string]$Key,
+        [string]$DefaultValue = ""
+    )
+
+    $lookupKey = $Key.ToLowerInvariant()
+    if ($Config.ContainsKey($lookupKey) -and -not [string]::IsNullOrWhiteSpace($Config[$lookupKey])) {
+        return $Config[$lookupKey]
+    }
+
+    return $DefaultValue
+}
+
+function Resolve-PathFromBase {
+    param(
+        [string]$BaseDirectory,
+        [string]$Value
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        return ""
+    }
+
+    if ([System.IO.Path]::IsPathRooted($Value)) {
+        return $Value
+    }
+
+    return [System.IO.Path]::GetFullPath((Join-Path $BaseDirectory $Value))
 }
 
 function Get-LDPlayerInstallDirsFromRegistry {
@@ -135,8 +195,6 @@ function Invoke-External {
         [int]$TimeoutSeconds = 20
     )
 
-    Write-DebugLog "Execute: $FilePath $($ArgumentList -join ' ')"
-
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $FilePath
     $psi.UseShellExecute = $false
@@ -174,14 +232,14 @@ function Invoke-External {
     return [pscustomobject]@{
         ExitCode = $process.ExitCode
         Output   = $output
-        StdOut   = (($output -join [Environment]::NewLine).Trim())
+        StdOut   = $stdoutText.Trim()
+        StdErr   = $stderrText.Trim()
     }
 }
 
 function Get-Devices {
     param([string]$Adb)
 
-    Write-Step "Read adb device list"
     $deviceArgs = @("devices", "-l")
     $result = Invoke-External -FilePath $Adb -ArgumentList $deviceArgs -TimeoutSeconds 10
     $fallbackReasons = New-Object System.Collections.Generic.List[string]
@@ -207,11 +265,9 @@ function Get-Devices {
     }
 
     if ($fallbackReasons.Count -gt 0) {
-        Write-DebugLog "Fallback to adb devices because: $($fallbackReasons -join '; ')"
-        $deviceArgs = @("devices")
-        $result = Invoke-External -FilePath $Adb -ArgumentList $deviceArgs -TimeoutSeconds 10
+        $result = Invoke-External -FilePath $Adb -ArgumentList @("devices") -TimeoutSeconds 10
         if ($result.ExitCode -ne 0) {
-            throw "Failed to run adb devices: $($result.StdOut)"
+            throw "Failed to run adb devices: $($result.StdOut) $($result.StdErr)".Trim()
         }
     }
 
@@ -232,7 +288,6 @@ function Get-Devices {
         $devices += [pscustomobject]@{
             Serial = $parts[0]
             State  = $parts[1]
-            Raw    = $line.Trim()
         }
     }
 
@@ -246,7 +301,6 @@ function Invoke-AdbShell {
         [string[]]$ShellArgs
     )
 
-    Write-DebugLog "adb shell: $Serial $($ShellArgs -join ' ')"
     return Invoke-External -FilePath $Adb -ArgumentList (@("-s", $Serial, "shell") + $ShellArgs) -TimeoutSeconds 15
 }
 
@@ -259,7 +313,6 @@ function Test-BootCompleted {
     )
 
     for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
-        Write-Step "Check boot completion for $Serial, attempt $attempt"
         $boot = Invoke-AdbShell -Adb $Adb -Serial $Serial -ShellArgs @("getprop", "sys.boot_completed")
         $bootCompleted = @(
             (($boot.StdOut | Out-String) -split "`r?`n") |
@@ -283,8 +336,6 @@ function Test-DeviceHealth {
         [string]$Adb,
         [object]$Device
     )
-
-    Write-Step "Check device $($Device.Serial)"
 
     if ($Device.State -ne "device") {
         return [pscustomobject]@{
@@ -313,21 +364,86 @@ function Test-DeviceHealth {
     }
 }
 
-function Convert-MonitorReportToMarkdown {
+function Ensure-Directory {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        [void](New-Item -Path $Path -ItemType Directory -Force)
+    }
+}
+
+function Remove-StaleLogs {
+    param(
+        [string]$DirectoryPath,
+        [int]$RetentionHours
+    )
+
+    $cutoff = (Get-Date).AddHours(-1 * $RetentionHours)
+    Get-ChildItem -LiteralPath $DirectoryPath -Filter "ldplayer-monitor-*.md" -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.LastWriteTime -lt $cutoff } |
+        Remove-Item -Force -ErrorAction SilentlyContinue
+}
+
+function New-RunSummary {
+    param(
+        [datetime]$RunTime,
+        [string]$Adb,
+        [object[]]$Checks,
+        [string]$ErrorMessage
+    )
+
+    $healthyDevices = @()
+    $unhealthyDevices = @()
+
+    if ($Checks) {
+        $healthyDevices = @($Checks | Where-Object { $_.Healthy } | ForEach-Object { $_.Serial })
+        $unhealthyDevices = @($Checks | Where-Object { -not $_.Healthy })
+    }
+
+    if ($Checks.Count -eq 0 -and [string]::IsNullOrWhiteSpace($ErrorMessage)) {
+        $unhealthyDevices = @(
+            [pscustomobject]@{
+                Serial  = "(none)"
+                State   = "missing"
+                Healthy = $false
+                Reason  = "no_devices_found"
+            }
+        )
+    }
+
+    $status = "healthy"
+    if ($unhealthyDevices.Count -gt 0) {
+        $status = "unhealthy"
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ErrorMessage)) {
+        $status = "error"
+    }
+
+    return [pscustomobject]@{
+        Timestamp        = $RunTime.ToString("o")
+        AdbPath          = $Adb
+        Status           = $status
+        TotalCount       = $Checks.Count
+        HealthyCount     = $healthyDevices.Count
+        UnhealthyCount   = $unhealthyDevices.Count
+        HealthyDevices   = $healthyDevices
+        UnhealthyDevices = $unhealthyDevices
+        ErrorMessage     = $ErrorMessage
+    }
+}
+
+function Convert-SummaryToMarkdown {
     param(
         [pscustomobject]$Summary,
-        [int]$PollSeconds,
-        [bool]$OnceMode
+        [string]$ConfigFilePath
     )
 
     $lines = New-Object System.Collections.Generic.List[string]
-    $modeText = if ($OnceMode) { "once" } else { "polling" }
-
-    $lines.Add("# LDPlayer health count report")
+    $lines.Add("# LDPlayer health monitor log")
     $lines.Add("")
     $lines.Add("- timestamp: $($Summary.Timestamp)")
-    $lines.Add("- mode: $modeText")
-    $lines.Add("- poll seconds: $PollSeconds")
+    $lines.Add("- status: $($Summary.Status)")
+    $lines.Add("- config: $ConfigFilePath")
     $lines.Add("- adb path: $($Summary.AdbPath)")
     $lines.Add("- connected devices: $($Summary.TotalCount)")
     $lines.Add("- healthy devices: $($Summary.HealthyCount)")
@@ -354,77 +470,86 @@ function Convert-MonitorReportToMarkdown {
         $lines.Add("")
     }
 
-    if ($Summary.TotalCount -eq 0) {
-        $lines.Add("## Current result")
+    if (-not [string]::IsNullOrWhiteSpace($Summary.ErrorMessage)) {
+        $lines.Add("## Error")
         $lines.Add("")
-        $lines.Add("- no connected emulator or device found")
+        $lines.Add('```text')
+        $lines.Add($Summary.ErrorMessage)
+        $lines.Add('```')
         $lines.Add("")
     }
 
-    return (($lines.ToArray()) -join [Environment]::NewLine)
+    return ($lines -join [Environment]::NewLine)
 }
 
-$adb = Resolve-AdbPath -Hint $AdbPath
-if (-not $adb) {
-    throw "adb.exe not found. Pass -AdbPath or add adb to PATH."
+$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$configFullPath = Resolve-PathFromBase -BaseDirectory $scriptRoot -Value $ConfigPath
+$configDirectory = Split-Path -Parent $configFullPath
+$config = Get-ConfigMap -Path $configFullPath
+
+$adbHint = $AdbPath
+if ([string]::IsNullOrWhiteSpace($adbHint)) {
+    $adbHint = Get-ConfigValue -Config $config -Key "adb_path"
+}
+if (-not [string]::IsNullOrWhiteSpace($adbHint)) {
+    $adbHint = Resolve-PathFromBase -BaseDirectory $configDirectory -Value $adbHint
 }
 
-if ($PollSeconds -lt 1) {
-    throw "-PollSeconds must be >= 1."
+$logDirectory = Resolve-PathFromBase -BaseDirectory $configDirectory -Value (Get-ConfigValue -Config $config -Key "log_directory" -DefaultValue ".\log")
+$retentionHours = [int](Get-ConfigValue -Config $config -Key "log_retention_hours" -DefaultValue "72")
+if ($retentionHours -lt 1) {
+    throw "log_retention_hours must be >= 1."
 }
 
-Write-Step "Resolved adb.exe: $adb"
+Ensure-Directory -Path $logDirectory
+$runTime = Get-Date
+$logFileName = "ldplayer-monitor-{0}.md" -f $runTime.ToString("yyyyMMdd-HHmmss")
+$logFilePath = Join-Path $logDirectory $logFileName
 
-do {
-    Write-Step "Start monitoring round"
-    $devices = @(Get-Devices -Adb $adb)
-    $checks = @(
-        foreach ($device in $devices) {
-            Test-DeviceHealth -Adb $adb -Device $device
-        }
-    )
+$resolvedAdb = ""
+$checks = @()
+$errorMessage = ""
+$exitCode = 0
 
-    $healthyDevices = @($checks | Where-Object { $_.Healthy })
-    $unhealthyDevices = @($checks | Where-Object { -not $_.Healthy })
-    if ($checks.Count -eq 0) {
-        $unhealthyDevices = @(
-            [pscustomobject]@{
-                Serial  = "(none)"
-                State   = "missing"
-                Healthy = $false
-                Reason  = "no_devices_found"
-            }
-        )
+try {
+    Write-Step "Load config from $configFullPath"
+    $resolvedAdb = Resolve-AdbPath -Hint $adbHint
+    if (-not $resolvedAdb) {
+        throw "adb.exe not found. Configure adb_path in config.txt or add adb to PATH."
     }
 
-    $summary = [pscustomobject]@{
-        Timestamp       = (Get-Date).ToString("o")
-        AdbPath         = $adb
-        TotalCount      = $checks.Count
-        HealthyCount    = $healthyDevices.Count
-        UnhealthyCount   = $unhealthyDevices.Count
-        HealthyDevices  = @($healthyDevices | ForEach-Object { $_.Serial })
-        UnhealthyDevices = @($unhealthyDevices)
+    Write-Step "Use adb at $resolvedAdb"
+    $devices = @(Get-Devices -Adb $resolvedAdb)
+    foreach ($device in $devices) {
+        $checks += Test-DeviceHealth -Adb $resolvedAdb -Device $device
     }
 
-    Write-Step "Write report to $ReportPath"
-    $markdownReport = Convert-MonitorReportToMarkdown -Summary $summary -PollSeconds $PollSeconds -OnceMode ([bool]$Once)
-    $markdownReport | Set-Content -LiteralPath $ReportPath -Encoding UTF8
+    if (@($checks | Where-Object { -not $_.Healthy }).Count -gt 0 -or $checks.Count -eq 0) {
+        $exitCode = 1
+    }
+} catch {
+    $errorMessage = $_.Exception.Message
+    $exitCode = 1
+}
 
+$summary = New-RunSummary -RunTime $runTime -Adb $resolvedAdb -Checks $checks -ErrorMessage $errorMessage
+$markdown = Convert-SummaryToMarkdown -Summary $summary -ConfigFilePath $configFullPath
+$markdown | Set-Content -LiteralPath $logFilePath -Encoding UTF8
+Remove-StaleLogs -DirectoryPath $logDirectory -RetentionHours $retentionHours
+
+if ($summary.Status -eq "healthy") {
     Write-Host "[RESULT] healthy emulators: $($summary.HealthyCount) / $($summary.TotalCount)" -ForegroundColor Green
-    foreach ($item in $unhealthyDevices) {
-        Write-Host "[WARN] $($item.Serial) $($item.Reason)" -ForegroundColor Yellow
-    }
+} else {
+    Write-WarnLog "healthy emulators: $($summary.HealthyCount) / $($summary.TotalCount)"
+}
 
-    if ($unhealthyDevices.Count -gt 0) {
-        Write-Step "Unhealthy devices found; exiting with code 1"
-        exit 1
-    }
+foreach ($item in $summary.UnhealthyDevices) {
+    Write-WarnLog "$($item.Serial) $($item.Reason)"
+}
 
-    if (-not $Once) {
-        Write-Step "Round complete; sleeping $PollSeconds seconds"
-        Start-Sleep -Seconds $PollSeconds
-    }
-} while (-not $Once)
+if (-not [string]::IsNullOrWhiteSpace($summary.ErrorMessage)) {
+    Write-WarnLog $summary.ErrorMessage
+}
 
-Write-Step "Monitoring complete"
+Write-Host "[LOG] $logFilePath"
+exit $exitCode

@@ -1,49 +1,68 @@
 # adb-monitor
 
-这个目录里有两个 PowerShell 脚本。
+这个目录现在只保留雷电模拟器健康监控链路。
 
-## 脚本用途
+## 文件说明
 
-### `ldplayer-inspect.ps1`
+- `ldplayer-monitor.ps1`
+  单次执行监控。每次运行都会检查当前连接设备里有多少台是健康的。
+- `start-monitor.ps1`
+  按 `config.txt` 注册并启动 Windows 计划任务。
+- `stop-monitor.ps1`
+  停止并删除计划任务。
+- `config.txt`
+  统一配置 `adb` 路径、日志目录、定时策略、日志保留时长。
+- `log/`
+  监控日志目录。日志名会自动带时间戳。
 
-一次性巡检，用来查看模拟器当前到底停在哪个状态。
+## 健康定义
 
-### `ldplayer-monitor.ps1`
+监控脚本只检查这两件事：
 
-健康数量监控，只关心当前有多少台模拟器处于健康运行状态。
+- 设备状态必须是 `device`
+- `sys.boot_completed` 必须等于 `1`
 
-它会检查这些内容：
+## 配置项
 
-- `adb` 是否能发现设备
-- 设备状态是不是 `device`
-- `sys.boot_completed` 是否为 `1`
+`config.txt` 采用 `key=value` 格式。
 
-输出文件：
+- `adb_path`
+  可留空。留空时脚本会自动查找 `adb.exe`。
+- `log_directory`
+  日志目录，默认是 `.\log`。
+- `task_name`
+  计划任务名称。
+- `schedule_interval_minutes`
+  定时执行间隔，单位分钟。
+- `schedule_start_time`
+  每日首次触发时间，格式必须是 `HH:mm`。
+- `log_retention_hours`
+  日志最多保留多少小时，默认 `72`。
 
-- `ldplayer-monitor.md`
+## 使用方式
 
-## 常用命令
+先修改 [config.txt](./config.txt)。
 
-### 运行一次健康数量监控
+手动运行一次监控：
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\ldplayer-monitor.ps1 -Once
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\ldplayer-monitor.ps1
 ```
 
-### 持续轮询监控
+启动定时监控：
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\ldplayer-monitor.ps1 -PollSeconds 30
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start-monitor.ps1
 ```
 
-### 手动传入 adb 路径
+停止定时监控：
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\ldplayer-monitor.ps1 -AdbPath "D:\leidian\LDPlayer9\adb.exe" -Once
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\stop-monitor.ps1
 ```
 
-## 说明
+## 日志规则
 
-- 健康运行数会直接写入终端和 `ldplayer-monitor.md`
-- 如果没有发现设备，脚本会按异常退出
-- 如果有设备但未通过健康检查，脚本也会按异常退出
+- 监控日志写入 `.\log`
+- 日志文件名格式为 `ldplayer-monitor-YYYYMMDD-HHMMSS.md`
+- 每次运行后会自动清理 72 小时以前的日志
