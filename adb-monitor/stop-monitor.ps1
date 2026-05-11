@@ -81,11 +81,14 @@ function Get-MonitorLogPath {
 function Write-LogLine {
     param(
         [string]$LogPath,
-        [string]$Message
+        [string]$Message,
+        [string]$Level = "INFO"
     )
 
-    Write-Host $Message
-    Add-Content -LiteralPath $LogPath -Value $Message -Encoding UTF8
+    $timestamp = (Get-Date).ToString("o")
+    $line = "[{0}] [{1}] {2}" -f $timestamp, $Level, $Message
+    Write-Host $line
+    Add-Content -LiteralPath $LogPath -Value $line -Encoding UTF8
 }
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -103,7 +106,7 @@ if (Test-Path -LiteralPath $runnerPidFile) {
         $proc = Get-Process -Id $runnerId -ErrorAction SilentlyContinue
         if ($proc) {
             Stop-Process -Id $runnerId -Force -ErrorAction SilentlyContinue
-            Write-LogLine -LogPath $logPath -Message "Runner stopped: PID $runnerId"
+            Write-LogLine -LogPath $logPath -Message "runner stopped, pid=$runnerId"
             $stopped = $true
         }
     }
@@ -116,10 +119,10 @@ $runnerProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue
 })
 foreach ($process in $runnerProcesses) {
     Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
-    Write-LogLine -LogPath $logPath -Message "Runner stopped: PID $($process.ProcessId)"
+    Write-LogLine -LogPath $logPath -Message "runner stopped, pid=$($process.ProcessId)"
     $stopped = $true
 }
 
 if (-not $stopped) {
-    Write-LogLine -LogPath $logPath -Message "Runner not found."
+    Write-LogLine -LogPath $logPath -Message "runner not found"
 }

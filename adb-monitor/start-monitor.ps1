@@ -81,11 +81,14 @@ function Get-MonitorLogPath {
 function Write-LogLine {
     param(
         [string]$LogPath,
-        [string]$Message
+        [string]$Message,
+        [string]$Level = "INFO"
     )
 
-    Write-Host $Message
-    Add-Content -LiteralPath $LogPath -Value $Message -Encoding UTF8
+    $timestamp = (Get-Date).ToString("o")
+    $line = "[{0}] [{1}] {2}" -f $timestamp, $Level, $Message
+    Write-Host $line
+    Add-Content -LiteralPath $LogPath -Value $line -Encoding UTF8
 }
 
 function Get-RunnerProcess {
@@ -116,8 +119,7 @@ if (-not (Test-Path -LiteralPath $runnerScriptPath)) {
 $existingRunner = Get-RunnerProcess -RunnerScriptPath $runnerScriptPath
 if ($existingRunner) {
     Set-Content -LiteralPath $runnerPidFile -Value $existingRunner.ProcessId -Encoding ASCII
-    Write-LogLine -LogPath $logPath -Message "Runner already running: PID $($existingRunner.ProcessId)"
-    Write-LogLine -LogPath $logPath -Message "PID file: $runnerPidFile"
+    Write-LogLine -LogPath $logPath -Message "runner already running, pid=$($existingRunner.ProcessId), pid_file=$runnerPidFile"
     exit 0
 }
 
@@ -130,6 +132,4 @@ $process = Start-Process -FilePath $powershellPath -ArgumentList @(
 ) -WorkingDirectory $configDirectory -PassThru
 
 Set-Content -LiteralPath $runnerPidFile -Value $process.Id -Encoding ASCII
-Write-LogLine -LogPath $logPath -Message "Runner started: PID $($process.Id)"
-Write-LogLine -LogPath $logPath -Message "PID file: $runnerPidFile"
-Write-LogLine -LogPath $logPath -Message "Interval seconds: $intervalSeconds"
+Write-LogLine -LogPath $logPath -Message "runner started, pid=$($process.Id), interval=${intervalSeconds}s, pid_file=$runnerPidFile"
