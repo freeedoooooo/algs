@@ -471,36 +471,150 @@ function Test-BootCompleted {
     return $false
 }
 
+function Get-LDConsolePath {
+    param([string]$LdPlayerPath)
+
+    if ([string]::IsNullOrWhiteSpace($LdPlayerPath)) {
+        return ""
+    }
+
+    foreach ($fileName in @("ldconsole.exe", "dnconsole.exe")) {
+        $candidate = Join-Path $LdPlayerPath $fileName
+        if (Test-Path -LiteralPath $candidate) {
+            return $candidate
+        }
+    }
+
+    return ""
+}
+
+function Get-LDPlayerInstances {
+    param([string]$LdPlayerPath)
+
+    $ldConsolePath = Get-LDConsolePath -LdPlayerPath $LdPlayerPath
+    if ([string]::IsNullOrWhiteSpace($ldConsolePath)) {
+        return @()
+    }
+
+    try {
+        $result = Invoke-External -FilePath $ldConsolePath -ArgumentList @("list2")
+        if ($result.ExitCode -ne 0) {
+            return @()
+        }
+
+        $instances = @()
+        foreach ($line in $result.Output) {
+            if ([string]::IsNullOrWhiteSpace($line)) {
+                continue
+            }
+
+            $parts = $line -split ",", 7
+            if ($parts.Count -lt 2) {
+                continue
+            }
+
+            $index = 0
+            if (-not [int]::TryParse($parts[0], [ref]$index)) {
+                continue
+            }
+
+            $instances += [pscustomobject]@{
+                Index = $index
+                Name  = $parts[1].Trim()
+            }
+        }
+
+        return @($instances)
+    } catch {
+        return @()
+    }
+}
+
+function Get-InstanceIndexFromSerial {
+    param([string]$Serial)
+
+    if ($Serial -match '^emulator-(\d+)$') {
+        $port = [int]$matches[1]
+        if ($port -ge 5554 -and (($port - 5554) % 2 -eq 0)) {
+            return [int](($port - 5554) / 2)
+        }
+    }
+
+    return $null
+}
+
+function Get-DeviceInstanceInfo {
+    param(
+        [string]$Serial,
+        [object[]]$LdPlayerInstances = @()
+    )
+
+    $instanceIndex = Get-InstanceIndexFromSerial -Serial $Serial
+    $instanceName = ""
+    $displayName = $Serial
+
+    if ($null -ne $instanceIndex) {
+        $matchedInstance = @($LdPlayerInstances | Where-Object { $_.Index -eq $instanceIndex } | Select-Object -First 1)
+        if ($matchedInstance.Count -gt 0) {
+            $instanceName = $matchedInstance[0].Name
+        }
+
+        if ([string]::IsNullOrWhiteSpace($instanceName)) {
+            $displayName = "模拟器$instanceIndex"
+        } else {
+            $displayName = "模拟器$instanceIndex（$instanceName）"
+        }
+    }
+
+    return [pscustomobject]@{
+        InstanceIndex = $instanceIndex
+        InstanceName  = $instanceName
+        DisplayName   = $displayName
+    }
+}
+
 function Test-DeviceHealth {
     param(
         [string]$Adb,
-        [object]$Device
+        [object]$Device,
+        [object[]]$LdPlayerInstances = @()
     )
+
+    $instanceInfo = Get-DeviceInstanceInfo -Serial $Device.Serial -LdPlayerInstances $LdPlayerInstances
 
     if ($Device.State -ne "device") {
         return [pscustomobject]@{
-            Serial  = $Device.Serial
-            State   = $Device.State
-            Healthy = $false
-            Reason  = "state=$($Device.State)"
+            Serial        = $Device.Serial
+            State         = $Device.State
+            Healthy       = $false
+            Reason        = "state=$($Device.State)"
+            InstanceIndex = $instanceInfo.InstanceIndex
+            InstanceName  = $instanceInfo.InstanceName
+            DisplayName   = $instanceInfo.DisplayName
         }
     }
 
     $bootCompleted = Test-BootCompleted -Adb $Adb -Serial $Device.Serial
     if (-not $bootCompleted) {
         return [pscustomobject]@{
-            Serial  = $Device.Serial
-            State   = $Device.State
-            Healthy = $false
-            Reason  = "boot_not_completed"
+            Serial        = $Device.Serial
+            State         = $Device.State
+            Healthy       = $false
+            Reason        = "boot_not_completed"
+            InstanceIndex = $instanceInfo.InstanceIndex
+            InstanceName  = $instanceInfo.InstanceName
+            DisplayName   = $instanceInfo.DisplayName
         }
     }
 
     return [pscustomobject]@{
-        Serial  = $Device.Serial
-        State   = $Device.State
-        Healthy = $true
-        Reason  = ""
+        Serial        = $Device.Serial
+        State         = $Device.State
+        Healthy       = $true
+        Reason        = ""
+        InstanceIndex = $instanceInfo.InstanceIndex
+        InstanceName  = $instanceInfo.InstanceName
+        DisplayName   = $instanceInfo.DisplayName
     }
 }
 
@@ -696,7 +810,8 @@ function Send-AlertMail {
     $bodyLines.Add("ADB路径：$($Summary.AdbPath)")
     $bodyLines.Add("设备明细：")
     foreach ($device in @($Summary.UnhealthyDevices)) {
-        $bodyLines.Add(" - 设备 $($device.Serial) $(Format-DeviceReason -Reason $device.Reason)")
+        $displayName = if ([string]::IsNullOrWhiteSpace($device.DisplayName)) { $device.Serial } else { $device.DisplayName }
+        $bodyLines.Add(" - $displayName $(Format-DeviceReason -Reason $device.Reason)")
     }
     $bodyLines.Add("")
     $bodyLines.Add("告警信息：$($Summary.AlertMessage)")
@@ -781,17 +896,18 @@ function New-RunSummary {
     $unhealthyDevices = @()
 
     if ($Checks) {
-        $healthyDevices = @($Checks | Where-Object { $_.Healthy } | ForEach-Object { $_.Serial })
+        $healthyDevices = @($Checks | Where-Object { $_.Healthy } | ForEach-Object { $_.DisplayName })
         $unhealthyDevices = @($Checks | Where-Object { -not $_.Healthy })
     }
 
     if ($Checks.Count -eq 0 -and [string]::IsNullOrWhiteSpace($ErrorMessage)) {
         $unhealthyDevices = @(
             [pscustomobject]@{
-                Serial  = "(none)"
-                State   = "missing"
-                Healthy = $false
-                Reason  = "no_devices_found"
+                Serial        = "(none)"
+                State         = "missing"
+                Healthy       = $false
+                Reason        = "no_devices_found"
+                DisplayName   = "未发现设备"
             }
         )
     }
@@ -853,7 +969,8 @@ function Convert-SummaryToLogLines {
     }
 
     foreach ($device in $Summary.UnhealthyDevices) {
-        $lines.Add("$prefix [WARN] 设备 $($device.Serial) $(Format-DeviceReason -Reason $device.Reason)")
+        $displayName = if ([string]::IsNullOrWhiteSpace($device.DisplayName)) { $device.Serial } else { $device.DisplayName }
+        $lines.Add("$prefix [WARN] 设备 $displayName $(Format-DeviceReason -Reason $device.Reason)")
     }
 
     if (-not [string]::IsNullOrWhiteSpace($Summary.ErrorMessage)) {
@@ -949,6 +1066,7 @@ $script:MonitorLogFilePath = $logFilePath
 $runTime = Get-Date
 $resolvedAdb = ""
 $resolvedLdPlayerPath = ""
+$ldPlayerInstances = @()
 $checks = @()
 $errorMessage = ""
 $exitCode = 0
@@ -969,9 +1087,10 @@ try {
         $resolvedLdPlayerPath = Resolve-LDPlayerPath -Hint $ldPlayerHint -ResolvedAdbPath $resolvedAdb
     }
 
+    $ldPlayerInstances = @(Get-LDPlayerInstances -LdPlayerPath $resolvedLdPlayerPath)
     $devices = @(Get-Devices -Adb $resolvedAdb)
     foreach ($device in $devices) {
-        $checks += Test-DeviceHealth -Adb $resolvedAdb -Device $device
+        $checks += Test-DeviceHealth -Adb $resolvedAdb -Device $device -LdPlayerInstances $ldPlayerInstances
     }
 
     if (@($checks | Where-Object { -not $_.Healthy }).Count -gt 0 -or $checks.Count -eq 0) {
