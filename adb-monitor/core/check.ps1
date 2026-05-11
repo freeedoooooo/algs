@@ -150,6 +150,25 @@ function Get-ConfigValue {
     return $DefaultValue
 }
 
+function Normalize-MailAddress {
+    param([string]$Address)
+
+    $value = $Address.Trim()
+    if ([string]::IsNullOrWhiteSpace($value)) {
+        return ""
+    }
+
+    if ($value -match "@") {
+        return $value
+    }
+
+    if ($value -match "^\d+$") {
+        return "$value@qq.com"
+    }
+
+    return $value
+}
+
 function Get-ConfigList {
     param(
         [hashtable]$Config,
@@ -539,6 +558,175 @@ function Remove-StaleLogs {
         Remove-Item -Force -ErrorAction SilentlyContinue
 }
 
+function Get-AlertStatePath {
+    param(
+        [string]$ConfigDirectory,
+        [hashtable]$Config
+    )
+
+    return Resolve-PathFromBase -BaseDirectory $ConfigDirectory -Value (Get-ConfigValue -Config $Config -Key "alert_state_file" -DefaultValue ".\runtime\alert.state.json")
+}
+
+function Get-AlertState {
+    param([string]$StatePath)
+
+    if (-not (Test-Path -LiteralPath $StatePath)) {
+        return $null
+    }
+
+    try {
+        return Get-Content -LiteralPath $StatePath -Raw -ErrorAction SilentlyContinue | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+        return $null
+    }
+}
+
+function Set-AlertState {
+    param(
+        [string]$StatePath,
+        [datetime]$LastAlertAt
+    )
+
+    $directory = Split-Path -Parent $StatePath
+    if (-not [string]::IsNullOrWhiteSpace($directory)) {
+        Ensure-Directory -Path $directory
+    }
+
+    $payload = [pscustomobject]@{
+        LastAlertAt = $LastAlertAt.ToString("o")
+    }
+
+    $payload | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $StatePath -Encoding UTF8
+}
+
+function Clear-AlertState {
+    param([string]$StatePath)
+
+    if (Test-Path -LiteralPath $StatePath) {
+        Remove-Item -LiteralPath $StatePath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Test-AlertCooldownPassed {
+    param(
+        [string]$StatePath,
+        [int]$CooldownMinutes
+    )
+
+    if ($CooldownMinutes -lt 1) {
+        return $true
+    }
+
+    $state = Get-AlertState -StatePath $StatePath
+    if (-not $state -or [string]::IsNullOrWhiteSpace($state.LastAlertAt)) {
+        return $true
+    }
+
+    try {
+        $lastAlertAt = [datetime]$state.LastAlertAt
+    } catch {
+        return $true
+    }
+
+    $elapsedMinutes = (New-TimeSpan -Start $lastAlertAt -End (Get-Date)).TotalMinutes
+    return ($elapsedMinutes -ge $CooldownMinutes)
+}
+
+function Send-AlertMail {
+    param(
+        [pscustomobject]$Summary,
+        [hashtable]$Config,
+        [string]$StatePath,
+        [int]$CooldownMinutes
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($Summary.ErrorMessage)) {
+        return
+    }
+
+    if ([string]::IsNullOrWhiteSpace($Summary.AlertMessage)) {
+        Clear-AlertState -StatePath $StatePath
+        return
+    }
+
+    $mailEnabled = (Get-ConfigValue -Config $Config -Key "mail_enabled" -DefaultValue "true").ToLowerInvariant()
+    if ($mailEnabled -ne "true") {
+        return
+    }
+
+    if (-not (Test-AlertCooldownPassed -StatePath $StatePath -CooldownMinutes $CooldownMinutes)) {
+        return
+    }
+
+    $smtpHost = Get-ConfigValue -Config $Config -Key "mail_smtp_host" -DefaultValue "smtp.qq.com"
+    $smtpPort = [int](Get-ConfigValue -Config $Config -Key "mail_smtp_port" -DefaultValue "587")
+    $smtpSsl = (Get-ConfigValue -Config $Config -Key "mail_smtp_ssl" -DefaultValue "true").ToLowerInvariant() -eq "true"
+    $mailUser = Normalize-MailAddress -Address (Get-ConfigValue -Config $Config -Key "mail_user")
+    $mailPassword = Get-ConfigValue -Config $Config -Key "mail_password"
+    $mailTo = @(
+        Get-ConfigList -Config $Config -Key "mail_to" |
+            ForEach-Object { Normalize-MailAddress -Address $_ } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    )
+    $subjectPrefix = Get-ConfigValue -Config $Config -Key "mail_subject_prefix" -DefaultValue "[adb-monitor]"
+    $timeoutSeconds = [int](Get-ConfigValue -Config $Config -Key "mail_timeout_seconds" -DefaultValue "20")
+
+    if ([string]::IsNullOrWhiteSpace($mailUser) -or [string]::IsNullOrWhiteSpace($mailPassword) -or $mailTo.Count -eq 0) {
+        Write-MonitorLine -Message ("[{0}] [ERROR] mail config incomplete" -f (Get-Date).ToString("o")) -ForegroundColor Red
+        return
+    }
+
+    $subject = "{0} health alert {1}/{2}" -f $subjectPrefix, $Summary.HealthyCount, $Summary.ExpectedHealthy
+    $bodyLines = New-Object System.Collections.Generic.List[string]
+    $bodyLines.Add("Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')")
+    $bodyLines.Add("Status: $($Summary.Status)")
+    $bodyLines.Add("Healthy: $($Summary.HealthyCount)/$($Summary.ExpectedHealthy)")
+    $bodyLines.Add("Total: $($Summary.TotalCount)")
+    $bodyLines.Add("LDPlayer: $($Summary.LdPlayerPath)")
+    $bodyLines.Add("ADB: $($Summary.AdbPath)")
+    $bodyLines.Add("Details:")
+    foreach ($device in @($Summary.UnhealthyDevices)) {
+        $bodyLines.Add(" - $($device.Serial) $(Format-DeviceReason -Reason $device.Reason)")
+    }
+    $bodyLines.Add("")
+    $bodyLines.Add($Summary.AlertMessage)
+
+    $message = $null
+    $client = $null
+    try {
+        Set-AlertState -StatePath $StatePath -LastAlertAt (Get-Date)
+
+        $message = New-Object System.Net.Mail.MailMessage
+        $message.From = New-Object System.Net.Mail.MailAddress($mailUser)
+        foreach ($recipient in $mailTo) {
+            [void]$message.To.Add($recipient)
+        }
+        $message.Subject = $subject
+        $message.Body = ($bodyLines -join [Environment]::NewLine)
+        $message.SubjectEncoding = [System.Text.Encoding]::UTF8
+        $message.BodyEncoding = [System.Text.Encoding]::UTF8
+        $message.IsBodyHtml = $false
+
+        $client = New-Object System.Net.Mail.SmtpClient($smtpHost, $smtpPort)
+        $client.EnableSsl = $smtpSsl
+        $client.UseDefaultCredentials = $false
+        $client.Credentials = New-Object System.Net.NetworkCredential($mailUser, $mailPassword)
+        $client.Timeout = [Math]::Max($timeoutSeconds, 1) * 1000
+        $client.Send($message)
+
+        Write-MonitorLine -Message ("[{0}] [INFO] alert mail sent to {1}" -f (Get-Date).ToString("o"), ($mailTo -join ";")) -ForegroundColor Cyan
+    } catch {
+        Write-MonitorLine -Message ("[{0}] [ERROR] alert mail failed: {1}" -f (Get-Date).ToString("o"), $_.Exception.Message) -ForegroundColor Red
+    } finally {
+        if ($message) {
+            $message.Dispose()
+        }
+        if ($client) {
+            $client.Dispose()
+        }
+    }
+}
+
 function Write-LogLines {
     param([string[]]$Lines)
 
@@ -696,6 +884,8 @@ $logFileName = Get-ConfigValue -Config $config -Key "log_file_name" -DefaultValu
 $retentionDays = [int](Get-ConfigValue -Config $config -Key "log_retention_days" -DefaultValue "7")
 $maxLogSizeMb = [int](Get-ConfigValue -Config $config -Key "log_max_size_mb" -DefaultValue "50")
 $expectedHealthyDevices = [int](Get-ConfigValue -Config $config -Key "expected_healthy_devices" -DefaultValue "27")
+$alertCooldownMinutes = [int](Get-ConfigValue -Config $config -Key "alert_cooldown_minutes" -DefaultValue "30")
+$alertStatePath = Get-AlertStatePath -ConfigDirectory $configDirectory -Config $config
 
 if ($script:RegistryRoots.Count -eq 0) {
     throw "registry_roots must not be empty."
@@ -729,6 +919,9 @@ if ($maxLogSizeMb -lt 1) {
 }
 if ($expectedHealthyDevices -lt 1) {
     throw "expected_healthy_devices must be >= 1."
+}
+if ($alertCooldownMinutes -lt 0) {
+    throw "alert_cooldown_minutes must be >= 0."
 }
 
 Ensure-Directory -Path $logDirectory
@@ -775,5 +968,6 @@ try {
 $summary = New-RunSummary -RunTime $runTime -ConfigFilePath $configFullPath -LogFilePath $logFilePath -ResolvedAdbPath $resolvedAdb -ResolvedLdPlayerPath $resolvedLdPlayerPath -ExpectedHealthyDevices $expectedHealthyDevices -Checks $checks -ErrorMessage $errorMessage
 $logLines = Convert-SummaryToLogLines -Summary $summary
 Write-LogLines -Lines $logLines
+Send-AlertMail -Summary $summary -Config $config -StatePath $alertStatePath -CooldownMinutes $alertCooldownMinutes
 Remove-StaleLogs -DirectoryPath $logDirectory -BaseFileName $logFileName -CurrentLogFileName (Split-Path -Leaf $logFilePath) -RetentionDays $retentionDays
 exit $exitCode

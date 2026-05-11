@@ -37,6 +37,26 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\core\check.ps1
   期望健康运行的模拟器数量，低于这个值会打印 `ERROR`
 - `alert_cooldown_minutes`
   预留给后续通知使用，用来控制重复提醒间隔
+- `mail_enabled`
+  是否启用邮件通知
+- `mail_user`
+  发件邮箱
+- `mail_password`
+  发件邮箱授权码
+- `mail_to`
+  收件邮箱列表，分号分隔
+- `mail_smtp_host`
+  SMTP 服务器，QQ 邮箱一般是 `smtp.qq.com`
+- `mail_smtp_port`
+  SMTP 端口，默认 `587`
+- `mail_smtp_ssl`
+  是否启用 SSL
+- `mail_subject_prefix`
+  邮件主题前缀
+- `mail_timeout_seconds`
+  SMTP 发送超时时间
+- `alert_state_file`
+  告警冷却状态文件
 - `schedule_interval_seconds`
   定时执行间隔
 - `window_clear_interval_seconds`

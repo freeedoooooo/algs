@@ -59,3 +59,9 @@ pip-wheel-metadata/
 *.log
 *.log.*
 
+# adb-monitor runtime and logs
+adb-monitor/log/*
+!adb-monitor/log/.gitkeep
+adb-monitor/runtime/*
+!adb-monitor/runtime/.gitkeep
+
