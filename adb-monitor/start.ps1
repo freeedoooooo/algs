@@ -153,11 +153,26 @@ function Write-LogLine {
 }
 
 function Get-RunnerProcess {
-    param([string]$RunnerScriptPath)
+    param(
+        [string]$RunnerScriptPath,
+        [string]$ConfigPath
+    )
 
     return Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-        $_.Name -ieq "powershell.exe" -and $_.CommandLine -like "*runner.ps1*"
+        $_.Name -ieq "powershell.exe" -and
+        $_.CommandLine -match [regex]::Escape($RunnerScriptPath) -and
+        $_.CommandLine -match [regex]::Escape($ConfigPath)
     } | Select-Object -First 1
+}
+
+function Get-RunnerProcessById {
+    param([int]$ProcessId)
+
+    if ($ProcessId -le 0) {
+        return $null
+    }
+
+    return Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
 }
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -187,7 +202,21 @@ if (-not (Test-Path -LiteralPath $runnerScriptPath)) {
 
 Reset-LogIfOversized -LogFilePath $logPath -MaxSizeMb $logMaxSizeMb
 
-$existingRunner = Get-RunnerProcess -RunnerScriptPath $runnerScriptPath
+$existingRunnerId = 0
+if (Test-Path -LiteralPath $runnerPidFile) {
+    $pidText = Get-Content -LiteralPath $runnerPidFile -Raw -ErrorAction SilentlyContinue
+    if ([int]::TryParse($pidText.Trim(), [ref]$existingRunnerId)) {
+        $pidProcess = Get-RunnerProcessById -ProcessId $existingRunnerId
+        if ($pidProcess) {
+            Write-LogLine -LogPath $logPath -Message "runner already running pid=$existingRunnerId"
+            exit 0
+        }
+    }
+
+    Remove-Item -LiteralPath $runnerPidFile -Force -ErrorAction SilentlyContinue
+}
+
+$existingRunner = Get-RunnerProcess -RunnerScriptPath $runnerScriptPath -ConfigPath $configFullPath
 if ($existingRunner) {
     Set-Content -LiteralPath $runnerPidFile -Value $existingRunner.ProcessId -Encoding ASCII
     Write-LogLine -LogPath $logPath -Message "runner already running pid=$($existingRunner.ProcessId)"

@@ -152,6 +152,19 @@ function Write-LogLine {
     Add-Content -LiteralPath $LogPath -Value $line -Encoding UTF8
 }
 
+function Get-RunnerProcesses {
+    param(
+        [string]$RunnerScriptPath,
+        [string]$ConfigPath
+    )
+
+    return @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+        $_.Name -ieq "powershell.exe" -and
+        $_.CommandLine -match [regex]::Escape($RunnerScriptPath) -and
+        $_.CommandLine -match [regex]::Escape($ConfigPath)
+    })
+}
+
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $configFullPath = Resolve-PathFromBase -BaseDirectory $scriptRoot -Value $ConfigPath
 $configDirectory = Split-Path -Parent $configFullPath
@@ -186,9 +199,8 @@ if (Test-Path -LiteralPath $runnerPidFile) {
     Remove-Item -LiteralPath $runnerPidFile -Force -ErrorAction SilentlyContinue
 }
 
-$runnerProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-    $_.Name -ieq "powershell.exe" -and $_.CommandLine -like "*runner.ps1*"
-})
+$runnerScriptPath = Join-Path $scriptRoot "core\runner.ps1"
+$runnerProcesses = Get-RunnerProcesses -RunnerScriptPath $runnerScriptPath -ConfigPath $configFullPath
 foreach ($process in $runnerProcesses) {
     Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
     Write-LogLine -LogPath $logPath -Message "runner stopped pid=$($process.ProcessId)"
