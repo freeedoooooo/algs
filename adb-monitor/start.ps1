@@ -208,7 +208,7 @@ if (Test-Path -LiteralPath $runnerPidFile) {
     if ([int]::TryParse($pidText.Trim(), [ref]$existingRunnerId)) {
         $pidProcess = Get-RunnerProcessById -ProcessId $existingRunnerId
         if ($pidProcess) {
-            Write-LogLine -LogPath $logPath -Message "监控已启动，PID=$($process.Id)，间隔=${intervalSeconds}秒"
+            Write-LogLine -LogPath $logPath -Message "监控已启动，PID=$($existingRunnerId)，间隔=${intervalSeconds}秒"
             exit 0
         }
     }
@@ -219,7 +219,7 @@ if (Test-Path -LiteralPath $runnerPidFile) {
 $existingRunner = Get-RunnerProcess -RunnerScriptPath $runnerScriptPath -ConfigPath $configFullPath
 if ($existingRunner) {
     Set-Content -LiteralPath $runnerPidFile -Value $existingRunner.ProcessId -Encoding ASCII
-    Write-LogLine -LogPath $logPath -Message "监控已启动，PID=$($process.Id)，间隔=${intervalSeconds}秒"
+    Write-LogLine -LogPath $logPath -Message "监控已启动，PID=$($existingRunner.ProcessId)，间隔=${intervalSeconds}秒"
     exit 0
 }
 
