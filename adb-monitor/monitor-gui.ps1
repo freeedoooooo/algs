@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$ConfigPath = ".\monitor.config"
+    [string]$ConfigPath
 )
 
 $ErrorActionPreference = "Stop"
@@ -13,6 +13,14 @@ $OutputEncoding = [Console]::OutputEncoding
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
+
+# 获取脚本所在目录（基于脚本文件位置，而非工作目录）
+$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+# 如果未指定配置文件路径，使用默认值
+if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
+    $ConfigPath = Join-Path $scriptRoot "monitor.config"
+}
 
 function Resolve-PathFromBase {
     param(
@@ -242,7 +250,13 @@ $configDirectory = Split-Path -Parent $configFullPath
 $configText = ""
 
 if (-not (Test-Path -LiteralPath $configFullPath)) {
-    throw "配置文件不存在：$configFullPath"
+    [System.Windows.Forms.MessageBox]::Show(
+        "配置文件不存在：$configFullPath`n`n请检查 monitor.config 文件是否存在于 adb-monitor 目录中。",
+        "错误",
+        [System.Windows.Forms.MessageBoxButtons]::OK,
+        [System.Windows.Forms.MessageBoxIcon]::Error
+    ) | Out-Null
+    exit 1
 }
 
 $configText = Get-Content -LiteralPath $configFullPath -Raw -Encoding UTF8
