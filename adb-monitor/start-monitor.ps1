@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$ConfigPath = ".\config.txt"
+    [string]$ConfigPath = ".\monitor.config"
 )
 
 $ErrorActionPreference = "Stop"
@@ -66,24 +66,35 @@ function Resolve-PathFromBase {
 function Get-NextStartBoundary {
     param([string]$TimeText)
 
-    if ($TimeText -notmatch '^\d{2}:\d{2}$') {
-        throw "schedule_start_time must use HH:mm format."
+    if ($TimeText -notmatch '^\d{2}:\d{2}:\d{2}$') {
+        throw "schedule_start_time must use HH:mm:ss format."
     }
 
     $parts = $TimeText.Split(":")
     $hour = [int]$parts[0]
     $minute = [int]$parts[1]
-    if ($hour -gt 23 -or $minute -gt 59) {
+    $second = [int]$parts[2]
+    if ($hour -gt 23 -or $minute -gt 59 -or $second -gt 59) {
         throw "schedule_start_time must be a valid 24-hour time."
     }
 
     $now = Get-Date
-    $start = Get-Date -Year $now.Year -Month $now.Month -Day $now.Day -Hour $hour -Minute $minute -Second 0
+    $start = Get-Date -Year $now.Year -Month $now.Month -Day $now.Day -Hour $hour -Minute $minute -Second $second
     if ($start -le $now) {
         $start = $start.AddDays(1)
     }
 
     return $start
+}
+
+function Get-RunnerProcesses {
+    param([string]$RunnerScriptPath)
+
+    $escapedPath = [System.Management.Automation.WildcardPattern]::Escape($RunnerScriptPath)
+    return @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+        $_.Name -ieq "powershell.exe" -and
+        $_.CommandLine -like "*$escapedPath*"
+    })
 }
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -92,21 +103,17 @@ $configDirectory = Split-Path -Parent $configFullPath
 $config = Get-ConfigMap -Path $configFullPath
 
 $taskName = Get-ConfigValue -Config $config -Key "task_name" -DefaultValue "LDPlayerHealthMonitor"
-$intervalMinutes = [int](Get-ConfigValue -Config $config -Key "schedule_interval_minutes" -DefaultValue "30")
-$startTimeText = Get-ConfigValue -Config $config -Key "schedule_start_time" -DefaultValue "00:00"
+$intervalSeconds = [int](Get-ConfigValue -Config $config -Key "schedule_interval_seconds" -DefaultValue "10")
+$startTimeText = Get-ConfigValue -Config $config -Key "schedule_start_time" -DefaultValue "00:00:00"
 $taskDescription = Get-ConfigValue -Config $config -Key "task_description" -DefaultValue "LDPlayer health monitor task"
-$repetitionDays = [int](Get-ConfigValue -Config $config -Key "schedule_repetition_days" -DefaultValue "3650")
 
-if ($intervalMinutes -lt 1) {
-    throw "schedule_interval_minutes must be >= 1."
-}
-if ($repetitionDays -lt 1) {
-    throw "schedule_repetition_days must be >= 1."
+if ($intervalSeconds -lt 1) {
+    throw "schedule_interval_seconds must be >= 1."
 }
 
-$monitorScriptPath = Join-Path $scriptRoot "ldplayer-monitor.ps1"
-if (-not (Test-Path -LiteralPath $monitorScriptPath)) {
-    throw "Monitor script not found: $monitorScriptPath"
+$runnerScriptPath = Join-Path $scriptRoot "monitor-runner.ps1"
+if (-not (Test-Path -LiteralPath $runnerScriptPath)) {
+    throw "Runner script not found: $runnerScriptPath"
 }
 
 $startBoundary = Get-NextStartBoundary -TimeText $startTimeText
@@ -114,12 +121,12 @@ $powershellPath = (Get-Command powershell.exe -ErrorAction Stop).Source
 $actionArguments = @(
     "-NoProfile",
     "-ExecutionPolicy", "Bypass",
-    "-File", "`"$monitorScriptPath`"",
+    "-File", "`"$runnerScriptPath`"",
     "-ConfigPath", "`"$configFullPath`""
 ) -join " "
 
 $action = New-ScheduledTaskAction -Execute $powershellPath -Argument $actionArguments -WorkingDirectory $configDirectory
-$trigger = New-ScheduledTaskTrigger -Once -At $startBoundary -RepetitionInterval (New-TimeSpan -Minutes $intervalMinutes) -RepetitionDuration ([TimeSpan]::FromDays($repetitionDays))
+$trigger = New-ScheduledTaskTrigger -Once -At $startBoundary
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 
 $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
@@ -128,8 +135,13 @@ if ($existingTask) {
 }
 
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Description $taskDescription | Out-Null
-Start-ScheduledTask -TaskName $taskName
+$runningProcesses = @(Get-RunnerProcesses -RunnerScriptPath $runnerScriptPath)
+if ($runningProcesses.Count -eq 0) {
+    Start-ScheduledTask -TaskName $taskName
+} else {
+    Write-Host "Runner already running. Skip immediate start."
+}
 
 Write-Host "Task registered: $taskName"
 Write-Host "Next schedule start: $($startBoundary.ToString('yyyy-MM-dd HH:mm:ss'))"
-Write-Host "Interval minutes: $intervalMinutes"
+Write-Host "Interval seconds: $intervalSeconds"

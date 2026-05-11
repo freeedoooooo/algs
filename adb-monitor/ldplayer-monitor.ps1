@@ -1,5 +1,5 @@
 param(
-    [string]$ConfigPath = ".\config.txt",
+    [string]$ConfigPath = ".\monitor.config",
     [string]$AdbPath = "",
     [string]$LdPlayerPath = ""
 )
@@ -627,7 +627,7 @@ try {
     Write-Step "Load config from $configFullPath"
     $resolvedAdb = Resolve-AdbPath -Hint $adbHint
     if (-not $resolvedAdb) {
-        throw "adb.exe not found. Configure adb_path in config.txt or add adb to PATH."
+        throw "adb.exe not found. Configure adb_path in monitor.config or add adb to PATH."
     }
 
     $resolvedLdPlayerPath = Resolve-LDPlayerPath -Hint $ldPlayerHint -ResolvedAdbPath $resolvedAdb

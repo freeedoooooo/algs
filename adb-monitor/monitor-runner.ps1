@@ -63,32 +63,30 @@ function Resolve-PathFromBase {
     return [System.IO.Path]::GetFullPath((Join-Path $BaseDirectory $Value))
 }
 
-function Get-RunnerProcesses {
-    param([string]$RunnerScriptPath)
-
-    $escapedPath = [System.Management.Automation.WildcardPattern]::Escape($RunnerScriptPath)
-    return @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-        $_.Name -ieq "powershell.exe" -and
-        $_.CommandLine -like "*$escapedPath*"
-    })
-}
-
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $configFullPath = Resolve-PathFromBase -BaseDirectory $scriptRoot -Value $ConfigPath
+$configDirectory = Split-Path -Parent $configFullPath
 $config = Get-ConfigMap -Path $configFullPath
-$taskName = Get-ConfigValue -Config $config -Key "task_name" -DefaultValue "LDPlayerHealthMonitor"
-$runnerScriptPath = Join-Path $scriptRoot "monitor-runner.ps1"
 
-$existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-if (-not $existingTask) {
-    Write-Host "Task not found: $taskName"
-} else {
-    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
-    Write-Host "Task removed: $taskName"
+$intervalSeconds = [int](Get-ConfigValue -Config $config -Key "schedule_interval_seconds" -DefaultValue "10")
+if ($intervalSeconds -lt 1) {
+    throw "schedule_interval_seconds must be >= 1."
 }
 
-$runnerProcesses = @(Get-RunnerProcesses -RunnerScriptPath $runnerScriptPath)
-foreach ($process in $runnerProcesses) {
-    Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
-    Write-Host "Runner stopped: PID $($process.ProcessId)"
+$monitorScriptPath = Join-Path $scriptRoot "ldplayer-monitor.ps1"
+if (-not (Test-Path -LiteralPath $monitorScriptPath)) {
+    throw "Monitor script not found: $monitorScriptPath"
+}
+
+$powershellPath = (Get-Command powershell.exe -ErrorAction Stop).Source
+$argumentList = @(
+    "-NoProfile",
+    "-ExecutionPolicy", "Bypass",
+    "-File", $monitorScriptPath,
+    "-ConfigPath", $configFullPath
+)
+
+while ($true) {
+    & $powershellPath @argumentList
+    Start-Sleep -Seconds $intervalSeconds
 }

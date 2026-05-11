@@ -6,11 +6,13 @@
 
 - `ldplayer-monitor.ps1`
   单次执行监控。每次运行都会检查当前连接设备里有多少台是健康的。
+- `monitor-runner.ps1`
+  后台循环执行器，按秒读取配置并周期性调用 `ldplayer-monitor.ps1`。
 - `start-monitor.ps1`
-  按 `config.txt` 注册并启动 Windows 计划任务。
+  按 `monitor.config` 注册并启动 Windows 计划任务。
 - `stop-monitor.ps1`
   停止并删除计划任务。
-- `config.txt`
+- `monitor.config`
   统一配置 `adb` 路径、模拟器路径、发现策略、健康检查参数、日志策略、定时策略。
 - `log/`
   监控日志目录。平时只追加一个主日志文件，达到轮转条件后再归档。
@@ -24,7 +26,7 @@
 
 ## 配置项
 
-`config.txt` 采用 `key=value` 格式。
+`monitor.config` 采用 `key=value` 格式。
 
 - `adb_path`
   可留空。留空时脚本会自动查找 `adb.exe`。
@@ -54,12 +56,10 @@
   计划任务名称。
 - `task_description`
   Windows 计划任务描述。
-- `schedule_interval_minutes`
-  定时执行间隔，单位分钟。
+- `schedule_interval_seconds`
+  定时执行间隔，单位秒。
 - `schedule_start_time`
-  每日首次触发时间，格式必须是 `HH:mm`。
-- `schedule_repetition_days`
-  计划任务重复调度持续天数。
+  计划任务首次启动时间，格式必须是 `HH:mm:ss`。
 - `log_rotate_size_mb`
   主日志达到多少 MB 后自动轮转，默认 `10`。
 - `log_retention_hours`
@@ -67,7 +67,7 @@
 
 ## 使用方式
 
-先修改 [config.txt](./config.txt)。
+先修改 [monitor.config](./monitor.config)。
 
 手动运行一次监控：
 
