@@ -646,7 +646,7 @@ if (-not [string]::IsNullOrWhiteSpace($ldPlayerHint)) {
 }
 
 $logDirectory = Resolve-PathFromBase -BaseDirectory $configDirectory -Value (Get-ConfigValue -Config $config -Key "log_directory" -DefaultValue ".\log")
-$logFileName = Get-ConfigValue -Config $config -Key "log_file_name" -DefaultValue "ldplayer-monitor.log"
+    $logFileName = Get-ConfigValue -Config $config -Key "log_file_name" -DefaultValue "monitor.log"
 $retentionDays = [int](Get-ConfigValue -Config $config -Key "log_retention_days" -DefaultValue "7")
 $maxLogSizeMb = [int](Get-ConfigValue -Config $config -Key "log_max_size_mb" -DefaultValue "50")
 

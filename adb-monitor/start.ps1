@@ -156,7 +156,7 @@ function Get-RunnerProcess {
     param([string]$RunnerScriptPath)
 
     return Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-        $_.Name -ieq "powershell.exe" -and $_.CommandLine -like "*monitor-runner.ps1*"
+        $_.Name -ieq "powershell.exe" -and $_.CommandLine -like "*runner.ps1*"
     } | Select-Object -First 1
 }
 
@@ -169,7 +169,7 @@ $logPath = Get-MonitorLogPath -ConfigDirectory $configDirectory -Config $config
 $intervalSeconds = [int](Get-ConfigValue -Config $config -Key "schedule_interval_seconds" -DefaultValue "10")
 $logMaxSizeMb = [int](Get-ConfigValue -Config $config -Key "log_max_size_mb" -DefaultValue "50")
 $logRetentionDays = [int](Get-ConfigValue -Config $config -Key "log_retention_days" -DefaultValue "7")
-$runnerPidFile = Resolve-PathFromBase -BaseDirectory $configDirectory -Value (Get-ConfigValue -Config $config -Key "runner_pid_file" -DefaultValue ".\monitor.pid")
+$runnerPidFile = Resolve-PathFromBase -BaseDirectory $configDirectory -Value (Get-ConfigValue -Config $config -Key "runner_pid_file" -DefaultValue ".\runner.pid")
 if ($intervalSeconds -lt 1) {
     throw "schedule_interval_seconds must be >= 1."
 }
@@ -180,7 +180,7 @@ if ($logRetentionDays -lt 1) {
     throw "log_retention_days must be >= 1."
 }
 
-$runnerScriptPath = Join-Path $scriptRoot "monitor-runner.ps1"
+$runnerScriptPath = Join-Path $scriptRoot "runner.ps1"
 if (-not (Test-Path -LiteralPath $runnerScriptPath)) {
     throw "Runner script not found: $runnerScriptPath"
 }
@@ -191,7 +191,6 @@ $existingRunner = Get-RunnerProcess -RunnerScriptPath $runnerScriptPath
 if ($existingRunner) {
     Set-Content -LiteralPath $runnerPidFile -Value $existingRunner.ProcessId -Encoding ASCII
     Write-LogLine -LogPath $logPath -Message "runner already running pid=$($existingRunner.ProcessId)"
-    Remove-StaleLogs -DirectoryPath (Split-Path -Parent $logPath) -BaseFileName (Get-ConfigValue -Config $config -Key "log_file_name" -DefaultValue "monitor.log") -CurrentLogFileName (Split-Path -Leaf $logPath) -RetentionDays $logRetentionDays
     exit 0
 }
 
@@ -205,4 +204,3 @@ $process = Start-Process -FilePath $powershellPath -ArgumentList @(
 
 Set-Content -LiteralPath $runnerPidFile -Value $process.Id -Encoding ASCII
 Write-LogLine -LogPath $logPath -Message "runner started pid=$($process.Id) interval=${intervalSeconds}s"
-Remove-StaleLogs -DirectoryPath (Split-Path -Parent $logPath) -BaseFileName (Get-ConfigValue -Config $config -Key "log_file_name" -DefaultValue "monitor.log") -CurrentLogFileName (Split-Path -Leaf $logPath) -RetentionDays $logRetentionDays

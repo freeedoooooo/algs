@@ -95,7 +95,7 @@ if ($clearIntervalSeconds -lt 1) {
     throw "window_clear_interval_seconds must be >= 1."
 }
 
-$monitorScriptPath = Join-Path $scriptRoot "ldplayer-monitor.ps1"
+$monitorScriptPath = Join-Path $scriptRoot "check.ps1"
 if (-not (Test-Path -LiteralPath $monitorScriptPath)) {
     throw "Monitor script not found: $monitorScriptPath"
 }

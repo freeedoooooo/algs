@@ -159,7 +159,7 @@ $config = Get-ConfigMap -Path $configFullPath
 $logPath = Get-MonitorLogPath -ConfigDirectory $configDirectory -Config $config
 $logMaxSizeMb = [int](Get-ConfigValue -Config $config -Key "log_max_size_mb" -DefaultValue "50")
 $logRetentionDays = [int](Get-ConfigValue -Config $config -Key "log_retention_days" -DefaultValue "7")
-$runnerPidFile = Resolve-PathFromBase -BaseDirectory $configDirectory -Value (Get-ConfigValue -Config $config -Key "runner_pid_file" -DefaultValue ".\monitor.pid")
+$runnerPidFile = Resolve-PathFromBase -BaseDirectory $configDirectory -Value (Get-ConfigValue -Config $config -Key "runner_pid_file" -DefaultValue ".\runner.pid")
 
 if ($logMaxSizeMb -lt 1) {
     throw "log_max_size_mb must be >= 1."
@@ -187,7 +187,7 @@ if (Test-Path -LiteralPath $runnerPidFile) {
 }
 
 $runnerProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-    $_.Name -ieq "powershell.exe" -and $_.CommandLine -like "*monitor-runner.ps1*"
+    $_.Name -ieq "powershell.exe" -and $_.CommandLine -like "*runner.ps1*"
 })
 foreach ($process in $runnerProcesses) {
     Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
