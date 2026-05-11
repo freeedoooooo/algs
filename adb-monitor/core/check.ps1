@@ -574,6 +574,7 @@ function New-RunSummary {
         [string]$LogFilePath,
         [string]$ResolvedAdbPath,
         [string]$ResolvedLdPlayerPath,
+        [int]$ExpectedHealthyDevices,
         [object[]]$Checks,
         [string]$ErrorMessage
     )
@@ -605,18 +606,25 @@ function New-RunSummary {
         $status = "error"
     }
 
+    $alertMessage = ""
+    if ($ExpectedHealthyDevices -gt 0 -and $healthyDevices.Count -lt $ExpectedHealthyDevices) {
+        $alertMessage = "healthy devices below expected expected=$ExpectedHealthyDevices actual=$($healthyDevices.Count)"
+    }
+
     return [pscustomobject]@{
         Timestamp        = $RunTime.ToString("o")
         ConfigFilePath   = $ConfigFilePath
         LogFilePath      = $LogFilePath
         AdbPath          = $ResolvedAdbPath
         LdPlayerPath     = $ResolvedLdPlayerPath
+        ExpectedHealthy  = $ExpectedHealthyDevices
         Status           = $status
         TotalCount       = $Checks.Count
         HealthyCount     = $healthyDevices.Count
         UnhealthyCount   = $unhealthyDevices.Count
         HealthyDevices   = $healthyDevices
         UnhealthyDevices = $unhealthyDevices
+        AlertMessage     = $alertMessage
         ErrorMessage     = $ErrorMessage
     }
 }
@@ -645,6 +653,10 @@ function Convert-SummaryToLogLines {
 
     if (-not [string]::IsNullOrWhiteSpace($Summary.ErrorMessage)) {
         $lines.Add("$prefix [ERROR] $($Summary.ErrorMessage)")
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($Summary.AlertMessage)) {
+        $lines.Add("$prefix [ERROR] $($Summary.AlertMessage)")
     }
 
     $lines.Add("$prefix [INFO] log=$($Summary.LogFilePath)")
@@ -680,9 +692,10 @@ if (-not [string]::IsNullOrWhiteSpace($ldPlayerHint)) {
 }
 
 $logDirectory = Resolve-PathFromBase -BaseDirectory $configDirectory -Value (Get-ConfigValue -Config $config -Key "log_directory" -DefaultValue ".\log")
-    $logFileName = Get-ConfigValue -Config $config -Key "log_file_name" -DefaultValue "monitor.log"
+$logFileName = Get-ConfigValue -Config $config -Key "log_file_name" -DefaultValue "monitor.log"
 $retentionDays = [int](Get-ConfigValue -Config $config -Key "log_retention_days" -DefaultValue "7")
 $maxLogSizeMb = [int](Get-ConfigValue -Config $config -Key "log_max_size_mb" -DefaultValue "50")
+$expectedHealthyDevices = [int](Get-ConfigValue -Config $config -Key "expected_healthy_devices" -DefaultValue "27")
 
 if ($script:RegistryRoots.Count -eq 0) {
     throw "registry_roots must not be empty."
@@ -713,6 +726,9 @@ if ($retentionDays -lt 1) {
 }
 if ($maxLogSizeMb -lt 1) {
     throw "log_max_size_mb must be >= 1."
+}
+if ($expectedHealthyDevices -lt 1) {
+    throw "expected_healthy_devices must be >= 1."
 }
 
 Ensure-Directory -Path $logDirectory
@@ -756,7 +772,7 @@ try {
     $exitCode = 1
 }
 
-$summary = New-RunSummary -RunTime $runTime -ConfigFilePath $configFullPath -LogFilePath $logFilePath -ResolvedAdbPath $resolvedAdb -ResolvedLdPlayerPath $resolvedLdPlayerPath -Checks $checks -ErrorMessage $errorMessage
+$summary = New-RunSummary -RunTime $runTime -ConfigFilePath $configFullPath -LogFilePath $logFilePath -ResolvedAdbPath $resolvedAdb -ResolvedLdPlayerPath $resolvedLdPlayerPath -ExpectedHealthyDevices $expectedHealthyDevices -Checks $checks -ErrorMessage $errorMessage
 $logLines = Convert-SummaryToLogLines -Summary $summary
 Write-LogLines -Lines $logLines
 Remove-StaleLogs -DirectoryPath $logDirectory -BaseFileName $logFileName -CurrentLogFileName (Split-Path -Leaf $logFilePath) -RetentionDays $retentionDays
