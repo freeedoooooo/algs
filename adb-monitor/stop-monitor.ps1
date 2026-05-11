@@ -63,10 +63,36 @@ function Resolve-PathFromBase {
     return [System.IO.Path]::GetFullPath((Join-Path $BaseDirectory $Value))
 }
 
+function Get-MonitorLogPath {
+    param(
+        [string]$ConfigDirectory,
+        [hashtable]$Config
+    )
+
+    $logDirectory = Resolve-PathFromBase -BaseDirectory $ConfigDirectory -Value (Get-ConfigValue -Config $Config -Key "log_directory" -DefaultValue ".\log")
+    $logFileName = Get-ConfigValue -Config $Config -Key "log_file_name" -DefaultValue "monitor.log"
+    if (-not (Test-Path -LiteralPath $logDirectory)) {
+        [void](New-Item -Path $logDirectory -ItemType Directory -Force)
+    }
+
+    return (Join-Path $logDirectory $logFileName)
+}
+
+function Write-LogLine {
+    param(
+        [string]$LogPath,
+        [string]$Message
+    )
+
+    Write-Host $Message
+    Add-Content -LiteralPath $LogPath -Value $Message -Encoding UTF8
+}
+
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $configFullPath = Resolve-PathFromBase -BaseDirectory $scriptRoot -Value $ConfigPath
 $configDirectory = Split-Path -Parent $configFullPath
 $config = Get-ConfigMap -Path $configFullPath
+$logPath = Get-MonitorLogPath -ConfigDirectory $configDirectory -Config $config
 $runnerPidFile = Resolve-PathFromBase -BaseDirectory $configDirectory -Value (Get-ConfigValue -Config $config -Key "runner_pid_file" -DefaultValue ".\monitor.pid")
 
 $stopped = $false
@@ -77,7 +103,7 @@ if (Test-Path -LiteralPath $runnerPidFile) {
         $proc = Get-Process -Id $runnerId -ErrorAction SilentlyContinue
         if ($proc) {
             Stop-Process -Id $runnerId -Force -ErrorAction SilentlyContinue
-            Write-Host "Runner stopped: PID $runnerId"
+            Write-LogLine -LogPath $logPath -Message "Runner stopped: PID $runnerId"
             $stopped = $true
         }
     }
@@ -90,10 +116,10 @@ $runnerProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue
 })
 foreach ($process in $runnerProcesses) {
     Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
-    Write-Host "Runner stopped: PID $($process.ProcessId)"
+    Write-LogLine -LogPath $logPath -Message "Runner stopped: PID $($process.ProcessId)"
     $stopped = $true
 }
 
 if (-not $stopped) {
-    Write-Host "Runner not found."
+    Write-LogLine -LogPath $logPath -Message "Runner not found."
 }

@@ -5,15 +5,33 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$script:MonitorLogFilePath = ""
 
 function Write-Step {
     param([string]$Message)
-    Write-Host "[STEP] $Message" -ForegroundColor Cyan
+    Write-MonitorLine -Message "[STEP] $Message" -ForegroundColor Cyan
 }
 
 function Write-WarnLog {
     param([string]$Message)
-    Write-Host "[WARN] $Message" -ForegroundColor Yellow
+    Write-MonitorLine -Message "[WARN] $Message" -ForegroundColor Yellow
+}
+
+function Write-MonitorLine {
+    param(
+        [Parameter(Mandatory = $true)][string]$Message,
+        [string]$ForegroundColor = ""
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ForegroundColor)) {
+        Write-Host $Message
+    } else {
+        Write-Host $Message -ForegroundColor $ForegroundColor
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($script:MonitorLogFilePath)) {
+        Add-Content -LiteralPath $script:MonitorLogFilePath -Value $Message -Encoding UTF8
+    }
 }
 
 function ConvertTo-ArgumentString {
@@ -457,8 +475,9 @@ function Write-LogLines {
         [string[]]$Lines
     )
 
-    $content = ($Lines -join [Environment]::NewLine) + [Environment]::NewLine
-    [System.IO.File]::AppendAllText($LogFilePath, $content, [System.Text.Encoding]::UTF8)
+    foreach ($line in $Lines) {
+        Write-MonitorLine -Message $line
+    }
 }
 
 function New-RunSummary {
@@ -615,6 +634,7 @@ if ($rotateSizeMb -lt 1) {
 Ensure-Directory -Path $logDirectory
 $logFilePath = Join-Path $logDirectory $logFileName
 Rotate-LogIfNeeded -LogFilePath $logFilePath -RotateSizeMb $rotateSizeMb
+$script:MonitorLogFilePath = $logFilePath
 
 $runTime = Get-Date
 $resolvedAdb = ""
@@ -656,16 +676,16 @@ Write-LogLines -LogFilePath $logFilePath -Lines $logLines
 Remove-StaleLogs -DirectoryPath $logDirectory -CurrentLogFileName $logFileName -RetentionHours $retentionHours
 
 if ($summary.Status -eq "healthy") {
-    Write-Host "[RESULT] healthy emulators: $($summary.HealthyCount) / $($summary.TotalCount)" -ForegroundColor Green
+    Write-MonitorLine -Message "[RESULT] healthy emulators: $($summary.HealthyCount) / $($summary.TotalCount)" -ForegroundColor Green
 } else {
     Write-WarnLog "healthy emulators: $($summary.HealthyCount) / $($summary.TotalCount)"
 }
 
 if (-not [string]::IsNullOrWhiteSpace($summary.AdbPath)) {
-    Write-Host "[INFO] adb path: $($summary.AdbPath)"
+    Write-MonitorLine -Message "[INFO] adb path: $($summary.AdbPath)"
 }
 if (-not [string]::IsNullOrWhiteSpace($summary.LdPlayerPath)) {
-    Write-Host "[INFO] ldplayer path: $($summary.LdPlayerPath)"
+    Write-MonitorLine -Message "[INFO] ldplayer path: $($summary.LdPlayerPath)"
 }
 
 foreach ($item in $summary.UnhealthyDevices) {
@@ -676,5 +696,5 @@ if (-not [string]::IsNullOrWhiteSpace($summary.ErrorMessage)) {
     Write-WarnLog $summary.ErrorMessage
 }
 
-Write-Host "[LOG] $logFilePath"
+Write-MonitorLine -Message "[LOG] $logFilePath"
 exit $exitCode

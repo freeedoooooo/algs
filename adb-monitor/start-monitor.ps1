@@ -63,6 +63,31 @@ function Resolve-PathFromBase {
     return [System.IO.Path]::GetFullPath((Join-Path $BaseDirectory $Value))
 }
 
+function Get-MonitorLogPath {
+    param(
+        [string]$ConfigDirectory,
+        [hashtable]$Config
+    )
+
+    $logDirectory = Resolve-PathFromBase -BaseDirectory $ConfigDirectory -Value (Get-ConfigValue -Config $Config -Key "log_directory" -DefaultValue ".\log")
+    $logFileName = Get-ConfigValue -Config $Config -Key "log_file_name" -DefaultValue "monitor.log"
+    if (-not (Test-Path -LiteralPath $logDirectory)) {
+        [void](New-Item -Path $logDirectory -ItemType Directory -Force)
+    }
+
+    return (Join-Path $logDirectory $logFileName)
+}
+
+function Write-LogLine {
+    param(
+        [string]$LogPath,
+        [string]$Message
+    )
+
+    Write-Host $Message
+    Add-Content -LiteralPath $LogPath -Value $Message -Encoding UTF8
+}
+
 function Get-RunnerProcess {
     param([string]$RunnerScriptPath)
 
@@ -75,6 +100,7 @@ $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $configFullPath = Resolve-PathFromBase -BaseDirectory $scriptRoot -Value $ConfigPath
 $configDirectory = Split-Path -Parent $configFullPath
 $config = Get-ConfigMap -Path $configFullPath
+$logPath = Get-MonitorLogPath -ConfigDirectory $configDirectory -Config $config
 
 $intervalSeconds = [int](Get-ConfigValue -Config $config -Key "schedule_interval_seconds" -DefaultValue "10")
 $runnerPidFile = Resolve-PathFromBase -BaseDirectory $configDirectory -Value (Get-ConfigValue -Config $config -Key "runner_pid_file" -DefaultValue ".\monitor.pid")
@@ -90,8 +116,8 @@ if (-not (Test-Path -LiteralPath $runnerScriptPath)) {
 $existingRunner = Get-RunnerProcess -RunnerScriptPath $runnerScriptPath
 if ($existingRunner) {
     Set-Content -LiteralPath $runnerPidFile -Value $existingRunner.ProcessId -Encoding ASCII
-    Write-Host "Runner already running: PID $($existingRunner.ProcessId)"
-    Write-Host "PID file: $runnerPidFile"
+    Write-LogLine -LogPath $logPath -Message "Runner already running: PID $($existingRunner.ProcessId)"
+    Write-LogLine -LogPath $logPath -Message "PID file: $runnerPidFile"
     exit 0
 }
 
@@ -104,6 +130,6 @@ $process = Start-Process -FilePath $powershellPath -ArgumentList @(
 ) -WorkingDirectory $configDirectory -PassThru -WindowStyle Hidden
 
 Set-Content -LiteralPath $runnerPidFile -Value $process.Id -Encoding ASCII
-Write-Host "Runner started: PID $($process.Id)"
-Write-Host "PID file: $runnerPidFile"
-Write-Host "Interval seconds: $intervalSeconds"
+Write-LogLine -LogPath $logPath -Message "Runner started: PID $($process.Id)"
+Write-LogLine -LogPath $logPath -Message "PID file: $runnerPidFile"
+Write-LogLine -LogPath $logPath -Message "Interval seconds: $intervalSeconds"
