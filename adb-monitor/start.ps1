@@ -169,7 +169,7 @@ $logPath = Get-MonitorLogPath -ConfigDirectory $configDirectory -Config $config
 $intervalSeconds = [int](Get-ConfigValue -Config $config -Key "schedule_interval_seconds" -DefaultValue "10")
 $logMaxSizeMb = [int](Get-ConfigValue -Config $config -Key "log_max_size_mb" -DefaultValue "50")
 $logRetentionDays = [int](Get-ConfigValue -Config $config -Key "log_retention_days" -DefaultValue "7")
-$runnerPidFile = Resolve-PathFromBase -BaseDirectory $configDirectory -Value (Get-ConfigValue -Config $config -Key "runner_pid_file" -DefaultValue ".\runner.pid")
+$runnerPidFile = Resolve-PathFromBase -BaseDirectory $configDirectory -Value (Get-ConfigValue -Config $config -Key "runner_pid_file" -DefaultValue ".\runtime\runner.pid")
 if ($intervalSeconds -lt 1) {
     throw "schedule_interval_seconds must be >= 1."
 }
@@ -180,7 +180,7 @@ if ($logRetentionDays -lt 1) {
     throw "log_retention_days must be >= 1."
 }
 
-$runnerScriptPath = Join-Path $scriptRoot "runner.ps1"
+$runnerScriptPath = Join-Path $scriptRoot "core\runner.ps1"
 if (-not (Test-Path -LiteralPath $runnerScriptPath)) {
     throw "Runner script not found: $runnerScriptPath"
 }

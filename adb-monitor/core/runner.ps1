@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$ConfigPath = ".\monitor.config"
+    [string]$ConfigPath = "..\monitor.config"
 )
 
 $ErrorActionPreference = "Stop"

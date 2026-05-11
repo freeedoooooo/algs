@@ -159,7 +159,7 @@ $config = Get-ConfigMap -Path $configFullPath
 $logPath = Get-MonitorLogPath -ConfigDirectory $configDirectory -Config $config
 $logMaxSizeMb = [int](Get-ConfigValue -Config $config -Key "log_max_size_mb" -DefaultValue "50")
 $logRetentionDays = [int](Get-ConfigValue -Config $config -Key "log_retention_days" -DefaultValue "7")
-$runnerPidFile = Resolve-PathFromBase -BaseDirectory $configDirectory -Value (Get-ConfigValue -Config $config -Key "runner_pid_file" -DefaultValue ".\runner.pid")
+$runnerPidFile = Resolve-PathFromBase -BaseDirectory $configDirectory -Value (Get-ConfigValue -Config $config -Key "runner_pid_file" -DefaultValue ".\runtime\runner.pid")
 
 if ($logMaxSizeMb -lt 1) {
     throw "log_max_size_mb must be >= 1."
