@@ -1,69 +1,83 @@
 # adb-monitor
 
-这个目录现在只保留雷电模拟器健康监控链路。
+只保留一套 LDPlayer 健康监控脚本，目标很简单：
+
+- 统计当前连接到 ADB 的模拟器总数
+- 判断其中多少台是健康运行
+- 用统一的黑窗口和日志持续输出结果
 
 ## 文件说明
 
 - `ldplayer-monitor.ps1`
-  单次执行监控。每次运行都会检查当前连接设备里有多少台是健康的。
+  单次执行一次健康检查。
 - `monitor-runner.ps1`
-  后台循环执行器，按秒读取配置并周期性调用 `ldplayer-monitor.ps1`。
+  按配置循环执行监控，并按周期清屏。
 - `start-monitor.ps1`
-  启动后台监控进程。
+  启动监控窗口。
 - `stop-monitor.ps1`
-  停止后台监控进程。
+  停止监控窗口。
 - `monitor.config`
-  统一配置模拟器路径、发现策略、健康检查参数、日志策略、定时策略。
+  所有配置都放在这里。
 - `log/`
-  监控日志目录。平时只追加一个主日志文件，达到轮转条件后再归档。
+  日志目录。
 
-## 健康定义
+## 健康判定
 
-监控脚本只检查这两件事：
+脚本只检查两件事：
 
 - 设备状态必须是 `device`
-- `sys.boot_completed` 必须等于 `1`
+- `adb shell getprop sys.boot_completed` 必须返回 `1`
+
+只要任意一项不满足，就记为不健康。
 
 ## 配置项
 
-`monitor.config` 采用 `key=value` 格式。
+`monitor.config` 使用 `key=value` 格式：
 
 - `ldplayer_path`
-  模拟器安装目录。脚本会默认使用这个目录下的 `adb.exe`。
+  LDPlayer 安装目录。脚本会默认使用这个目录下的 `adb.exe`。
 - `common_ldplayer_dirs`
-  常见雷电安装目录列表，使用分号分隔。
-- `log_directory`
-  日志目录，默认是 `.\log`。
-- `log_file_name`
-  当前正在写入的主日志文件名。
+  常见 LDPlayer 安装目录，分号分隔，用于兜底发现。
 - `registry_roots`
-  自动发现雷电安装目录时会扫描的注册表根路径，使用分号分隔。
+  扫描注册表时使用的根路径，分号分隔。
 - `registry_value_names`
-  从注册表里读取安装目录时使用的值名列表，使用分号分隔。
+  注册表里用于查找安装目录的键名，分号分隔。
 - `external_command_timeout_seconds`
-  外部命令默认超时时间。
+  外部命令默认超时。
 - `adb_devices_timeout_seconds`
-  `adb devices` 超时时间。
+  `adb devices` 超时。
 - `adb_shell_timeout_seconds`
-  `adb shell` 超时时间。
+  `adb shell` 超时。
 - `boot_check_attempts`
-  `sys.boot_completed` 检查重试次数。
+  `sys.boot_completed` 重试次数。
 - `boot_check_delay_seconds`
-  启动完成检查失败后的重试间隔秒数。
+  启动完成检查的重试间隔。
 - `schedule_interval_seconds`
   定时执行间隔，单位秒。
+- `window_clear_interval_seconds`
+  黑窗口清屏间隔，单位秒。默认 3600，也就是 1 小时。
 - `runner_pid_file`
-  后台监控进程 PID 文件。
-- `log_rotate_size_mb`
-  主日志达到多少 MB 后自动轮转，默认 `10`。
-- `log_retention_hours`
-  轮转后的旧日志最多保留多少小时，默认 `72`。
+  监控进程 PID 文件。
+- `log_directory`
+  日志目录。
+- `log_file_name`
+  日志基础文件名。实际写入文件会自动带上日期后缀。
+- `log_max_size_mb`
+  单个日志文件最大大小，超过后直接删除并从新内容开始写。
+- `log_retention_days`
+  仅保留最近多少天的日志文件。
+
+## 日志规则
+
+- 每天一个日志文件，例如 `log\monitor-20260511.log`
+- 黑窗口输出和日志文件内容保持一致
+- 每小时清屏一次，避免窗口堆太多内容
+- 仅保留最近 7 天日志
+- 单个日志文件超过 50MB 时，直接删除当前文件，再继续写入
 
 ## 使用方式
 
-先修改 [monitor.config](./monitor.config)。
-
-手动运行一次监控：
+手动执行一次监控：
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\ldplayer-monitor.ps1
@@ -80,11 +94,3 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start-monitor.ps1
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\stop-monitor.ps1
 ```
-
-## 日志规则
-
-- 监控日志默认写入 `.\log\monitor.log`
-- 每次执行都会把结果追加到同一个 `.log` 文件，而不是一轮一个文件
-- 主日志达到 `log_rotate_size_mb` 后，会轮转成带时间戳的归档日志
-- 每次运行后会自动清理 72 小时以前的归档日志
-- 日志里会记录配置文件路径、`adb` 路径、模拟器安装目录、健康结果和异常原因

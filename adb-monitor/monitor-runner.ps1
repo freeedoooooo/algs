@@ -63,14 +63,36 @@ function Resolve-PathFromBase {
     return [System.IO.Path]::GetFullPath((Join-Path $BaseDirectory $Value))
 }
 
+$script:LastConsoleClearAt = Get-Date
+
+function Clear-ConsoleIfNeeded {
+    param([int]$IntervalSeconds)
+
+    if ($IntervalSeconds -lt 1) {
+        return
+    }
+
+    $now = Get-Date
+    if ((New-TimeSpan -Start $script:LastConsoleClearAt -End $now).TotalSeconds -lt $IntervalSeconds) {
+        return
+    }
+
+    Clear-Host
+    $script:LastConsoleClearAt = $now
+}
+
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $configFullPath = Resolve-PathFromBase -BaseDirectory $scriptRoot -Value $ConfigPath
 $configDirectory = Split-Path -Parent $configFullPath
 $config = Get-ConfigMap -Path $configFullPath
 
 $intervalSeconds = [int](Get-ConfigValue -Config $config -Key "schedule_interval_seconds" -DefaultValue "10")
+$clearIntervalSeconds = [int](Get-ConfigValue -Config $config -Key "window_clear_interval_seconds" -DefaultValue "3600")
 if ($intervalSeconds -lt 1) {
     throw "schedule_interval_seconds must be >= 1."
+}
+if ($clearIntervalSeconds -lt 1) {
+    throw "window_clear_interval_seconds must be >= 1."
 }
 
 $monitorScriptPath = Join-Path $scriptRoot "ldplayer-monitor.ps1"
@@ -87,6 +109,7 @@ $argumentList = @(
 )
 
 while ($true) {
+    Clear-ConsoleIfNeeded -IntervalSeconds $clearIntervalSeconds
     & $powershellPath @argumentList
     Start-Sleep -Seconds $intervalSeconds
 }

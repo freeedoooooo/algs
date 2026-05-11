@@ -23,8 +23,8 @@ function Write-MonitorLine {
         [string]$ForegroundColor = ""
     )
 
-    if ($null -eq $Message) {
-        $Message = ""
+    if ([string]::IsNullOrWhiteSpace($Message)) {
+        return
     }
 
     if ([string]::IsNullOrWhiteSpace($ForegroundColor)) {
@@ -36,6 +36,29 @@ function Write-MonitorLine {
     if (-not [string]::IsNullOrWhiteSpace($script:MonitorLogFilePath)) {
         Add-Content -LiteralPath $script:MonitorLogFilePath -Value $Message -Encoding UTF8
     }
+}
+
+function Get-LogBaseName {
+    param([string]$FileName)
+
+    $name = [System.IO.Path]::GetFileNameWithoutExtension($FileName)
+    if ([string]::IsNullOrWhiteSpace($name)) {
+        return "monitor"
+    }
+
+    return $name
+}
+
+function Get-DatedLogFilePath {
+    param(
+        [string]$DirectoryPath,
+        [string]$BaseFileName,
+        [datetime]$Date = (Get-Date)
+    )
+
+    $baseName = Get-LogBaseName -FileName $BaseFileName
+    $dateSuffix = $Date.ToString("yyyyMMdd")
+    return Join-Path $DirectoryPath ("{0}-{1}.log" -f $baseName, $dateSuffix)
 }
 
 function Get-MonitorLineColor {
@@ -446,17 +469,17 @@ function Ensure-Directory {
     }
 }
 
-function Rotate-LogIfNeeded {
+function Reset-LogIfOversized {
     param(
         [string]$LogFilePath,
-        [int]$RotateSizeMb
+        [int]$MaxSizeMb
     )
 
     if (-not (Test-Path -LiteralPath $LogFilePath)) {
         return
     }
 
-    $maxBytes = $RotateSizeMb * 1MB
+    $maxBytes = $MaxSizeMb * 1MB
     if ($maxBytes -lt 1MB) {
         $maxBytes = 1MB
     }
@@ -466,21 +489,19 @@ function Rotate-LogIfNeeded {
         return
     }
 
-    $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-    $archiveName = "{0}-{1}{2}" -f $logFile.BaseName, $timestamp, $logFile.Extension
-    $archivePath = Join-Path $logFile.DirectoryName $archiveName
-    Move-Item -LiteralPath $LogFilePath -Destination $archivePath -Force
+    Remove-Item -LiteralPath $LogFilePath -Force
 }
 
 function Remove-StaleLogs {
     param(
         [string]$DirectoryPath,
+        [string]$BaseFileName,
         [string]$CurrentLogFileName,
-        [int]$RetentionHours
+        [int]$RetentionDays
     )
 
-    $cutoff = (Get-Date).AddHours(-1 * $RetentionHours)
-    $baseName = [System.IO.Path]::GetFileNameWithoutExtension($CurrentLogFileName)
+    $cutoff = (Get-Date).AddDays(-1 * $RetentionDays)
+    $baseName = Get-LogBaseName -FileName $BaseFileName
     Get-ChildItem -LiteralPath $DirectoryPath -File -ErrorAction SilentlyContinue |
         Where-Object {
             $_.Name -like "$baseName*.log" -and
@@ -491,10 +512,7 @@ function Remove-StaleLogs {
 }
 
 function Write-LogLines {
-    param(
-        [string]$LogFilePath,
-        [string[]]$Lines
-    )
+    param([string[]]$Lines)
 
     foreach ($line in $Lines) {
         Write-MonitorLine -Message $line -ForegroundColor (Get-MonitorLineColor -Message $line)
@@ -578,26 +596,26 @@ function Convert-SummaryToLogLines {
 
     $resultLevel = if ($Summary.Status -eq "healthy") { "INFO" } else { "WARN" }
 
-    $lines.Add("$prefix [INFO] run start")
-    $lines.Add("$prefix [INFO] config $($Summary.ConfigFilePath)")
-    $lines.Add("$prefix [INFO] paths ldplayer=$($Summary.LdPlayerPath) adb=$($Summary.AdbPath)")
-    $lines.Add("$prefix [$resultLevel] result $($Summary.Status), healthy $($Summary.HealthyCount) / total $($Summary.TotalCount)")
+    $lines.Add("$prefix [INFO] monitor start")
+    $lines.Add("$prefix [INFO] config=$($Summary.ConfigFilePath)")
+    $lines.Add("$prefix [INFO] ldplayer=$($Summary.LdPlayerPath)")
+    $lines.Add("$prefix [INFO] adb=$($Summary.AdbPath)")
+    $lines.Add("$prefix [$resultLevel] status=$($Summary.Status) total=$($Summary.TotalCount) healthy=$($Summary.HealthyCount) unhealthy=$($Summary.UnhealthyCount)")
 
     foreach ($device in $Summary.HealthyDevices) {
-        $lines.Add("$prefix [INFO] device $device healthy")
+        $lines.Add("$prefix [INFO] $device healthy")
     }
 
     foreach ($device in $Summary.UnhealthyDevices) {
-        $lines.Add("$prefix [WARN] device $($device.Serial) $(Format-DeviceReason -Reason $device.Reason)")
+        $lines.Add("$prefix [WARN] $($device.Serial) $(Format-DeviceReason -Reason $device.Reason)")
     }
 
     if (-not [string]::IsNullOrWhiteSpace($Summary.ErrorMessage)) {
         $lines.Add("$prefix [ERROR] $($Summary.ErrorMessage)")
     }
 
-    $lines.Add("$prefix [INFO] log $($Summary.LogFilePath)")
-    $lines.Add("$prefix [INFO] run end")
-    $lines.Add("")
+    $lines.Add("$prefix [INFO] log=$($Summary.LogFilePath)")
+    $lines.Add("$prefix [INFO] monitor end")
     return $lines
 }
 
@@ -629,8 +647,8 @@ if (-not [string]::IsNullOrWhiteSpace($ldPlayerHint)) {
 
 $logDirectory = Resolve-PathFromBase -BaseDirectory $configDirectory -Value (Get-ConfigValue -Config $config -Key "log_directory" -DefaultValue ".\log")
 $logFileName = Get-ConfigValue -Config $config -Key "log_file_name" -DefaultValue "ldplayer-monitor.log"
-$retentionHours = [int](Get-ConfigValue -Config $config -Key "log_retention_hours" -DefaultValue "72")
-$rotateSizeMb = [int](Get-ConfigValue -Config $config -Key "log_rotate_size_mb" -DefaultValue "10")
+$retentionDays = [int](Get-ConfigValue -Config $config -Key "log_retention_days" -DefaultValue "7")
+$maxLogSizeMb = [int](Get-ConfigValue -Config $config -Key "log_max_size_mb" -DefaultValue "50")
 
 if ($script:RegistryRoots.Count -eq 0) {
     throw "registry_roots must not be empty."
@@ -656,16 +674,16 @@ if ($script:BootCheckAttempts -lt 1) {
 if ($script:BootCheckDelaySeconds -lt 0) {
     throw "boot_check_delay_seconds must be >= 0."
 }
-if ($retentionHours -lt 1) {
-    throw "log_retention_hours must be >= 1."
+if ($retentionDays -lt 1) {
+    throw "log_retention_days must be >= 1."
 }
-if ($rotateSizeMb -lt 1) {
-    throw "log_rotate_size_mb must be >= 1."
+if ($maxLogSizeMb -lt 1) {
+    throw "log_max_size_mb must be >= 1."
 }
 
 Ensure-Directory -Path $logDirectory
-$logFilePath = Join-Path $logDirectory $logFileName
-Rotate-LogIfNeeded -LogFilePath $logFilePath -RotateSizeMb $rotateSizeMb
+$logFilePath = Get-DatedLogFilePath -DirectoryPath $logDirectory -BaseFileName $logFileName
+Reset-LogIfOversized -LogFilePath $logFilePath -MaxSizeMb $maxLogSizeMb
 $script:MonitorLogFilePath = $logFilePath
 
 $runTime = Get-Date
@@ -706,6 +724,6 @@ try {
 
 $summary = New-RunSummary -RunTime $runTime -ConfigFilePath $configFullPath -LogFilePath $logFilePath -ResolvedAdbPath $resolvedAdb -ResolvedLdPlayerPath $resolvedLdPlayerPath -Checks $checks -ErrorMessage $errorMessage
 $logLines = Convert-SummaryToLogLines -Summary $summary
-Write-LogLines -LogFilePath $logFilePath -Lines $logLines
-Remove-StaleLogs -DirectoryPath $logDirectory -CurrentLogFileName $logFileName -RetentionHours $retentionHours
+Write-LogLines -Lines $logLines
+Remove-StaleLogs -DirectoryPath $logDirectory -BaseFileName $logFileName -CurrentLogFileName (Split-Path -Leaf $logFilePath) -RetentionDays $retentionDays
 exit $exitCode

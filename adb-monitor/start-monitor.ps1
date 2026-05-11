@@ -63,6 +63,63 @@ function Resolve-PathFromBase {
     return [System.IO.Path]::GetFullPath((Join-Path $BaseDirectory $Value))
 }
 
+function Get-LogBaseName {
+    param([string]$FileName)
+
+    $name = [System.IO.Path]::GetFileNameWithoutExtension($FileName)
+    if ([string]::IsNullOrWhiteSpace($name)) {
+        return "monitor"
+    }
+
+    return $name
+}
+
+function Get-DatedLogFilePath {
+    param(
+        [string]$DirectoryPath,
+        [string]$BaseFileName,
+        [datetime]$Date = (Get-Date)
+    )
+
+    $baseName = Get-LogBaseName -FileName $BaseFileName
+    return Join-Path $DirectoryPath ("{0}-{1}.log" -f $baseName, $Date.ToString("yyyyMMdd"))
+}
+
+function Reset-LogIfOversized {
+    param(
+        [string]$LogFilePath,
+        [int]$MaxSizeMb
+    )
+
+    if (-not (Test-Path -LiteralPath $LogFilePath)) {
+        return
+    }
+
+    $maxBytes = [Math]::Max($MaxSizeMb, 1) * 1MB
+    if ((Get-Item -LiteralPath $LogFilePath).Length -ge $maxBytes) {
+        Remove-Item -LiteralPath $LogFilePath -Force
+    }
+}
+
+function Remove-StaleLogs {
+    param(
+        [string]$DirectoryPath,
+        [string]$BaseFileName,
+        [string]$CurrentLogFileName,
+        [int]$RetentionDays
+    )
+
+    $cutoff = (Get-Date).AddDays(-1 * [Math]::Max($RetentionDays, 1))
+    $baseName = Get-LogBaseName -FileName $BaseFileName
+    Get-ChildItem -LiteralPath $DirectoryPath -File -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.Name -like "$baseName*.log" -and
+            $_.Name -ne $CurrentLogFileName -and
+            $_.LastWriteTime -lt $cutoff
+        } |
+        Remove-Item -Force -ErrorAction SilentlyContinue
+}
+
 function Get-MonitorLogPath {
     param(
         [string]$ConfigDirectory,
@@ -75,7 +132,7 @@ function Get-MonitorLogPath {
         [void](New-Item -Path $logDirectory -ItemType Directory -Force)
     }
 
-    return (Join-Path $logDirectory $logFileName)
+    return (Get-DatedLogFilePath -DirectoryPath $logDirectory -BaseFileName $logFileName)
 }
 
 function Write-LogLine {
@@ -84,6 +141,10 @@ function Write-LogLine {
         [string]$Message,
         [string]$Level = "INFO"
     )
+
+    if ([string]::IsNullOrWhiteSpace($Message)) {
+        return
+    }
 
     $timestamp = (Get-Date).ToString("o")
     $line = "[{0}] [{1}] {2}" -f $timestamp, $Level, $Message
@@ -106,9 +167,17 @@ $config = Get-ConfigMap -Path $configFullPath
 $logPath = Get-MonitorLogPath -ConfigDirectory $configDirectory -Config $config
 
 $intervalSeconds = [int](Get-ConfigValue -Config $config -Key "schedule_interval_seconds" -DefaultValue "10")
+$logMaxSizeMb = [int](Get-ConfigValue -Config $config -Key "log_max_size_mb" -DefaultValue "50")
+$logRetentionDays = [int](Get-ConfigValue -Config $config -Key "log_retention_days" -DefaultValue "7")
 $runnerPidFile = Resolve-PathFromBase -BaseDirectory $configDirectory -Value (Get-ConfigValue -Config $config -Key "runner_pid_file" -DefaultValue ".\monitor.pid")
 if ($intervalSeconds -lt 1) {
     throw "schedule_interval_seconds must be >= 1."
+}
+if ($logMaxSizeMb -lt 1) {
+    throw "log_max_size_mb must be >= 1."
+}
+if ($logRetentionDays -lt 1) {
+    throw "log_retention_days must be >= 1."
 }
 
 $runnerScriptPath = Join-Path $scriptRoot "monitor-runner.ps1"
@@ -116,10 +185,13 @@ if (-not (Test-Path -LiteralPath $runnerScriptPath)) {
     throw "Runner script not found: $runnerScriptPath"
 }
 
+Reset-LogIfOversized -LogFilePath $logPath -MaxSizeMb $logMaxSizeMb
+
 $existingRunner = Get-RunnerProcess -RunnerScriptPath $runnerScriptPath
 if ($existingRunner) {
     Set-Content -LiteralPath $runnerPidFile -Value $existingRunner.ProcessId -Encoding ASCII
-    Write-LogLine -LogPath $logPath -Message "runner already running, pid=$($existingRunner.ProcessId), pid_file=$runnerPidFile"
+    Write-LogLine -LogPath $logPath -Message "runner already running pid=$($existingRunner.ProcessId)"
+    Remove-StaleLogs -DirectoryPath (Split-Path -Parent $logPath) -BaseFileName (Get-ConfigValue -Config $config -Key "log_file_name" -DefaultValue "monitor.log") -CurrentLogFileName (Split-Path -Leaf $logPath) -RetentionDays $logRetentionDays
     exit 0
 }
 
@@ -132,4 +204,5 @@ $process = Start-Process -FilePath $powershellPath -ArgumentList @(
 ) -WorkingDirectory $configDirectory -PassThru
 
 Set-Content -LiteralPath $runnerPidFile -Value $process.Id -Encoding ASCII
-Write-LogLine -LogPath $logPath -Message "runner started, pid=$($process.Id), interval=${intervalSeconds}s, pid_file=$runnerPidFile"
+Write-LogLine -LogPath $logPath -Message "runner started pid=$($process.Id) interval=${intervalSeconds}s"
+Remove-StaleLogs -DirectoryPath (Split-Path -Parent $logPath) -BaseFileName (Get-ConfigValue -Config $config -Key "log_file_name" -DefaultValue "monitor.log") -CurrentLogFileName (Split-Path -Leaf $logPath) -RetentionDays $logRetentionDays
