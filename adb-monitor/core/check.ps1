@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$ConfigPath = "..\monitor.config",
     [string]$AdbPath = "",
     [string]$LdPlayerPath = ""
@@ -158,12 +158,8 @@ function Normalize-MailAddress {
         return ""
     }
 
-    if ($value -match "@") {
-        return $value
-    }
-
-    if ($value -match "^\d+$") {
-        return "$value@qq.com"
+    if ($value -notmatch '^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$') {
+        return ""
     }
 
     return $value
@@ -632,6 +628,17 @@ function Test-AlertCooldownPassed {
     return ($elapsedMinutes -ge $CooldownMinutes)
 }
 
+function Get-SummaryStatusText {
+    param([string]$Status)
+
+    switch ($Status) {
+        "healthy" { return "正常" }
+        "unhealthy" { return "异常" }
+        "error" { return "错误" }
+        default { return $Status }
+    }
+}
+
 function Send-AlertMail {
     param(
         [pscustomobject]$Summary,
@@ -651,10 +658,12 @@ function Send-AlertMail {
 
     $mailEnabled = (Get-ConfigValue -Config $Config -Key "mail_enabled" -DefaultValue "true").ToLowerInvariant()
     if ($mailEnabled -ne "true") {
+        Write-MonitorLine -Message ("[{0}] [INFO] 邮件通知未开启" -f (Get-Date).ToString("o"))
         return
     }
 
     if (-not (Test-AlertCooldownPassed -StatePath $StatePath -CooldownMinutes $CooldownMinutes)) {
+        Write-MonitorLine -Message ("[{0}] [INFO] 告警邮件处于冷却期，本次跳过发送" -f (Get-Date).ToString("o"))
         return
     }
 
@@ -672,24 +681,25 @@ function Send-AlertMail {
     $timeoutSeconds = [int](Get-ConfigValue -Config $Config -Key "mail_timeout_seconds" -DefaultValue "20")
 
     if ([string]::IsNullOrWhiteSpace($mailUser) -or [string]::IsNullOrWhiteSpace($mailPassword) -or $mailTo.Count -eq 0) {
-        Write-MonitorLine -Message ("[{0}] [ERROR] mail config incomplete" -f (Get-Date).ToString("o")) -ForegroundColor Red
+        Write-MonitorLine -Message ("[{0}] [ERROR] 邮件配置不完整或邮箱格式不正确" -f (Get-Date).ToString("o")) -ForegroundColor Red
         return
     }
 
-    $subject = "{0} health alert {1}/{2}" -f $subjectPrefix, $Summary.HealthyCount, $Summary.ExpectedHealthy
+    $subject = "{0} 模拟器告警 {1}/{2}" -f $subjectPrefix, $Summary.HealthyCount, $Summary.ExpectedHealthy
+    $statusText = Get-SummaryStatusText -Status $Summary.Status
     $bodyLines = New-Object System.Collections.Generic.List[string]
-    $bodyLines.Add("Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')")
-    $bodyLines.Add("Status: $($Summary.Status)")
-    $bodyLines.Add("Healthy: $($Summary.HealthyCount)/$($Summary.ExpectedHealthy)")
-    $bodyLines.Add("Total: $($Summary.TotalCount)")
-    $bodyLines.Add("LDPlayer: $($Summary.LdPlayerPath)")
-    $bodyLines.Add("ADB: $($Summary.AdbPath)")
-    $bodyLines.Add("Details:")
+    $bodyLines.Add("时间：$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')")
+    $bodyLines.Add("状态：$statusText")
+    $bodyLines.Add("健康数量：$($Summary.HealthyCount)/$($Summary.ExpectedHealthy)")
+    $bodyLines.Add("总数：$($Summary.TotalCount)")
+    $bodyLines.Add("模拟器路径：$($Summary.LdPlayerPath)")
+    $bodyLines.Add("ADB路径：$($Summary.AdbPath)")
+    $bodyLines.Add("设备明细：")
     foreach ($device in @($Summary.UnhealthyDevices)) {
-        $bodyLines.Add(" - $($device.Serial) $(Format-DeviceReason -Reason $device.Reason)")
+        $bodyLines.Add(" - 设备 $($device.Serial) $(Format-DeviceReason -Reason $device.Reason)")
     }
     $bodyLines.Add("")
-    $bodyLines.Add($Summary.AlertMessage)
+    $bodyLines.Add("告警信息：$($Summary.AlertMessage)")
 
     $message = $null
     $client = $null
@@ -714,9 +724,9 @@ function Send-AlertMail {
         $client.Timeout = [Math]::Max($timeoutSeconds, 1) * 1000
         $client.Send($message)
 
-        Write-MonitorLine -Message ("[{0}] [INFO] alert mail sent to {1}" -f (Get-Date).ToString("o"), ($mailTo -join ";")) -ForegroundColor Cyan
+        Write-MonitorLine -Message ("[{0}] [INFO] 告警邮件已发送，主题={1}，收件人={2}" -f (Get-Date).ToString("o"), $subject, ($mailTo -join ";")) -ForegroundColor Cyan
     } catch {
-        Write-MonitorLine -Message ("[{0}] [ERROR] alert mail failed: {1}" -f (Get-Date).ToString("o"), $_.Exception.Message) -ForegroundColor Red
+        Write-MonitorLine -Message ("[{0}] [ERROR] 告警邮件发送失败：{1}" -f (Get-Date).ToString("o"), $_.Exception.Message) -ForegroundColor Red
     } finally {
         if ($message) {
             $message.Dispose()
@@ -744,11 +754,11 @@ function Format-DeviceReason {
     param([string]$Reason)
 
     switch ($Reason) {
-        "boot_not_completed" { return "boot not completed" }
-        "no_devices_found" { return "no devices found" }
+        "boot_not_completed" { return "启动未完成" }
+        "no_devices_found" { return "未发现设备" }
         default {
             if ($Reason -like "state=*") {
-                return $Reason.Substring(6)
+                return "状态=$($Reason.Substring(6))"
             }
             return $Reason
         }
@@ -796,7 +806,7 @@ function New-RunSummary {
 
     $alertMessage = ""
     if ($ExpectedHealthyDevices -gt 0 -and $healthyDevices.Count -lt $ExpectedHealthyDevices) {
-        $alertMessage = "healthy devices below expected expected=$ExpectedHealthyDevices actual=$($healthyDevices.Count)"
+        $alertMessage = "健康设备数量低于预期，预期=$ExpectedHealthyDevices，当前=$($healthyDevices.Count)"
     }
 
     return [pscustomobject]@{
@@ -823,20 +833,27 @@ function Convert-SummaryToLogLines {
     $prefix = "[{0}]" -f $Summary.Timestamp
     $lines = New-Object System.Collections.Generic.List[string]
 
-    $resultLevel = if ($Summary.Status -eq "healthy") { "INFO" } else { "WARN" }
+    $resultLevel = if ($Summary.Status -eq "healthy") { "INFO" } elseif (-not [string]::IsNullOrWhiteSpace($Summary.ErrorMessage) -or -not [string]::IsNullOrWhiteSpace($Summary.AlertMessage)) { "ERROR" } else { "WARN" }
 
-    $lines.Add("$prefix [INFO] monitor start")
-    $lines.Add("$prefix [INFO] config=$($Summary.ConfigFilePath)")
-    $lines.Add("$prefix [INFO] ldplayer=$($Summary.LdPlayerPath)")
-    $lines.Add("$prefix [INFO] adb=$($Summary.AdbPath)")
-    $lines.Add("$prefix [$resultLevel] status=$($Summary.Status) total=$($Summary.TotalCount) healthy=$($Summary.HealthyCount) unhealthy=$($Summary.UnhealthyCount)")
+    $statusText = switch ($Summary.Status) {
+        "healthy" { "正常" }
+        "unhealthy" { "异常" }
+        "error" { "错误" }
+        default { $Summary.Status }
+    }
+
+    $lines.Add("$prefix [INFO] 监控开始")
+    $lines.Add("$prefix [INFO] 配置=$($Summary.ConfigFilePath)")
+    $lines.Add("$prefix [INFO] 模拟器路径=$($Summary.LdPlayerPath)")
+    $lines.Add("$prefix [INFO] ADB路径=$($Summary.AdbPath)")
+    $lines.Add("$prefix [$resultLevel] 状态=$statusText 总数=$($Summary.TotalCount) 健康=$($Summary.HealthyCount) 异常=$($Summary.UnhealthyCount)")
 
     foreach ($device in $Summary.HealthyDevices) {
-        $lines.Add("$prefix [INFO] $device healthy")
+        $lines.Add("$prefix [INFO] 设备 $device 正常")
     }
 
     foreach ($device in $Summary.UnhealthyDevices) {
-        $lines.Add("$prefix [WARN] $($device.Serial) $(Format-DeviceReason -Reason $device.Reason)")
+        $lines.Add("$prefix [WARN] 设备 $($device.Serial) $(Format-DeviceReason -Reason $device.Reason)")
     }
 
     if (-not [string]::IsNullOrWhiteSpace($Summary.ErrorMessage)) {
@@ -847,8 +864,8 @@ function Convert-SummaryToLogLines {
         $lines.Add("$prefix [ERROR] $($Summary.AlertMessage)")
     }
 
-    $lines.Add("$prefix [INFO] log=$($Summary.LogFilePath)")
-    $lines.Add("$prefix [INFO] monitor end")
+    $lines.Add("$prefix [INFO] 日志=$($Summary.LogFilePath)")
+    $lines.Add("$prefix [INFO] 监控结束")
     $lines.Add("")
     return $lines
 }
@@ -971,3 +988,4 @@ Write-LogLines -Lines $logLines
 Send-AlertMail -Summary $summary -Config $config -StatePath $alertStatePath -CooldownMinutes $alertCooldownMinutes
 Remove-StaleLogs -DirectoryPath $logDirectory -BaseFileName $logFileName -CurrentLogFileName (Split-Path -Leaf $logFilePath) -RetentionDays $retentionDays
 exit $exitCode
+

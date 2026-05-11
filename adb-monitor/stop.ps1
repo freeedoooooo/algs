@@ -191,7 +191,7 @@ if (Test-Path -LiteralPath $runnerPidFile) {
         $proc = Get-Process -Id $runnerId -ErrorAction SilentlyContinue
         if ($proc) {
             Stop-Process -Id $runnerId -Force -ErrorAction SilentlyContinue
-            Write-LogLine -LogPath $logPath -Message "runner stopped pid=$runnerId"
+            Write-LogLine -LogPath $logPath -Message "监控已停止，PID=$runnerId"
             $stopped = $true
         }
     }
@@ -203,12 +203,12 @@ $runnerScriptPath = Join-Path $scriptRoot "core\runner.ps1"
 $runnerProcesses = Get-RunnerProcesses -RunnerScriptPath $runnerScriptPath -ConfigPath $configFullPath
 foreach ($process in $runnerProcesses) {
     Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
-    Write-LogLine -LogPath $logPath -Message "runner stopped pid=$($process.ProcessId)"
+    Write-LogLine -LogPath $logPath -Message "监控已停止，PID=$($process.ProcessId)"
     $stopped = $true
 }
 
 if (-not $stopped) {
-    Write-LogLine -LogPath $logPath -Message "runner not running"
+    Write-LogLine -LogPath $logPath -Message "未发现正在运行的监控"
 }
 
 Remove-StaleLogs -DirectoryPath (Split-Path -Parent $logPath) -BaseFileName (Get-ConfigValue -Config $config -Key "log_file_name" -DefaultValue "monitor.log") -CurrentLogFileName (Split-Path -Leaf $logPath) -RetentionDays $logRetentionDays

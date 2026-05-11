@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$ConfigPath = ".\monitor.config"
 )
@@ -208,7 +208,7 @@ if (Test-Path -LiteralPath $runnerPidFile) {
     if ([int]::TryParse($pidText.Trim(), [ref]$existingRunnerId)) {
         $pidProcess = Get-RunnerProcessById -ProcessId $existingRunnerId
         if ($pidProcess) {
-            Write-LogLine -LogPath $logPath -Message "runner already running pid=$existingRunnerId"
+            Write-LogLine -LogPath $logPath -Message "监控已启动，PID=$($process.Id)，间隔=${intervalSeconds}秒"
             exit 0
         }
     }
@@ -219,7 +219,7 @@ if (Test-Path -LiteralPath $runnerPidFile) {
 $existingRunner = Get-RunnerProcess -RunnerScriptPath $runnerScriptPath -ConfigPath $configFullPath
 if ($existingRunner) {
     Set-Content -LiteralPath $runnerPidFile -Value $existingRunner.ProcessId -Encoding ASCII
-    Write-LogLine -LogPath $logPath -Message "runner already running pid=$($existingRunner.ProcessId)"
+    Write-LogLine -LogPath $logPath -Message "监控已启动，PID=$($process.Id)，间隔=${intervalSeconds}秒"
     exit 0
 }
 
@@ -232,4 +232,5 @@ $process = Start-Process -FilePath $powershellPath -ArgumentList @(
 ) -WorkingDirectory $configDirectory -PassThru
 
 Set-Content -LiteralPath $runnerPidFile -Value $process.Id -Encoding ASCII
-Write-LogLine -LogPath $logPath -Message "runner started pid=$($process.Id) interval=${intervalSeconds}s"
+Write-LogLine -LogPath $logPath -Message "监控已启动，PID=$($process.Id)，间隔=${intervalSeconds}秒"
+
