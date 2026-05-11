@@ -11,9 +11,9 @@
 - `stop-monitor.ps1`
   停止并删除计划任务。
 - `config.txt`
-  统一配置 `adb` 路径、日志目录、定时策略、日志保留时长。
+  统一配置 `adb` 路径、模拟器路径、发现策略、健康检查参数、日志策略、定时策略。
 - `log/`
-  监控日志目录。日志名会自动带时间戳。
+  监控日志目录。平时只追加一个主日志文件，达到轮转条件后再归档。
 
 ## 健康定义
 
@@ -28,16 +28,42 @@
 
 - `adb_path`
   可留空。留空时脚本会自动查找 `adb.exe`。
+- `ldplayer_path`
+  可留空。留空时脚本会优先用 `adb.exe` 所在目录推断模拟器安装目录。
+- `common_ldplayer_dirs`
+  常见雷电安装目录列表，使用分号分隔。
 - `log_directory`
   日志目录，默认是 `.\log`。
+- `log_file_name`
+  当前正在写入的主日志文件名。
+- `registry_roots`
+  自动发现雷电安装目录时会扫描的注册表根路径，使用分号分隔。
+- `registry_value_names`
+  从注册表里读取安装目录时使用的值名列表，使用分号分隔。
+- `external_command_timeout_seconds`
+  外部命令默认超时时间。
+- `adb_devices_timeout_seconds`
+  `adb devices` 超时时间。
+- `adb_shell_timeout_seconds`
+  `adb shell` 超时时间。
+- `boot_check_attempts`
+  `sys.boot_completed` 检查重试次数。
+- `boot_check_delay_seconds`
+  启动完成检查失败后的重试间隔秒数。
 - `task_name`
   计划任务名称。
+- `task_description`
+  Windows 计划任务描述。
 - `schedule_interval_minutes`
   定时执行间隔，单位分钟。
 - `schedule_start_time`
   每日首次触发时间，格式必须是 `HH:mm`。
+- `schedule_repetition_days`
+  计划任务重复调度持续天数。
+- `log_rotate_size_mb`
+  主日志达到多少 MB 后自动轮转，默认 `10`。
 - `log_retention_hours`
-  日志最多保留多少小时，默认 `72`。
+  轮转后的旧日志最多保留多少小时，默认 `72`。
 
 ## 使用方式
 
@@ -63,6 +89,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\stop-monitor.ps1
 
 ## 日志规则
 
-- 监控日志写入 `.\log`
-- 日志文件名格式为 `ldplayer-monitor-YYYYMMDD-HHMMSS.md`
-- 每次运行后会自动清理 72 小时以前的日志
+- 监控日志默认写入 `.\log\ldplayer-monitor.log`
+- 每次执行都会把结果追加到同一个 `.log` 文件，而不是一轮一个文件
+- 主日志达到 `log_rotate_size_mb` 后，会轮转成带时间戳的归档日志
+- 每次运行后会自动清理 72 小时以前的归档日志
+- 日志里会记录配置文件路径、`adb` 路径、模拟器安装目录、连接设备数和异常原因

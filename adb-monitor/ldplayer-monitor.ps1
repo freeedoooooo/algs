@@ -1,6 +1,7 @@
 param(
     [string]$ConfigPath = ".\config.txt",
-    [string]$AdbPath = ""
+    [string]$AdbPath = "",
+    [string]$LdPlayerPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -80,6 +81,24 @@ function Get-ConfigValue {
     return $DefaultValue
 }
 
+function Get-ConfigList {
+    param(
+        [hashtable]$Config,
+        [string]$Key
+    )
+
+    $rawValue = Get-ConfigValue -Config $Config -Key $Key
+    if ([string]::IsNullOrWhiteSpace($rawValue)) {
+        return @()
+    }
+
+    return @(
+        $rawValue.Split(";") |
+            ForEach-Object { $_.Trim() } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    )
+}
+
 function Resolve-PathFromBase {
     param(
         [string]$BaseDirectory,
@@ -97,16 +116,13 @@ function Resolve-PathFromBase {
     return [System.IO.Path]::GetFullPath((Join-Path $BaseDirectory $Value))
 }
 
+function Get-CommonLdPlayerDirs {
+    return @($script:CommonLdPlayerDirs)
+}
+
 function Get-LDPlayerInstallDirsFromRegistry {
-    $roots = @(
-        "HKCU:\Software\leidian",
-        "HKLM:\Software\leidian",
-        "HKLM:\Software\WOW6432Node\leidian",
-        "HKCU:\Software\ChangZhi2",
-        "HKLM:\Software\ChangZhi2",
-        "HKLM:\Software\WOW6432Node\ChangZhi2"
-    )
-    $valueNames = @("InstallDir", "InstallPath", "Path", "Dir", "LdPlayerPath")
+    $roots = @($script:RegistryRoots)
+    $valueNames = @($script:RegistryValueNames)
     $dirs = New-Object System.Collections.Generic.List[string]
 
     foreach ($root in $roots) {
@@ -134,6 +150,38 @@ function Get-LDPlayerInstallDirsFromRegistry {
     return @($dirs | Select-Object -Unique)
 }
 
+function Resolve-LDPlayerPath {
+    param(
+        [string]$Hint,
+        [string]$ResolvedAdbPath
+    )
+
+    if ($Hint -and (Test-Path -LiteralPath $Hint)) {
+        return (Resolve-Path -LiteralPath $Hint).Path
+    }
+
+    if ($ResolvedAdbPath -and (Test-Path -LiteralPath $ResolvedAdbPath)) {
+        return Split-Path -Parent $ResolvedAdbPath
+    }
+
+    $dirs = New-Object System.Collections.Generic.List[string]
+    foreach ($dir in Get-LDPlayerInstallDirsFromRegistry) {
+        $dirs.Add($dir)
+    }
+    foreach ($dir in Get-CommonLdPlayerDirs) {
+        if (Test-Path -LiteralPath $dir) {
+            $dirs.Add((Resolve-Path -LiteralPath $dir).Path)
+        }
+    }
+
+    $firstDir = @($dirs | Select-Object -Unique | Select-Object -First 1)
+    if ($firstDir.Count -gt 0) {
+        return $firstDir[0]
+    }
+
+    return ""
+}
+
 function Resolve-AdbPath {
     param([string]$Hint)
 
@@ -146,19 +194,7 @@ function Resolve-AdbPath {
         $dirs.Add($dir)
     }
 
-    $commonDirs = @(
-        "D:\leidian\LDPlayer9",
-        "D:\leidian",
-        "C:\leidian\LDPlayer9",
-        "C:\leidian",
-        "C:\Program Files\LDPlayer\LDPlayer9",
-        "C:\Program Files\LDPlayer",
-        "C:\Program Files\dnplayerext2",
-        "D:\LDPlayer",
-        "C:\LDPlayer"
-    )
-
-    foreach ($dir in $commonDirs) {
+    foreach ($dir in Get-CommonLdPlayerDirs) {
         if (Test-Path -LiteralPath $dir) {
             $dirs.Add((Resolve-Path -LiteralPath $dir).Path)
         }
@@ -192,7 +228,7 @@ function Invoke-External {
     param(
         [Parameter(Mandatory = $true)][string]$FilePath,
         [string[]]$ArgumentList = @(),
-        [int]$TimeoutSeconds = 20
+        [int]$TimeoutSeconds = $script:ExternalCommandTimeoutSeconds
     )
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -241,7 +277,7 @@ function Get-Devices {
     param([string]$Adb)
 
     $deviceArgs = @("devices", "-l")
-    $result = Invoke-External -FilePath $Adb -ArgumentList $deviceArgs -TimeoutSeconds 10
+    $result = Invoke-External -FilePath $Adb -ArgumentList $deviceArgs -TimeoutSeconds $script:AdbDevicesTimeoutSeconds
     $fallbackReasons = New-Object System.Collections.Generic.List[string]
 
     if ($result.ExitCode -ne 0) {
@@ -265,7 +301,7 @@ function Get-Devices {
     }
 
     if ($fallbackReasons.Count -gt 0) {
-        $result = Invoke-External -FilePath $Adb -ArgumentList @("devices") -TimeoutSeconds 10
+        $result = Invoke-External -FilePath $Adb -ArgumentList @("devices") -TimeoutSeconds $script:AdbDevicesTimeoutSeconds
         if ($result.ExitCode -ne 0) {
             throw "Failed to run adb devices: $($result.StdOut) $($result.StdErr)".Trim()
         }
@@ -301,18 +337,18 @@ function Invoke-AdbShell {
         [string[]]$ShellArgs
     )
 
-    return Invoke-External -FilePath $Adb -ArgumentList (@("-s", $Serial, "shell") + $ShellArgs) -TimeoutSeconds 15
+    return Invoke-External -FilePath $Adb -ArgumentList (@("-s", $Serial, "shell") + $ShellArgs) -TimeoutSeconds $script:AdbShellTimeoutSeconds
 }
 
 function Test-BootCompleted {
     param(
         [string]$Adb,
-        [string]$Serial,
-        [int]$Attempts = 3,
-        [int]$DelaySeconds = 1
+        [string]$Serial
     )
 
-    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+    $attempts = $script:BootCheckAttempts
+    $delaySeconds = $script:BootCheckDelaySeconds
+    for ($attempt = 1; $attempt -le $attempts; $attempt++) {
         $boot = Invoke-AdbShell -Adb $Adb -Serial $Serial -ShellArgs @("getprop", "sys.boot_completed")
         $bootCompleted = @(
             (($boot.StdOut | Out-String) -split "`r?`n") |
@@ -323,8 +359,8 @@ function Test-BootCompleted {
             return $true
         }
 
-        if ($attempt -lt $Attempts) {
-            Start-Sleep -Seconds $DelaySeconds
+        if ($attempt -lt $attempts) {
+            Start-Sleep -Seconds $delaySeconds
         }
     }
 
@@ -372,22 +408,65 @@ function Ensure-Directory {
     }
 }
 
+function Rotate-LogIfNeeded {
+    param(
+        [string]$LogFilePath,
+        [int]$RotateSizeMb
+    )
+
+    if (-not (Test-Path -LiteralPath $LogFilePath)) {
+        return
+    }
+
+    $maxBytes = $RotateSizeMb * 1MB
+    if ($maxBytes -lt 1MB) {
+        $maxBytes = 1MB
+    }
+
+    $logFile = Get-Item -LiteralPath $LogFilePath
+    if ($logFile.Length -lt $maxBytes) {
+        return
+    }
+
+    $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $archiveName = "{0}-{1}{2}" -f $logFile.BaseName, $timestamp, $logFile.Extension
+    $archivePath = Join-Path $logFile.DirectoryName $archiveName
+    Move-Item -LiteralPath $LogFilePath -Destination $archivePath -Force
+}
+
 function Remove-StaleLogs {
     param(
         [string]$DirectoryPath,
+        [string]$CurrentLogFileName,
         [int]$RetentionHours
     )
 
     $cutoff = (Get-Date).AddHours(-1 * $RetentionHours)
-    Get-ChildItem -LiteralPath $DirectoryPath -Filter "ldplayer-monitor-*.md" -File -ErrorAction SilentlyContinue |
-        Where-Object { $_.LastWriteTime -lt $cutoff } |
+    Get-ChildItem -LiteralPath $DirectoryPath -File -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.Name -like "ldplayer-monitor*.log" -and
+            $_.Name -ne $CurrentLogFileName -and
+            $_.LastWriteTime -lt $cutoff
+        } |
         Remove-Item -Force -ErrorAction SilentlyContinue
+}
+
+function Write-LogLines {
+    param(
+        [string]$LogFilePath,
+        [string[]]$Lines
+    )
+
+    $content = ($Lines -join [Environment]::NewLine) + [Environment]::NewLine
+    [System.IO.File]::AppendAllText($LogFilePath, $content, [System.Text.Encoding]::UTF8)
 }
 
 function New-RunSummary {
     param(
         [datetime]$RunTime,
-        [string]$Adb,
+        [string]$ConfigFilePath,
+        [string]$ResolvedAdbPath,
+        [string]$ResolvedLdPlayerPath,
         [object[]]$Checks,
         [string]$ErrorMessage
     )
@@ -421,7 +500,9 @@ function New-RunSummary {
 
     return [pscustomobject]@{
         Timestamp        = $RunTime.ToString("o")
-        AdbPath          = $Adb
+        ConfigFilePath   = $ConfigFilePath
+        AdbPath          = $ResolvedAdbPath
+        LdPlayerPath     = $ResolvedLdPlayerPath
         Status           = $status
         TotalCount       = $Checks.Count
         HealthyCount     = $healthyDevices.Count
@@ -432,60 +513,52 @@ function New-RunSummary {
     }
 }
 
-function Convert-SummaryToMarkdown {
-    param(
-        [pscustomobject]$Summary,
-        [string]$ConfigFilePath
-    )
+function Convert-SummaryToLogLines {
+    param([pscustomobject]$Summary)
 
+    $prefix = "[{0}]" -f $Summary.Timestamp
     $lines = New-Object System.Collections.Generic.List[string]
-    $lines.Add("# LDPlayer health monitor log")
-    $lines.Add("")
-    $lines.Add("- timestamp: $($Summary.Timestamp)")
-    $lines.Add("- status: $($Summary.Status)")
-    $lines.Add("- config: $ConfigFilePath")
-    $lines.Add("- adb path: $($Summary.AdbPath)")
-    $lines.Add("- connected devices: $($Summary.TotalCount)")
-    $lines.Add("- healthy devices: $($Summary.HealthyCount)")
-    $lines.Add("- unhealthy devices: $($Summary.UnhealthyCount)")
-    $lines.Add("")
 
-    if ($Summary.HealthyDevices.Count -gt 0) {
-        $lines.Add("## Healthy devices")
-        $lines.Add("")
-        foreach ($device in $Summary.HealthyDevices) {
-            $lines.Add("- $device")
-        }
-        $lines.Add("")
+    $lines.Add("$prefix [INFO] monitor run start")
+    $lines.Add("$prefix [INFO] config_path=$($Summary.ConfigFilePath)")
+    $lines.Add("$prefix [INFO] adb_path=$($Summary.AdbPath)")
+    $lines.Add("$prefix [INFO] ldplayer_path=$($Summary.LdPlayerPath)")
+    $lines.Add("$prefix [INFO] status=$($Summary.Status) connected_devices=$($Summary.TotalCount) healthy_devices=$($Summary.HealthyCount) unhealthy_devices=$($Summary.UnhealthyCount)")
+
+    foreach ($device in $Summary.HealthyDevices) {
+        $lines.Add("$prefix [INFO] healthy_device=$device")
     }
 
-    if ($Summary.UnhealthyDevices.Count -gt 0) {
-        $lines.Add("## Unhealthy devices")
-        $lines.Add("")
-        $lines.Add("| device | reason |")
-        $lines.Add("| --- | --- |")
-        foreach ($device in $Summary.UnhealthyDevices) {
-            $lines.Add("| $($device.Serial) | $($device.Reason) |")
-        }
-        $lines.Add("")
+    foreach ($device in $Summary.UnhealthyDevices) {
+        $lines.Add("$prefix [WARN] unhealthy_device=$($device.Serial) reason=$($device.Reason)")
     }
 
     if (-not [string]::IsNullOrWhiteSpace($Summary.ErrorMessage)) {
-        $lines.Add("## Error")
-        $lines.Add("")
-        $lines.Add('```text')
-        $lines.Add($Summary.ErrorMessage)
-        $lines.Add('```')
-        $lines.Add("")
+        $lines.Add("$prefix [ERROR] $($Summary.ErrorMessage)")
     }
 
-    return ($lines -join [Environment]::NewLine)
+    $lines.Add("$prefix [INFO] monitor run end")
+    $lines.Add("")
+    return $lines
 }
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $configFullPath = Resolve-PathFromBase -BaseDirectory $scriptRoot -Value $ConfigPath
 $configDirectory = Split-Path -Parent $configFullPath
 $config = Get-ConfigMap -Path $configFullPath
+
+$script:CommonLdPlayerDirs = @(
+    foreach ($item in (Get-ConfigList -Config $config -Key "common_ldplayer_dirs")) {
+        Resolve-PathFromBase -BaseDirectory $configDirectory -Value $item
+    }
+)
+$script:RegistryRoots = @(Get-ConfigList -Config $config -Key "registry_roots")
+$script:RegistryValueNames = @(Get-ConfigList -Config $config -Key "registry_value_names")
+$script:ExternalCommandTimeoutSeconds = [int](Get-ConfigValue -Config $config -Key "external_command_timeout_seconds" -DefaultValue "20")
+$script:AdbDevicesTimeoutSeconds = [int](Get-ConfigValue -Config $config -Key "adb_devices_timeout_seconds" -DefaultValue "10")
+$script:AdbShellTimeoutSeconds = [int](Get-ConfigValue -Config $config -Key "adb_shell_timeout_seconds" -DefaultValue "15")
+$script:BootCheckAttempts = [int](Get-ConfigValue -Config $config -Key "boot_check_attempts" -DefaultValue "3")
+$script:BootCheckDelaySeconds = [int](Get-ConfigValue -Config $config -Key "boot_check_delay_seconds" -DefaultValue "1")
 
 $adbHint = $AdbPath
 if ([string]::IsNullOrWhiteSpace($adbHint)) {
@@ -495,18 +568,57 @@ if (-not [string]::IsNullOrWhiteSpace($adbHint)) {
     $adbHint = Resolve-PathFromBase -BaseDirectory $configDirectory -Value $adbHint
 }
 
+$ldPlayerHint = $LdPlayerPath
+if ([string]::IsNullOrWhiteSpace($ldPlayerHint)) {
+    $ldPlayerHint = Get-ConfigValue -Config $config -Key "ldplayer_path"
+}
+if (-not [string]::IsNullOrWhiteSpace($ldPlayerHint)) {
+    $ldPlayerHint = Resolve-PathFromBase -BaseDirectory $configDirectory -Value $ldPlayerHint
+}
+
 $logDirectory = Resolve-PathFromBase -BaseDirectory $configDirectory -Value (Get-ConfigValue -Config $config -Key "log_directory" -DefaultValue ".\log")
+$logFileName = Get-ConfigValue -Config $config -Key "log_file_name" -DefaultValue "ldplayer-monitor.log"
 $retentionHours = [int](Get-ConfigValue -Config $config -Key "log_retention_hours" -DefaultValue "72")
+$rotateSizeMb = [int](Get-ConfigValue -Config $config -Key "log_rotate_size_mb" -DefaultValue "10")
+
+if ($script:RegistryRoots.Count -eq 0) {
+    throw "registry_roots must not be empty."
+}
+if ($script:RegistryValueNames.Count -eq 0) {
+    throw "registry_value_names must not be empty."
+}
+if ($script:CommonLdPlayerDirs.Count -eq 0) {
+    throw "common_ldplayer_dirs must not be empty."
+}
+if ($script:ExternalCommandTimeoutSeconds -lt 1) {
+    throw "external_command_timeout_seconds must be >= 1."
+}
+if ($script:AdbDevicesTimeoutSeconds -lt 1) {
+    throw "adb_devices_timeout_seconds must be >= 1."
+}
+if ($script:AdbShellTimeoutSeconds -lt 1) {
+    throw "adb_shell_timeout_seconds must be >= 1."
+}
+if ($script:BootCheckAttempts -lt 1) {
+    throw "boot_check_attempts must be >= 1."
+}
+if ($script:BootCheckDelaySeconds -lt 0) {
+    throw "boot_check_delay_seconds must be >= 0."
+}
 if ($retentionHours -lt 1) {
     throw "log_retention_hours must be >= 1."
 }
+if ($rotateSizeMb -lt 1) {
+    throw "log_rotate_size_mb must be >= 1."
+}
 
 Ensure-Directory -Path $logDirectory
-$runTime = Get-Date
-$logFileName = "ldplayer-monitor-{0}.md" -f $runTime.ToString("yyyyMMdd-HHmmss")
 $logFilePath = Join-Path $logDirectory $logFileName
+Rotate-LogIfNeeded -LogFilePath $logFilePath -RotateSizeMb $rotateSizeMb
 
+$runTime = Get-Date
 $resolvedAdb = ""
+$resolvedLdPlayerPath = ""
 $checks = @()
 $errorMessage = ""
 $exitCode = 0
@@ -518,7 +630,13 @@ try {
         throw "adb.exe not found. Configure adb_path in config.txt or add adb to PATH."
     }
 
+    $resolvedLdPlayerPath = Resolve-LDPlayerPath -Hint $ldPlayerHint -ResolvedAdbPath $resolvedAdb
+
     Write-Step "Use adb at $resolvedAdb"
+    if (-not [string]::IsNullOrWhiteSpace($resolvedLdPlayerPath)) {
+        Write-Step "Use LDPlayer path $resolvedLdPlayerPath"
+    }
+
     $devices = @(Get-Devices -Adb $resolvedAdb)
     foreach ($device in $devices) {
         $checks += Test-DeviceHealth -Adb $resolvedAdb -Device $device
@@ -532,15 +650,22 @@ try {
     $exitCode = 1
 }
 
-$summary = New-RunSummary -RunTime $runTime -Adb $resolvedAdb -Checks $checks -ErrorMessage $errorMessage
-$markdown = Convert-SummaryToMarkdown -Summary $summary -ConfigFilePath $configFullPath
-$markdown | Set-Content -LiteralPath $logFilePath -Encoding UTF8
-Remove-StaleLogs -DirectoryPath $logDirectory -RetentionHours $retentionHours
+$summary = New-RunSummary -RunTime $runTime -ConfigFilePath $configFullPath -ResolvedAdbPath $resolvedAdb -ResolvedLdPlayerPath $resolvedLdPlayerPath -Checks $checks -ErrorMessage $errorMessage
+$logLines = Convert-SummaryToLogLines -Summary $summary
+Write-LogLines -LogFilePath $logFilePath -Lines $logLines
+Remove-StaleLogs -DirectoryPath $logDirectory -CurrentLogFileName $logFileName -RetentionHours $retentionHours
 
 if ($summary.Status -eq "healthy") {
     Write-Host "[RESULT] healthy emulators: $($summary.HealthyCount) / $($summary.TotalCount)" -ForegroundColor Green
 } else {
     Write-WarnLog "healthy emulators: $($summary.HealthyCount) / $($summary.TotalCount)"
+}
+
+if (-not [string]::IsNullOrWhiteSpace($summary.AdbPath)) {
+    Write-Host "[INFO] adb path: $($summary.AdbPath)"
+}
+if (-not [string]::IsNullOrWhiteSpace($summary.LdPlayerPath)) {
+    Write-Host "[INFO] ldplayer path: $($summary.LdPlayerPath)"
 }
 
 foreach ($item in $summary.UnhealthyDevices) {

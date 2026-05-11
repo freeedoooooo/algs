@@ -94,9 +94,14 @@ $config = Get-ConfigMap -Path $configFullPath
 $taskName = Get-ConfigValue -Config $config -Key "task_name" -DefaultValue "LDPlayerHealthMonitor"
 $intervalMinutes = [int](Get-ConfigValue -Config $config -Key "schedule_interval_minutes" -DefaultValue "30")
 $startTimeText = Get-ConfigValue -Config $config -Key "schedule_start_time" -DefaultValue "00:00"
+$taskDescription = Get-ConfigValue -Config $config -Key "task_description" -DefaultValue "LDPlayer health monitor task"
+$repetitionDays = [int](Get-ConfigValue -Config $config -Key "schedule_repetition_days" -DefaultValue "3650")
 
 if ($intervalMinutes -lt 1) {
     throw "schedule_interval_minutes must be >= 1."
+}
+if ($repetitionDays -lt 1) {
+    throw "schedule_repetition_days must be >= 1."
 }
 
 $monitorScriptPath = Join-Path $scriptRoot "ldplayer-monitor.ps1"
@@ -114,7 +119,7 @@ $actionArguments = @(
 ) -join " "
 
 $action = New-ScheduledTaskAction -Execute $powershellPath -Argument $actionArguments -WorkingDirectory $configDirectory
-$trigger = New-ScheduledTaskTrigger -Once -At $startBoundary -RepetitionInterval (New-TimeSpan -Minutes $intervalMinutes) -RepetitionDuration ([TimeSpan]::FromDays(3650))
+$trigger = New-ScheduledTaskTrigger -Once -At $startBoundary -RepetitionInterval (New-TimeSpan -Minutes $intervalMinutes) -RepetitionDuration ([TimeSpan]::FromDays($repetitionDays))
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 
 $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
@@ -122,7 +127,7 @@ if ($existingTask) {
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
 }
 
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Description "LDPlayer health monitor task" | Out-Null
+Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Description $taskDescription | Out-Null
 Start-ScheduledTask -TaskName $taskName
 
 Write-Host "Task registered: $taskName"

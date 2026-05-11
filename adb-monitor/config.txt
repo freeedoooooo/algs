@@ -1,11 +1,28 @@
 # Paths
 adb_path=
+ldplayer_path=
+common_ldplayer_dirs=D:\leidian\LDPlayer9;D:\leidian;C:\leidian\LDPlayer9;C:\leidian;C:\Program Files\LDPlayer\LDPlayer9;C:\Program Files\LDPlayer;C:\Program Files\dnplayerext2;D:\LDPlayer;C:\LDPlayer
 log_directory=.\log
+log_file_name=ldplayer-monitor.log
+
+# Discovery
+registry_roots=HKCU:\Software\leidian;HKLM:\Software\leidian;HKLM:\Software\WOW6432Node\leidian;HKCU:\Software\ChangZhi2;HKLM:\Software\ChangZhi2;HKLM:\Software\WOW6432Node\ChangZhi2
+registry_value_names=InstallDir;InstallPath;Path;Dir;LdPlayerPath
+
+# Health check
+external_command_timeout_seconds=20
+adb_devices_timeout_seconds=10
+adb_shell_timeout_seconds=15
+boot_check_attempts=3
+boot_check_delay_seconds=1
 
 # Scheduling
 task_name=LDPlayerHealthMonitor
-schedule_interval_minutes=30
+task_description=LDPlayer health monitor task
+schedule_interval_minutes=1
 schedule_start_time=00:00
+schedule_repetition_days=3650
 
-# Retention
+# Log policy
+log_rotate_size_mb=10
 log_retention_hours=72
