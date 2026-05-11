@@ -46,3 +46,51 @@
 [2026-05-11T11:22:59.9138451+08:00] [ERROR] adb.exe not found. Configure adb_path in monitor.config or add adb to PATH.
 [2026-05-11T11:22:59.9138451+08:00] [INFO] monitor run end
 
+[2026-05-11T11:23:27.3555685+08:00] [INFO] monitor run start
+[2026-05-11T11:23:27.3555685+08:00] [INFO] config_path=D:\PROJECT\Project_HU\freeedoooooo\algs\adb-monitor\monitor.config
+[2026-05-11T11:23:27.3555685+08:00] [INFO] adb_path=
+[2026-05-11T11:23:27.3555685+08:00] [INFO] ldplayer_path=
+[2026-05-11T11:23:27.3555685+08:00] [INFO] status=error connected_devices=0 healthy_devices=0 unhealthy_devices=0
+[2026-05-11T11:23:27.3555685+08:00] [ERROR] adb.exe not found. Configure adb_path in monitor.config or add adb to PATH.
+[2026-05-11T11:23:27.3555685+08:00] [INFO] monitor run end
+
+[2026-05-11T11:23:30.0137107+08:00] [INFO] monitor run start
+[2026-05-11T11:23:30.0137107+08:00] [INFO] config_path=D:\PROJECT\Project_HU\freeedoooooo\algs\adb-monitor\monitor.config
+[2026-05-11T11:23:30.0137107+08:00] [INFO] adb_path=
+[2026-05-11T11:23:30.0137107+08:00] [INFO] ldplayer_path=
+[2026-05-11T11:23:30.0137107+08:00] [INFO] status=error connected_devices=0 healthy_devices=0 unhealthy_devices=0
+[2026-05-11T11:23:30.0137107+08:00] [ERROR] adb.exe not found. Configure adb_path in monitor.config or add adb to PATH.
+[2026-05-11T11:23:30.0137107+08:00] [INFO] monitor run end
+
+[2026-05-11T11:23:40.4834579+08:00] [INFO] monitor run start
+[2026-05-11T11:23:40.4834579+08:00] [INFO] config_path=D:\PROJECT\Project_HU\freeedoooooo\algs\adb-monitor\monitor.config
+[2026-05-11T11:23:40.4834579+08:00] [INFO] adb_path=
+[2026-05-11T11:23:40.4834579+08:00] [INFO] ldplayer_path=
+[2026-05-11T11:23:40.4834579+08:00] [INFO] status=error connected_devices=0 healthy_devices=0 unhealthy_devices=0
+[2026-05-11T11:23:40.4834579+08:00] [ERROR] adb.exe not found. Configure adb_path in monitor.config or add adb to PATH.
+[2026-05-11T11:23:40.4834579+08:00] [INFO] monitor run end
+
+[2026-05-11T11:23:50.9219538+08:00] [INFO] monitor run start
+[2026-05-11T11:23:50.9219538+08:00] [INFO] config_path=D:\PROJECT\Project_HU\freeedoooooo\algs\adb-monitor\monitor.config
+[2026-05-11T11:23:50.9219538+08:00] [INFO] adb_path=
+[2026-05-11T11:23:50.9219538+08:00] [INFO] ldplayer_path=
+[2026-05-11T11:23:50.9219538+08:00] [INFO] status=error connected_devices=0 healthy_devices=0 unhealthy_devices=0
+[2026-05-11T11:23:50.9219538+08:00] [ERROR] adb.exe not found. Configure adb_path in monitor.config or add adb to PATH.
+[2026-05-11T11:23:50.9219538+08:00] [INFO] monitor run end
+
+[2026-05-11T11:24:01.3596795+08:00] [INFO] monitor run start
+[2026-05-11T11:24:01.3596795+08:00] [INFO] config_path=D:\PROJECT\Project_HU\freeedoooooo\algs\adb-monitor\monitor.config
+[2026-05-11T11:24:01.3596795+08:00] [INFO] adb_path=
+[2026-05-11T11:24:01.3596795+08:00] [INFO] ldplayer_path=
+[2026-05-11T11:24:01.3596795+08:00] [INFO] status=error connected_devices=0 healthy_devices=0 unhealthy_devices=0
+[2026-05-11T11:24:01.3596795+08:00] [ERROR] adb.exe not found. Configure adb_path in monitor.config or add adb to PATH.
+[2026-05-11T11:24:01.3596795+08:00] [INFO] monitor run end
+
+[2026-05-11T11:24:11.8876693+08:00] [INFO] monitor run start
+[2026-05-11T11:24:11.8876693+08:00] [INFO] config_path=D:\PROJECT\Project_HU\freeedoooooo\algs\adb-monitor\monitor.config
+[2026-05-11T11:24:11.8876693+08:00] [INFO] adb_path=
+[2026-05-11T11:24:11.8876693+08:00] [INFO] ldplayer_path=
+[2026-05-11T11:24:11.8876693+08:00] [INFO] status=error connected_devices=0 healthy_devices=0 unhealthy_devices=0
+[2026-05-11T11:24:11.8876693+08:00] [ERROR] adb.exe not found. Configure adb_path in monitor.config or add adb to PATH.
+[2026-05-11T11:24:11.8876693+08:00] [INFO] monitor run end
+

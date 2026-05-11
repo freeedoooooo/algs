@@ -54,3 +54,7 @@ env/
 ENV/
 pip-wheel-metadata/
 *.egg-info/
+
+# Log files
+*.log
+*.log.*
