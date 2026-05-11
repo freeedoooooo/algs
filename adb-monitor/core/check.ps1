@@ -38,6 +38,14 @@ function Write-MonitorLine {
     }
 }
 
+function Write-MonitorBlankLine {
+    Write-Host ""
+
+    if (-not [string]::IsNullOrWhiteSpace($script:MonitorLogFilePath)) {
+        Add-Content -LiteralPath $script:MonitorLogFilePath -Value "" -Encoding UTF8
+    }
+}
+
 function Get-LogBaseName {
     param([string]$FileName)
 
@@ -535,6 +543,11 @@ function Write-LogLines {
     param([string[]]$Lines)
 
     foreach ($line in $Lines) {
+        if ($null -eq $line -or $line -eq "") {
+            Write-MonitorBlankLine
+            continue
+        }
+
         Write-MonitorLine -Message $line -ForegroundColor (Get-MonitorLineColor -Message $line)
     }
 }
@@ -636,6 +649,7 @@ function Convert-SummaryToLogLines {
 
     $lines.Add("$prefix [INFO] log=$($Summary.LogFilePath)")
     $lines.Add("$prefix [INFO] monitor end")
+    $lines.Add("")
     return $lines
 }
 
