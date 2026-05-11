@@ -181,6 +181,20 @@ function Get-CommonLdPlayerDirs {
     return @($script:CommonLdPlayerDirs)
 }
 
+function Test-LDPlayerInstallDir {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return $false
+    }
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return $false
+    }
+
+    return (Test-Path -LiteralPath (Join-Path $Path "adb.exe"))
+}
+
 function Get-LDPlayerInstallDirsFromRegistry {
     $roots = @($script:RegistryRoots)
     $valueNames = @($script:RegistryValueNames)
@@ -217,21 +231,26 @@ function Resolve-LDPlayerPath {
         [string]$ResolvedAdbPath
     )
 
-    if ($Hint -and (Test-Path -LiteralPath $Hint)) {
+    if (Test-LDPlayerInstallDir -Path $Hint) {
         return (Resolve-Path -LiteralPath $Hint).Path
     }
 
     if ($ResolvedAdbPath -and (Test-Path -LiteralPath $ResolvedAdbPath)) {
-        return Split-Path -Parent $ResolvedAdbPath
+        $adbDir = Split-Path -Parent $ResolvedAdbPath
+        if (Test-LDPlayerInstallDir -Path $adbDir) {
+            return $adbDir
+        }
     }
 
     $dirs = New-Object System.Collections.Generic.List[string]
-    foreach ($dir in Get-LDPlayerInstallDirsFromRegistry) {
-        $dirs.Add($dir)
-    }
     foreach ($dir in Get-CommonLdPlayerDirs) {
-        if (Test-Path -LiteralPath $dir) {
+        if (Test-LDPlayerInstallDir -Path $dir) {
             $dirs.Add((Resolve-Path -LiteralPath $dir).Path)
+        }
+    }
+    foreach ($dir in Get-LDPlayerInstallDirsFromRegistry) {
+        if (Test-LDPlayerInstallDir -Path $dir) {
+            $dirs.Add($dir)
         }
     }
 
@@ -251,13 +270,14 @@ function Resolve-AdbPath {
     }
 
     $dirs = New-Object System.Collections.Generic.List[string]
-    foreach ($dir in Get-LDPlayerInstallDirsFromRegistry) {
-        $dirs.Add($dir)
-    }
-
     foreach ($dir in Get-CommonLdPlayerDirs) {
-        if (Test-Path -LiteralPath $dir) {
+        if (Test-LDPlayerInstallDir -Path $dir) {
             $dirs.Add((Resolve-Path -LiteralPath $dir).Path)
+        }
+    }
+    foreach ($dir in Get-LDPlayerInstallDirsFromRegistry) {
+        if (Test-LDPlayerInstallDir -Path $dir) {
+            $dirs.Add($dir)
         }
     }
 
