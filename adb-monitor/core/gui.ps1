@@ -355,7 +355,7 @@ $configFullPath = Resolve-PathFromBase -BaseDirectory $projectRoot -Value $Confi
 $configDir = Split-Path -Parent $configFullPath
 
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "adb-monitor"
+$form.Text = "模拟器监控"
 $form.StartPosition = "CenterScreen"
 $form.Width = 1400
 $form.Height = 900

@@ -959,18 +959,14 @@ function Convert-SummaryToLogLines {
     }
 
     $lines.Add("$prefix [INFO] 监控开始")
-    $lines.Add("$prefix [INFO] 配置=$($Summary.ConfigFilePath)")
-    $lines.Add("$prefix [INFO] 模拟器路径=$($Summary.LdPlayerPath)")
+    $lines.Add("$prefix [INFO] 配置文件=$($Summary.ConfigFilePath)")
+    $lines.Add("$prefix [INFO] 雷电路径=$($Summary.LdPlayerPath)")
     $lines.Add("$prefix [INFO] ADB路径=$($Summary.AdbPath)")
-    $lines.Add("$prefix [$resultLevel] 状态=$statusText 总数=$($Summary.TotalCount) 健康=$($Summary.HealthyCount) 异常=$($Summary.UnhealthyCount)")
-
-    foreach ($device in $Summary.HealthyDevices) {
-        $lines.Add("$prefix [INFO] 设备 $device 正常")
-    }
+    $lines.Add("$prefix [$resultLevel] 状态=$statusText 总数=$($Summary.TotalCount) 健康=$($Summary.HealthyCount) 异常=$($Summary.UnhealthyCount) 预期=$($Summary.ExpectedHealthy)")
 
     foreach ($device in $Summary.UnhealthyDevices) {
         $displayName = if ([string]::IsNullOrWhiteSpace($device.DisplayName)) { $device.Serial } else { $device.DisplayName }
-        $lines.Add("$prefix [WARN] 设备 $displayName $(Format-DeviceReason -Reason $device.Reason)")
+        $lines.Add("$prefix [WARN] 模拟器 $displayName $(Format-DeviceReason -Reason $device.Reason)")
     }
 
     if (-not [string]::IsNullOrWhiteSpace($Summary.ErrorMessage)) {
