@@ -1,6 +1,7 @@
 ﻿[CmdletBinding()]
 param(
-    [string]$ConfigPath = "..\monitor.config"
+    [string]$ConfigPath = "..\monitor.config",
+    [switch]$Inline
 )
 
 $ErrorActionPreference = "Stop"
@@ -59,6 +60,13 @@ if ($existingRunner.Count -gt 0) {
 }
 
 $powershellPath = (Get-Command powershell.exe -ErrorAction Stop).Source
+
+if ($Inline) {
+    Write-LogLine -LogPath $logPath -Message "监控启动成功，PID=$PID，间隔=${intervalSeconds}秒"
+    & $runnerScriptPath -ConfigPath $configFullPath
+    exit $LASTEXITCODE
+}
+
 $process = Start-Process -FilePath $powershellPath -ArgumentList @(
     "-NoProfile",
     "-ExecutionPolicy", "Bypass",

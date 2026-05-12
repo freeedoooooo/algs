@@ -828,7 +828,6 @@ function Convert-SummaryToLogLines {
 
     $lines.Add("$prefix [INFO] 日志=$($Summary.LogFilePath)")
     $lines.Add("$prefix [INFO] 监控结束")
-    $lines.Add("")
     return $lines
 }
 
