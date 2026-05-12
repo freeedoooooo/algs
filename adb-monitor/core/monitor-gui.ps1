@@ -1,6 +1,6 @@
 ﻿[CmdletBinding()]
 param(
-    [string]$ConfigPath = ".\monitor.config"
+    [string]$ConfigPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -15,8 +15,9 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$projectRoot = Split-Path -Parent $scriptRoot
 if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
-    $ConfigPath = Join-Path $scriptRoot "monitor.config"
+    $ConfigPath = Join-Path $projectRoot "monitor.config"
 }
 
 function Resolve-PathFromBase {
@@ -83,7 +84,8 @@ function Get-RunnerState {
     $config = Get-ConfigMap -Path $ConfigFullPath
     $configDir = Split-Path -Parent $ConfigFullPath
     $runnerPidFile = Resolve-PathFromBase -BaseDirectory $configDir -Value (Get-ConfigValue -Config $config -Key "runner_pid_file" -DefaultValue ".\runtime\runner.pid")
-    $runnerScript = Join-Path $scriptRoot "core\runner.ps1"
+    $runnerScript = Join-Path $scriptRoot "runner.ps1"
+
     if (Test-Path -LiteralPath $runnerPidFile) {
         $pidText = Get-Content -LiteralPath $runnerPidFile -Raw -ErrorAction SilentlyContinue
         $pid = 0
@@ -113,7 +115,8 @@ function Start-Backend {
     if ($state.Running) {
         return $state.Pid
     }
-    $runnerScript = Join-Path $scriptRoot "core\runner.ps1"
+
+    $runnerScript = Join-Path $scriptRoot "runner.ps1"
     $powershellPath = (Get-Command powershell.exe -ErrorAction Stop).Source
     $process = Start-Process -FilePath $powershellPath -WindowStyle Hidden -PassThru -ArgumentList @(
         "-NoProfile",
@@ -121,6 +124,7 @@ function Start-Backend {
         "-File", $runnerScript,
         "-ConfigPath", $ConfigFullPath
     )
+
     return $process.Id
 }
 
@@ -129,7 +133,7 @@ function Stop-Backend {
     $config = Get-ConfigMap -Path $ConfigFullPath
     $configDir = Split-Path -Parent $ConfigFullPath
     $runnerPidFile = Resolve-PathFromBase -BaseDirectory $configDir -Value (Get-ConfigValue -Config $config -Key "runner_pid_file" -DefaultValue ".\runtime\runner.pid")
-    $runnerScript = Join-Path $scriptRoot "core\runner.ps1"
+    $runnerScript = Join-Path $scriptRoot "runner.ps1"
     $stopped = $false
 
     if (Test-Path -LiteralPath $runnerPidFile) {
@@ -163,8 +167,7 @@ function Save-ConfigText {
     [System.IO.File]::WriteAllText($Path, $Text, [System.Text.UTF8Encoding]::new($true))
 }
 
-$configFullPath = Resolve-PathFromBase -BaseDirectory $scriptRoot -Value $ConfigPath
-$config = Get-ConfigMap -Path $configFullPath
+$configFullPath = Resolve-PathFromBase -BaseDirectory $projectRoot -Value $ConfigPath
 $configDir = Split-Path -Parent $configFullPath
 
 $form = New-Object System.Windows.Forms.Form
@@ -310,9 +313,6 @@ $btnSave.Add_Click({
 
 $btnOpenConfig.Add_Click({ Invoke-Item -LiteralPath $configFullPath })
 $btnOpenLog.Add_Click({
-    if (-not (Test-Path -LiteralPath $configDir)) {
-        [void](New-Item -Path $configDir -ItemType Directory -Force)
-    }
     $config = Get-ConfigMap -Path $configFullPath
     $logDirectory = Resolve-PathFromBase -BaseDirectory $configDir -Value (Get-ConfigValue -Config $config -Key "log_directory" -DefaultValue ".\log")
     if (-not (Test-Path -LiteralPath $logDirectory)) {
