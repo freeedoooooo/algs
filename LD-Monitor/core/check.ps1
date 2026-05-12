@@ -739,11 +739,14 @@ function New-RunSummary {
 
     $healthyDevices = @()
     $unhealthyDevices = @()
+    $displayTotalCount = 0
 
     if ($Checks) {
         $healthyDevices = @($Checks | Where-Object { $_.Healthy } | ForEach-Object { $_.DisplayName })
         $unhealthyDevices = @($Checks | Where-Object { -not $_.Healthy })
     }
+
+    $displayTotalCount = $Checks.Count
 
     if ($Checks.Count -eq 0 -and [string]::IsNullOrWhiteSpace($ErrorMessage)) {
         $unhealthyDevices = @(
@@ -755,6 +758,7 @@ function New-RunSummary {
                 DisplayName   = "未发现设备"
             }
         )
+        $displayTotalCount = 1
     }
 
     $status = "healthy"
@@ -778,7 +782,7 @@ function New-RunSummary {
         LdPlayerPath     = $ResolvedLdPlayerPath
         ExpectedHealthy  = $ExpectedHealthyDevices
         Status           = $status
-        TotalCount       = $Checks.Count
+        TotalCount       = $displayTotalCount
         HealthyCount     = $healthyDevices.Count
         UnhealthyCount   = $unhealthyDevices.Count
         HealthyDevices   = $healthyDevices
@@ -826,8 +830,6 @@ function Convert-SummaryToLogLines {
         $lines.Add("$prefix [ERROR] $($Summary.AlertMessage)")
     }
 
-    $lines.Add("$prefix [INFO] 日志=$($Summary.LogFilePath)")
-    $lines.Add("$prefix [INFO] -------- 监控结束 --------")
     return $lines
 }
 
@@ -949,6 +951,8 @@ $summary = New-RunSummary -RunTime $runTime -ConfigFilePath $configFullPath -Log
 $logLines = Convert-SummaryToLogLines -Summary $summary
 Write-LogLines -Lines $logLines
 Send-AlertMail -Summary $summary -Config $config -StatePath $alertStatePath -CooldownMinutes $alertCooldownMinutes
+Write-MonitorLine -Message ("[{0}] [INFO] 日志={1}" -f $summary.Timestamp, $summary.LogFilePath)
+Write-MonitorLine -Message ("[{0}] [INFO] -------- 监控结束 --------" -f $summary.Timestamp)
 Remove-StaleLogs -DirectoryPath $logDirectory -BaseFileName $logFileName -CurrentLogFileName (Split-Path -Leaf $logFilePath) -RetentionDays $retentionDays
 exit $exitCode
 
