@@ -654,6 +654,9 @@ function Send-AlertMail {
     $bodyLines.Add("模拟器路径：$($Summary.LdPlayerPath)")
     $bodyLines.Add("ADB路径：$($Summary.AdbPath)")
     $bodyLines.Add("设备明细：")
+    if ($Summary.NoDevicesFound) {
+        $bodyLines.Add(" - 当前未发现已连接的模拟器设备")
+    }
     foreach ($device in @($Summary.UnhealthyDevices)) {
         $displayName = if ([string]::IsNullOrWhiteSpace($device.DisplayName)) { $device.Serial } else { $device.DisplayName }
         $bodyLines.Add(" - $displayName $(Format-DeviceReason -Reason $device.Reason)")
@@ -740,6 +743,7 @@ function New-RunSummary {
     $healthyDevices = @()
     $unhealthyDevices = @()
     $displayTotalCount = 0
+    $noDevicesFound = $false
 
     if ($Checks) {
         $healthyDevices = @($Checks | Where-Object { $_.Healthy } | ForEach-Object { $_.DisplayName })
@@ -749,20 +753,11 @@ function New-RunSummary {
     $displayTotalCount = $Checks.Count
 
     if ($Checks.Count -eq 0 -and [string]::IsNullOrWhiteSpace($ErrorMessage)) {
-        $unhealthyDevices = @(
-            [pscustomobject]@{
-                Serial        = "(none)"
-                State         = "missing"
-                Healthy       = $false
-                Reason        = "no_devices_found"
-                DisplayName   = "未发现设备"
-            }
-        )
-        $displayTotalCount = 1
+        $noDevicesFound = $true
     }
 
     $status = "healthy"
-    if ($unhealthyDevices.Count -gt 0) {
+    if ($unhealthyDevices.Count -gt 0 -or $noDevicesFound) {
         $status = "unhealthy"
     }
     if (-not [string]::IsNullOrWhiteSpace($ErrorMessage)) {
@@ -787,6 +782,7 @@ function New-RunSummary {
         UnhealthyCount   = $unhealthyDevices.Count
         HealthyDevices   = $healthyDevices
         UnhealthyDevices = $unhealthyDevices
+        NoDevicesFound   = $noDevicesFound
         AlertMessage     = $alertMessage
         ErrorMessage     = $ErrorMessage
     }
@@ -820,6 +816,10 @@ function Convert-SummaryToLogLines {
     foreach ($device in $Summary.UnhealthyDevices) {
         $displayName = if ([string]::IsNullOrWhiteSpace($device.DisplayName)) { $device.Serial } else { $device.DisplayName }
         $lines.Add("$prefix [WARN] 设备 $displayName $(Format-DeviceReason -Reason $device.Reason)")
+    }
+
+    if ($Summary.NoDevicesFound) {
+        $lines.Add("$prefix [WARN] 当前未发现已连接的模拟器设备")
     }
 
     if (-not [string]::IsNullOrWhiteSpace($Summary.ErrorMessage)) {
@@ -951,7 +951,6 @@ $summary = New-RunSummary -RunTime $runTime -ConfigFilePath $configFullPath -Log
 $logLines = Convert-SummaryToLogLines -Summary $summary
 Write-LogLines -Lines $logLines
 Send-AlertMail -Summary $summary -Config $config -StatePath $alertStatePath -CooldownMinutes $alertCooldownMinutes
-Write-MonitorLine -Message ("[{0}] [INFO] 日志={1}" -f $summary.Timestamp, $summary.LogFilePath)
 Write-MonitorLine -Message ("[{0}] [INFO] -------- 监控结束 --------" -f $summary.Timestamp)
 Remove-StaleLogs -DirectoryPath $logDirectory -BaseFileName $logFileName -CurrentLogFileName (Split-Path -Leaf $logFilePath) -RetentionDays $retentionDays
 exit $exitCode
