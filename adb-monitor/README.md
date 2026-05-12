@@ -5,6 +5,7 @@
 - 开发/调试：双击 `start.cmd`（优先启动已发布的 exe，找不到则回退到 PowerShell GUI）
 - 正式分发：发布 `src\AdbMonitor.Gui\AdbMonitor.Gui.csproj` 生成的 `AdbMonitor.Gui.exe`
 - 发布机器需要 .NET 8 SDK，目标机器不需要额外运行时环境
+- 分发时请带上整个发布目录，不要只拷贝单独的 `.exe`
 
 ## 目录说明
 

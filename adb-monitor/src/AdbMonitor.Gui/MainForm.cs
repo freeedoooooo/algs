@@ -17,7 +17,7 @@ internal sealed class MainForm : Form
     private readonly Label _stateLabel = new();
     private readonly Label _cooldownLabel = new();
     private readonly ToolStripStatusLabel _statusLabel = new();
-    private readonly Timer _timer = new();
+    private readonly System.Windows.Forms.Timer _timer = new();
     private int _backendPid;
 
     public MainForm()
