@@ -49,6 +49,14 @@ foreach ($process in $runnerProcesses) {
     $stopped = $true
 }
 
+$checkScriptPath = Join-Path $scriptRoot "core\check.ps1"
+$checkProcesses = @(Get-CheckProcessByCommandLine -CheckScriptPath $checkScriptPath -ConfigPath $configFullPath)
+foreach ($process in $checkProcesses) {
+    Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
+    Write-LogLine -LogPath $logPath -Message "已清理残留检查进程，PID=$($process.ProcessId)"
+    $stopped = $true
+}
+
 if (-not $stopped) {
     Write-LogLine -LogPath $logPath -Message "未发现正在运行的监控"
 }

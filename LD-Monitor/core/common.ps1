@@ -211,6 +211,19 @@ function Get-RunnerProcessById {
     return Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
 }
 
+function Get-CheckProcessByCommandLine {
+    param(
+        [string]$CheckScriptPath,
+        [string]$ConfigPath
+    )
+
+    return @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+        $_.Name -ieq "powershell.exe" -and
+        $_.CommandLine -match [regex]::Escape($CheckScriptPath) -and
+        $_.CommandLine -match [regex]::Escape($ConfigPath)
+    })
+}
+
 function Get-SafeWorkingDirectory {
     param([string]$MonitorRoot)
 
