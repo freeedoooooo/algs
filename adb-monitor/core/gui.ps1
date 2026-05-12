@@ -14,6 +14,27 @@ $OutputEncoding = [Console]::OutputEncoding
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
+$nativeCode = @"
+using System;
+using System.Runtime.InteropServices;
+
+public static class NativeMethods {
+    [StructLayout(LayoutKind.Sequential)]
+    public struct POINT {
+        public int X;
+        public int Y;
+    }
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    public static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, ref POINT lParam);
+}
+"@
+
+Add-Type -TypeDefinition $nativeCode -Language CSharp
+
+$EM_GETSCROLLPOS = 0x04DD
+$EM_SETSCROLLPOS = 0x04DE
+
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectRoot = Split-Path -Parent $scriptRoot
 if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
@@ -30,6 +51,7 @@ function Resolve-PathFromBase {
 function Get-ConfigMap {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) { throw "配置文件不存在：$Path" }
+
     $config = @{}
     foreach ($rawLine in Get-Content -LiteralPath $Path -Encoding UTF8) {
         $line = $rawLine.Trim()
@@ -38,13 +60,16 @@ function Get-ConfigMap {
         if ($index -lt 1) { continue }
         $config[$line.Substring(0, $index).Trim().ToLowerInvariant()] = $line.Substring($index + 1).Trim()
     }
+
     return $config
 }
 
 function Get-ConfigValue {
     param([hashtable]$Config, [string]$Key, [string]$DefaultValue = "")
     $lookupKey = $Key.ToLowerInvariant()
-    if ($Config.ContainsKey($lookupKey) -and -not [string]::IsNullOrWhiteSpace($Config[$lookupKey])) { return $Config[$lookupKey] }
+    if ($Config.ContainsKey($lookupKey) -and -not [string]::IsNullOrWhiteSpace($Config[$lookupKey])) {
+        return $Config[$lookupKey]
+    }
     return $DefaultValue
 }
 
@@ -72,8 +97,7 @@ function Read-LogTail {
     }
 
     try {
-        $lines = Get-Content -LiteralPath $LogFilePath -Tail $TailLines -Encoding UTF8 -ErrorAction Stop
-        return @($lines)
+        return @(Get-Content -LiteralPath $LogFilePath -Tail $TailLines -Encoding UTF8 -ErrorAction Stop)
     } catch {
         return @("读取日志失败：$($_.Exception.Message)")
     }
@@ -163,100 +187,13 @@ function Stop-Backend {
 
 function Get-AlertStatePath {
     param([string]$ConfigFullPath)
-
     $config = Get-ConfigMap -Path $ConfigFullPath
     $configDir = Split-Path -Parent $ConfigFullPath
-    return Resolve-PathFromBase -BaseDirectory $configDir -Value (Get-ConfigValue -Config $config -Key "alert_state_file" -DefaultValue ".\runtime\alert.state.json")
-}
-
-function Get-CooldownInfo {
-    param([string]$ConfigFullPath)
-
-    $config = Get-ConfigMap -Path $ConfigFullPath
-    $cooldownMinutes = [int](Get-ConfigValue -Config $config -Key "alert_cooldown_minutes" -DefaultValue "30")
-    $statePath = Get-AlertStatePath -ConfigFullPath $ConfigFullPath
-
-    if ($cooldownMinutes -le 0) {
-        return [pscustomobject]@{
-            Text = "邮件冷却：未启用"
-            RemainingSeconds = 0
-            LastAlertAt = ""
-            StatePath = $statePath
-        }
-    }
-
-    if (-not (Test-Path -LiteralPath $statePath)) {
-        return [pscustomobject]@{
-            Text = "邮件冷却：无"
-            RemainingSeconds = 0
-            LastAlertAt = ""
-            StatePath = $statePath
-        }
-    }
-
-    try {
-        $state = Get-Content -LiteralPath $statePath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
-    } catch {
-        return [pscustomobject]@{
-            Text = "邮件冷却：状态异常"
-            RemainingSeconds = 0
-            LastAlertAt = ""
-            StatePath = $statePath
-        }
-    }
-
-    if ([string]::IsNullOrWhiteSpace($state.LastAlertAt)) {
-        return [pscustomobject]@{
-            Text = "邮件冷却：无"
-            RemainingSeconds = 0
-            LastAlertAt = ""
-            StatePath = $statePath
-        }
-    }
-
-    try {
-        $lastAlertAt = [datetime]$state.LastAlertAt
-    } catch {
-        return [pscustomobject]@{
-            Text = "邮件冷却：状态异常"
-            RemainingSeconds = 0
-            LastAlertAt = ""
-            StatePath = $statePath
-        }
-    }
-
-    $remaining = [TimeSpan]::FromMinutes($cooldownMinutes) - (New-TimeSpan -Start $lastAlertAt -End (Get-Date))
-    $remainingSeconds = [int][Math]::Ceiling([Math]::Max($remaining.TotalSeconds, 0))
-
-    if ($remainingSeconds -le 0) {
-        return [pscustomobject]@{
-            Text = "邮件冷却：已结束"
-            RemainingSeconds = 0
-            LastAlertAt = $lastAlertAt.ToString("yyyy-MM-dd HH:mm:ss")
-            StatePath = $statePath
-        }
-    }
-
-    return [pscustomobject]@{
-        Text = "邮件冷却：剩余 $(Format-Seconds -TotalSeconds $remainingSeconds)"
-        RemainingSeconds = $remainingSeconds
-        LastAlertAt = $lastAlertAt.ToString("yyyy-MM-dd HH:mm:ss")
-        StatePath = $statePath
-    }
-}
-
-function Clear-CooldownState {
-    param([string]$ConfigFullPath)
-
-    $statePath = Get-AlertStatePath -ConfigFullPath $ConfigFullPath
-    if (Test-Path -LiteralPath $statePath) {
-        Remove-Item -LiteralPath $statePath -Force -ErrorAction SilentlyContinue
-    }
+    Resolve-PathFromBase -BaseDirectory $configDir -Value (Get-ConfigValue -Config $config -Key "alert_state_file" -DefaultValue ".\runtime\alert.state.json")
 }
 
 function Format-Seconds {
     param([int]$TotalSeconds)
-
     $seconds = [Math]::Max($TotalSeconds, 0)
     $hours = [int]($seconds / 3600)
     $minutes = [int](($seconds % 3600) / 60)
@@ -267,14 +204,89 @@ function Format-Seconds {
     return "{0:D2}:{1:D2}" -f $minutes, $remain
 }
 
+function Get-CooldownInfo {
+    param([string]$ConfigFullPath)
+
+    $config = Get-ConfigMap -Path $ConfigFullPath
+    $cooldownMinutes = [int](Get-ConfigValue -Config $config -Key "alert_cooldown_minutes" -DefaultValue "30")
+    $statePath = Get-AlertStatePath -ConfigFullPath $ConfigFullPath
+
+    if ($cooldownMinutes -le 0) {
+        return [pscustomobject]@{ Text = "邮件冷却：未启用"; RemainingSeconds = 0; StatePath = $statePath }
+    }
+    if (-not (Test-Path -LiteralPath $statePath)) {
+        return [pscustomobject]@{ Text = "邮件冷却：无"; RemainingSeconds = 0; StatePath = $statePath }
+    }
+
+    try {
+        $state = Get-Content -LiteralPath $statePath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+        $lastAlertAt = [datetime]$state.LastAlertAt
+    } catch {
+        return [pscustomobject]@{ Text = "邮件冷却：状态异常"; RemainingSeconds = 0; StatePath = $statePath }
+    }
+
+    $remaining = [TimeSpan]::FromMinutes($cooldownMinutes) - (New-TimeSpan -Start $lastAlertAt -End (Get-Date))
+    $remainingSeconds = [int][Math]::Ceiling([Math]::Max($remaining.TotalSeconds, 0))
+
+    if ($remainingSeconds -le 0) {
+        return [pscustomobject]@{
+            Text = "邮件冷却：已结束"
+            RemainingSeconds = 0
+            StatePath = $statePath
+        }
+    }
+
+    return [pscustomobject]@{
+        Text = "邮件冷却：剩余 $(Format-Seconds -TotalSeconds $remainingSeconds)"
+        RemainingSeconds = $remainingSeconds
+        StatePath = $statePath
+    }
+}
+
+function Clear-CooldownState {
+    param([string]$ConfigFullPath)
+    $statePath = Get-AlertStatePath -ConfigFullPath $ConfigFullPath
+    if (Test-Path -LiteralPath $statePath) {
+        Remove-Item -LiteralPath $statePath -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Get-LogLineColor {
     param([string]$Line)
-
     if ($Line -match '\[ERROR\]') { return [System.Drawing.Color]::Firebrick }
     if ($Line -match '\[WARN\]') { return [System.Drawing.Color]::DarkOrange }
     if ($Line -match '\[STEP\]') { return [System.Drawing.Color]::Teal }
     if ($Line -match '\[INFO\]') { return [System.Drawing.Color]::DimGray }
     return [System.Drawing.Color]::Black
+}
+
+function Get-RichTextScrollPos {
+    param([System.Windows.Forms.RichTextBox]$Box)
+
+    $point = New-Object NativeMethods+POINT
+    [void][NativeMethods]::SendMessage($Box.Handle, $EM_GETSCROLLPOS, [IntPtr]::Zero, [ref]$point)
+    return $point
+}
+
+function Set-RichTextScrollPos {
+    param(
+        [System.Windows.Forms.RichTextBox]$Box,
+        $Point
+    )
+
+    [void][NativeMethods]::SendMessage($Box.Handle, $EM_SETSCROLLPOS, [IntPtr]::Zero, [ref]$Point)
+}
+
+function Test-LogAtBottom {
+    param([System.Windows.Forms.RichTextBox]$Box)
+
+    if ($Box.TextLength -eq 0) {
+        return $true
+    }
+
+    $bottomPoint = New-Object System.Drawing.Point(1, [Math]::Max($Box.ClientSize.Height - 2, 1))
+    $visibleIndex = $Box.GetCharIndexFromPosition($bottomPoint)
+    return ($visibleIndex -ge ($Box.TextLength - 80))
 }
 
 function Render-LogLines {
@@ -283,22 +295,33 @@ function Render-LogLines {
         [string[]]$Lines
     )
 
+    $scrollPos = Get-RichTextScrollPos -Box $Box
+    $stickToBottom = Test-LogAtBottom -Box $Box
+
+    $Box.SuspendLayout()
     $Box.Clear()
+
     if (-not $Lines -or $Lines.Count -eq 0) {
         $Box.SelectionColor = [System.Drawing.Color]::Gray
         $Box.AppendText("暂无日志。" + [Environment]::NewLine)
-        return
+    } else {
+        foreach ($line in $Lines) {
+            $Box.SelectionStart = $Box.TextLength
+            $Box.SelectionLength = 0
+            $Box.SelectionColor = Get-LogLineColor -Line $line
+            $Box.AppendText($line + [Environment]::NewLine)
+        }
     }
 
-    foreach ($line in $Lines) {
+    if ($stickToBottom) {
         $Box.SelectionStart = $Box.TextLength
         $Box.SelectionLength = 0
-        $Box.SelectionColor = Get-LogLineColor -Line $line
-        $Box.AppendText($line + [Environment]::NewLine)
+        $Box.ScrollToCaret()
+    } else {
+        Set-RichTextScrollPos -Box $Box -Point $scrollPos
     }
 
-    $Box.SelectionColor = $Box.ForeColor
-    $Box.ScrollToCaret()
+    $Box.ResumeLayout()
 }
 
 function Refresh-View {
@@ -306,13 +329,11 @@ function Refresh-View {
     $logDirectory = Resolve-PathFromBase -BaseDirectory $configDir -Value (Get-ConfigValue -Config $config -Key "log_directory" -DefaultValue ".\log")
     $logFileName = Get-ConfigValue -Config $config -Key "log_file_name" -DefaultValue "monitor.log"
     $latestLog = Get-LatestLogFile -LogDirectory $logDirectory -LogFileName $logFileName
-
+    $logLines = @()
     if ($latestLog) {
         $logLines = Read-LogTail -LogFilePath $latestLog.FullName -TailLines 500
-        Render-LogLines -Box $txtLog -Lines $logLines
-    } else {
-        Render-LogLines -Box $txtLog -Lines @()
     }
+    Render-LogLines -Box $txtLog -Lines $logLines
 
     $state = Get-RunnerState -ConfigFullPath $configFullPath
     if ($state.Running) {
@@ -325,11 +346,7 @@ function Refresh-View {
 
     $cooldown = Get-CooldownInfo -ConfigFullPath $configFullPath
     $lblCooldown.Text = $cooldown.Text
-    if ($cooldown.RemainingSeconds -gt 0) {
-        $lblCooldown.ForeColor = [System.Drawing.Color]::DarkOrange
-    } else {
-        $lblCooldown.ForeColor = [System.Drawing.Color]::ForestGreen
-    }
+    $lblCooldown.ForeColor = if ($cooldown.RemainingSeconds -gt 0) { [System.Drawing.Color]::DarkOrange } else { [System.Drawing.Color]::ForestGreen }
 
     $statusLabel.Text = "最后刷新：$((Get-Date).ToString('HH:mm:ss'))"
 }
@@ -417,13 +434,9 @@ $btnStop.Add_Click({
     }
 })
 
-$btnRefresh.Add_Click({
-    Refresh-View
-})
+$btnRefresh.Add_Click({ Refresh-View })
 
-$btnOpenConfig.Add_Click({
-    Invoke-Item -LiteralPath $configFullPath
-})
+$btnOpenConfig.Add_Click({ Invoke-Item -LiteralPath $configFullPath })
 
 $btnClearCooldown.Add_Click({
     try {
