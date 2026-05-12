@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$ConfigPath = ""
+    [string]$ConfigPath = "..\monitor.config"
 )
 
 $ErrorActionPreference = "Stop"
@@ -63,26 +63,6 @@ function Resolve-PathFromBase {
     return [System.IO.Path]::GetFullPath((Join-Path $BaseDirectory $Value))
 }
 
-function Find-MonitorRoot {
-    param([string]$StartDirectory)
-
-    $current = $StartDirectory
-    while (-not [string]::IsNullOrWhiteSpace($current)) {
-        if (Test-Path -LiteralPath (Join-Path $current "monitor.config")) {
-            return $current
-        }
-
-        $parent = Split-Path -Parent $current
-        if ([string]::IsNullOrWhiteSpace($parent) -or $parent -eq $current) {
-            break
-        }
-
-        $current = $parent
-    }
-
-    return $StartDirectory
-}
-
 $script:LastConsoleClearAt = Get-Date
 
 function Clear-ConsoleIfNeeded {
@@ -101,44 +81,10 @@ function Clear-ConsoleIfNeeded {
     $script:LastConsoleClearAt = $now
 }
 
-function Write-RunnerPidFile {
-    param([string]$PidFilePath)
-
-    if ([string]::IsNullOrWhiteSpace($PidFilePath)) {
-        return
-    }
-
-    $pidDirectory = Split-Path -Parent $PidFilePath
-    if (-not [string]::IsNullOrWhiteSpace($pidDirectory)) {
-        if (-not (Test-Path -LiteralPath $pidDirectory)) {
-            [void](New-Item -Path $pidDirectory -ItemType Directory -Force)
-        }
-    }
-
-    Set-Content -LiteralPath $PidFilePath -Value $PID -Encoding UTF8
-}
-
-function Remove-RunnerPidFile {
-    param([string]$PidFilePath)
-
-    if ([string]::IsNullOrWhiteSpace($PidFilePath)) {
-        return
-    }
-
-    if (Test-Path -LiteralPath $PidFilePath) {
-        Remove-Item -LiteralPath $PidFilePath -Force -ErrorAction SilentlyContinue
-    }
-}
-
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$monitorRoot = Find-MonitorRoot -StartDirectory $scriptRoot
-if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
-    $ConfigPath = Join-Path $monitorRoot "monitor.config"
-}
 $configFullPath = Resolve-PathFromBase -BaseDirectory $scriptRoot -Value $ConfigPath
 $configDirectory = Split-Path -Parent $configFullPath
 $config = Get-ConfigMap -Path $configFullPath
-$runnerPidFile = Resolve-PathFromBase -BaseDirectory $configDirectory -Value (Get-ConfigValue -Config $config -Key "runner_pid_file" -DefaultValue ".\runtime\runner.pid")
 
 $intervalSeconds = [int](Get-ConfigValue -Config $config -Key "schedule_interval_seconds" -DefaultValue "10")
 $clearIntervalSeconds = [int](Get-ConfigValue -Config $config -Key "window_clear_interval_seconds" -DefaultValue "3600")
@@ -162,13 +108,8 @@ $argumentList = @(
     "-ConfigPath", $configFullPath
 )
 
-Write-RunnerPidFile -PidFilePath $runnerPidFile
-try {
-    while ($true) {
-        Clear-ConsoleIfNeeded -IntervalSeconds $clearIntervalSeconds
-        & $powershellPath @argumentList
-        Start-Sleep -Seconds $intervalSeconds
-    }
-} finally {
-    Remove-RunnerPidFile -PidFilePath $runnerPidFile
+while ($true) {
+    Clear-ConsoleIfNeeded -IntervalSeconds $clearIntervalSeconds
+    & $powershellPath @argumentList
+    Start-Sleep -Seconds $intervalSeconds
 }

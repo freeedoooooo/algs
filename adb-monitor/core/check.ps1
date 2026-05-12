@@ -1,5 +1,5 @@
 ﻿param(
-    [string]$ConfigPath = "",
+    [string]$ConfigPath = "..\monitor.config",
     [string]$AdbPath = "",
     [string]$LdPlayerPath = ""
 )
@@ -198,26 +198,6 @@ function Resolve-PathFromBase {
     }
 
     return [System.IO.Path]::GetFullPath((Join-Path $BaseDirectory $Value))
-}
-
-function Find-MonitorRoot {
-    param([string]$StartDirectory)
-
-    $current = $StartDirectory
-    while (-not [string]::IsNullOrWhiteSpace($current)) {
-        if (Test-Path -LiteralPath (Join-Path $current "monitor.config")) {
-            return $current
-        }
-
-        $parent = Split-Path -Parent $current
-        if ([string]::IsNullOrWhiteSpace($parent) -or $parent -eq $current) {
-            break
-        }
-
-        $current = $parent
-    }
-
-    return $StartDirectory
 }
 
 function Get-CommonLdPlayerDirs {
@@ -979,14 +959,18 @@ function Convert-SummaryToLogLines {
     }
 
     $lines.Add("$prefix [INFO] 监控开始")
-    $lines.Add("$prefix [INFO] 配置文件=$($Summary.ConfigFilePath)")
-    $lines.Add("$prefix [INFO] 雷电路径=$($Summary.LdPlayerPath)")
+    $lines.Add("$prefix [INFO] 配置=$($Summary.ConfigFilePath)")
+    $lines.Add("$prefix [INFO] 模拟器路径=$($Summary.LdPlayerPath)")
     $lines.Add("$prefix [INFO] ADB路径=$($Summary.AdbPath)")
-    $lines.Add("$prefix [$resultLevel] 状态=$statusText 总数=$($Summary.TotalCount) 健康=$($Summary.HealthyCount) 异常=$($Summary.UnhealthyCount) 预期=$($Summary.ExpectedHealthy)")
+    $lines.Add("$prefix [$resultLevel] 状态=$statusText 总数=$($Summary.TotalCount) 健康=$($Summary.HealthyCount) 异常=$($Summary.UnhealthyCount)")
+
+    foreach ($device in $Summary.HealthyDevices) {
+        $lines.Add("$prefix [INFO] 设备 $device 正常")
+    }
 
     foreach ($device in $Summary.UnhealthyDevices) {
         $displayName = if ([string]::IsNullOrWhiteSpace($device.DisplayName)) { $device.Serial } else { $device.DisplayName }
-        $lines.Add("$prefix [WARN] 模拟器 $displayName $(Format-DeviceReason -Reason $device.Reason)")
+        $lines.Add("$prefix [WARN] 设备 $displayName $(Format-DeviceReason -Reason $device.Reason)")
     }
 
     if (-not [string]::IsNullOrWhiteSpace($Summary.ErrorMessage)) {
@@ -1004,10 +988,6 @@ function Convert-SummaryToLogLines {
 }
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$monitorRoot = Find-MonitorRoot -StartDirectory $scriptRoot
-if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
-    $ConfigPath = Join-Path $monitorRoot "monitor.config"
-}
 $configFullPath = Resolve-PathFromBase -BaseDirectory $scriptRoot -Value $ConfigPath
 $configDirectory = Split-Path -Parent $configFullPath
 $config = Get-ConfigMap -Path $configFullPath
