@@ -210,3 +210,18 @@ function Get-RunnerProcessById {
 
     return Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
 }
+
+function Get-SafeWorkingDirectory {
+    param([string]$MonitorRoot)
+
+    if ([string]::IsNullOrWhiteSpace($MonitorRoot)) {
+        return [System.IO.Path]::GetTempPath()
+    }
+
+    $parent = Split-Path -Parent $MonitorRoot
+    if (-not [string]::IsNullOrWhiteSpace($parent) -and (Test-Path -LiteralPath $parent)) {
+        return $parent
+    }
+
+    return $MonitorRoot
+}

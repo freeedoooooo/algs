@@ -1,26 +1,39 @@
-# BB-Monitor
+# LD-Monitor
 
 轻量脚本版模拟器健康监控工具。
 
-## 目录
+## 根目录里你主要会用到的文件
 
-- `start.ps1`：启动监控
-- `stop.ps1`：停止监控
-- `monitor.config`：外部配置
-- `core/check.ps1`：单次检查
-- `core/runner.ps1`：循环调度
-- `core/common.ps1`：公共函数
-- `runtime/`：运行状态文件
-- `log/`：日志目录
+- `start.cmd`
+  双击启动监控，适合日常使用
+- `stop.cmd`
+  双击停止监控，适合日常使用
+- `start.ps1`
+  PowerShell 启动入口，适合调试
+- `stop.ps1`
+  PowerShell 停止入口，适合调试
+- `monitor.config`
+  外部配置文件，路径、检查频率、邮件告警都在这里改
 
-## 常用方式
+## 其他目录
+
+- `core/`
+  内部脚本
+  `check.ps1` 负责单次检查
+  `runner.ps1` 负责循环调度
+  `common.ps1` 负责公共函数
+- `runtime/`
+  运行状态文件目录
+- `log/`
+  日志目录
+
+## 最常用的方式
 
 日常使用：
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\stop.ps1
-```
+1. 双击 `start.cmd`
+2. 需要停止时双击 `stop.cmd`
+3. 需要改配置时编辑 `monitor.config`
 
 调试单次检查：
 
@@ -42,22 +55,3 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\core\check.ps1
 - 单个日志超过 50MB 时直接删除重写
 - 黑窗口输出与日志文件内容保持一致
 - 黑窗口每 3600 秒清屏一次
-
-## 关键配置
-
-- `ldplayer_path`
-  主模拟器目录，优先使用；失效后自动尝试备用目录
-- `common_ldplayer_dirs`
-  备用目录列表，按顺序尝试
-- `schedule_interval_seconds`
-  循环检查间隔，单位秒
-- `expected_healthy_devices`
-  期望健康数量，低于该值会输出错误日志并触发告警逻辑
-- `alert_cooldown_minutes`
-  告警冷却时间，冷却期内不重复发同类邮件
-- `mail_to`
-  收件邮箱列表，分号分隔
-- `runner_pid_file`
-  runner 进程 PID 文件
-- `alert_state_file`
-  邮件冷却状态文件

@@ -53,6 +53,7 @@ function Remove-RunnerPidFile {
 $configFullPath = Resolve-PathFromBase -BaseDirectory $scriptRoot -Value $ConfigPath
 $configDirectory = Split-Path -Parent $configFullPath
 $config = Get-ConfigMap -Path $configFullPath
+$safeWorkingDirectory = Get-SafeWorkingDirectory -MonitorRoot $configDirectory
 
 $intervalSeconds = [int](Get-ConfigValue -Config $config -Key "schedule_interval_seconds" -DefaultValue "10")
 $clearIntervalSeconds = [int](Get-ConfigValue -Config $config -Key "window_clear_interval_seconds" -DefaultValue "3600")
@@ -82,7 +83,7 @@ Write-RunnerPidFile -PidFilePath $runnerPidFile
 try {
     while ($true) {
         Clear-ConsoleIfNeeded -IntervalSeconds $clearIntervalSeconds
-        & $powershellPath @argumentList
+        $child = Start-Process -FilePath $powershellPath -ArgumentList $argumentList -WorkingDirectory $safeWorkingDirectory -PassThru -Wait
         Start-Sleep -Seconds $intervalSeconds
     }
 } finally {

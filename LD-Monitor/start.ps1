@@ -33,6 +33,8 @@ if (-not (Test-Path -LiteralPath $runnerScriptPath)) {
     throw "Runner script not found: $runnerScriptPath"
 }
 
+$safeWorkingDirectory = Get-SafeWorkingDirectory -MonitorRoot $scriptRoot
+
 Reset-LogIfOversized -LogFilePath $logPath -MaxSizeMb $logMaxSizeMb
 Remove-StaleLogs -DirectoryPath (Split-Path -Parent $logPath) -BaseFileName (Get-ConfigValue -Config $config -Key "log_file_name" -DefaultValue "monitor.log") -CurrentLogFileName (Split-Path -Leaf $logPath) -RetentionDays $logRetentionDays
 
@@ -62,7 +64,7 @@ $process = Start-Process -FilePath $powershellPath -ArgumentList @(
     "-ExecutionPolicy", "Bypass",
     "-File", $runnerScriptPath,
     "-ConfigPath", $configFullPath
-) -WorkingDirectory $configDirectory -PassThru
+) -WorkingDirectory $safeWorkingDirectory -PassThru
 
 Start-Sleep -Seconds 1
 $startedRunner = Get-RunnerProcessById -ProcessId $process.Id
