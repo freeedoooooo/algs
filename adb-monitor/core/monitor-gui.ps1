@@ -88,10 +88,10 @@ function Get-RunnerState {
 
     if (Test-Path -LiteralPath $runnerPidFile) {
         $pidText = Get-Content -LiteralPath $runnerPidFile -Raw -ErrorAction SilentlyContinue
-        $pid = 0
-        if ([int]::TryParse($pidText.Trim(), [ref]$pid)) {
-            if (Get-Process -Id $pid -ErrorAction SilentlyContinue) {
-                return [pscustomobject]@{ Running = $true; Pid = $pid; Source = "PID 文件" }
+        $runnerPid = 0
+        if ([int]::TryParse($pidText.Trim(), [ref]$runnerPid)) {
+            if (Get-Process -Id $runnerPid -ErrorAction SilentlyContinue) {
+                return [pscustomobject]@{ Running = $true; Pid = $runnerPid; Source = "PID 文件" }
             }
         }
     }
@@ -138,9 +138,9 @@ function Stop-Backend {
 
     if (Test-Path -LiteralPath $runnerPidFile) {
         $pidText = Get-Content -LiteralPath $runnerPidFile -Raw -ErrorAction SilentlyContinue
-        $pid = 0
-        if ([int]::TryParse($pidText.Trim(), [ref]$pid)) {
-            Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+        $runnerPid = 0
+        if ([int]::TryParse($pidText.Trim(), [ref]$runnerPid)) {
+            Stop-Process -Id $runnerPid -Force -ErrorAction SilentlyContinue
             $stopped = $true
         }
         Remove-Item -LiteralPath $runnerPidFile -Force -ErrorAction SilentlyContinue
@@ -281,8 +281,8 @@ function Refresh-View {
 
 $btnStart.Add_Click({
     try {
-        $pid = Start-Backend -ConfigFullPath $configFullPath
-        $statusLabel.Text = "已启动监控，PID=$pid"
+        $startedPid = Start-Backend -ConfigFullPath $configFullPath
+        $statusLabel.Text = "已启动监控，PID=$startedPid"
         Refresh-View
     } catch {
         [System.Windows.Forms.MessageBox]::Show("启动失败：$($_.Exception.Message)", "错误") | Out-Null
