@@ -8,10 +8,6 @@
   双击启动监控，适合日常使用
 - `stop.cmd`
   双击停止监控，适合日常使用
-- `start.ps1`
-  PowerShell 启动入口，适合调试
-- `stop.ps1`
-  PowerShell 停止入口，适合调试
 - `monitor.config`
   外部配置文件，路径、检查频率、邮件告警都在这里改
 
@@ -19,6 +15,8 @@
 
 - `core/`
   内部脚本
+  `start.ps1` 负责 PowerShell 启动入口
+  `stop.ps1` 负责 PowerShell 停止入口
   `check.ps1` 负责单次检查
   `runner.ps1` 负责循环调度
   `common.ps1` 负责公共函数

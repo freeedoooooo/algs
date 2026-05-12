@@ -1,12 +1,12 @@
 ﻿[CmdletBinding()]
 param(
-    [string]$ConfigPath = ".\monitor.config"
+    [string]$ConfigPath = "..\monitor.config"
 )
 
 $ErrorActionPreference = "Stop"
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-. (Join-Path $scriptRoot "core\common.ps1")
+. (Join-Path $scriptRoot "common.ps1")
 
 $configFullPath = Resolve-PathFromBase -BaseDirectory $scriptRoot -Value $ConfigPath
 $configDirectory = Split-Path -Parent $configFullPath
@@ -28,12 +28,12 @@ if ($logRetentionDays -lt 1) {
     throw "log_retention_days must be >= 1."
 }
 
-$runnerScriptPath = Join-Path $scriptRoot "core\runner.ps1"
+$runnerScriptPath = Join-Path $scriptRoot "runner.ps1"
 if (-not (Test-Path -LiteralPath $runnerScriptPath)) {
     throw "Runner script not found: $runnerScriptPath"
 }
 
-$safeWorkingDirectory = Get-SafeWorkingDirectory -MonitorRoot $scriptRoot
+$safeWorkingDirectory = Get-SafeWorkingDirectory -MonitorRoot $configDirectory
 
 Reset-LogIfOversized -LogFilePath $logPath -MaxSizeMb $logMaxSizeMb
 Remove-StaleLogs -DirectoryPath (Split-Path -Parent $logPath) -BaseFileName (Get-ConfigValue -Config $config -Key "log_file_name" -DefaultValue "monitor.log") -CurrentLogFileName (Split-Path -Leaf $logPath) -RetentionDays $logRetentionDays

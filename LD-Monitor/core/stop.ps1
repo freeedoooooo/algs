@@ -1,12 +1,12 @@
 ﻿[CmdletBinding()]
 param(
-    [string]$ConfigPath = ".\monitor.config"
+    [string]$ConfigPath = "..\monitor.config"
 )
 
 $ErrorActionPreference = "Stop"
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-. (Join-Path $scriptRoot "core\common.ps1")
+. (Join-Path $scriptRoot "common.ps1")
 
 $configFullPath = Resolve-PathFromBase -BaseDirectory $scriptRoot -Value $ConfigPath
 $configDirectory = Split-Path -Parent $configFullPath
@@ -41,7 +41,7 @@ if (Test-Path -LiteralPath $runnerPidFile) {
     Remove-Item -LiteralPath $runnerPidFile -Force -ErrorAction SilentlyContinue
 }
 
-$runnerScriptPath = Join-Path $scriptRoot "core\runner.ps1"
+$runnerScriptPath = Join-Path $scriptRoot "runner.ps1"
 $runnerProcesses = @(Get-RunnerProcessByCommandLine -RunnerScriptPath $runnerScriptPath -ConfigPath $configFullPath)
 foreach ($process in $runnerProcesses) {
     Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
@@ -49,7 +49,7 @@ foreach ($process in $runnerProcesses) {
     $stopped = $true
 }
 
-$checkScriptPath = Join-Path $scriptRoot "core\check.ps1"
+$checkScriptPath = Join-Path $scriptRoot "check.ps1"
 $checkProcesses = @(Get-CheckProcessByCommandLine -CheckScriptPath $checkScriptPath -ConfigPath $configFullPath)
 foreach ($process in $checkProcesses) {
     Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
