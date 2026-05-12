@@ -81,9 +81,10 @@ $argumentList = @(
 
 Write-RunnerPidFile -PidFilePath $runnerPidFile
 try {
+    Set-Location -LiteralPath $safeWorkingDirectory
     while ($true) {
         Clear-ConsoleIfNeeded -IntervalSeconds $clearIntervalSeconds
-        $child = Start-Process -FilePath $powershellPath -ArgumentList $argumentList -WorkingDirectory $safeWorkingDirectory -PassThru -Wait
+        & $powershellPath @argumentList
         Start-Sleep -Seconds $intervalSeconds
     }
 } finally {
