@@ -64,9 +64,9 @@ adb-monitor/log/*
 !adb-monitor/log/.gitkeep
 adb-monitor/runtime/*
 !adb-monitor/runtime/.gitkeep
-adb-monitor/src/AdbMonitor.Gui/bin/
-adb-monitor/src/AdbMonitor.Gui/obj/
-adb-monitor/src/AdbMonitor.Gui/NuGet/
+adb-monitor/source/AdbMonitor.Gui/bin/
+adb-monitor/source/AdbMonitor.Gui/obj/
+adb-monitor/source/AdbMonitor.Gui/NuGet/
 
 # Local .NET build environment
 .dotnet8/

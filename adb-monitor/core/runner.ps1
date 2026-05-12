@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$ConfigPath = "..\monitor.config"
+    [string]$ConfigPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -63,6 +63,26 @@ function Resolve-PathFromBase {
     return [System.IO.Path]::GetFullPath((Join-Path $BaseDirectory $Value))
 }
 
+function Find-MonitorRoot {
+    param([string]$StartDirectory)
+
+    $current = $StartDirectory
+    while (-not [string]::IsNullOrWhiteSpace($current)) {
+        if (Test-Path -LiteralPath (Join-Path $current "monitor.config")) {
+            return $current
+        }
+
+        $parent = Split-Path -Parent $current
+        if ([string]::IsNullOrWhiteSpace($parent) -or $parent -eq $current) {
+            break
+        }
+
+        $current = $parent
+    }
+
+    return $StartDirectory
+}
+
 $script:LastConsoleClearAt = Get-Date
 
 function Clear-ConsoleIfNeeded {
@@ -111,6 +131,10 @@ function Remove-RunnerPidFile {
 }
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$monitorRoot = Find-MonitorRoot -StartDirectory $scriptRoot
+if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
+    $ConfigPath = Join-Path $monitorRoot "monitor.config"
+}
 $configFullPath = Resolve-PathFromBase -BaseDirectory $scriptRoot -Value $ConfigPath
 $configDirectory = Split-Path -Parent $configFullPath
 $config = Get-ConfigMap -Path $configFullPath
