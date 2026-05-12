@@ -803,7 +803,7 @@ function Convert-SummaryToLogLines {
         default { $Summary.Status }
     }
 
-    $lines.Add("$prefix [INFO] 监控开始")
+    $lines.Add("$prefix [INFO] -------- 监控开始 --------")
     $lines.Add("$prefix [INFO] 配置=$($Summary.ConfigFilePath)")
     $lines.Add("$prefix [INFO] 模拟器路径=$($Summary.LdPlayerPath)")
     $lines.Add("$prefix [INFO] ADB路径=$($Summary.AdbPath)")
@@ -827,7 +827,7 @@ function Convert-SummaryToLogLines {
     }
 
     $lines.Add("$prefix [INFO] 日志=$($Summary.LogFilePath)")
-    $lines.Add("$prefix [INFO] 监控结束")
+    $lines.Add("$prefix [INFO] -------- 监控结束 --------")
     return $lines
 }
 
