@@ -8,14 +8,16 @@
 
 ## 内部目录
 
-- `core/`：内部脚本，不需要手动执行
+- `core/gui.ps1`：GUI 主程序，不需要手动执行
+- `core/runner.ps1`：后台监控循环
+- `core/check.ps1`：单次健康检查
 - `runtime/`：运行时文件
 - `log/`：日志目录
 
 ## 使用方式
 
 1. 双击 `start.cmd`
-2. 在 GUI 中查看日志、修改配置、启动或停止监控
+2. 在 GUI 中查看日志、打开配置、启动或停止监控
 3. 关闭 GUI 时，后台监控会自动停止
 
 ## 配置说明
@@ -25,6 +27,7 @@
 - `schedule_interval_seconds`：监控间隔，单位为秒
 - `expected_healthy_devices`：期望健康模拟器数量
 - `alert_cooldown_minutes`：告警冷却时间
+- `alert_state_file`：告警冷却状态文件
 - `mail_enabled`：是否启用邮件告警
 - `mail_user`：发件邮箱
 - `mail_password`：SMTP 授权码
