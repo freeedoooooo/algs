@@ -60,18 +60,8 @@ pip-wheel-metadata/
 *.log.*
 
 # adb-monitor runtime and logs
-adb-monitor/log/*
-!adb-monitor/log/.gitkeep
-adb-monitor/runtime/*
-!adb-monitor/runtime/.gitkeep
-adb-monitor/source/AdbMonitor.Gui/bin/
-adb-monitor/source/AdbMonitor.Gui/obj/
-adb-monitor/source/AdbMonitor.Gui/NuGet/
-
-# Local .NET build environment
-.dotnet8/
-.dotnet-home/
-.nuget/
-.appdata/
-.userprofile/
+LD-Monitor/log/*
+!LD-Monitor/log/.gitkeep
+LD-Monitor/runtime/*
+!LD-Monitor/runtime/.gitkeep
 
