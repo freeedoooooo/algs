@@ -1,4 +1,4 @@
-function Get-ConfigMap {
+﻿function Get-ConfigMap {
     param([string]$Path)
 
     if (-not (Test-Path -LiteralPath $Path)) {
@@ -292,3 +292,4 @@ function Get-SafeWorkingDirectory {
 
     return $MonitorRoot
 }
+
