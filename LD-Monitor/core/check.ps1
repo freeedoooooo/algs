@@ -654,14 +654,14 @@ function Send-AlertMail {
 
     $mailEnabled = (Get-ConfigValue -Config $Config -Key "mail_enabled" -DefaultValue "true").ToLowerInvariant()
     if ($mailEnabled -ne "true") {
-        Write-MonitorLine -Message ("[{0}] [INFO] 邮件通知未开启" -f (Get-Date).ToString("o"))
+        Write-MonitorLine -Message ("[{0}] [INFO] 邮件通知未开启" -f (Get-LogTimestamp))
         return
     }
 
     $cooldownInfo = Get-AlertCooldownInfo -StatePath $StatePath -CooldownMinutes $CooldownMinutes
     if (-not $cooldownInfo.Passed) {
         $remainingText = Format-DurationText -TotalSeconds $cooldownInfo.RemainingSeconds
-        Write-MonitorLine -Message ("[{0}] [INFO] 告警邮件处于冷却期，本次跳过发送，剩余冷却时间={1}" -f (Get-Date).ToString("o"), $remainingText)
+        Write-MonitorLine -Message ("[{0}] [INFO] 告警邮件处于冷却期，本次跳过发送，剩余冷却时间={1}" -f (Get-LogTimestamp), $remainingText)
         return
     }
 
@@ -679,7 +679,7 @@ function Send-AlertMail {
     $timeoutSeconds = [int](Get-ConfigValue -Config $Config -Key "mail_timeout_seconds" -DefaultValue "20")
 
     if ([string]::IsNullOrWhiteSpace($mailUser) -or [string]::IsNullOrWhiteSpace($mailPassword) -or $mailTo.Count -eq 0) {
-        Write-MonitorLine -Message ("[{0}] [ERROR] 邮件配置不完整或邮箱格式不正确" -f (Get-Date).ToString("o")) -ForegroundColor Red
+        Write-MonitorLine -Message ("[{0}] [ERROR] 邮件配置不完整或邮箱格式不正确" -f (Get-LogTimestamp)) -ForegroundColor Red
         return
     }
 
@@ -727,9 +727,9 @@ function Send-AlertMail {
         $client.Timeout = [Math]::Max($timeoutSeconds, 1) * 1000
         $client.Send($message)
 
-        Write-MonitorLine -Message ("[{0}] [INFO] 告警邮件已发送，主题={1}，收件人={2}" -f (Get-Date).ToString("o"), $subject, ($mailTo -join ";")) -ForegroundColor Cyan
+        Write-MonitorLine -Message ("[{0}] [INFO] 告警邮件已发送，主题={1}，收件人={2}" -f (Get-LogTimestamp), $subject, ($mailTo -join ";")) -ForegroundColor Cyan
     } catch {
-        Write-MonitorLine -Message ("[{0}] [ERROR] 告警邮件发送失败：{1}" -f (Get-Date).ToString("o"), $_.Exception.Message) -ForegroundColor Red
+        Write-MonitorLine -Message ("[{0}] [ERROR] 告警邮件发送失败：{1}" -f (Get-LogTimestamp), $_.Exception.Message) -ForegroundColor Red
     } finally {
         if ($message) {
             $message.Dispose()
@@ -811,7 +811,7 @@ function New-RunSummary {
     }
 
     return [pscustomobject]@{
-        Timestamp        = $RunTime.ToString("o")
+        Timestamp        = Get-LogTimestamp -Date $RunTime
         ComputerName     = $ComputerName
         ConfigFilePath   = $ConfigFilePath
         LogFilePath      = $LogFilePath

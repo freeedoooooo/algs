@@ -160,6 +160,12 @@ function Get-DatedLogFilePath {
     return Join-Path $DirectoryPath ("{0}-{1}.log" -f $baseName, $Date.ToString("yyyyMMdd"))
 }
 
+function Get-LogTimestamp {
+    param([datetime]$Date = (Get-Date))
+
+    return $Date.ToString("yyyy-MM-dd HH:mm:ss")
+}
+
 function Reset-LogIfOversized {
     param(
         [string]$LogFilePath,
@@ -218,7 +224,7 @@ function Write-LogLine {
         return
     }
 
-    $timestamp = (Get-Date).ToString("o")
+    $timestamp = Get-LogTimestamp
     $line = "[{0}] [{1}] {2}" -f $timestamp, $Level, $Message
     Write-Host $line
 
