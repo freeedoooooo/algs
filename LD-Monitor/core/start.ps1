@@ -47,7 +47,9 @@ if (Test-Path -LiteralPath $runnerPidFile) {
         $pidProcess = Get-RunnerProcessById -ProcessId $existingRunnerId
         if ($pidProcess) {
             Write-LogLine -LogPath $logPath -Message "监控已启动，PID=$existingRunnerId，间隔=${intervalSeconds}秒"
-            exit 0
+            Write-Host ""
+            Write-Host "监控已在运行，本窗口 3 秒后自动关闭..."
+            exit 2
         }
     }
 
@@ -57,7 +59,9 @@ if (Test-Path -LiteralPath $runnerPidFile) {
 $existingRunner = @(Get-RunnerProcessByCommandLine -RunnerScriptPath $runnerScriptPath -ConfigPath $configFullPath | Select-Object -First 1)
 if ($existingRunner.Count -gt 0) {
     Write-LogLine -LogPath $logPath -Message "监控已启动，PID=$($existingRunner[0].ProcessId)，间隔=${intervalSeconds}秒"
-    exit 0
+    Write-Host ""
+    Write-Host "监控已在运行，本窗口 3 秒后自动关闭..."
+    exit 2
 }
 
 $powershellPath = (Get-Command powershell.exe -ErrorAction Stop).Source
