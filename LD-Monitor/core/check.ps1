@@ -850,6 +850,11 @@ function Convert-SummaryToLogLines {
     $lines.Add("$prefix [INFO] 配置=$($Summary.ConfigFilePath)")
     $lines.Add("$prefix [INFO] 模拟器路径=$($Summary.LdPlayerPath)")
     $lines.Add("$prefix [INFO] ADB路径=$($Summary.AdbPath)")
+
+    if ($Summary.NoDevicesFound) {
+        $lines.Add("$prefix [ERROR] 当前未发现已连接的模拟器设备")
+    }
+
     $lines.Add("$prefix [$resultLevel] 状态=$statusText 总数=$($Summary.TotalCount) 健康=$($Summary.HealthyCount) 异常=$($Summary.UnhealthyCount)")
 
     foreach ($device in $Summary.HealthyDevices) {
@@ -858,11 +863,7 @@ function Convert-SummaryToLogLines {
 
     foreach ($device in $Summary.UnhealthyDevices) {
         $displayName = if ([string]::IsNullOrWhiteSpace($device.DisplayName)) { $device.Serial } else { $device.DisplayName }
-        $lines.Add("$prefix [WARN] 设备 $displayName $(Format-DeviceReason -Reason $device.Reason)")
-    }
-
-    if ($Summary.NoDevicesFound) {
-        $lines.Add("$prefix [WARN] 当前未发现已连接的模拟器设备")
+        $lines.Add("$prefix [ERROR] 设备 $displayName $(Format-DeviceReason -Reason $device.Reason)")
     }
 
     if (-not [string]::IsNullOrWhiteSpace($Summary.ErrorMessage)) {
