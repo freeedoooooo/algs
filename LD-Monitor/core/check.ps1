@@ -562,29 +562,66 @@ function Clear-AlertState {
     }
 }
 
-function Test-AlertCooldownPassed {
+function Get-AlertCooldownInfo {
     param(
         [string]$StatePath,
         [int]$CooldownMinutes
     )
 
     if ($CooldownMinutes -lt 1) {
-        return $true
+        return [pscustomobject]@{
+            Passed           = $true
+            RemainingSeconds = 0
+        }
     }
 
     $state = Get-AlertState -StatePath $StatePath
     if (-not $state -or [string]::IsNullOrWhiteSpace($state.LastAlertAt)) {
-        return $true
+        return [pscustomobject]@{
+            Passed           = $true
+            RemainingSeconds = 0
+        }
     }
 
     try {
         $lastAlertAt = [datetime]$state.LastAlertAt
     } catch {
-        return $true
+        return [pscustomobject]@{
+            Passed           = $true
+            RemainingSeconds = 0
+        }
     }
 
-    $elapsedMinutes = (New-TimeSpan -Start $lastAlertAt -End (Get-Date)).TotalMinutes
-    return ($elapsedMinutes -ge $CooldownMinutes)
+    $cooldownSeconds = [Math]::Max($CooldownMinutes, 0) * 60
+    $elapsedSeconds = [int][Math]::Floor((New-TimeSpan -Start $lastAlertAt -End (Get-Date)).TotalSeconds)
+    $remainingSeconds = [Math]::Max($cooldownSeconds - $elapsedSeconds, 0)
+
+    return [pscustomobject]@{
+        Passed           = ($remainingSeconds -le 0)
+        RemainingSeconds = $remainingSeconds
+    }
+}
+
+function Format-DurationText {
+    param([int]$TotalSeconds)
+
+    $seconds = [Math]::Max($TotalSeconds, 0)
+    $hours = [int][Math]::Floor($seconds / 3600)
+    $minutes = [int][Math]::Floor(($seconds % 3600) / 60)
+    $remainSeconds = $seconds % 60
+    $parts = New-Object System.Collections.Generic.List[string]
+
+    if ($hours -gt 0) {
+        $parts.Add("${hours}小时")
+    }
+    if ($minutes -gt 0) {
+        $parts.Add("${minutes}分钟")
+    }
+    if ($remainSeconds -gt 0 -or $parts.Count -eq 0) {
+        $parts.Add("${remainSeconds}秒")
+    }
+
+    return ($parts -join "")
 }
 
 function Get-SummaryStatusText {
@@ -621,8 +658,10 @@ function Send-AlertMail {
         return
     }
 
-    if (-not (Test-AlertCooldownPassed -StatePath $StatePath -CooldownMinutes $CooldownMinutes)) {
-        Write-MonitorLine -Message ("[{0}] [INFO] 告警邮件处于冷却期，本次跳过发送" -f (Get-Date).ToString("o"))
+    $cooldownInfo = Get-AlertCooldownInfo -StatePath $StatePath -CooldownMinutes $CooldownMinutes
+    if (-not $cooldownInfo.Passed) {
+        $remainingText = Format-DurationText -TotalSeconds $cooldownInfo.RemainingSeconds
+        Write-MonitorLine -Message ("[{0}] [INFO] 告警邮件处于冷却期，本次跳过发送，剩余冷却时间={1}" -f (Get-Date).ToString("o"), $remainingText)
         return
     }
 
