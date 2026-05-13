@@ -644,10 +644,11 @@ function Send-AlertMail {
         return
     }
 
-    $subject = "{0} 模拟器告警 {1}/{2}" -f $subjectPrefix, $Summary.HealthyCount, $Summary.ExpectedHealthy
+    $subject = "{0} [{1}] 模拟器告警 {2}/{3}" -f $subjectPrefix, $Summary.ComputerName, $Summary.HealthyCount, $Summary.ExpectedHealthy
     $statusText = Get-SummaryStatusText -Status $Summary.Status
     $bodyLines = New-Object System.Collections.Generic.List[string]
     $bodyLines.Add("时间：$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')")
+    $bodyLines.Add("电脑名称：$($Summary.ComputerName)")
     $bodyLines.Add("状态：$statusText")
     $bodyLines.Add("健康数量：$($Summary.HealthyCount)/$($Summary.ExpectedHealthy)")
     $bodyLines.Add("总数：$($Summary.TotalCount)")
@@ -731,6 +732,7 @@ function Format-DeviceReason {
 function New-RunSummary {
     param(
         [datetime]$RunTime,
+        [string]$ComputerName,
         [string]$ConfigFilePath,
         [string]$LogFilePath,
         [string]$ResolvedAdbPath,
@@ -771,6 +773,7 @@ function New-RunSummary {
 
     return [pscustomobject]@{
         Timestamp        = $RunTime.ToString("o")
+        ComputerName     = $ComputerName
         ConfigFilePath   = $ConfigFilePath
         LogFilePath      = $LogFilePath
         AdbPath          = $ResolvedAdbPath
@@ -804,6 +807,7 @@ function Convert-SummaryToLogLines {
     }
 
     $lines.Add("$prefix [INFO] -------- 监控开始 --------")
+    $lines.Add("$prefix [INFO] 电脑名称=$($Summary.ComputerName)")
     $lines.Add("$prefix [INFO] 配置=$($Summary.ConfigFilePath)")
     $lines.Add("$prefix [INFO] 模拟器路径=$($Summary.LdPlayerPath)")
     $lines.Add("$prefix [INFO] ADB路径=$($Summary.AdbPath)")
@@ -866,6 +870,7 @@ $maxLogSizeMb = [int](Get-ConfigValue -Config $config -Key "log_max_size_mb" -De
 $expectedHealthyDevices = [int](Get-ConfigValue -Config $config -Key "expected_healthy_devices" -DefaultValue "27")
 $alertCooldownMinutes = [int](Get-ConfigValue -Config $config -Key "alert_cooldown_minutes" -DefaultValue "30")
 $alertStatePath = Get-AlertStatePath -ConfigDirectory $configDirectory -Config $config
+$computerName = Get-ConfigValue -Config $config -Key "computer_name" -DefaultValue $env:COMPUTERNAME
 
 if ($script:RegistryRoots.Count -eq 0) {
     throw "registry_roots must not be empty."
@@ -902,6 +907,9 @@ if ($expectedHealthyDevices -lt 1) {
 }
 if ($alertCooldownMinutes -lt 0) {
     throw "alert_cooldown_minutes must be >= 0."
+}
+if ([string]::IsNullOrWhiteSpace($computerName)) {
+    throw "computer_name must not be empty."
 }
 
 Ensure-Directory -Path $logDirectory
@@ -947,7 +955,7 @@ try {
     $exitCode = 1
 }
 
-$summary = New-RunSummary -RunTime $runTime -ConfigFilePath $configFullPath -LogFilePath $logFilePath -ResolvedAdbPath $resolvedAdb -ResolvedLdPlayerPath $resolvedLdPlayerPath -ExpectedHealthyDevices $expectedHealthyDevices -Checks $checks -ErrorMessage $errorMessage
+$summary = New-RunSummary -RunTime $runTime -ComputerName $computerName -ConfigFilePath $configFullPath -LogFilePath $logFilePath -ResolvedAdbPath $resolvedAdb -ResolvedLdPlayerPath $resolvedLdPlayerPath -ExpectedHealthyDevices $expectedHealthyDevices -Checks $checks -ErrorMessage $errorMessage
 $logLines = Convert-SummaryToLogLines -Summary $summary
 Write-LogLines -Lines $logLines
 Send-AlertMail -Summary $summary -Config $config -StatePath $alertStatePath -CooldownMinutes $alertCooldownMinutes
