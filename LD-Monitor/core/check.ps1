@@ -880,7 +880,8 @@ function Convert-SummaryToLogLines {
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $configFullPath = Resolve-PathFromBase -BaseDirectory $scriptRoot -Value $ConfigPath
 $configDirectory = Split-Path -Parent $configFullPath
-$config = Get-ConfigMap -Path $configFullPath
+$defaultConfigPath = Get-DefaultConfigPath -ScriptRoot $scriptRoot
+$config = Get-MergedConfigMap -DefaultConfigPath $defaultConfigPath -OverrideConfigPath $configFullPath
 
 $script:CommonLdPlayerDirs = @(
     foreach ($item in (Get-ConfigList -Config $config -Key "common_ldplayer_dirs")) {

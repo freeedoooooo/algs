@@ -52,7 +52,8 @@ function Remove-RunnerPidFile {
 
 $configFullPath = Resolve-PathFromBase -BaseDirectory $scriptRoot -Value $ConfigPath
 $configDirectory = Split-Path -Parent $configFullPath
-$config = Get-ConfigMap -Path $configFullPath
+$defaultConfigPath = Get-DefaultConfigPath -ScriptRoot $scriptRoot
+$config = Get-MergedConfigMap -DefaultConfigPath $defaultConfigPath -OverrideConfigPath $configFullPath
 $safeWorkingDirectory = Get-SafeWorkingDirectory -MonitorRoot $configDirectory
 
 $intervalSeconds = [int](Get-ConfigValue -Config $config -Key "schedule_interval_seconds" -DefaultValue "10")

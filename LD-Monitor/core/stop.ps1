@@ -10,7 +10,8 @@ $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 $configFullPath = Resolve-PathFromBase -BaseDirectory $scriptRoot -Value $ConfigPath
 $configDirectory = Split-Path -Parent $configFullPath
-$config = Get-ConfigMap -Path $configFullPath
+$defaultConfigPath = Get-DefaultConfigPath -ScriptRoot $scriptRoot
+$config = Get-MergedConfigMap -DefaultConfigPath $defaultConfigPath -OverrideConfigPath $configFullPath
 $logPath = Get-MonitorLogPath -ConfigDirectory $configDirectory -Config $config
 $logMaxSizeMb = [int](Get-ConfigValue -Config $config -Key "log_max_size_mb" -DefaultValue "50")
 $logRetentionDays = [int](Get-ConfigValue -Config $config -Key "log_retention_days" -DefaultValue "7")

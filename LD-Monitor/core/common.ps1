@@ -1,4 +1,4 @@
-﻿function Get-ConfigMap {
+function Get-ConfigMap {
     param([string]$Path)
 
     if (-not (Test-Path -LiteralPath $Path)) {
@@ -26,6 +26,54 @@
     }
 
     return $config
+}
+
+function Merge-ConfigMap {
+    param(
+        [hashtable]$BaseConfig,
+        [hashtable]$OverrideConfig
+    )
+
+    $merged = @{}
+
+    if ($BaseConfig) {
+        foreach ($key in $BaseConfig.Keys) {
+            $merged[$key] = $BaseConfig[$key]
+        }
+    }
+
+    if ($OverrideConfig) {
+        foreach ($key in $OverrideConfig.Keys) {
+            $merged[$key] = $OverrideConfig[$key]
+        }
+    }
+
+    return $merged
+}
+
+function Get-MergedConfigMap {
+    param(
+        [string]$DefaultConfigPath,
+        [string]$OverrideConfigPath
+    )
+
+    $defaultConfig = @{}
+    if (-not [string]::IsNullOrWhiteSpace($DefaultConfigPath) -and (Test-Path -LiteralPath $DefaultConfigPath)) {
+        $defaultConfig = Get-ConfigMap -Path $DefaultConfigPath
+    }
+
+    $overrideConfig = @{}
+    if (-not [string]::IsNullOrWhiteSpace($OverrideConfigPath)) {
+        $overrideConfig = Get-ConfigMap -Path $OverrideConfigPath
+    }
+
+    return Merge-ConfigMap -BaseConfig $defaultConfig -OverrideConfig $overrideConfig
+}
+
+function Get-DefaultConfigPath {
+    param([string]$ScriptRoot)
+
+    return Join-Path $ScriptRoot "default.config"
 }
 
 function Get-ConfigValue {

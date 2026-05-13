@@ -1,55 +1,62 @@
 # LD-Monitor
 
-轻量脚本版模拟器健康监控工具。
+轻量脚本版雷电模拟器健康监控工具。
 
-## 根目录里你主要会用到的文件
+## 你平时只需要关心这些文件
 
 - `start.cmd`
-  双击启动监控，适合日常使用
+  双击启动监控，黑窗口会持续显示最新监控结果
 - `stop.cmd`
-  双击停止监控，适合日常使用
+  双击停止监控，窗口会保留，方便查看停止结果
 - `monitor.config`
-  外部配置文件，路径、检查频率、邮件告警都在这里改
+  给普通用户修改的配置文件
+  这里只保留了最常用、最需要改的几项
 
-## 其他目录
+## monitor.config 里建议只改什么
+
+- `computer_name`
+  这台电脑的名称，会显示在日志和告警邮件里
+- `ldplayer_path`
+  雷电安装目录
+  不填也可以，程序会自动尝试常见目录和注册表路径
+- `expected_healthy_devices`
+  这台电脑正常应该有多少个健康模拟器
+- `mail_enabled`
+  是否开启邮件告警
+- `mail_to`
+  告警邮件收件人
+- `alert_cooldown_minutes`
+  邮件冷却时间，避免短时间重复轰炸
+
+## 其他目录说明
 
 - `core/`
-  内部脚本
-  `start.ps1` 负责 PowerShell 启动入口
-  `stop.ps1` 负责 PowerShell 停止入口
-  `check.ps1` 负责单次检查
-  `runner.ps1` 负责循环调度
-  `common.ps1` 负责公共函数
-- `runtime/`
-  运行状态文件目录
+  内部脚本和默认配置
+  普通用户一般不需要修改
 - `log/`
   日志目录
+  日志按天生成
+- `runtime/`
+  运行状态目录
+  保存 PID、邮件冷却状态等内部文件
 
-## 最常用的方式
-
-日常使用：
+## 最常用的使用方式
 
 1. 双击 `start.cmd`
-2. 需要停止时双击 `stop.cmd`
-3. 需要改配置时编辑 `monitor.config`
-
-调试单次检查：
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\core\check.ps1
-```
+2. 如果需要改配置，编辑 `monitor.config`
+3. 需要停止时，双击 `stop.cmd`
 
 ## 监控规则
 
-- 只统计当前 ADB 已连接的健康模拟器数量
+- 只统计当前 ADB 已连接的健康设备数量
 - 设备状态必须是 `device`
 - `adb shell getprop sys.boot_completed` 必须返回 `1`
-- 每轮输出后额外留一空行，方便区分
+- 没有发现设备时，会明确打印“当前未发现已连接的模拟器设备”
 
 ## 日志规则
 
-- 每天一个日志文件，例如 `monitor-20260512.log`
+- 每天一个日志文件，例如 `monitor-20260513.log`
 - 只保留最近 7 天日志
-- 单个日志超过 50MB 时直接删除重写
+- 单个日志文件超过 50MB 时，直接删除后重新写
 - 黑窗口输出与日志文件内容保持一致
-- 黑窗口每 3600 秒清屏一次
+- 黑窗口会按设定时间自动清屏一次
