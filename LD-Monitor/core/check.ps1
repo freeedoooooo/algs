@@ -1009,7 +1009,7 @@ function Convert-SummaryToLogLines {
     $prefix = "[{0}]" -f $Summary.Timestamp
     $lines = New-Object System.Collections.Generic.List[string]
 
-    $resultLevel = if ($Summary.Status -eq "healthy") { "INFO" } elseif (-not [string]::IsNullOrWhiteSpace($Summary.ErrorMessage)) { "ERROR" } else { "WARN" }
+    $resultLevel = if ($Summary.Status -eq "healthy") { "INFO" } else { "ERROR" }
 
     $statusText = switch ($Summary.Status) {
         "healthy" { "正常" }
@@ -1024,11 +1024,27 @@ function Convert-SummaryToLogLines {
     $lines.Add("$prefix [INFO] 模拟器路径=$($Summary.LdPlayerPath)")
     $lines.Add("$prefix [INFO] ADB路径=$($Summary.AdbPath)")
 
-    if ($Summary.NoDevicesFound) {
-        $lines.Add("$prefix [ERROR] 当前未发现已连接的模拟器设备")
+    $statusDetail = "状态=$statusText 健康=$($Summary.HealthyCount)/$($Summary.ExpectedHealthy) ADB设备=$($Summary.TotalCount)"
+    if ($Summary.UnhealthyCount -gt 0) {
+        $statusDetail = "$statusDetail 异常设备=$($Summary.UnhealthyCount)"
     }
 
-    $lines.Add("$prefix [$resultLevel] 状态=$statusText 总数=$($Summary.TotalCount) 健康=$($Summary.HealthyCount) 异常=$($Summary.UnhealthyCount)")
+    $reason = ""
+    if ($Summary.NoDevicesFound) {
+        $reason = "未发现已连接的模拟器设备"
+    } elseif (-not [string]::IsNullOrWhiteSpace($Summary.ErrorMessage)) {
+        $reason = "脚本执行异常"
+    } elseif ($Summary.Status -eq "unhealthy" -and $Summary.HealthyCount -lt $Summary.ExpectedHealthy) {
+        $reason = "健康数量低于期望值"
+    } elseif ($Summary.Status -eq "healthy") {
+        $reason = "正常"
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($reason)) {
+        $statusDetail = "$statusDetail 原因=$reason"
+    }
+
+    $lines.Add("$prefix [$resultLevel] $statusDetail")
 
     if (-not [string]::IsNullOrWhiteSpace($Summary.ErrorMessage)) {
         $lines.Add("$prefix [ERROR] $($Summary.ErrorMessage)")
