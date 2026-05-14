@@ -629,16 +629,74 @@ function Get-AlertDecision {
     $stableSeconds = [Math]::Max($StableMinutes, 0) * 60
 
     if ($state.ConfirmedStatus -eq "unknown") {
+        if ($observedStatus -eq "healthy") {
+            $state.ConfirmedStatus = $observedStatus
+            Reset-PendingAlertState -State $state
+            Set-AlertState -StatePath $StatePath -State $state
+            return [pscustomobject]@{
+                State        = $state
+                Observed     = $observedStatus
+                ShouldNotify = $false
+                LogMessage   = "首次记录状态：$((Get-StatusDisplayText -Status $observedStatus))"
+                MailSubject  = ""
+                MailBodyTag  = ""
+            }
+        }
+
+        if ($state.PendingStatus -ne $observedStatus -or [string]::IsNullOrWhiteSpace($state.PendingSince)) {
+            $state.PendingStatus = $observedStatus
+            $state.PendingSince = $now.ToString("o")
+            Set-AlertState -StatePath $StatePath -State $state
+            return [pscustomobject]@{
+                State        = $state
+                Observed     = $observedStatus
+                ShouldNotify = $false
+                LogMessage   = "首次检测到状态异常，开始稳定观察"
+                MailSubject  = ""
+                MailBodyTag  = ""
+            }
+        }
+
+        try {
+            $initialPendingSince = [datetime]$state.PendingSince
+        } catch {
+            $state.PendingSince = $now.ToString("o")
+            Set-AlertState -StatePath $StatePath -State $state
+            return [pscustomobject]@{
+                State        = $state
+                Observed     = $observedStatus
+                ShouldNotify = $false
+                LogMessage   = "首次检测到状态异常，开始稳定观察"
+                MailSubject  = ""
+                MailBodyTag  = ""
+            }
+        }
+
+        $initialElapsedSeconds = [int][Math]::Floor((New-TimeSpan -Start $initialPendingSince -End $now).TotalSeconds)
+        if ($initialElapsedSeconds -lt $stableSeconds) {
+            $remainingText = Format-DurationText -TotalSeconds ($stableSeconds - $initialElapsedSeconds)
+            Set-AlertState -StatePath $StatePath -State $state
+            return [pscustomobject]@{
+                State        = $state
+                Observed     = $observedStatus
+                ShouldNotify = $false
+                LogMessage   = "首次异常观察中：剩余稳定时间=$remainingText"
+                MailSubject  = ""
+                MailBodyTag  = ""
+            }
+        }
+
         $state.ConfirmedStatus = $observedStatus
+        $state.LastNotifiedAt = $now.ToString("o")
         Reset-PendingAlertState -State $state
         Set-AlertState -StatePath $StatePath -State $state
         return [pscustomobject]@{
             State        = $state
             Observed     = $observedStatus
-            ShouldNotify = $false
-            LogMessage   = "首次记录状态：$((Get-StatusDisplayText -Status $observedStatus))"
-            MailSubject  = ""
-            MailBodyTag  = ""
+            ShouldNotify = $true
+            LogMessage   = "首次异常状态已确认：$((Get-StatusDisplayText -Status $observedStatus))"
+            MailSubject  = "初始 -> $((Get-StatusDisplayText -Status $observedStatus))"
+            MailBodyTag  = "状态异常"
         }
     }
 
@@ -823,7 +881,7 @@ function Send-AlertMail {
         $bodyLines.Add(" - $displayName $(Format-DeviceReason -Reason $device.Reason)")
     }
     $bodyLines.Add("")
-    $bodyLines.Add("告警信息：$($Summary.AlertMessage)")
+    $bodyLines.Add("状态变化：$($AlertDecision.MailSubject)")
 
     $message = $null
     $client = $null
