@@ -587,10 +587,11 @@ function New-AlertState {
     param([string]$ConfirmedStatus = "unknown")
 
     return [pscustomobject]@{
-        ConfirmedStatus = $ConfirmedStatus
-        PendingStatus   = ""
-        PendingSince    = ""
-        LastNotifiedAt  = ""
+        ConfirmedStatus          = $ConfirmedStatus
+        ConsecutiveHealthyCount  = 0
+        ConsecutiveUnhealthyCount = 0
+        LastObservedStatus       = ""
+        LastNotifiedAt           = ""
     }
 }
 
@@ -602,85 +603,79 @@ function Normalize-AlertState {
     }
 
     return [pscustomobject]@{
-        ConfirmedStatus = if ([string]::IsNullOrWhiteSpace($State.ConfirmedStatus)) { "unknown" } else { [string]$State.ConfirmedStatus }
-        PendingStatus   = if ($null -eq $State.PendingStatus) { "" } else { [string]$State.PendingStatus }
-        PendingSince    = if ($null -eq $State.PendingSince) { "" } else { [string]$State.PendingSince }
-        LastNotifiedAt  = if ($null -eq $State.LastNotifiedAt) { "" } else { [string]$State.LastNotifiedAt }
+        ConfirmedStatus           = if ([string]::IsNullOrWhiteSpace($State.ConfirmedStatus)) { "unknown" } else { [string]$State.ConfirmedStatus }
+        ConsecutiveHealthyCount   = if ($null -eq $State.ConsecutiveHealthyCount) { 0 } else { [int]$State.ConsecutiveHealthyCount }
+        ConsecutiveUnhealthyCount = if ($null -eq $State.ConsecutiveUnhealthyCount) { 0 } else { [int]$State.ConsecutiveUnhealthyCount }
+        LastObservedStatus        = if ($null -eq $State.LastObservedStatus) { "" } else { [string]$State.LastObservedStatus }
+        LastNotifiedAt            = if ($null -eq $State.LastNotifiedAt) { "" } else { [string]$State.LastNotifiedAt }
     }
 }
 
-function Reset-PendingAlertState {
+function Reset-AlertCounters {
     param([pscustomobject]$State)
 
-    $State.PendingStatus = ""
-    $State.PendingSince = ""
+    $State.ConsecutiveHealthyCount = 0
+    $State.ConsecutiveUnhealthyCount = 0
+    $State.LastObservedStatus = ""
 }
 
 function Get-AlertDecision {
     param(
         [pscustomobject]$Summary,
         [string]$StatePath,
-        [int]$StableMinutes
+        [int]$ConsecutiveCount
     )
 
     $now = Get-Date
     $observedStatus = Get-ObservedStatus -Summary $Summary
     $state = Normalize-AlertState -State (Get-AlertState -StatePath $StatePath)
-    $stableSeconds = [Math]::Max($StableMinutes, 0) * 60
+    $requiredCount = [Math]::Max($ConsecutiveCount, 1)
+
+    if ($observedStatus -eq "healthy") {
+        $state.ConsecutiveHealthyCount += 1
+        $state.ConsecutiveUnhealthyCount = 0
+    } elseif ($observedStatus -eq "unhealthy") {
+        $state.ConsecutiveUnhealthyCount += 1
+        $state.ConsecutiveHealthyCount = 0
+    } else {
+        Reset-AlertCounters -State $state
+        Set-AlertState -StatePath $StatePath -State $state
+        return [pscustomobject]@{
+            State        = $state
+            Observed     = $observedStatus
+            ShouldNotify = $false
+            LogMessage   = "本轮检测异常，不参与状态确认"
+            MailSubject  = ""
+            MailBodyTag  = ""
+        }
+    }
+
+    $state.LastObservedStatus = $observedStatus
+    $currentCount = if ($observedStatus -eq "healthy") { $state.ConsecutiveHealthyCount } else { $state.ConsecutiveUnhealthyCount }
+    $progressText = "$currentCount/$requiredCount"
 
     if ($state.ConfirmedStatus -eq "unknown") {
-        if ($observedStatus -eq "healthy") {
-            $state.ConfirmedStatus = $observedStatus
-            Reset-PendingAlertState -State $state
+        if ($observedStatus -eq "healthy" -and $currentCount -eq 1) {
+            $state.ConfirmedStatus = "healthy"
+            $state.LastNotifiedAt = ""
             Set-AlertState -StatePath $StatePath -State $state
             return [pscustomobject]@{
                 State        = $state
                 Observed     = $observedStatus
                 ShouldNotify = $false
-                LogMessage   = "首次记录状态：$((Get-StatusDisplayText -Status $observedStatus))"
+                LogMessage   = "首次记录状态：正常"
                 MailSubject  = ""
                 MailBodyTag  = ""
             }
         }
 
-        if ($state.PendingStatus -ne $observedStatus -or [string]::IsNullOrWhiteSpace($state.PendingSince)) {
-            $state.PendingStatus = $observedStatus
-            $state.PendingSince = $now.ToString("o")
+        if ($currentCount -lt $requiredCount) {
             Set-AlertState -StatePath $StatePath -State $state
             return [pscustomobject]@{
                 State        = $state
                 Observed     = $observedStatus
                 ShouldNotify = $false
-                LogMessage   = "首次检测到状态异常，开始稳定观察"
-                MailSubject  = ""
-                MailBodyTag  = ""
-            }
-        }
-
-        try {
-            $initialPendingSince = [datetime]$state.PendingSince
-        } catch {
-            $state.PendingSince = $now.ToString("o")
-            Set-AlertState -StatePath $StatePath -State $state
-            return [pscustomobject]@{
-                State        = $state
-                Observed     = $observedStatus
-                ShouldNotify = $false
-                LogMessage   = "首次检测到状态异常，开始稳定观察"
-                MailSubject  = ""
-                MailBodyTag  = ""
-            }
-        }
-
-        $initialElapsedSeconds = [int][Math]::Floor((New-TimeSpan -Start $initialPendingSince -End $now).TotalSeconds)
-        if ($initialElapsedSeconds -lt $stableSeconds) {
-            $remainingText = Format-DurationText -TotalSeconds ($stableSeconds - $initialElapsedSeconds)
-            Set-AlertState -StatePath $StatePath -State $state
-            return [pscustomobject]@{
-                State        = $state
-                Observed     = $observedStatus
-                ShouldNotify = $false
-                LogMessage   = "首次异常观察中：剩余稳定时间=$remainingText"
+                LogMessage   = "首次状态确认中：$((Get-StatusDisplayText -Status $observedStatus))，连续次数=$progressText"
                 MailSubject  = ""
                 MailBodyTag  = ""
             }
@@ -688,7 +683,6 @@ function Get-AlertDecision {
 
         $state.ConfirmedStatus = $observedStatus
         $state.LastNotifiedAt = $now.ToString("o")
-        Reset-PendingAlertState -State $state
         Set-AlertState -StatePath $StatePath -State $state
         return [pscustomobject]@{
             State        = $state
@@ -701,19 +695,6 @@ function Get-AlertDecision {
     }
 
     if ($observedStatus -eq $state.ConfirmedStatus) {
-        if (-not [string]::IsNullOrWhiteSpace($state.PendingStatus)) {
-            Reset-PendingAlertState -State $state
-            Set-AlertState -StatePath $StatePath -State $state
-            return [pscustomobject]@{
-                State        = $state
-                Observed     = $observedStatus
-                ShouldNotify = $false
-                LogMessage   = "状态恢复为已确认状态，取消变更观察"
-                MailSubject  = ""
-                MailBodyTag  = ""
-            }
-        }
-
         Set-AlertState -StatePath $StatePath -State $state
         return [pscustomobject]@{
             State        = $state
@@ -725,46 +706,13 @@ function Get-AlertDecision {
         }
     }
 
-    if ($state.PendingStatus -ne $observedStatus -or [string]::IsNullOrWhiteSpace($state.PendingSince)) {
-        $state.PendingStatus = $observedStatus
-        $state.PendingSince = $now.ToString("o")
-        Set-AlertState -StatePath $StatePath -State $state
-
-        return [pscustomobject]@{
-            State        = $state
-            Observed     = $observedStatus
-            ShouldNotify = $false
-            LogMessage   = "检测到状态变化候选：$((Get-StatusDisplayText -Status $state.ConfirmedStatus)) -> $((Get-StatusDisplayText -Status $observedStatus))，开始稳定观察"
-            MailSubject  = ""
-            MailBodyTag  = ""
-        }
-    }
-
-    try {
-        $pendingSince = [datetime]$state.PendingSince
-    } catch {
-        $state.PendingSince = $now.ToString("o")
+    if ($currentCount -lt $requiredCount) {
         Set-AlertState -StatePath $StatePath -State $state
         return [pscustomobject]@{
             State        = $state
             Observed     = $observedStatus
             ShouldNotify = $false
-            LogMessage   = "检测到状态变化候选：$((Get-StatusDisplayText -Status $state.ConfirmedStatus)) -> $((Get-StatusDisplayText -Status $observedStatus))，开始稳定观察"
-            MailSubject  = ""
-            MailBodyTag  = ""
-        }
-    }
-
-    $elapsedSeconds = [int][Math]::Floor((New-TimeSpan -Start $pendingSince -End $now).TotalSeconds)
-    if ($elapsedSeconds -lt $stableSeconds) {
-        $remainingText = Format-DurationText -TotalSeconds ($stableSeconds - $elapsedSeconds)
-        Set-AlertState -StatePath $StatePath -State $state
-
-        return [pscustomobject]@{
-            State        = $state
-            Observed     = $observedStatus
-            ShouldNotify = $false
-            LogMessage   = "状态变化观察中：$((Get-StatusDisplayText -Status $state.ConfirmedStatus)) -> $((Get-StatusDisplayText -Status $observedStatus))，剩余稳定时间=$remainingText"
+            LogMessage   = "状态切换确认中：$((Get-StatusDisplayText -Status $state.ConfirmedStatus)) -> $((Get-StatusDisplayText -Status $observedStatus))，连续次数=$progressText"
             MailSubject  = ""
             MailBodyTag  = ""
         }
@@ -773,7 +721,6 @@ function Get-AlertDecision {
     $previousStatus = $state.ConfirmedStatus
     $state.ConfirmedStatus = $observedStatus
     $state.LastNotifiedAt = $now.ToString("o")
-    Reset-PendingAlertState -State $state
     Set-AlertState -StatePath $StatePath -State $state
 
     $mailBodyTag = if ($observedStatus -eq "healthy") { "已恢复正常" } else { "状态异常" }
@@ -787,28 +734,6 @@ function Get-AlertDecision {
         MailSubject  = $mailSubject
         MailBodyTag  = $mailBodyTag
     }
-}
-
-function Format-DurationText {
-    param([int]$TotalSeconds)
-
-    $seconds = [Math]::Max($TotalSeconds, 0)
-    $hours = [int][Math]::Floor($seconds / 3600)
-    $minutes = [int][Math]::Floor(($seconds % 3600) / 60)
-    $remainSeconds = $seconds % 60
-    $parts = New-Object System.Collections.Generic.List[string]
-
-    if ($hours -gt 0) {
-        $parts.Add("${hours}小时")
-    }
-    if ($minutes -gt 0) {
-        $parts.Add("${minutes}分钟")
-    }
-    if ($remainSeconds -gt 0 -or $parts.Count -eq 0) {
-        $parts.Add("${remainSeconds}秒")
-    }
-
-    return ($parts -join "")
 }
 
 function Get-SummaryStatusText {
@@ -1089,7 +1014,7 @@ $logFileName = Get-ConfigValue -Config $config -Key "log_file_name" -DefaultValu
 $retentionDays = [int](Get-ConfigValue -Config $config -Key "log_retention_days" -DefaultValue "7")
 $maxLogSizeMb = [int](Get-ConfigValue -Config $config -Key "log_max_size_mb" -DefaultValue "50")
 $expectedHealthyDevices = [int](Get-ConfigValue -Config $config -Key "expected_healthy_devices" -DefaultValue "27")
-$alertStableMinutes = [int](Get-ConfigValue -Config $config -Key "alert_stable_minutes" -DefaultValue "10")
+$alertConsecutiveCount = [int](Get-ConfigValue -Config $config -Key "alert_consecutive_count" -DefaultValue "20")
 $alertStatePath = Get-AlertStatePath -ConfigDirectory $configDirectory -Config $config
 $computerName = Get-ConfigValue -Config $config -Key "computer_name" -DefaultValue $env:COMPUTERNAME
 
@@ -1126,8 +1051,8 @@ if ($maxLogSizeMb -lt 1) {
 if ($expectedHealthyDevices -lt 1) {
     throw "expected_healthy_devices must be >= 1."
 }
-if ($alertStableMinutes -lt 0) {
-    throw "alert_stable_minutes must be >= 0."
+if ($alertConsecutiveCount -lt 1) {
+    throw "alert_consecutive_count must be >= 1."
 }
 if ([string]::IsNullOrWhiteSpace($computerName)) {
     throw "computer_name must not be empty."
@@ -1179,7 +1104,7 @@ try {
 $summary = New-RunSummary -RunTime $runTime -ComputerName $computerName -ConfigFilePath $configFullPath -LogFilePath $logFilePath -ResolvedAdbPath $resolvedAdb -ResolvedLdPlayerPath $resolvedLdPlayerPath -ExpectedHealthyDevices $expectedHealthyDevices -Checks $checks -ErrorMessage $errorMessage
 $alertDecision = $null
 if ([string]::IsNullOrWhiteSpace($summary.ErrorMessage)) {
-    $alertDecision = Get-AlertDecision -Summary $summary -StatePath $alertStatePath -StableMinutes $alertStableMinutes
+    $alertDecision = Get-AlertDecision -Summary $summary -StatePath $alertStatePath -ConsecutiveCount $alertConsecutiveCount
     if ($alertDecision -and -not [string]::IsNullOrWhiteSpace($alertDecision.LogMessage)) {
         $summary.EventMessage = $alertDecision.LogMessage
     }
