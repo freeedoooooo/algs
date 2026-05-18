@@ -1,6 +1,6 @@
 param(
-    [string]$XmlPath = (Join-Path $PSScriptRoot 'Machine.xml'),
-    [string]$SettingsPath = (Join-Path $PSScriptRoot 'monitor-settings.json'),
+    [string]$XmlPath = (Join-Path (Split-Path $PSScriptRoot -Parent) 'Machine.xml'),
+    [string]$SettingsPath = (Join-Path (Split-Path $PSScriptRoot -Parent) 'monitor-settings.json'),
     [switch]$SkipPing
 )
 

@@ -11,7 +11,7 @@ echo.
 :loop
 echo ==================================================
 echo [%date% %time%] Starting monitor check...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0monitor.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Program\monitor.ps1"
 
 if errorlevel 1 (
     echo [%date% %time%] Monitor finished with warnings or errors. ExitCode=%errorlevel%
