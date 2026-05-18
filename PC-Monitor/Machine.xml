@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="GB2312"?>
+<root>
+
+	<Group	Name="group1">
+		<Machine Name="1" IP="192.168.1.11" Port="7899" UserName="pc1" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
+		<Machine Name="2" IP="192.168.1.22" Port="7899" UserName="pc2" PassWord="asdfdsa" Mac="C8-60-00-70-6F-3F" />
+		<Machine Name="3" IP="192.168.1.33" Port="7899" UserName="pc3" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
+		<Machine Name="4" IP="192.168.1.44" Port="7899" UserName="pc4" PassWord="asdfdsa" Mac="C8-60-00-70-6F-3F" />
+		<Machine Name="5" IP="192.168.1.55" Port="7899" UserName="pc5" PassWord="asdfdsa" Mac="C8-60-00-70-6F-3F" />
+		<Machine Name="6" IP="192.168.1.66" Port="7899" UserName="pc6" PassWord="asdfdsa" Mac="C8-60-00-70-6F-3F" />
+		<Machine Name="7" IP="192.168.1.77" Port="7899" UserName="pc7" PassWord="asdfdsa" Mac="C8-60-00-70-6F-3F" />
+		<Machine Name="8" IP="192.168.1.88" Port="7899" UserName="pc8" PassWord="asdfdsa" Mac="C8-60-00-70-6F-3F" />
+		<Machine Name="9" IP="192.168.1.119" Port="7899" UserName="pc9" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
+		<Machine Name="10" IP="192.168.1.100" Port="7899" UserName="pc10" PassWord="asdfdsa" Mac="C8-60-00-70-6F-3F" />
+	</Group>
+
+	<Group	Name="group2">
+		<Machine Name="11" IP="192.168.1.101" Port="7899" UserName="pc11" PassWord="asdfdsa" Mac="C8-60-00-70-6F-3F" />
+		<Machine Name="12" IP="192.168.1.102" Port="7899" UserName="PC12" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
+		<Machine Name="13" IP="192.168.1.103" Port="7899" UserName="pc13" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
+		<Machine Name="14" IP="192.168.1.104" Port="7899" UserName="pc14" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
+		<Machine Name="15" IP="192.168.1.105" Port="7899" UserName="pc15" PassWord="asdfdsa" Mac="C8-60-00-70-6F-3F" />
+		<Machine Name="16" IP="192.168.1.106" Port="7899" UserName="pc16" PassWord="asdfdsa" Mac="C8-60-00-70-6F-3F" />
+		<Machine Name="17" IP="192.168.1.107" Port="7899" UserName="pc17" PassWord="asdfdsa" Mac="C8-60-00-70-6F-3F" />
+		<Machine Name="18" IP="192.168.1.108" Port="7899" UserName="pc18" PassWord="asdfdsa" Mac="C8-60-00-70-6F-3F" />
+		<Machine Name="19" IP="192.168.1.109" Port="7899" UserName="pc19" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
+		<Machine Name="20" IP="192.168.1.200" Port="7899" UserName="pc20" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
+	</Group>
+
+	<Group	Name="group3">
+		<Machine Name="21" IP="192.168.1.211" Port="7899" UserName="pc21" PassWord="asdfdsa" Mac="C8-60-00-70-6F-3F" />
+		<Machine Name="22" IP="192.168.1.222" Port="7899" UserName="pc22" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
+		<Machine Name="23" IP="192.168.1.203" Port="7899" UserName="pc23" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
+		<Machine Name="24" IP="192.168.1.204" Port="7899" UserName="pc24" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
+		<Machine Name="25" IP="192.168.1.205" Port="7899" UserName="pc25" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
+		<Machine Name="26" IP="192.168.1.206" Port="7899" UserName="pc26" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
+		<Machine Name="27" IP="192.168.1.207" Port="7899" UserName="pc27" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
+        <Machine Name="28" IP="192.168.1.208" Port="7899" UserName="pc28" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
+		<Machine Name="29" IP="192.168.1.129" Port="7899" UserName="pc29" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
+		<Machine Name="30" IP="192.168.1.130" Port="7899" UserName="pc30" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
+		<Machine Name="31" IP="192.168.1.131" Port="7899" UserName="pc31" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
+	</Group>
+
+</root>
