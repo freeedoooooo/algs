@@ -262,9 +262,19 @@ function Send-AlertMail {
         throw 'Alert.To is empty.'
     }
 
+    $safeRecipients = @($recipients | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+    $recipientText = ($safeRecipients -join '; ')
+    $smtpSummary = '{0}:{1}, SSL={2}, User={3}' -f `
+        [string]$AlertSettings.SmtpHost,
+        [int]$AlertSettings.SmtpPort,
+        [bool]$AlertSettings.UseSsl,
+        [string]$AlertSettings.UserName
+
+    Write-Log -Message "Preparing email. Subject=$Subject; To=$recipientText; SMTP=$smtpSummary" -LogFile $LogFile
+
     $message = [System.Net.Mail.MailMessage]::new()
     $message.From = [System.Net.Mail.MailAddress]::new([string]$AlertSettings.From)
-    foreach ($recipient in $recipients) {
+    foreach ($recipient in $safeRecipients) {
         if (-not [string]::IsNullOrWhiteSpace([string]$recipient)) {
             $message.To.Add([string]$recipient)
         }
@@ -286,7 +296,12 @@ function Send-AlertMail {
 
     try {
         $smtpClient.Send($message)
-        Write-Log -Message "Alert email sent: $Subject" -LogFile $LogFile
+        Write-Log -Message "Alert email sent successfully. Subject=$Subject; To=$recipientText" -LogFile $LogFile
+    }
+    catch {
+        $baseException = $_.Exception.GetBaseException()
+        Write-Log -Message "Alert email send failed. Subject=$Subject; To=$recipientText; Error=$($baseException.Message)" -LogFile $LogFile
+        throw
     }
     finally {
         $message.Dispose()
@@ -585,6 +600,23 @@ if ($machines.Count -eq 0) {
 $groupCount = ($machines.Group | Sort-Object -Unique).Count
 Write-Log -Message "Loaded $($machines.Count) machines from $groupCount groups." -LogFile $logFile
 
+if ([bool]$settings.Alert.Enabled) {
+    $mailToText = (@($settings.Alert.To) -join '; ')
+    $mailSummary = '{0}:{1}, SSL={2}, From={3}, To={4}, FailureThreshold={5}, RecoveryThreshold={6}, ReminderMinutes={7}' -f `
+        [string]$settings.Alert.SmtpHost,
+        [int]$settings.Alert.SmtpPort,
+        [bool]$settings.Alert.UseSsl,
+        [string]$settings.Alert.From,
+        $mailToText,
+        [int]$settings.Alert.FailureThreshold,
+        [int]$settings.Alert.RecoveryThreshold,
+        [int]$settings.Alert.ReminderMinutes
+    Write-Log -Message "Email alert enabled. $mailSummary" -LogFile $logFile
+}
+else {
+    Write-Log -Message 'Email alert disabled.' -LogFile $logFile
+}
+
 $shouldPing = (-not $SkipPing.IsPresent) -and (
     [bool]$settings.RequirePingForOnline -or
     [bool]$settings.TestPingWhenTcpFails
@@ -629,6 +661,22 @@ $alertChanges = Update-StateAndCollectAlerts `
 
 Save-State -State $alertChanges.State -Path $statePath
 
+Write-Log -Message ("Alert evaluation: offlineToSend={0}, recoveryToSend={1}" -f $alertChanges.OfflineAlerts.Count, $alertChanges.RecoveryAlerts.Count) -LogFile $logFile
+
+if ($alertChanges.OfflineAlerts.Count -gt 0) {
+    $offlineTargets = ($alertChanges.OfflineAlerts | ForEach-Object {
+            '{0}/{1}/{2}:{3}' -f $_.Machine.Group, $_.Machine.Name, $_.Machine.IP, $_.Machine.Port
+        }) -join ', '
+    Write-Log -Message "Offline alerts pending: $offlineTargets" -LogFile $logFile
+}
+
+if ($alertChanges.RecoveryAlerts.Count -gt 0) {
+    $recoveryTargets = ($alertChanges.RecoveryAlerts | ForEach-Object {
+            '{0}/{1}/{2}:{3}' -f $_.Machine.Group, $_.Machine.Name, $_.Machine.IP, $_.Machine.Port
+        }) -join ', '
+    Write-Log -Message "Recovery alerts pending: $recoveryTargets" -LogFile $logFile
+}
+
 $reportPayload = [pscustomobject]@{
     CheckedAt = $checkedAt.ToString('s')
     Summary   = $summary
@@ -661,13 +709,21 @@ if ([bool]$settings.Alert.Enabled) {
     if ($alertChanges.OfflineAlerts.Count -gt 0) {
         $offlineBody = Build-OfflineAlertBody -Alerts $alertChanges.OfflineAlerts -CheckedAt $checkedAt -Summary $summary
         $offlineSubject = "{0} {1} machine(s) offline" -f $subjectPrefix, $alertChanges.OfflineAlerts.Count
+        Write-Log -Message "Sending offline alert email. Subject=$offlineSubject" -LogFile $logFile
         Send-AlertMail -AlertSettings $settings.Alert -Subject $offlineSubject -Body $offlineBody -LogFile $logFile
+    }
+    else {
+        Write-Log -Message 'No offline alert email to send in this round.' -LogFile $logFile
     }
 
     if ($alertChanges.RecoveryAlerts.Count -gt 0) {
         $recoveryBody = Build-RecoveryAlertBody -Alerts $alertChanges.RecoveryAlerts -CheckedAt $checkedAt -Summary $summary
         $recoverySubject = "{0} {1} machine(s) recovered" -f $subjectPrefix, $alertChanges.RecoveryAlerts.Count
+        Write-Log -Message "Sending recovery alert email. Subject=$recoverySubject" -LogFile $logFile
         Send-AlertMail -AlertSettings $settings.Alert -Subject $recoverySubject -Body $recoveryBody -LogFile $logFile
+    }
+    else {
+        Write-Log -Message 'No recovery alert email to send in this round.' -LogFile $logFile
     }
 }
 
