@@ -8,19 +8,20 @@
   "StatePath": "output/monitor-state.json",
   "LogDirectory": "output/logs",
   "Alert": {
-    "Enabled": false,
+    "Enabled": true,
     "FailureThreshold": 3,
     "RecoveryThreshold": 2,
     "ReminderMinutes": 60,
-    "From": "monitor@example.com",
+    "From": "2504601121@qq.com",
     "To": [
-      "admin@example.com"
+      "195836303@qq.com",
+      "3198127828@qq.com"
     ],
-    "SmtpHost": "smtp.example.com",
-    "SmtpPort": 465,
+    "SmtpHost": "smtp.qq.com",
+    "SmtpPort": 587,
     "UseSsl": true,
-    "UserName": "monitor@example.com",
-    "Password": "replace-with-real-password",
+    "UserName": "2504601121@qq.com",
+    "Password": "tibskdiwwcvoecge",
     "SubjectPrefix": "[PC-Monitor]"
   }
 }
