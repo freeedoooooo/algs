@@ -464,42 +464,48 @@ function Get-MachineStatus {
         [bool]$TcpReachable,
         [string]$TcpError,
         [bool]$ShouldPing,
+        [bool]$RequirePingForOnline,
         [int]$PingTimeoutMs
     )
-
-    if ($TcpReachable) {
-        return [pscustomobject]@{
-            Group         = $Machine.Group
-            Name          = $Machine.Name
-            IP            = $Machine.IP
-            Port          = $Machine.Port
-            UserName      = $Machine.UserName
-            Mac           = $Machine.Mac
-            Status        = 'UP'
-            TcpReachable  = $true
-            PingReachable = $null
-            LatencyMs     = $null
-            Note          = 'TCP connected'
-        }
-    }
 
     $pingReachable = $null
     $latencyMs = $null
     $note = $TcpError
     $status = 'DOWN'
+    $tcpNote = if ($TcpReachable) { 'TCP connected' } else { $TcpError }
 
     if ($ShouldPing) {
         $ping = Test-PingStatus -IP $Machine.IP -TimeoutMs $PingTimeoutMs
         $pingReachable = $ping.Reachable
         $latencyMs = $ping.LatencyMs
 
-        if ($ping.Reachable) {
-            $status = 'HOST_UP_PORT_DOWN'
-            $note = "Ping ok, port closed or filtered; $TcpError"
+        if ($TcpReachable -and $RequirePingForOnline) {
+            if ($ping.Reachable) {
+                $status = 'UP'
+                $note = "Ping ok ($latencyMs ms), TCP connected"
+            }
+            else {
+                $note = "Ping failed ($($ping.Status)); TCP connected"
+            }
         }
-        else {
-            $note = "Ping failed ($($ping.Status)); $TcpError"
+        elseif (-not $TcpReachable) {
+            if ($ping.Reachable) {
+                $status = 'HOST_UP_PORT_DOWN'
+                $note = "Ping ok ($latencyMs ms), port closed or filtered; $TcpError"
+            }
+            else {
+                $note = "Ping failed ($($ping.Status)); $TcpError"
+            }
         }
+    }
+    elseif ($TcpReachable) {
+        $status = 'UP'
+        $note = $tcpNote
+    }
+
+    if ($TcpReachable -and -not $RequirePingForOnline -and $ShouldPing -and $null -eq $pingReachable) {
+        $status = 'UP'
+        $note = $tcpNote
     }
 
     return [pscustomobject]@{
@@ -520,6 +526,7 @@ function Get-MachineStatus {
 $defaultSettings = @{
     TimeoutMs            = 1500
     PingTimeoutMs        = 800
+    RequirePingForOnline = $true
     TestPingWhenTcpFails = $true
     OnlyShowOffline      = $false
     ReportPath           = 'output/last-report.json'
@@ -578,7 +585,11 @@ if ($machines.Count -eq 0) {
 $groupCount = ($machines.Group | Sort-Object -Unique).Count
 Write-Log -Message "Loaded $($machines.Count) machines from $groupCount groups." -LogFile $logFile
 
-$shouldPing = (-not $SkipPing.IsPresent) -and [bool]$settings.TestPingWhenTcpFails
+$shouldPing = (-not $SkipPing.IsPresent) -and (
+    [bool]$settings.RequirePingForOnline -or
+    [bool]$settings.TestPingWhenTcpFails
+)
+$requirePingForOnline = (-not $SkipPing.IsPresent) -and [bool]$settings.RequirePingForOnline
 
 $report = @(
 foreach ($machine in $machines) {
@@ -588,6 +599,7 @@ foreach ($machine in $machines) {
         -TcpReachable $tcpResult.Reachable `
         -TcpError $tcpResult.Error `
         -ShouldPing $shouldPing `
+        -RequirePingForOnline $requirePingForOnline `
         -PingTimeoutMs ([int]$settings.PingTimeoutMs)
 }
 )

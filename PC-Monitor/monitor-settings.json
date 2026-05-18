@@ -1,6 +1,7 @@
 {
   "TimeoutMs": 1500,
   "PingTimeoutMs": 800,
+  "RequirePingForOnline": true,
   "TestPingWhenTcpFails": true,
   "OnlyShowOffline": false,
   "ReportPath": "output/last-report.json",
