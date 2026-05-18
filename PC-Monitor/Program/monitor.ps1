@@ -7,6 +7,12 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function Format-TimeStamp {
+    param([datetime]$Value)
+
+    return $Value.ToString('yyyy-MM-dd HH:mm:ss')
+}
+
 function Merge-Settings {
     param(
         [hashtable]$Defaults,
@@ -168,13 +174,13 @@ function Update-StateAndCollectAlerts {
             $record.ConsecutiveFailures = 0
 
             if ($previousStatus -ne 'UP') {
-                $record.LastStatusChangeAt = $CheckedAt.ToString('s')
+                $record.LastStatusChangeAt = Format-TimeStamp -Value $CheckedAt
             }
 
             if ([bool]$record.AlertActive -and [int]$record.ConsecutiveSuccesses -ge $recoveryThreshold) {
                 $record.AlertActive = $false
-                $record.LastRecoveredAt = $CheckedAt.ToString('s')
-                $record.LastAlertedAt = $CheckedAt.ToString('s')
+                $record.LastRecoveredAt = Format-TimeStamp -Value $CheckedAt
+                $record.LastAlertedAt = Format-TimeStamp -Value $CheckedAt
                 $recoveryAlerts += [pscustomobject]@{
                     Machine         = $machine
                     FirstFailureAt  = $record.FirstFailureAt
@@ -189,8 +195,8 @@ function Update-StateAndCollectAlerts {
             $record.ConsecutiveSuccesses = 0
 
             if ($previousStatus -eq 'UP' -or [string]::IsNullOrWhiteSpace([string]$record.FirstFailureAt)) {
-                $record.FirstFailureAt = $CheckedAt.ToString('s')
-                $record.LastStatusChangeAt = $CheckedAt.ToString('s')
+                $record.FirstFailureAt = Format-TimeStamp -Value $CheckedAt
+                $record.LastStatusChangeAt = Format-TimeStamp -Value $CheckedAt
             }
 
             $shouldSendFailureAlert = $false
@@ -208,7 +214,7 @@ function Update-StateAndCollectAlerts {
 
             if ($shouldSendFailureAlert) {
                 $record.AlertActive = $true
-                $record.LastAlertedAt = $CheckedAt.ToString('s')
+                $record.LastAlertedAt = Format-TimeStamp -Value $CheckedAt
                 $offlineAlerts += [pscustomobject]@{
                     Machine             = $machine
                     FirstFailureAt      = $record.FirstFailureAt
@@ -219,7 +225,7 @@ function Update-StateAndCollectAlerts {
         }
 
         $record.Status = $machine.Status
-        $record.LastCheckedAt = $CheckedAt.ToString('s')
+        $record.LastCheckedAt = Format-TimeStamp -Value $CheckedAt
         $record.LastNote = $machine.Note
         $State[$key] = $record
     }
@@ -318,7 +324,7 @@ function Build-OfflineAlertBody {
 
     $lines = New-Object System.Collections.Generic.List[string]
     $lines.Add("PC Monitor detected offline machines.")
-    $lines.Add("CheckedAt: $($CheckedAt.ToString('yyyy-MM-dd HH:mm:ss'))")
+    $lines.Add("CheckedAt: $(Format-TimeStamp -Value $CheckedAt)")
     $lines.Add("Online: $($Summary.OnlineCount), HostUpPortDown: $($Summary.HostUpPortDownCount), Down: $($Summary.DownCount)")
     $lines.Add('')
 
@@ -342,7 +348,7 @@ function Build-RecoveryAlertBody {
 
     $lines = New-Object System.Collections.Generic.List[string]
     $lines.Add("PC Monitor detected recovered machines.")
-    $lines.Add("CheckedAt: $($CheckedAt.ToString('yyyy-MM-dd HH:mm:ss'))")
+    $lines.Add("CheckedAt: $(Format-TimeStamp -Value $CheckedAt)")
     $lines.Add("Online: $($Summary.OnlineCount), HostUpPortDown: $($Summary.HostUpPortDownCount), Down: $($Summary.DownCount)")
     $lines.Add('')
 
@@ -363,7 +369,7 @@ function Write-Log {
         [string]$LogFile
     )
 
-    $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    $timestamp = Format-TimeStamp -Value (Get-Date)
     $line = "[{0}] {1}" -f $timestamp, $Message
     Write-Host $line
     Add-Content -LiteralPath $LogFile -Value $line -Encoding UTF8
@@ -643,7 +649,7 @@ $downItems = @($reportItems | Where-Object Status -eq 'DOWN')
 $failureItems = @($reportItems | Where-Object Status -ne 'UP')
 
 $summary = [pscustomobject]@{
-    CheckedAt           = $checkedAt.ToString('s')
+    CheckedAt           = Format-TimeStamp -Value $checkedAt
     MachineCount        = $reportItems.Count
     GroupCount          = $groupCount
     OnlineCount         = $onlineItems.Count
@@ -678,7 +684,7 @@ if ($alertChanges.RecoveryAlerts.Count -gt 0) {
 }
 
 $reportPayload = [pscustomobject]@{
-    CheckedAt = $checkedAt.ToString('s')
+    CheckedAt = Format-TimeStamp -Value $checkedAt
     Summary   = $summary
     Machines  = $report
 }
