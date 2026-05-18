@@ -5,5 +5,22 @@
   "OnlyShowOffline": false,
   "ReportPath": "output/last-report.json",
   "SummaryPath": "output/last-summary.json",
-  "LogDirectory": "output/logs"
+  "StatePath": "output/monitor-state.json",
+  "LogDirectory": "output/logs",
+  "Alert": {
+    "Enabled": false,
+    "FailureThreshold": 3,
+    "RecoveryThreshold": 2,
+    "ReminderMinutes": 60,
+    "From": "monitor@example.com",
+    "To": [
+      "admin@example.com"
+    ],
+    "SmtpHost": "smtp.example.com",
+    "SmtpPort": 465,
+    "UseSsl": true,
+    "UserName": "monitor@example.com",
+    "Password": "replace-with-real-password",
+    "SubjectPrefix": "[PC-Monitor]"
+  }
 }

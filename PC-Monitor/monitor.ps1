@@ -56,6 +56,292 @@ function Ensure-ParentDirectory {
     }
 }
 
+function ConvertTo-Hashtable {
+    param([object]$InputObject)
+
+    if ($null -eq $InputObject) {
+        return $null
+    }
+
+    $result = @{}
+    foreach ($property in $InputObject.PSObject.Properties) {
+        $value = $property.Value
+        if ($value -is [System.Management.Automation.PSCustomObject]) {
+            $result[$property.Name] = ConvertTo-Hashtable -InputObject $value
+        }
+        elseif ($value -is [System.Array]) {
+            $items = @()
+            foreach ($item in $value) {
+                if ($item -is [System.Management.Automation.PSCustomObject]) {
+                    $items += , (ConvertTo-Hashtable -InputObject $item)
+                }
+                else {
+                    $items += , $item
+                }
+            }
+            $result[$property.Name] = $items
+        }
+        else {
+            $result[$property.Name] = $value
+        }
+    }
+
+    return $result
+}
+
+function Load-State {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return @{}
+    }
+
+    $raw = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
+    if ([string]::IsNullOrWhiteSpace($raw)) {
+        return @{}
+    }
+
+    $stateObject = $raw | ConvertFrom-Json
+    return ConvertTo-Hashtable -InputObject $stateObject
+}
+
+function Save-State {
+    param(
+        [hashtable]$State,
+        [string]$Path
+    )
+
+    $State | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $Path -Encoding UTF8
+}
+
+function Get-MachineKey {
+    param([object]$Machine)
+
+    return '{0}|{1}|{2}|{3}' -f $Machine.Group, $Machine.Name, $Machine.IP, $Machine.Port
+}
+
+function New-StateRecord {
+    return @{
+        Status                = 'UNKNOWN'
+        ConsecutiveFailures   = 0
+        ConsecutiveSuccesses  = 0
+        FirstFailureAt        = $null
+        LastCheckedAt         = $null
+        LastStatusChangeAt    = $null
+        LastAlertedAt         = $null
+        LastRecoveredAt       = $null
+        AlertActive           = $false
+        LastNote              = $null
+    }
+}
+
+function Update-StateAndCollectAlerts {
+    param(
+        [object[]]$Report,
+        [hashtable]$State,
+        [datetime]$CheckedAt,
+        [hashtable]$AlertSettings
+    )
+
+    $offlineAlerts = @()
+    $recoveryAlerts = @()
+    $activeKeys = @{}
+
+    $failureThreshold = [int]$AlertSettings.FailureThreshold
+    $recoveryThreshold = [int]$AlertSettings.RecoveryThreshold
+    $reminderMinutes = [int]$AlertSettings.ReminderMinutes
+
+    foreach ($machine in $Report) {
+        $key = Get-MachineKey -Machine $machine
+        $activeKeys[$key] = $true
+
+        if (-not $State.ContainsKey($key) -or $null -eq $State[$key]) {
+            $State[$key] = New-StateRecord
+        }
+
+        $record = $State[$key]
+        $previousStatus = [string]$record.Status
+        $isUp = ($machine.Status -eq 'UP')
+
+        if ($isUp) {
+            $record.ConsecutiveSuccesses = [int]$record.ConsecutiveSuccesses + 1
+            $record.ConsecutiveFailures = 0
+
+            if ($previousStatus -ne 'UP') {
+                $record.LastStatusChangeAt = $CheckedAt.ToString('s')
+            }
+
+            if ([bool]$record.AlertActive -and [int]$record.ConsecutiveSuccesses -ge $recoveryThreshold) {
+                $record.AlertActive = $false
+                $record.LastRecoveredAt = $CheckedAt.ToString('s')
+                $record.LastAlertedAt = $CheckedAt.ToString('s')
+                $recoveryAlerts += [pscustomobject]@{
+                    Machine         = $machine
+                    FirstFailureAt  = $record.FirstFailureAt
+                    LastRecoveredAt = $record.LastRecoveredAt
+                }
+            }
+
+            $record.FirstFailureAt = $null
+        }
+        else {
+            $record.ConsecutiveFailures = [int]$record.ConsecutiveFailures + 1
+            $record.ConsecutiveSuccesses = 0
+
+            if ($previousStatus -eq 'UP' -or [string]::IsNullOrWhiteSpace([string]$record.FirstFailureAt)) {
+                $record.FirstFailureAt = $CheckedAt.ToString('s')
+                $record.LastStatusChangeAt = $CheckedAt.ToString('s')
+            }
+
+            $shouldSendFailureAlert = $false
+            if ([int]$record.ConsecutiveFailures -ge $failureThreshold) {
+                if (-not [bool]$record.AlertActive) {
+                    $shouldSendFailureAlert = $true
+                }
+                elseif (-not [string]::IsNullOrWhiteSpace([string]$record.LastAlertedAt)) {
+                    $lastAlertedAt = [datetime]::Parse($record.LastAlertedAt)
+                    if ($reminderMinutes -gt 0 -and $lastAlertedAt.AddMinutes($reminderMinutes) -le $CheckedAt) {
+                        $shouldSendFailureAlert = $true
+                    }
+                }
+            }
+
+            if ($shouldSendFailureAlert) {
+                $record.AlertActive = $true
+                $record.LastAlertedAt = $CheckedAt.ToString('s')
+                $offlineAlerts += [pscustomobject]@{
+                    Machine             = $machine
+                    FirstFailureAt      = $record.FirstFailureAt
+                    ConsecutiveFailures = $record.ConsecutiveFailures
+                    LastAlertedAt       = $record.LastAlertedAt
+                }
+            }
+        }
+
+        $record.Status = $machine.Status
+        $record.LastCheckedAt = $CheckedAt.ToString('s')
+        $record.LastNote = $machine.Note
+        $State[$key] = $record
+    }
+
+    foreach ($stateKey in @($State.Keys)) {
+        if (-not $activeKeys.ContainsKey($stateKey)) {
+            $State.Remove($stateKey)
+        }
+    }
+
+    $result = [ordered]@{}
+    $result['OfflineAlerts'] = @($offlineAlerts)
+    $result['RecoveryAlerts'] = @($recoveryAlerts)
+    $result['State'] = $State
+    return $result
+}
+
+function Send-AlertMail {
+    param(
+        [hashtable]$AlertSettings,
+        [string]$Subject,
+        [string]$Body,
+        [string]$LogFile
+    )
+
+    if (-not [bool]$AlertSettings.Enabled) {
+        return
+    }
+
+    if ([string]::IsNullOrWhiteSpace([string]$AlertSettings.SmtpHost)) {
+        throw 'Alert.SmtpHost is empty.'
+    }
+
+    if ([string]::IsNullOrWhiteSpace([string]$AlertSettings.From)) {
+        throw 'Alert.From is empty.'
+    }
+
+    $recipients = @($AlertSettings.To)
+    if ($recipients.Count -eq 0) {
+        throw 'Alert.To is empty.'
+    }
+
+    $message = [System.Net.Mail.MailMessage]::new()
+    $message.From = [System.Net.Mail.MailAddress]::new([string]$AlertSettings.From)
+    foreach ($recipient in $recipients) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$recipient)) {
+            $message.To.Add([string]$recipient)
+        }
+    }
+    $message.Subject = $Subject
+    $message.Body = $Body
+    $message.BodyEncoding = [System.Text.Encoding]::UTF8
+    $message.SubjectEncoding = [System.Text.Encoding]::UTF8
+
+    $smtpClient = [System.Net.Mail.SmtpClient]::new([string]$AlertSettings.SmtpHost, [int]$AlertSettings.SmtpPort)
+    $smtpClient.EnableSsl = [bool]$AlertSettings.UseSsl
+
+    if (-not [string]::IsNullOrWhiteSpace([string]$AlertSettings.UserName)) {
+        $smtpClient.Credentials = [System.Net.NetworkCredential]::new(
+            [string]$AlertSettings.UserName,
+            [string]$AlertSettings.Password
+        )
+    }
+
+    try {
+        $smtpClient.Send($message)
+        Write-Log -Message "Alert email sent: $Subject" -LogFile $LogFile
+    }
+    finally {
+        $message.Dispose()
+        $smtpClient.Dispose()
+    }
+}
+
+function Build-OfflineAlertBody {
+    param(
+        [object[]]$Alerts,
+        [datetime]$CheckedAt,
+        [object]$Summary
+    )
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add("PC Monitor detected offline machines.")
+    $lines.Add("CheckedAt: $($CheckedAt.ToString('yyyy-MM-dd HH:mm:ss'))")
+    $lines.Add("Online: $($Summary.OnlineCount), HostUpPortDown: $($Summary.HostUpPortDownCount), Down: $($Summary.DownCount)")
+    $lines.Add('')
+
+    foreach ($alert in $Alerts | Sort-Object { $_.Machine.Group }, { [int]$_.Machine.Name }) {
+        $machine = $alert.Machine
+        $lines.Add(("Group={0}, Name={1}, IP={2}, Port={3}, Status={4}" -f $machine.Group, $machine.Name, $machine.IP, $machine.Port, $machine.Status))
+        $lines.Add(("FirstFailureAt={0}, ConsecutiveFailures={1}" -f $alert.FirstFailureAt, $alert.ConsecutiveFailures))
+        $lines.Add(("Note={0}" -f $machine.Note))
+        $lines.Add('')
+    }
+
+    return ($lines -join [Environment]::NewLine)
+}
+
+function Build-RecoveryAlertBody {
+    param(
+        [object[]]$Alerts,
+        [datetime]$CheckedAt,
+        [object]$Summary
+    )
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add("PC Monitor detected recovered machines.")
+    $lines.Add("CheckedAt: $($CheckedAt.ToString('yyyy-MM-dd HH:mm:ss'))")
+    $lines.Add("Online: $($Summary.OnlineCount), HostUpPortDown: $($Summary.HostUpPortDownCount), Down: $($Summary.DownCount)")
+    $lines.Add('')
+
+    foreach ($alert in $Alerts | Sort-Object { $_.Machine.Group }, { [int]$_.Machine.Name }) {
+        $machine = $alert.Machine
+        $lines.Add(("Group={0}, Name={1}, IP={2}, Port={3}, Status={4}" -f $machine.Group, $machine.Name, $machine.IP, $machine.Port, $machine.Status))
+        $lines.Add(("FirstFailureAt={0}, RecoveredAt={1}" -f $alert.FirstFailureAt, $alert.LastRecoveredAt))
+        $lines.Add(("Note={0}" -f $machine.Note))
+        $lines.Add('')
+    }
+
+    return ($lines -join [Environment]::NewLine)
+}
+
 function Write-Log {
     param(
         [string]$Message,
@@ -238,7 +524,22 @@ $defaultSettings = @{
     OnlyShowOffline      = $false
     ReportPath           = 'output/last-report.json'
     SummaryPath          = 'output/last-summary.json'
+    StatePath            = 'output/monitor-state.json'
     LogDirectory         = 'output/logs'
+    Alert                = @{
+        Enabled          = $false
+        FailureThreshold = 3
+        RecoveryThreshold = 2
+        ReminderMinutes  = 60
+        From             = 'monitor@example.com'
+        To               = @('admin@example.com')
+        SmtpHost         = 'smtp.example.com'
+        SmtpPort         = 465
+        UseSsl           = $true
+        UserName         = 'monitor@example.com'
+        Password         = 'replace-with-real-password'
+        SubjectPrefix    = '[PC-Monitor]'
+    }
 }
 
 $settings = Merge-Settings -Defaults $defaultSettings -Path $SettingsPath
@@ -249,7 +550,11 @@ if ([string]::IsNullOrWhiteSpace($baseDirectory)) {
 
 $reportPath = Resolve-ConfigPath -Path $settings.ReportPath -BaseDirectory $baseDirectory
 $summaryPath = Resolve-ConfigPath -Path $settings.SummaryPath -BaseDirectory $baseDirectory
+$statePath = Resolve-ConfigPath -Path $settings.StatePath -BaseDirectory $baseDirectory
 $logDirectory = Resolve-ConfigPath -Path $settings.LogDirectory -BaseDirectory $baseDirectory
+if ($settings.Alert -is [System.Management.Automation.PSCustomObject]) {
+    $settings.Alert = ConvertTo-Hashtable -InputObject $settings.Alert
+}
 
 if (-not (Test-Path -LiteralPath $logDirectory)) {
     New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
@@ -257,6 +562,7 @@ if (-not (Test-Path -LiteralPath $logDirectory)) {
 
 Ensure-ParentDirectory -Path $reportPath
 Ensure-ParentDirectory -Path $summaryPath
+Ensure-ParentDirectory -Path $statePath
 
 $logFile = Join-Path $logDirectory ("monitor-{0}.log" -f (Get-Date -Format 'yyyyMMdd'))
 $checkedAt = Get-Date
@@ -302,6 +608,15 @@ $summary = [pscustomobject]@{
     HasFailures         = ($failureItems.Count -gt 0)
 }
 
+$state = Load-State -Path $statePath
+$alertChanges = Update-StateAndCollectAlerts `
+    -Report $reportItems `
+    -State $state `
+    -CheckedAt $checkedAt `
+    -AlertSettings $settings.Alert
+
+Save-State -State $alertChanges.State -Path $statePath
+
 $reportPayload = [pscustomobject]@{
     CheckedAt = $checkedAt.ToString('s')
     Summary   = $summary
@@ -326,6 +641,23 @@ Write-Host ("Checked at: {0}" -f $summary.CheckedAt)
 Write-Host ("Online: {0}, HostUpPortDown: {1}, Down: {2}" -f $summary.OnlineCount, $summary.HostUpPortDownCount, $summary.DownCount)
 Write-Host ("Detailed report: {0}" -f $reportPath)
 Write-Host ("Summary report:  {0}" -f $summaryPath)
+Write-Host ("State file:      {0}" -f $statePath)
+
+if ([bool]$settings.Alert.Enabled) {
+    $subjectPrefix = [string]$settings.Alert.SubjectPrefix
+
+    if ($alertChanges.OfflineAlerts.Count -gt 0) {
+        $offlineBody = Build-OfflineAlertBody -Alerts $alertChanges.OfflineAlerts -CheckedAt $checkedAt -Summary $summary
+        $offlineSubject = "{0} {1} machine(s) offline" -f $subjectPrefix, $alertChanges.OfflineAlerts.Count
+        Send-AlertMail -AlertSettings $settings.Alert -Subject $offlineSubject -Body $offlineBody -LogFile $logFile
+    }
+
+    if ($alertChanges.RecoveryAlerts.Count -gt 0) {
+        $recoveryBody = Build-RecoveryAlertBody -Alerts $alertChanges.RecoveryAlerts -CheckedAt $checkedAt -Summary $summary
+        $recoverySubject = "{0} {1} machine(s) recovered" -f $subjectPrefix, $alertChanges.RecoveryAlerts.Count
+        Send-AlertMail -AlertSettings $settings.Alert -Subject $recoverySubject -Body $recoveryBody -LogFile $logFile
+    }
+}
 
 Write-Log -Message ("Finished check. Online={0}, HostUpPortDown={1}, Down={2}" -f $summary.OnlineCount, $summary.HostUpPortDownCount, $summary.DownCount) -LogFile $logFile
 
