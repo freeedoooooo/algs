@@ -1,0 +1,9 @@
+{
+  "TimeoutMs": 1500,
+  "PingTimeoutMs": 800,
+  "TestPingWhenTcpFails": true,
+  "OnlyShowOffline": false,
+  "ReportPath": "output/last-report.json",
+  "SummaryPath": "output/last-summary.json",
+  "LogDirectory": "output/logs"
+}
