@@ -42,8 +42,10 @@ function Parse-MachineConfig {
 function Test-Ping {
     param([string]$IP, [int]$TimeoutMs)
     try {
-        $null = Test-Connection -ComputerName $IP -Count 1 -TimeoutMs $TimeoutMs -ErrorAction Stop
-        return $true
+        # PowerShell 5.1 兼容：使用 WMI 查询方式，支持自定义超时
+        $query = "SELECT * FROM Win32_PingStatus WHERE Address='$IP' AND Timeout=$TimeoutMs"
+        $result = Get-WmiObject -Query $query -ErrorAction Stop
+        return ($result.StatusCode -eq 0)
     }
     catch { return $false }
 }
@@ -120,14 +122,24 @@ foreach ($pc in $machines) {
     $pingOk = Test-Ping -IP $pc.IP -TimeoutMs $Timeout
     $portOk = Test-Port -IP $pc.IP -Port $pc.Port -TimeoutMs $Timeout
 
-    if ($pingOk -and $portOk) {
-        $status = "[ONLINE]"; $flag = "[OK/OK]"; $color = "Green"; $onlineCount++
+    # 判断逻辑：端口通 = 在线（即使 Ping 不通）
+    # 因为很多机器禁用了 ICMP，但服务端口是开放的
+    if ($portOk) {
+        # 端口通，机器在线
+        if ($pingOk) {
+            $status = "[ONLINE]"; $flag = "[OK/OK]"; $color = "Green"
+        } else {
+            $status = "[ONLINE]"; $flag = "[NO-ICMP/OK]"; $color = "Green"
+        }
+        $onlineCount++
     }
     elseif ($pingOk) {
+        # Ping 通但端口不通 = 半通（服务可能未启动）
         $status = "[HALF]"; $flag = "[OK/FAIL]"; $color = "Yellow"; $halfCount++
         $offlineList += $pc
     }
     else {
+        # 都不通 = 离线
         $status = "[OFFLINE]"; $flag = "[FAIL/-]"; $color = "Red"; $offlineCount++
         $offlineList += $pc
     }
