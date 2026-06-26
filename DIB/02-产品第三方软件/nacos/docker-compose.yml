@@ -1,0 +1,28 @@
+networks:
+  c1-network:
+    name: c1-network
+    driver: bridge
+
+services:
+  ########## 注册中心 ##########
+  nacos:
+    image: nacos/nacos-server:v2.3.2
+    container_name: nacos-standalone
+    networks:
+      - c1-network
+    environment:
+      - MODE=standalone
+      - NACOS_AUTH_IDENTITY_KEY=admin
+      - NACOS_AUTH_IDENTITY_VALUE=admin
+      - NACOS_AUTH_TOKEN=VGhpc0lzTXlDdXN0b21TZWNyZXRLZXkwMTIzNDU2Nzg=
+      # 开启认证，默认用户名密码 nacos/nacos，密码修改为 nacos@2025
+      - NACOS_AUTH_ENABLE=true
+    volumes:
+      # 绑定日志和数据目录
+      - /opt/nacos/logs:/home/nacos/logs
+      - /opt/nacos/data:/home/nacos/data
+    ports:
+      - "8880:8080"
+      - "8848:8848"
+      - "9848:9848"
+    restart: unless-stopped

@@ -1,0 +1,44 @@
+{
+  "versions": [
+    {
+      "versionNumber": "1.0.1",
+      "versionTag": "测试版",
+      "changeLog": "调整分类",
+      "versionId": "F0E11CDB-2D9F-43D8-8854-2C59C2BD721D",
+      "createdAt": "2026-03-11 14:12:21",
+      "author": "Administrator",
+      "fileName": "1.0.1.json",
+      "fileSize": 4909269,
+      "fileHash": "5ad66b418ca517a5d1a977ac86d0f5e3",
+      "changeDetails": "",
+      "fileData": {
+        "dbDialect": "MySQL",
+        "incrementSqlScript": "",
+        "conceptTotalCount": 0,
+        "logicTotalCount": 6,
+        "physicTotalCount": 136,
+        "diagramTotalCount": 15
+      }
+    },
+    {
+      "versionNumber": "1.0.0",
+      "versionTag": "测试版",
+      "changeLog": "首次初始化",
+      "versionId": "49C347E9-8EFF-46E6-BED3-17F61F8BB6C4",
+      "createdAt": "2026-03-11 12:57:33",
+      "author": "Administrator",
+      "fileName": "1.0.0.json",
+      "fileSize": 4909085,
+      "fileHash": "46974f6f0df156b25e0178b8e9f64acc",
+      "changeDetails": "",
+      "fileData": {
+        "dbDialect": "MySQL",
+        "incrementSqlScript": "",
+        "conceptTotalCount": 0,
+        "logicTotalCount": 6,
+        "physicTotalCount": 136,
+        "diagramTotalCount": 15
+      }
+    }
+  ]
+}

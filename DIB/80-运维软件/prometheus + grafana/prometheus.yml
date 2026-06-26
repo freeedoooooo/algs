@@ -1,0 +1,98 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  # 监控 Prometheus 自身
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['prometheus:9090']
+
+  # 监控 auth-server 微服务
+  - job_name: 'data-cloud-auth-server'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: [ '10.0.5.142:9090' ]
+      - targets: [ '10.0.5.70:9090' ]
+      - targets: [ '10.0.5.101:9090' ]
+      - targets: [ '10.0.5.239:9090' ]
+
+  # 监控 eureka 微服务
+  - job_name: 'data-cloud-eureka'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: [ '10.0.5.142:10000' ]
+      - targets: [ '10.0.5.70:10000' ]
+      - targets: [ '10.0.5.101:10000' ]
+      - targets: [ '10.0.5.239:10000' ]
+
+  # 监控 gateway 微服务
+  - job_name: 'data-cloud-gateway'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: [ '10.0.5.142:20000' ]
+      - targets: [ '10.0.5.70:20000' ]
+      - targets: [ '10.0.5.101:20000' ]
+      - targets: [ '10.0.5.239:20000' ]
+
+  # 监控 auth-resource 微服务
+  - job_name: 'data-cloud-auth-resource'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: [ '10.0.5.142:20001' ]
+      - targets: [ '10.0.5.70:20001' ]
+      - targets: [ '10.0.5.101:20001' ]
+      - targets: [ '10.0.5.239:20001' ]
+
+  # 监控 mdm 微服务
+  - job_name: 'data-cloud-mdm'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: [ '10.0.5.142:20002' ]
+      - targets: [ '10.0.5.70:20002' ]
+      - targets: [ '10.0.5.101:20002' ]
+      - targets: [ '10.0.5.239:20002' ]
+
+  # 监控 extract 微服务
+  - job_name: 'ms-extract'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: [ '10.0.5.142:30001' ]
+      - targets: [ '10.0.5.70:30001' ]
+      - targets: [ '10.0.5.101:30001' ]
+      - targets: [ '10.0.5.239:30001' ]
+
+  # 监控 report 微服务
+  - job_name: 'ms-report'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['10.0.5.142:30002']
+      - targets: ['10.0.5.70:30002']
+      - targets: ['10.0.5.101:30002']
+      - targets: ['10.0.5.239:30002']
+
+  # 监控 data 微服务
+  - job_name: 'ms-data'
+    metrics_path: '/api/data/actuator/prometheus'
+    static_configs:
+      - targets: [ '10.0.5.142:30003' ]
+      - targets: [ '10.0.5.70:30003' ]
+      - targets: [ '10.0.5.101:30003' ]
+      - targets: [ '10.0.5.239:30003' ]
+
+  # 监控 rule 微服务
+  - job_name: 'ms-rule'
+    metrics_path: '/api/rule/actuator/prometheus'
+    static_configs:
+      - targets: [ '10.0.5.142:30004' ]
+      - targets: [ '10.0.5.70:30004' ]
+      - targets: [ '10.0.5.101:30004' ]
+      - targets: [ '10.0.5.239:30004' ]
+
+  # 监控 dg 微服务
+  - job_name: 'ms-dg'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: [ '10.0.5.142:30005' ]
+      - targets: [ '10.0.5.70:30005' ]
+      - targets: [ '10.0.5.101:30005' ]
+      - targets: [ '10.0.5.239:30005' ]

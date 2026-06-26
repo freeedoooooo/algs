@@ -1,0 +1,125 @@
+<svg width="1600" height="920" viewBox="0 0 1600 920" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#F7FAFE"/>
+      <stop offset="100%" stop-color="#F2F6FB"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#D6E0EA" flood-opacity="0.35"/>
+    </filter>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2F6BFF"/>
+    </marker>
+    <marker id="arrowOrange" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#E8833A"/>
+    </marker>
+    <style>
+      .font { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }
+      .title { font-size: 30px; font-weight: 700; fill: #123B5D; }
+      .subtitle { font-size: 13px; fill: #5E6B78; }
+      .section-tag { font-size: 14px; font-weight: 700; }
+      .box-title { font-size: 22px; font-weight: 700; fill: #123B5D; }
+      .box-sub { font-size: 14px; fill: #384656; }
+      .legend { font-size: 13px; fill: #5E6B78; }
+      .small { font-size: 12px; fill: #6B7785; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1600" height="920" fill="url(#bg)"/>
+  <rect x="48" y="34" width="1504" height="852" rx="24" fill="#FFFFFF" stroke="#D9E2EC" filter="url(#shadow)"/>
+
+  <text x="86" y="88" class="font title">产品技术架构图</text>
+  <text x="86" y="114" class="font subtitle">汇报表达口径：上层入口，中层主链，下层支撑，底座托底</text>
+
+  <line x1="1240" y1="84" x2="1300" y2="84" stroke="#2F6BFF" stroke-width="3" marker-end="url(#arrowBlue)"/>
+  <text x="1312" y="89" class="font legend">主链 / 调用关系</text>
+  <line x1="1240" y1="112" x2="1300" y2="112" stroke="#94A3B8" stroke-width="3" stroke-dasharray="8 7"/>
+  <text x="1312" y="117" class="font legend">挂载 / 承载 / 入口</text>
+
+  <rect x="86" y="146" width="1428" height="176" rx="22" fill="#F8FBFF" stroke="#BED6FF"/>
+  <rect x="106" y="130" width="118" height="34" rx="17" fill="#EEF4FF"/>
+  <text x="165" y="152" text-anchor="middle" class="font section-tag" fill="#2F6BFF">上层入口</text>
+
+  <rect x="130" y="192" width="240" height="88" rx="18" fill="#FFFFFF" stroke="#D9E2EC"/>
+  <text x="250" y="230" text-anchor="middle" class="font box-title" font-size="20" fill="#2F3A48">业务用户</text>
+  <text x="250" y="255" text-anchor="middle" class="font box-sub">项目团队 / 管理层</text>
+
+  <rect x="460" y="182" width="270" height="108" rx="22" fill="#EAF3FF" stroke="#2F6BFF" stroke-width="2"/>
+  <text x="595" y="228" text-anchor="middle" class="font box-title">统一门户</text>
+  <text x="595" y="257" text-anchor="middle" class="font box-sub">app-nav</text>
+
+  <rect x="800" y="182" width="320" height="108" rx="22" fill="#EAF3FF" stroke="#2F6BFF" stroke-width="2"/>
+  <text x="960" y="222" text-anchor="middle" class="font box-title">业务应用</text>
+  <text x="960" y="248" text-anchor="middle" class="font box-sub">app-data / app-report / app-system</text>
+  <text x="960" y="271" text-anchor="middle" class="font small">挂载于统一门户之上</text>
+
+  <rect x="1188" y="182" width="280" height="108" rx="22" fill="#EEF8F6" stroke="#1C8C7A" stroke-width="2"/>
+  <text x="1328" y="222" text-anchor="middle" class="font box-title">统一接入</text>
+  <text x="1328" y="248" text-anchor="middle" class="font box-sub">Nginx / Gateway / Auth</text>
+  <text x="1328" y="271" text-anchor="middle" class="font small">入口、转发、认证、权限控制</text>
+
+  <line x1="370" y1="236" x2="460" y2="236" stroke="#2F6BFF" stroke-width="3" marker-end="url(#arrowBlue)"/>
+  <line x1="730" y1="236" x2="800" y2="236" stroke="#94A3B8" stroke-width="3" stroke-dasharray="8 7"/>
+  <line x1="1120" y1="236" x2="1188" y2="236" stroke="#2F6BFF" stroke-width="3" marker-end="url(#arrowBlue)"/>
+
+  <rect x="86" y="350" width="1428" height="246" rx="22" fill="#FFFDF8" stroke="#F1D9BC"/>
+  <rect x="106" y="334" width="142" height="34" rx="17" fill="#FFF4EA"/>
+  <text x="177" y="356" text-anchor="middle" class="font section-tag" fill="#E8833A">中层主链</text>
+
+  <rect x="126" y="422" width="290" height="118" rx="24" fill="#FFF4EA" stroke="#E8833A" stroke-width="2"/>
+  <text x="271" y="463" text-anchor="middle" class="font box-title">资料提取</text>
+  <text x="271" y="491" text-anchor="middle" class="font box-sub">extract</text>
+  <text x="271" y="516" text-anchor="middle" class="font small">文件 / 清单 / OCR / FTP</text>
+
+  <rect x="450" y="422" width="300" height="118" rx="24" fill="#FFF4EA" stroke="#E8833A" stroke-width="2"/>
+  <text x="600" y="463" text-anchor="middle" class="font box-title">指标 / 规则 / 框架</text>
+  <text x="600" y="491" text-anchor="middle" class="font box-sub">data / rule</text>
+  <text x="600" y="516" text-anchor="middle" class="font small">指标计算 / 规则引擎 / 框架测算</text>
+
+  <rect x="784" y="422" width="280" height="118" rx="24" fill="#FFF4EA" stroke="#E8833A" stroke-width="2"/>
+  <text x="924" y="463" text-anchor="middle" class="font box-title">报告生成</text>
+  <text x="924" y="491" text-anchor="middle" class="font box-sub">report</text>
+  <text x="924" y="516" text-anchor="middle" class="font small">模板 / 变量 / Word 渲染</text>
+
+  <rect x="1098" y="422" width="290" height="118" rx="24" fill="#FFF7ED" stroke="#FB923C" stroke-width="2"/>
+  <text x="1243" y="463" text-anchor="middle" class="font box-title">成果交付</text>
+  <text x="1243" y="491" text-anchor="middle" class="font box-sub">报告 / 指标结果 / 规则结果</text>
+  <text x="1243" y="516" text-anchor="middle" class="font small">业务输出与汇报成果</text>
+
+  <line x1="416" y1="481" x2="450" y2="481" stroke="#E8833A" stroke-width="4" marker-end="url(#arrowOrange)"/>
+  <line x1="750" y1="481" x2="784" y2="481" stroke="#E8833A" stroke-width="4" marker-end="url(#arrowOrange)"/>
+  <line x1="1064" y1="481" x2="1098" y2="481" stroke="#E8833A" stroke-width="4" marker-end="url(#arrowOrange)"/>
+
+  <line x1="1328" y1="290" x2="1328" y2="390" stroke="#2F6BFF" stroke-width="3" marker-end="url(#arrowBlue)"/>
+  <line x1="1328" y1="390" x2="271" y2="390" stroke="#2F6BFF" stroke-width="3"/>
+  <line x1="271" y1="390" x2="271" y2="422" stroke="#2F6BFF" stroke-width="3" marker-end="url(#arrowBlue)"/>
+
+  <line x1="1243" y1="540" x2="1243" y2="566" stroke="#94A3B8" stroke-width="3" stroke-dasharray="8 7"/>
+  <line x1="1243" y1="566" x2="960" y2="566" stroke="#94A3B8" stroke-width="3" stroke-dasharray="8 7"/>
+  <line x1="960" y1="566" x2="960" y2="192" stroke="#94A3B8" stroke-width="3" stroke-dasharray="8 7"/>
+
+  <rect x="86" y="626" width="1428" height="120" rx="22" fill="#F6FFF9" stroke="#B7E4C7"/>
+  <rect x="106" y="610" width="166" height="34" rx="17" fill="#EEF8F6"/>
+  <text x="189" y="632" text-anchor="middle" class="font section-tag" fill="#1C8C7A">下层支撑</text>
+
+  <rect x="170" y="660" width="300" height="58" rx="18" fill="#ECFDF5" stroke="#22C55E" stroke-width="2"/>
+  <text x="320" y="697" text-anchor="middle" class="font box-sub" font-size="18">主数据与治理  ·  mdm / dg</text>
+
+  <rect x="570" y="660" width="460" height="58" rx="18" fill="#F5F3FF" stroke="#7C3AED" stroke-width="2"/>
+  <text x="800" y="697" text-anchor="middle" class="font box-sub" font-size="18">数据资源管理  ·  数据源 / 元数据 / 主题 / 看板</text>
+
+  <rect x="1130" y="660" width="260" height="58" rx="18" fill="#ECFDF5" stroke="#22C55E" stroke-width="2"/>
+  <text x="1260" y="697" text-anchor="middle" class="font box-sub" font-size="18">外部能力  ·  OCR / FTP / TYC / AIGC</text>
+
+  <rect x="86" y="772" width="1428" height="84" rx="22" fill="#F8FAFC" stroke="#D5DEE8"/>
+  <rect x="106" y="756" width="142" height="34" rx="17" fill="#F1F5F9"/>
+  <text x="177" y="778" text-anchor="middle" class="font section-tag" fill="#64748B">底座托底</text>
+
+  <rect x="198" y="798" width="760" height="36" rx="18" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <text x="578" y="821" text-anchor="middle" class="font box-sub" font-size="17">服务治理与存储  ·  Nacos / Redis / MinIO / MySQL / DM8 / GBase</text>
+
+  <rect x="1012" y="798" width="390" height="36" rx="18" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <text x="1207" y="821" text-anchor="middle" class="font box-sub" font-size="17">运维监控  ·  Prometheus / Grafana</text>
+
+  <text x="1430" y="821" text-anchor="end" class="font small">适合汇报页展示，不展开细粒度依赖</text>
+</svg>

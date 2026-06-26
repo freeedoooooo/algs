@@ -1,0 +1,22 @@
+services:
+  ollama:
+    # load image ollama=v0.12.9
+    image: ollama:v0.12.9
+    # 官网地址
+    # image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      # Ollama API 端口
+      - "11434:11434"
+    volumes:
+      # 持久化模型目录
+      - ollama_models:/root/.ollama
+    environment:
+      # 监听所有接口
+      - OLLAMA_HOST=0.0.0.0
+      # 允许跨域（可选）
+      - OLLAMA_ORIGINS=*
+    restart: unless-stopped
+
+volumes:
+  ollama_models:

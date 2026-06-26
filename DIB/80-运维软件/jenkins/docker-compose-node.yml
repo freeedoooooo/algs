@@ -1,0 +1,16 @@
+services:
+  node-builder:
+    # node:14.21.3-alpine
+    image: node:20.17.0-alpine
+    # jenkins-node14-builder
+    container_name: jenkins-node20-builder
+    working_dir: /workspace
+    volumes:
+      # 挂载项目工作目录（由外部指定或绑定）
+      - /opt/jenkins/workspace:/workspace
+      # 👇 关键：挂载宿主机的 npm 配置和缓存
+      - ~/.npmrc:/root/.npmrc:ro          # 只读挂载 .npmrc
+      - ~/.npm:/root/.npm                 # 挂载 npm 缓存（可写）
+    # 保持容器长期运行（用于 Jenkins 复用）
+    command: tail -f /dev/null
+    restart: unless-stopped

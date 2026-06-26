@@ -1,0 +1,84 @@
+filebeat.inputs:
+  - type: log
+    enabled: true
+    paths:
+      - /opt/app/backend/platform-gateway/logs/*info.log
+    fields:
+      product: c1
+      app: gateway
+      env: demo-bank
+      
+  - type: log
+    enabled: true
+    paths:
+      - /opt/app/backend/platform-auth-server/logs/*info.log
+    fields:
+      product: c1
+      app: auth-server
+      env: demo-bank
+  
+  - type: log
+    enabled: true
+    paths:
+      - /opt/app/backend/platform-auth-resource/logs/*info.log
+    fields:
+      product: c1
+      app: auth-resource
+      env: demo-bank
+
+  - type: log
+    enabled: true
+    paths:
+      - /opt/app/backend/platform-mdm/logs/*info.log
+    fields:
+      product: c1
+      app: mdm
+      env: demo-bank
+
+  - type: log
+    enabled: true
+    paths:
+      - /opt/app/backend/c1-extract/logs/*info.log
+    fields:
+      product: c1
+      app: extract
+      env: demo-bank
+  
+  - type: log
+    enabled: true
+    paths:
+      - /opt/app/backend/c1-report/logs/*info.log
+    fields:
+      product: c1
+      app: report
+      env: demo-bank
+
+  - type: log
+    enabled: true
+    paths:
+      - /opt/app/backend/c1-data/logs/*info.log
+    fields:
+      product: c1
+      app: data
+      env: demo-bank
+
+  - type: log
+    enabled: true
+    paths:
+      - /opt/app/backend/c1-rule/logs/*info.log
+    fields:
+      product: c1
+      app: rule
+      env: demo-bank
+
+  - type: log
+    enabled: true
+    paths:
+      - /opt/app/backend/c1-dg/logs/*info.log
+    fields:
+      product: c1
+      app: dg
+      env: demo-bank
+
+output.logstash:
+  hosts: ["10.0.5.239:5044"]

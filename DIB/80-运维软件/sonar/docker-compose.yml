@@ -1,0 +1,27 @@
+services:
+  sonar:
+    image: sonarqube:lts-community
+    container_name: sonar
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    environment:
+      # 默认账号密码均为 admin，首次登录会强制修改，改为 sonar@2026
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: sonar@2025
+      # 如需连接外部数据库可在此配置，默认使用内嵌 H2（仅适合测试）
+      # SONAR_JDBC_URL: jdbc:postgresql://db:5432/sonarqube
+    volumes:
+      # ⚠️ 必须挂载以下三个目录，否则重启/升级后数据丢失
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+
+volumes:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:

@@ -1,0 +1,35 @@
+services:
+  namenode:
+    # bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    image: 10.0.6.183:8088/c1/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: hdfs-namenode
+    restart: unless-stopped
+    ports:
+      - "9870:9870"   # Web UI
+      - "9000:9000"   # HDFS RPC
+    volumes:
+      - ./namenode_data:/hadoop/dfs/name
+    environment:
+      - CLUSTER_NAME=local-test
+    env_file:
+      - hadoop.env
+
+  datanode:
+    # bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    image: 10.0.6.183:8088/c1/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: hdfs-datanode
+    restart: unless-stopped
+    ports:
+      - "9864:9864"   # DataNode Web UI
+      - "9866:9866"   # <--- 必须添加这一行！这是数据传输端口
+    depends_on:
+      - namenode
+    volumes:
+      - ./datanode_data:/hadoop/dfs/data
+    environment:
+      - SERVICE_PRECONDITION=namenode:9870
+      - HDFS_DATANODE_HOST_NAME=10.0.5.70
+      - DFS_DATANODE_ADDRESS=0.0.0.0:9866
+      - DFS_DATANODE_HTTP_ADDRESS=0.0.0.0:9864
+    env_file:
+      - hadoop.env

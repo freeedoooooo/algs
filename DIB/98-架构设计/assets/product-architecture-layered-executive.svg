@@ -1,0 +1,161 @@
+<svg width="1800" height="1080" viewBox="0 0 1800 1080" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#F8FBFF"/>
+      <stop offset="100%" stop-color="#F1F5FA"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#FBFDFF"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#7EA8E8"/>
+      <stop offset="100%" stop-color="#6F98D7"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFF5E5"/>
+      <stop offset="100%" stop-color="#FFEDD1"/>
+    </linearGradient>
+    <linearGradient id="mint" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#EEF9F2"/>
+      <stop offset="100%" stop-color="#E6F5EB"/>
+    </linearGradient>
+    <linearGradient id="lav" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#F5F2FF"/>
+      <stop offset="100%" stop-color="#EEE9FF"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#C9D4E2" flood-opacity="0.28"/>
+    </filter>
+    <style>
+      .font { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }
+      .title { font-size: 34px; font-weight: 700; fill: #123B5D; }
+      .sub { font-size: 14px; fill: #64748B; }
+      .layer { font-size: 20px; font-weight: 700; fill: #22344D; letter-spacing: 2px; }
+      .tag { font-size: 15px; font-weight: 700; }
+      .boxt { font-size: 22px; font-weight: 700; fill: #123B5D; }
+      .boxs { font-size: 14px; fill: #334155; }
+      .pill { font-size: 13px; font-weight: 700; fill: #334155; }
+      .tiny { font-size: 12px; fill: #64748B; }
+      .mid { font-size: 18px; font-weight: 700; fill: #123B5D; }
+    </style>
+  </defs>
+
+  <rect width="1800" height="1080" fill="url(#bg)"/>
+  <rect x="42" y="32" width="1716" height="1016" rx="28" fill="url(#card)" stroke="#D9E2EC" stroke-width="2" filter="url(#shadow)"/>
+
+  <text x="84" y="86" class="font title">产品技术架构图</text>
+  <text x="84" y="114" class="font sub">领导汇报版 · 分层展示 · 主链突出 · 口径收敛</text>
+
+  <rect x="72" y="156" width="1656" height="154" rx="22" fill="#F7FBFF" stroke="#C9DBF5"/>
+  <rect x="72" y="332" width="1656" height="82" rx="18" fill="#F7FBFF" stroke="#C9DBF5"/>
+  <rect x="72" y="436" width="1656" height="402" rx="22" fill="#FFFDF8" stroke="#F0D6B7"/>
+  <rect x="72" y="860" width="1656" height="104" rx="20" fill="#F7FCF8" stroke="#CBE6D3"/>
+  <rect x="72" y="986" width="1656" height="42" rx="18" fill="#F7F9FC" stroke="#D9E2EC"/>
+
+  <rect x="92" y="176" width="76" height="114" rx="18" fill="#FFFFFF" opacity="0.95"/>
+  <rect x="92" y="348" width="76" height="50" rx="16" fill="#FFFFFF" opacity="0.95"/>
+  <rect x="92" y="556" width="76" height="160" rx="18" fill="#FFFFFF" opacity="0.95"/>
+  <rect x="92" y="880" width="76" height="64" rx="18" fill="#FFFFFF" opacity="0.95"/>
+  <rect x="92" y="992" width="76" height="30" rx="15" fill="#FFFFFF" opacity="0.95"/>
+
+  <g transform="translate(130,233) rotate(-90)"><text text-anchor="middle" class="font layer">视图层</text></g>
+  <g transform="translate(130,374) rotate(-90)"><text text-anchor="middle" class="font layer">接入层</text></g>
+  <g transform="translate(130,636) rotate(-90)"><text text-anchor="middle" class="font layer">服务层</text></g>
+  <g transform="translate(130,916) rotate(-90)"><text text-anchor="middle" class="font layer">存储层</text></g>
+  <g transform="translate(130,1010) rotate(-90)"><text text-anchor="middle" class="font layer">底座层</text></g>
+
+  <rect x="214" y="174" width="472" height="118" rx="24" fill="#9EC1F1" stroke="#203864" stroke-width="2.5"/>
+  <text x="450" y="205" text-anchor="middle" class="font tag" fill="#163A61">前端技术与应用</text>
+  <rect x="240" y="214" width="130" height="34" rx="10" fill="#FFFFFF" stroke="#203864" stroke-width="1.5"/>
+  <rect x="384" y="214" width="130" height="34" rx="10" fill="#FFFFFF" stroke="#203864" stroke-width="1.5"/>
+  <rect x="528" y="214" width="130" height="34" rx="10" fill="#FFFFFF" stroke="#203864" stroke-width="1.5"/>
+  <rect x="240" y="256" width="130" height="34" rx="10" fill="#FFFFFF" stroke="#203864" stroke-width="1.5"/>
+  <rect x="384" y="256" width="130" height="34" rx="10" fill="#FFFFFF" stroke="#203864" stroke-width="1.5"/>
+  <rect x="528" y="256" width="130" height="34" rx="10" fill="#FFFFFF" stroke="#203864" stroke-width="1.5"/>
+  <text x="305" y="236" text-anchor="middle" class="font pill">Vue 3</text>
+  <text x="449" y="236" text-anchor="middle" class="font pill">TypeScript</text>
+  <text x="593" y="236" text-anchor="middle" class="font pill">Vite</text>
+  <text x="305" y="278" text-anchor="middle" class="font pill">Element Plus</text>
+  <text x="449" y="278" text-anchor="middle" class="font pill">ECharts</text>
+  <text x="593" y="278" text-anchor="middle" class="font pill">Pinia / Router</text>
+
+  <rect x="736" y="174" width="432" height="118" rx="24" fill="url(#amber)" stroke="#203864" stroke-width="2"/>
+  <text x="952" y="205" text-anchor="middle" class="font tag" fill="#7C4A0E">统一门户</text>
+  <rect x="774" y="212" width="356" height="56" rx="16" fill="#FFFFFF" stroke="#203864" stroke-width="1.8"/>
+  <text x="952" y="243" text-anchor="middle" class="font boxt">app-nav</text>
+  <text x="952" y="264" text-anchor="middle" class="font boxs">承载 app-data / app-report / app-system</text>
+
+  <rect x="1208" y="174" width="472" height="118" rx="24" fill="url(#amber)" stroke="#203864" stroke-width="2"/>
+  <text x="1444" y="205" text-anchor="middle" class="font tag" fill="#7C4A0E">外部接入</text>
+  <rect x="1264" y="212" width="360" height="56" rx="16" fill="#FFFFFF" stroke="#203864" stroke-width="1.8"/>
+  <text x="1444" y="243" text-anchor="middle" class="font boxt">OpenAPI / OCR / FTP / AI</text>
+  <text x="1444" y="264" text-anchor="middle" class="font boxs">第三方能力与开放接口</text>
+
+  <rect x="452" y="348" width="896" height="50" rx="16" fill="url(#blue)" stroke="#203864" stroke-width="2"/>
+  <text x="900" y="381" text-anchor="middle" class="font boxt" fill="#FFFFFF">Nginx + Gateway + Auth</text>
+
+  <rect x="214" y="458" width="1472" height="178" rx="22" fill="url(#amber)" stroke="#203864" stroke-width="2"/>
+  <text x="950" y="486" text-anchor="middle" class="font tag" fill="#7C4A0E">核心业务主链</text>
+
+  <rect x="250" y="514" width="304" height="88" rx="22" fill="#FFFFFF" stroke="#203864" stroke-width="1.8"/>
+  <text x="402" y="550" text-anchor="middle" class="font boxt">资料提取</text>
+  <text x="402" y="574" text-anchor="middle" class="font boxs">extract</text>
+  <text x="402" y="594" text-anchor="middle" class="font tiny">文件提取 / ETL / 清单</text>
+
+  <rect x="610" y="514" width="432" height="88" rx="22" fill="#FFFFFF" stroke="#203864" stroke-width="1.8"/>
+  <text x="826" y="548" text-anchor="middle" class="font boxt">指标 / 规则 / 框架</text>
+  <text x="826" y="574" text-anchor="middle" class="font boxs">data / rule</text>
+  <text x="826" y="594" text-anchor="middle" class="font tiny">指标计算 / 规则引擎 / 框架测算</text>
+
+  <rect x="1098" y="514" width="286" height="88" rx="22" fill="#FFFFFF" stroke="#203864" stroke-width="1.8"/>
+  <text x="1241" y="550" text-anchor="middle" class="font boxt">报告生成</text>
+  <text x="1241" y="574" text-anchor="middle" class="font boxs">report</text>
+  <text x="1241" y="594" text-anchor="middle" class="font tiny">模板 / 变量 / 文档生成</text>
+
+  <rect x="1430" y="514" width="220" height="88" rx="22" fill="#FFF7ED" stroke="#FB923C" stroke-width="1.8"/>
+  <text x="1540" y="550" text-anchor="middle" class="font boxt">成果输出</text>
+  <text x="1540" y="574" text-anchor="middle" class="font boxs">报告 / 结果</text>
+  <text x="1540" y="594" text-anchor="middle" class="font tiny">交付与汇报成果</text>
+
+  <rect x="214" y="662" width="1472" height="154" rx="22" fill="#FFFDF8" stroke="#E7CCAA" stroke-width="1.5"/>
+  <text x="950" y="688" text-anchor="middle" class="font tag" fill="#7C4A0E">平台支撑能力</text>
+
+  <rect x="250" y="718" width="320" height="62" rx="18" fill="url(#mint)" stroke="#2E9E5B" stroke-width="1.6"/>
+  <text x="410" y="755" text-anchor="middle" class="font mid">主数据与治理</text>
+  <text x="410" y="776" text-anchor="middle" class="font tiny">mdm / dg</text>
+
+  <rect x="612" y="718" width="430" height="62" rx="18" fill="url(#lav)" stroke="#7C3AED" stroke-width="1.6"/>
+  <text x="827" y="755" text-anchor="middle" class="font mid">数据资源管理</text>
+  <text x="827" y="776" text-anchor="middle" class="font tiny">数据源 / 元数据 / 主题 / 看板</text>
+
+  <rect x="1084" y="718" width="266" height="62" rx="18" fill="url(#mint)" stroke="#2E9E5B" stroke-width="1.6"/>
+  <text x="1217" y="755" text-anchor="middle" class="font mid">认证与权限</text>
+  <text x="1217" y="776" text-anchor="middle" class="font tiny">auth-server / auth-resource</text>
+
+  <rect x="1392" y="718" width="258" height="62" rx="18" fill="url(#mint)" stroke="#2E9E5B" stroke-width="1.6"/>
+  <text x="1521" y="755" text-anchor="middle" class="font mid">监控与运维</text>
+  <text x="1521" y="776" text-anchor="middle" class="font tiny">Prometheus / Grafana</text>
+
+  <rect x="238" y="882" width="360" height="58" rx="20" fill="#A9C8F3" stroke="#203864" stroke-width="2"/>
+  <rect x="632" y="882" width="262" height="58" rx="20" fill="#A9C8F3" stroke="#203864" stroke-width="2"/>
+  <rect x="928" y="882" width="262" height="58" rx="20" fill="#A9C8F3" stroke="#203864" stroke-width="2"/>
+  <rect x="1224" y="882" width="430" height="58" rx="20" fill="#A9C8F3" stroke="#203864" stroke-width="2"/>
+  <text x="418" y="918" text-anchor="middle" class="font mid" fill="#14365F">MySQL / DM8 / GBase</text>
+  <text x="763" y="918" text-anchor="middle" class="font mid" fill="#14365F">MinIO</text>
+  <text x="1059" y="918" text-anchor="middle" class="font mid" fill="#14365F">Redis</text>
+  <text x="1439" y="918" text-anchor="middle" class="font mid" fill="#14365F">文件、治理表、计算结果</text>
+
+  <rect x="260" y="992" width="170" height="30" rx="12" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.4"/>
+  <rect x="460" y="992" width="170" height="30" rx="12" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.4"/>
+  <rect x="660" y="992" width="170" height="30" rx="12" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.4"/>
+  <rect x="860" y="992" width="170" height="30" rx="12" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.4"/>
+  <rect x="1060" y="992" width="210" height="30" rx="12" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.4"/>
+  <rect x="1300" y="992" width="170" height="30" rx="12" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.4"/>
+  <text x="345" y="1012" text-anchor="middle" class="font pill">Java 8</text>
+  <text x="545" y="1012" text-anchor="middle" class="font pill">Spring Boot</text>
+  <text x="745" y="1012" text-anchor="middle" class="font pill">Nacos 2.3.2</text>
+  <text x="945" y="1012" text-anchor="middle" class="font pill">Docker</text>
+  <text x="1165" y="1012" text-anchor="middle" class="font pill">Docker Compose</text>
+  <text x="1385" y="1012" text-anchor="middle" class="font pill">信创兼容</text>
+</svg>

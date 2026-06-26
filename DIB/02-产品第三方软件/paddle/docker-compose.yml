@@ -1,0 +1,11 @@
+services:
+  paddle-jupyter:
+    image: ccr-2vdh3abv-pub.cnc.bj.baidubce.com/paddlepaddle/paddle:3.3.0-jupyter
+    container_name: paddle-jupyter
+    ports:
+      - "30080:80"
+      - "38888:8888"
+    environment:
+      - USER_PASSWD=dib@12345A
+    volumes:
+      - /opt/paddle:/home/paddle

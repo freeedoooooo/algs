@@ -1,0 +1,144 @@
+{
+  "profile": {
+    "team": {
+      "dbEnvironments": [
+        {
+          "defKey": "idc-test-c1",
+          "defName": "产品-测试",
+          "dbDialect": "MySQL",
+          "dbConnections": [
+            {
+              "defName": "多合一",
+              "usedFor": "ALL_IN_ONE",
+              "dbDialectKey": "MySQL",
+              "driverFiles": "mysql-connector-j-8.3.0.jar",
+              "extParams": "schemaName=dib_report_copilot",
+              "password": "ExePj+O53YzF7P5gIQPx1A==",
+              "id": "0D972BA6-7ABC-4C83-B09A-4811C1EA1D7B",
+              "username": "xa1HO8gevrFNnWjL9Bsgnw==",
+              "driverClassName": "com.mysql.cj.jdbc.Driver",
+              "url": "acZ11UCvuF3j+RfDIkQBDAJMaJ7/sJBEJRLaTKlhG4op2lfEijSHNsCYmK+Sp0SZHzN1KkdiQwGE2m/Y7uD8wQLakew0bBFAcXwjjW3cu2HWQ9V6fe8VsNEvWku7y9SWP4VErigtoU0wpfrF1tL8OQ78Jhomzy5Rtdt4n7k/Ngjg34Sskt0gObvJN9bDvvYrW4tXaNr9DTnMf21ogIESKnUyB8RFCCwOzGqRx82No0Amkj+afMBa9zEBDn9fX+AVXyXXsn1Yiadeq6vzSXFhXg==",
+              "envId": "E90990AE-515C-4DBC-A3C2-8A065023E136"
+            }
+          ],
+          "id": "E90990AE-515C-4DBC-A3C2-8A065023E136",
+          "excludeTables": [],
+          "markColor": "rgb(25, 222, 166)"
+        },
+        {
+          "defKey": "c1-pro-bank",
+          "defName": "产品-bank-demo",
+          "dbDialect": "MySQL",
+          "dbConnections": [
+            {
+              "defName": "多合一",
+              "usedFor": "ALL_IN_ONE",
+              "dbDialectKey": "MySQL",
+              "driverFiles": "mysql-connector-j-8.3.0.jar",
+              "extParams": "schemaName=dib_report_copilot",
+              "password": "ExePj+O53YzF7P5gIQPx1A==",
+              "id": "33A2D707-3318-4E27-A163-9913B0B3759E",
+              "username": "xa1HO8gevrFNnWjL9Bsgnw==",
+              "driverClassName": "com.mysql.cj.jdbc.Driver",
+              "url": "acZ11UCvuF3j+RfDIkQBDG51JZZ4pvktKbRSUYdoFeF5X4x7M9v6jPKT83mWDsbIaiQ06vAEQS037MYSYlTn8Kp9pty0TRUH2EkG6PjYe0ORxymRKK6HD48u8Dv9PKyimgkj9+s3mGrJGAo7csr/BxCVudHH/uRV+yEyp4b5OjOmlRY84dUzUVK6TY8xI4cRrYFFzMWTo0Lflv+3GxM17amjXy6aZZh/zjpGauIXAy4=",
+              "envId": "EC7CD9C8-B713-4AC0-B8D1-854D162C570A"
+            }
+          ],
+          "id": "EC7CD9C8-B713-4AC0-B8D1-854D162C570A",
+          "excludeTables": [],
+          "markColor": "rgb(250, 153, 231)"
+        },
+        {
+          "defKey": "c1-pro-sh",
+          "defName": "产品-sh-prod",
+          "dbDialect": "MySQL",
+          "dbConnections": [
+            {
+              "defName": "多合一",
+              "usedFor": "ALL_IN_ONE",
+              "dbDialectKey": "MySQL",
+              "driverFiles": "mysql-connector-j-8.3.0.jar",
+              "extParams": "schemaName=dib_report_sh",
+              "password": "ExePj+O53YzF7P5gIQPx1A==",
+              "id": "9B4ECAA7-30CA-4A76-B1FA-46F0DFEE4F30",
+              "username": "xa1HO8gevrFNnWjL9Bsgnw==",
+              "driverClassName": "com.mysql.cj.jdbc.Driver",
+              "url": "acZ11UCvuF3j+RfDIkQBDG51JZZ4pvktKbRSUYdoFeF5X4x7M9v6jPKT83mWDsbIaiQ06vAEQS037MYSYlTn8Kp9pty0TRUH2EkG6PjYe0ORxymRKK6HD48u8Dv9PKyimgkj9+s3mGrJGAo7csr/BxCVudHH/uRV+yEyp4b5OjOmlRY84dUzUVK6TY8xI4cRrYFFzMWTo0Lflv+3GxM17amjXy6aZZh/zjpGauIXAy4=",
+              "envId": "4DA2D1CD-AF54-4469-9BF9-DFEE19734923"
+            }
+          ],
+          "id": "4DA2D1CD-AF54-4469-9BF9-DFEE19734923",
+          "excludeTables": [],
+          "markColor": "rgb(251, 157, 167)"
+        },
+        {
+          "defKey": "jianshe-idc-pro",
+          "defName": "项目-建行-idc-pro",
+          "markColor": "rgb(251, 157, 167)",
+          "dbDialect": "MySQL",
+          "dbConnections": [
+            {
+              "defName": "多合一",
+              "usedFor": "ALL_IN_ONE",
+              "dbDialectKey": "MySQL",
+              "driverFiles": "mysql-connector-j-8.3.0.jar",
+              "extParams": "schemaName=dib_report_copilot",
+              "password": "q2rI2WDrBST4lioUU0dzGw==",
+              "id": "AFB7238C-E626-4DF8-865F-76C18CA60D2F",
+              "username": "xa1HO8gevrFNnWjL9Bsgnw==",
+              "driverClassName": "com.mysql.cj.jdbc.Driver",
+              "url": "bCGACcVoIK8V6QuF9QFBHsGc2MD9jZxmITz1jU2NHie1zh3T/IxqbmMgKGbhOEOrwKM0cP5VlUthhiIMeEMX1QnmjrAWhjql9LMOsBDv3hEAfh9DSrz3hY8SiGJ9CIifyTDvqds/EfnCX2IBdTC1xSUNzyHx6ukPOZlt2ZZtty/K/uAK6XsmgpV5vPB4KDEVMJx+m3jSzGKK8+otXYg3rwDIzytkfkoAc5udWcPeGJov+AIJEW8l3mPYjWbk0pTwCtdJYgGbd3M1ZdLDJuU1uQ==",
+              "envId": "C50E6CDD-BFEF-45FC-9A12-3C2D3A2E7CA0"
+            }
+          ],
+          "id": "C50E6CDD-BFEF-45FC-9A12-3C2D3A2E7CA0",
+          "excludeTables": []
+        },
+        {
+          "defKey": "c1_tb_uat",
+          "defName": "项目-投保-c1_tb_uat",
+          "dbDialect": "MySQL",
+          "dbConnections": [
+            {
+              "defName": "多合一",
+              "usedFor": "ALL_IN_ONE",
+              "dbDialectKey": "MySQL",
+              "driverFiles": "mysql-connector-j-8.3.0.jar",
+              "extParams": "schemaName=c1_tb_uat",
+              "password": "ExePj+O53YzF7P5gIQPx1A==",
+              "id": "52E8C328-88D4-4907-A8C7-4B9B0B33C960",
+              "username": "xa1HO8gevrFNnWjL9Bsgnw==",
+              "driverClassName": "com.mysql.cj.jdbc.Driver",
+              "url": "acZ11UCvuF3j+RfDIkQBDNe9UtojRUd3iiQ/vGeDP9/o1sEYZab/EYzQ2B5rL4qemSXossj/0LKkHpc+BWK/z/+ID7hqas9PnVjMVbgmVUsLsuGUQIno2BNtaIPdxzXPegpAenUUaqmVFSCzKjb574aaZp/qpX+pm1cwHMXm3IX5IMkmmU70mQy2RlACYjB9CSDc9EWdp9s0mTFCpXVIQfFRrFL9Y6W7SKWKyRXGHEc=",
+              "envId": "F2DD5996-0807-4BA0-AC7F-7AFB91631FC4"
+            }
+          ],
+          "id": "F2DD5996-0807-4BA0-AC7F-7AFB91631FC4",
+          "excludeTables": []
+        },
+        {
+          "defKey": "dib_report_copilot",
+          "defName": "项目-投保-dib_report_copilot",
+          "dbDialect": "MySQL",
+          "dbConnections": [
+            {
+              "defName": "多合一",
+              "usedFor": "ALL_IN_ONE",
+              "dbDialectKey": "MySQL",
+              "driverFiles": "mysql-connector-j-8.3.0.jar",
+              "extParams": "schemaName=dib_report_copilot",
+              "password": "ExePj+O53YzF7P5gIQPx1A==",
+              "id": "5AC6BF51-5013-461F-9960-996E5BA1257D",
+              "username": "xa1HO8gevrFNnWjL9Bsgnw==",
+              "driverClassName": "com.mysql.cj.jdbc.Driver",
+              "url": "acZ11UCvuF3j+RfDIkQBDAJMaJ7/sJBEJRLaTKlhG4op2lfEijSHNsCYmK+Sp0SZHzN1KkdiQwGE2m/Y7uD8wQLakew0bBFAcXwjjW3cu2HWQ9V6fe8VsNEvWku7y9SWP4VErigtoU0wpfrF1tL8OQ78Jhomzy5Rtdt4n7k/Ngjg34Sskt0gObvJN9bDvvYrW4tXaNr9DTnMf21ogIESKnUyB8RFCCwOzGqRx82No0CZvjbaSaBVqW/XbRBbW8g1",
+              "envId": "45287E21-F6D6-4052-97BE-366EBEE2EB79"
+            }
+          ],
+          "id": "45287E21-F6D6-4052-97BE-366EBEE2EB79",
+          "excludeTables": []
+        }
+      ]
+    }
+  }
+}
