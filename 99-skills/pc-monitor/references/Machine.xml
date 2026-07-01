@@ -1,44 +1,238 @@
-<?xml version="1.0" encoding="GB2312"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
+  <Group Name="第一组">
+    <Machine Name="59云岚1" IP="192.168.201.59" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="66云岚2" IP="192.168.201.66" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="94云岚3" IP="192.168.201.94" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="3云岚4" IP="192.168.201.3" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="97云岚5" IP="192.168.201.97" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="98云岚6" IP="192.168.201.98" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="99云岚7" IP="192.168.201.99" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="100云岚8" IP="192.168.201.100" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="143云岚9" IP="192.168.201.143" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="102云岚10" IP="192.168.201.102" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="103云岚11" IP="192.168.201.103" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="105云岚12" IP="192.168.201.105" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="36云岚13" IP="192.168.201.36" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="124云岚14" IP="192.168.201.124" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="101云岚15" IP="192.168.201.101" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="37云岚16" IP="192.168.201.37" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="92云岚17" IP="192.168.201.92" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="121云岚18" IP="192.168.201.121" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+  </Group>
 
-	<Group	Name="group1">
-		<Machine Name="1" IP="192.168.1.11" Port="7899" UserName="pc1" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
-		<Machine Name="2" IP="192.168.1.22" Port="7899" UserName="pc2" PassWord="asdfdsa" Mac="C8-60-00-70-6F-3F" />
-		<Machine Name="3" IP="192.168.1.33" Port="7899" UserName="pc3" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
-		<Machine Name="4" IP="192.168.1.44" Port="7899" UserName="pc4" PassWord="asdfdsa" Mac="C8-60-00-70-6F-3F" />
-		<Machine Name="5" IP="192.168.1.55" Port="7899" UserName="pc5" PassWord="asdfdsa" Mac="C8-60-00-70-6F-3F" />
-		<Machine Name="6" IP="192.168.1.66" Port="7899" UserName="pc6" PassWord="asdfdsa" Mac="C8-60-00-70-6F-3F" />
-		<Machine Name="7" IP="192.168.1.77" Port="7899" UserName="pc7" PassWord="asdfdsa" Mac="C8-60-00-70-6F-3F" />
-		<Machine Name="8" IP="192.168.1.88" Port="7899" UserName="pc8" PassWord="asdfdsa" Mac="C8-60-00-70-6F-3F" />
-		<Machine Name="9" IP="192.168.1.119" Port="7899" UserName="pc9" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
-		<Machine Name="10" IP="192.168.1.100" Port="7899" UserName="pc10" PassWord="asdfdsa" Mac="C8-60-00-70-6F-3F" />
-	</Group>
+  <Group Name="第二组">
+    <Machine Name="5火耀1" IP="192.168.201.5" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="33火耀2" IP="192.168.201.33" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="34火耀3" IP="192.168.201.34" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="2火耀4" IP="192.168.201.2" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="122火耀5" IP="192.168.201.122" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="115火耀6" IP="192.168.201.115" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="31火耀7" IP="192.168.201.31" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="88火耀8" IP="192.168.201.88" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="78火耀9" IP="192.168.201.78" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="29火耀10" IP="192.168.201.29" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="30火耀11" IP="192.168.201.30" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="71火耀12" IP="192.168.201.71" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="188火耀13" IP="192.168.201.188" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="189火耀14" IP="192.168.201.189" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+  </Group>
 
-	<Group	Name="group2">
-		<Machine Name="11" IP="192.168.1.101" Port="7899" UserName="pc11" PassWord="asdfdsa" Mac="C8-60-00-70-6F-3F" />
-		<Machine Name="12" IP="192.168.1.102" Port="7899" UserName="PC12" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
-		<Machine Name="13" IP="192.168.1.103" Port="7899" UserName="pc13" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
-		<Machine Name="14" IP="192.168.1.104" Port="7899" UserName="pc14" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
-		<Machine Name="15" IP="192.168.1.105" Port="7899" UserName="pc15" PassWord="asdfdsa" Mac="C8-60-00-70-6F-3F" />
-		<Machine Name="16" IP="192.168.1.106" Port="7899" UserName="pc16" PassWord="asdfdsa" Mac="C8-60-00-70-6F-3F" />
-		<Machine Name="17" IP="192.168.1.107" Port="7899" UserName="pc17" PassWord="asdfdsa" Mac="C8-60-00-70-6F-3F" />
-		<Machine Name="18" IP="192.168.1.108" Port="7899" UserName="pc18" PassWord="asdfdsa" Mac="C8-60-00-70-6F-3F" />
-		<Machine Name="19" IP="192.168.1.109" Port="7899" UserName="pc19" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
-		<Machine Name="20" IP="192.168.1.200" Port="7899" UserName="pc20" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
-	</Group>
+  <Group Name="第三组">
+    <Machine Name="139永利1" IP="192.168.201.139" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="140永利2" IP="192.168.201.140" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="49永利3" IP="192.168.201.49" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="50永利4" IP="192.168.201.50" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="51永利5" IP="192.168.201.51" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="141永利6" IP="192.168.201.141" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="52永利7" IP="192.168.201.52" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="53永利8" IP="192.168.201.53" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="54永利9" IP="192.168.201.54" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="55永利10" IP="192.168.201.55" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="56永利11" IP="192.168.201.56" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="117永利12" IP="192.168.201.117" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="104永利13" IP="192.168.201.104" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="67永利14" IP="192.168.201.67" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+  </Group>
 
-	<Group	Name="group3">
-		<Machine Name="21" IP="192.168.1.211" Port="7899" UserName="pc21" PassWord="asdfdsa" Mac="C8-60-00-70-6F-3F" />
-		<Machine Name="22" IP="192.168.1.222" Port="7899" UserName="pc22" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
-		<Machine Name="23" IP="192.168.1.203" Port="7899" UserName="pc23" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
-		<Machine Name="24" IP="192.168.1.204" Port="7899" UserName="pc24" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
-		<Machine Name="25" IP="192.168.1.205" Port="7899" UserName="pc25" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
-		<Machine Name="26" IP="192.168.1.206" Port="7899" UserName="pc26" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
-		<Machine Name="27" IP="192.168.1.207" Port="7899" UserName="pc27" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
-        <Machine Name="28" IP="192.168.1.208" Port="7899" UserName="pc28" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
-		<Machine Name="29" IP="192.168.1.129" Port="7899" UserName="pc29" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
-		<Machine Name="30" IP="192.168.1.130" Port="7899" UserName="pc30" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
-		<Machine Name="31" IP="192.168.1.131" Port="7899" UserName="pc31" PassWord="asdfdsa1" Mac="C8-60-00-70-6F-3F" />
-	</Group>
+  <Group Name="第四组">
+    <Machine Name="132蓝枫1" IP="192.168.201.132" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="133蓝枫2" IP="192.168.201.133" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="120蓝枫3" IP="192.168.201.120" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="127蓝枫4" IP="192.168.201.127" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="58蓝枫5" IP="192.168.201.58" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="72蓝枫6" IP="192.168.201.72" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="61蓝枫7" IP="192.168.201.61" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="108蓝枫8" IP="192.168.201.108" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="129蓝枫9" IP="192.168.201.129" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="41蓝枫10" IP="192.168.201.41" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="109蓝枫11" IP="192.168.201.109" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="106蓝枫12" IP="192.168.201.106" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="70蓝枫13" IP="192.168.201.70" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="142蓝枫14" IP="192.168.201.142" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+  </Group>
 
+  <Group Name="第五组">
+    <Machine Name="15绿枫1" IP="192.168.201.15" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="16-绿枫2" IP="192.168.201.16" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="17绿枫3" IP="192.168.201.17" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="18-绿枫4" IP="192.168.201.18" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="19绿枫5" IP="192.168.201.19" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="123-绿枫6" IP="192.168.201.123" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="187绿枫7" IP="192.168.201.187" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="65绿枫8" IP="192.168.201.65" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="90绿枫9" IP="192.168.201.90" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="131绿枫10" IP="192.168.201.131" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="116绿枫11" IP="192.168.201.116" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="63绿枫12" IP="192.168.201.63" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="112绿枫13" IP="192.168.201.112" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="12绿枫14" IP="192.168.201.12" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+  </Group>
+
+  <Group Name="第六组">
+    <Machine Name="174苍猫" IP="192.168.201.174" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="157苍猫" IP="192.168.201.157" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="152苍猫" IP="192.168.201.152" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="44苍猫" IP="192.168.201.44" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="170苍猫" IP="192.168.201.170" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="4苍猫" IP="192.168.201.4" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="200喜神B" IP="192.168.201.200" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="201喜神B" IP="192.168.200.1" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="202喜神B" IP="192.168.200.2" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="203喜神B" IP="192.168.200.3" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="205喜神B" IP="192.168.200.5" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="206喜神B" IP="192.168.200.6" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+  </Group>
+
+  <Group Name="第七组">
+    <Machine Name="14惊云1" IP="192.168.201.14" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="107惊云2" IP="192.168.201.107" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="130惊云3" IP="192.168.201.130" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="136惊云4" IP="192.168.201.136" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="62惊云5" IP="192.168.201.62" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="35惊云6" IP="192.168.201.35" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="20惊云7" IP="192.168.201.20" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="23惊云8" IP="192.168.201.23" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="47惊云9" IP="192.168.201.47" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="57惊云10" IP="192.168.201.57" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="60惊云11" IP="192.168.201.60" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="73惊云12" IP="192.168.201.73" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="114惊云" IP="192.168.201.114" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+  </Group>
+
+  <Group Name="第八组">
+    <Machine Name="179苍凌1" IP="192.168.201.179" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="180苍凌2" IP="192.168.201.180" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="181苍凌3" IP="192.168.201.181" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="126苍凌4" IP="192.168.201.126" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="128苍凌5" IP="192.168.201.128" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="182苍凌6" IP="192.168.201.182" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="183苍凌7" IP="192.168.201.183" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="28苍凌8" IP="192.168.201.28" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="27苍凌9" IP="192.168.201.27" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="42苍凌10" IP="192.168.201.42" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="46苍凌11" IP="192.168.201.46" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="48苍凌12" IP="192.168.201.48" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="43苍凌13" IP="192.168.201.43" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+  </Group>
+
+  <Group Name="第九组">
+    <Machine Name="76小刀1" IP="192.168.201.76" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="64小刀2" IP="192.168.201.64" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="162小刀3" IP="192.168.201.162" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="164小刀4" IP="192.168.201.164" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="163小刀5" IP="192.168.201.163" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="96小刀6" IP="192.168.201.96" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="156三上" IP="192.168.201.156" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="249三上" IP="192.168.200.49" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="134三上" IP="192.168.201.134" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="93三上" IP="192.168.201.93" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="32三上" IP="192.168.201.32" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="土药6" IP="192.168.201.6" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="土药7" IP="192.168.201.7" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="土药145" IP="192.168.201.145" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="土药148" IP="192.168.201.148" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="土药149" IP="192.168.201.149" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="150土药B" IP="192.168.201.150" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="193土药B" IP="192.168.201.193" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="190土药B" IP="192.168.201.190" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="192土药B" IP="192.168.201.192" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+  </Group>
+
+  <Group Name="第十组">
+    <Machine Name="154妖尊" IP="192.168.201.154" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="89妖尊" IP="192.168.201.89" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="125妖尊" IP="192.168.201.125" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="45妖尊" IP="192.168.201.45" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="39妖尊" IP="192.168.201.39" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="175妖尊" IP="192.168.201.175" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="80老魔" IP="192.168.201.80" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="83老魔" IP="192.168.201.83" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="87老魔" IP="192.168.201.87" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="8老魔" IP="192.168.201.8" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="22老魔" IP="192.168.201.22" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="95老魔" IP="192.168.201.95" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="118久念" IP="192.168.201.118" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="119久念" IP="192.168.201.119" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="38久念" IP="192.168.201.38" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="158久念" IP="192.168.201.158" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+  </Group>
+
+  <Group Name="第十一组">
+    <Machine Name="147喜神" IP="192.168.201.147" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="171喜神" IP="192.168.201.171" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="110小贝" IP="192.168.201.110" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="111小贝" IP="192.168.201.111" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="81小贝" IP="192.168.201.81" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="153沐歌" IP="192.168.201.153" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="165沐歌" IP="192.168.201.165" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="194沐歌" IP="192.168.201.194" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="195铃铛" IP="192.168.201.195" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="196铃铛" IP="192.168.201.196" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+  </Group>
+
+  <Group Name="第十二组">
+    <Machine Name="68三下" IP="192.168.201.68" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="138小贝" IP="192.168.201.138" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="1修仙" IP="192.168.201.1" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="169修仙" IP="192.168.201.169" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="172修仙" IP="192.168.201.172" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="184千世" IP="192.168.201.184" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="146皓趣" IP="192.168.201.146" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="86千世" IP="192.168.201.86" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="135千世" IP="192.168.201.135" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="207青木" IP="192.168.200.7" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="208青木" IP="192.168.200.8" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="21蓝枫永利" IP="192.168.201.21" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+  </Group>
+
+  <Group Name="第十三组">
+    <Machine Name="11剑胆1" IP="192.168.201.11" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="13剑胆2" IP="192.168.201.13" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="9剑胆3" IP="192.168.201.9" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+  </Group>
+
+  <Group Name="第十四组">
+    <Machine Name="24喜神" IP="192.168.201.24" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="25喜神B" IP="192.168.201.25" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="26皓趣" IP="192.168.201.26" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="79久念" IP="192.168.201.79" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="177老魔" IP="192.168.201.177" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="77血色" IP="192.168.201.77" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="85蓝枫神" IP="192.168.201.85" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="166玄尊" IP="192.168.201.166" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="176剑胆" IP="192.168.201.176" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="197空" IP="192.168.201.197" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="199空" IP="192.168.201.199" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="178空" IP="192.168.201.178" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="185空" IP="192.168.201.185" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="186空" IP="192.168.201.186" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="173空" IP="192.168.201.173" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="151空" IP="192.168.201.151" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="10空" IP="192.168.201.10" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="159空" IP="192.168.201.159" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="160空" IP="192.168.201.160" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="84空" IP="192.168.201.84" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+    <Machine Name="82空" IP="192.168.201.82" Port="7899" UserName="Promuyi" PassWord="135246" Mac="C8-60-00-70-6F-3F" />
+  </Group>
 </root>
