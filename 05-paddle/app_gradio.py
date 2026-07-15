@@ -13,8 +13,8 @@ logging.getLogger("paddleocr").setLevel(logging.WARNING)
 ocr = PaddleOCR(
     use_textline_orientation=True,
     lang="ch",
-    text_detection_model_name="PP-OCRv4_mobile_det",  # 精度优先，将此处的 mobile 改为 server
-    text_recognition_model_name="PP-OCRv4_mobile_rec",  # 识别用 mobile 平衡速度
+    text_detection_model_name="PP-OCRv4_mobile_det",
+    text_recognition_model_name="PP-OCRv4_mobile_rec",
     text_det_thresh=0.35,
     text_det_box_thresh=0.15,
     text_det_unclip_ratio=1.5,
@@ -39,8 +39,7 @@ def draw_ocr_boxes(image, ocr_result):
 
     txt_lines = []
     info_lines = []
-
-    md_lines = ["## 📄 OCR 识别结果\n"]  # 👈 新增：Markdown 内容容器
+    md_lines = ["## 📄 OCR 识别结果\n"]
 
     for res in ocr_result:
         # 兼容 3.x 返回结构
@@ -56,33 +55,35 @@ def draw_ocr_boxes(image, ocr_result):
             continue
 
         for box, text, score in zip(boxes, texts, scores):
-            # box 格式: [[x1,y1],[x2,y2],[x3,y3],[x4,y4]]
             points = [(int(p[0]), int(p[1])) for p in box]
-            # 绘制四边形检测框
             draw.polygon(points, outline="#FF4444", width=2)
-            # 在框上方绘制文本标签
             label = f"{text} ({score:.2f})"
             x, y = points[0][0], max(0, points[0][1] - 20)
             draw.text((x, y), label, fill="#FF4444", font=font)
 
             txt_lines.append(text)
             info_lines.append(f"{text} (置信度: {score:.4f})")
-
-            # 👈 新增：按行拼接 Markdown，保留原始换行结构
             md_lines.append(f"- **{text}** _(置信度: {score:.2f})_")
 
-    return img, "\n".join(txt_lines), "\n".join(info_lines)
+    # 👇 修复1：draw_ocr_boxes 必须返回4个值，补上拼接好的 markdown
+    return img, "\n".join(txt_lines), "\n".join(info_lines), "\n".join(md_lines)
 
 
 def recognize_image(image):
     if image is None:
-        # 👇 修复：补充第4个返回值，确保与 outputs 数量一致
         return None, "", "请上传图片", "### ⚠️ 请先上传图片"
 
     result = ocr.predict(np.array(image))
-    annotated_img, full_text, detail_info = draw_ocr_boxes(image, result)
+    # 👇 修复2：接收4个返回值
+    annotated_img, full_text, detail_info, md_content = draw_ocr_boxes(image, result)
 
-    return annotated_img, full_text, detail_info if detail_info else "未识别到文字"
+    # 👇 修复3：正常分支也必须返回4个值，与 outputs 严格对应
+    return (
+        annotated_img,
+        full_text,
+        detail_info if detail_info else "未识别到文字",
+        md_content if md_content.strip() else "### ⚠️ 未识别到文字"
+    )
 
 
 with gr.Blocks(title="PaddleOCR 可视化测试") as demo:
@@ -96,14 +97,13 @@ with gr.Blocks(title="PaddleOCR 可视化测试") as demo:
         text_output = gr.Textbox(label="识别文本", lines=8)
         detail_output = gr.Textbox(label="详细信息(含置信度)", lines=8)
 
-    # 👈 新增：Markdown 渲染区域，独立一行展示
-    md_output = gr.Markdown(label="Markdown 预览", value="### 📭 等待上传图片...")
+    md_output = gr.Markdown(value="### 📭 等待上传图片...")
 
     btn = gr.Button("🔍 开始识别", variant="primary", size="lg")
     btn.click(
         fn=recognize_image,
         inputs=img_input,
-        outputs=[img_output, text_output, detail_output, md_output]  # 👈 新增输出绑定
+        outputs=[img_output, text_output, detail_output, md_output]
     )
 
 if __name__ == "__main__":
