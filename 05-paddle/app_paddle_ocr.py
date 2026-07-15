@@ -8,7 +8,7 @@ from paddleocr import PaddleOCR
 
 # 屏蔽检查 & 日志
 os.environ["PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK"] = "True"
-logging.getLogger("paddleocr").setLevel(logging.WARNING)
+logging.getLogger("paddleocr").setLevel(logging.INFO)
 
 ocr = PaddleOCR(
     use_textline_orientation=True,
