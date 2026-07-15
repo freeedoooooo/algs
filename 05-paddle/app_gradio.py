@@ -1,9 +1,10 @@
-import os
 import logging
+import os
+
 import gradio as gr
-from paddleocr import PaddleOCR
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import ImageDraw, ImageFont
+from paddleocr import PaddleOCR
 
 # 屏蔽检查 & 日志
 os.environ["PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK"] = "True"
@@ -12,10 +13,14 @@ logging.getLogger("paddleocr").setLevel(logging.WARNING)
 ocr = PaddleOCR(
     use_textline_orientation=True,
     lang="ch",
-    # 🔧 核心修改：指定移动端/服务器端模型
-    text_detection_model_name="PP-OCRv4_mobile_det",     # 识别模型换为 mobile
-    text_recognition_model_name="PP-OCRv4_mobile_rec"    # 检测模型换为 mobile
+    text_detection_model_name="PP-OCRv4_mobile_det",    # 精度优先，将此处的 mobile 改为 server
+    text_recognition_model_name="PP-OCRv4_mobile_rec",  # 识别用 mobile 平衡速度
+    text_det_thresh=0.35,
+    text_det_box_thresh=0.15,
+    text_det_unclip_ratio=1.5,
+    text_det_limit_side_len=1280,
 )
+
 
 def draw_ocr_boxes(image, ocr_result):
     """在原图上绘制 OCR 检测框和识别文本"""
@@ -27,7 +32,8 @@ def draw_ocr_boxes(image, ocr_result):
         font = ImageFont.truetype("msyh.ttc", size=max(12, int(min(img.size) * 0.03)))
     except Exception:
         try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc", size=max(12, int(min(img.size) * 0.03)))
+            font = ImageFont.truetype("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+                                      size=max(12, int(min(img.size) * 0.03)))
         except Exception:
             font = ImageFont.load_default()
 
@@ -73,9 +79,7 @@ def recognize_image(image):
     return annotated_img, full_text, detail_info if detail_info else "未识别到文字"
 
 
-with gr.Blocks(title="PaddleOCR 可视化测试", css="""
-    .output-image img { object-fit: contain !important; max-height: 600px; }
-""") as demo:
+with gr.Blocks(title="PaddleOCR 可视化测试") as demo:
     gr.Markdown("# 📝 PaddleOCR 可视化识别测试\n上传图片后，左侧显示带检测框的结果图，右侧显示识别文本")
 
     with gr.Row():
@@ -94,4 +98,11 @@ with gr.Blocks(title="PaddleOCR 可视化测试", css="""
     )
 
 if __name__ == "__main__":
-    demo.launch(server_name="127.0.0.1", server_port=7860)
+    demo.launch(
+        server_name="127.0.0.1",
+        server_port=7860,
+        theme=gr.themes.Default(),
+        css="""
+            .output-image img { object-fit: contain !important; max-height: 600px; }
+        """
+    )
