@@ -60,8 +60,8 @@ pip-wheel-metadata/
 *.log.*
 
 # adb-monitor runtime and logs
-90-monitor/LD-Monitor/log/*
-!90-monitor/LD-Monitor/log/.gitkeep
-90-monitor/LD-Monitor/runtime/*
-!90-monitor/LD-Monitor/runtime/.gitkeep
+99-bak/90-monitor/LD-Monitor/log/*
+!99-bak/90-monitor/LD-Monitor/log/.gitkeep
+99-bak/90-monitor/LD-Monitor/runtime/*
+!99-bak/90-monitor/LD-Monitor/runtime/.gitkeep
 
