@@ -23,7 +23,7 @@ ocr = PaddleOCR(
     det_db_box_thresh=0.15,
     det_db_unclip_ratio=1.5,
     det_limit_side_len=1280,
-    show_log=False,
+    show_log=True,
 )
 
 import paddle
