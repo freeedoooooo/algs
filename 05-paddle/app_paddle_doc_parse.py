@@ -83,10 +83,12 @@ def extract_markdown(result):
     return "\n\n".join(part for part in md_parts if part.strip())
 
 
-def parse_document(file_input):
+def parse_document(file_input, progress=gr.Progress(track_tqdm=True)):
     """支持图片和 PDF 文件解析"""
     if file_input is None:
         return None, "### ⚠️ 请先上传文件或图片"
+
+    progress(0, desc="⏳ 正在预处理...")
 
     preview_image = None
     input_data = None
@@ -110,8 +112,14 @@ def parse_document(file_input):
         return None, "### ❌ 不支持的输入格式"
 
     try:
+        progress(0.1, desc="🔍 正在解析文档（CPU模式较慢，请耐心等待）...")
         result = doc_parser.predict(input_data)
+
+        progress(0.5, desc="📝 正在提取 Markdown...")
         md_content = extract_markdown(result)
+
+        progress(1.0, desc="✅ 完成！")
+
     except Exception as e:
         return preview_image, f"### ❌ 解析失败\n```{str(e)}```"
 
@@ -125,11 +133,10 @@ with gr.Blocks(title="文档转 Markdown 工具") as demo:
     gr.Markdown(f"# 📑 文档/图片 → Markdown 转换\n当前流水线: `{used_pipeline_name}` | 设备: CPU")
 
     with gr.Row(equal_height=True):
-        # 🔥 同时支持图片和文件（PDF）上传
         with gr.Column(scale=1):
-            img_input = gr.Image(type="pil", label="📤 上传图片")
+            # 🔥 单一入口，同时支持图片和 PDF
             file_input = gr.File(
-                label="📁 或上传文件 (PDF/图片)",
+                label="📁 上传文档 (图片/PDF)",
                 file_types=["image", ".pdf"],
                 type="filepath"
             )
@@ -144,10 +151,10 @@ with gr.Blocks(title="文档转 Markdown 工具") as demo:
 
     btn = gr.Button("🔍 开始解析", variant="primary", size="lg")
 
-    # 绑定两个输入源，任一有值即可触发
+    # 🔥 绑定简化：只需一个输入
     btn.click(
-        fn=lambda img, file: parse_document(img if img is not None else file),
-        inputs=[img_input, file_input],
+        fn=parse_document,  # 直接传函数，不再需要 lambda
+        inputs=[file_input],  # 只有一个输入源
         outputs=[img_preview, md_output]
     )
 
