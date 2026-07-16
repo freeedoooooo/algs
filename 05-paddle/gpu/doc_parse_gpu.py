@@ -195,12 +195,18 @@ with gr.Blocks(title="银行对账单解析器") as demo:
         "> 基于 PaddleX 3.x OCR + 动态坐标聚类算法，专治弱边框表格"
     )
     with gr.Row():
-        inp = gr.File(
-            label="上传图片/PDF", file_types=["image", ".pdf"], type="filepath"
+        # 🔑 修改：使用 gr.Image 替代 gr.File，上传与预览合二为一
+        inp = gr.Image(
+            label="📤 点击或拖拽上传图片/PDF",
+            type="filepath",      # 保持返回文件路径，确保原有 OCR 逻辑无需任何修改
+            sources=["upload"],   # 限制仅允许上传，禁用摄像头等无关输入源
+            height=400,
         )
         out = gr.HTML(
             value=CSS + '<div class="paddlex-preview"><p>📤 等待上传...</p></div>'
         )
+
+    # 注意：原有的 click 事件绑定完全不需要改动
     gr.Button("🔍 开始解析", variant="primary").click(parse_document, [inp], [out])
 
 if __name__ == "__main__":
