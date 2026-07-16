@@ -1,151 +1,182 @@
+import gc
+import logging
 import os
+import re
+
+import gradio as gr
+import paddle
 
 os.environ["PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK"] = "True"
+logging.getLogger("paddlex").setLevel(logging.WARNING)
 
-import logging
-import numpy as np
-import gradio as gr
-from PIL import Image
-
-logging.getLogger("paddlex").setLevel(logging.INFO)
+# 8GB 显存安全配置
+paddle.set_flags({"FLAGS_fraction_of_gpu_memory_to_use": 0.85})
+print(f"Paddle {paddle.__version__} | GPU: {paddle.is_compiled_with_cuda()}")
 
 
-def get_available_pipeline():
-    from paddlex import create_pipeline
+# ==================== 加载基础 OCR 产线 ====================
+def load_ocr_pipeline():
+    try:
+        from paddlex import create_pipeline
 
-    candidates = [
-        "layout_parsing",
-        "PP-StructureV3",
-        "doc_parsing",
-    ]
-
-    last_error = None
-    for name in candidates:
-        # 👇 修改1: 将 device 改为 gpu，并增加 GPU 优先的参数组合
-        param_variants = [
-            {
-                "device": "gpu",                          # 👈 cpu → gpu
-                "use_doc_orientation_classify": False,
-                "use_doc_unwarping": False,
-            },
-            {"device": "gpu"},                            # 👈 cpu → gpu
-        ]
-
-        for params in param_variants:
-            try:
-                print(f"🔍 正在尝试: {name} | 参数: {list(params.keys())}")
-                pipeline = create_pipeline(pipeline=name, **params)
-                print(f"✅ 成功加载流水线: {name} (GPU)")
-                return pipeline, name
-            except TypeError as e:
-                if "unexpected keyword argument" in str(e):
-                    continue
-                raise
-            except Exception as e:
-                last_error = e
-                print(f"⚠️ '{name}' 不可用: {str(e)[:300]}")
-                break
-
-    raise RuntimeError(
-        f"❌ 所有候选流水线均不可用！\n最后一条错误: {last_error}\n"
-        f"请运行: python -c \"from paddlex import create_pipeline; create_pipeline('__INVALID__')\" 查看可用列表"
-    )
+        print("⏳ 正在加载基础 OCR 产线 (PaddleX 3.x)...")
+        pipeline = create_pipeline(
+            pipeline="OCR",
+            device="gpu",
+            use_doc_orientation_classify=False,
+            use_doc_unwarping=False,
+        )
+        print("✅ OCR 产线加载成功")
+        return pipeline
+    except Exception as e:
+        print(f"❌ 加载失败: {e}")
+        raise
 
 
-doc_parser, used_pipeline_name = get_available_pipeline()
+ocr_pipeline = load_ocr_pipeline()
 
 
-def extract_markdown(result):
-    """从 PaddleX 解析结果中提取 Markdown 内容"""
-    md_parts = []
-    results = list(result) if hasattr(result, '__iter__') else [result]
+# ==================== 核心：基于坐标的表格重建算法 ====================
+def rebuild_table_from_ocr(ocr_result):
+    """适配 PaddleX 3.x OCR 返回结构的表格重建"""
+    items = []
 
-    for res in results:
-        if hasattr(res, 'markdown') and res.markdown:
-            md_parts.append(str(res.markdown))
-            continue
-        if hasattr(res, 'res_dict') and isinstance(res.res_dict, dict):
-            md_val = res.res_dict.get('markdown', '')
-            if md_val:
-                md_parts.append(str(md_val))
-                continue
-        if hasattr(res, 'rec_text') and res.rec_text:
-            texts = res.rec_text if isinstance(res.rec_text, list) else [res.rec_text]
-            md_parts.append("\n".join(str(t) for t in texts if t))
-
-    return "\n\n".join(part for part in md_parts if part.strip())
-
-
-def parse_document(file_input, progress=gr.Progress(track_tqdm=True)):
-    """支持图片和 PDF 文件解析"""
-    if file_input is None:
-        return None, "### ⚠️ 请先上传文件或图片"
-
-    progress(0, desc="⏳ 正在预处理...")
-
-    preview_image = None
-    input_data = None
-
-    if isinstance(file_input, Image.Image):
-        preview_image = file_input
-        input_data = np.array(file_input)
-    elif isinstance(file_input, np.ndarray):
-        preview_image = Image.fromarray(file_input)
-        input_data = file_input
-    elif isinstance(file_input, str) and os.path.exists(file_input):
-        input_data = file_input
-        try:
-            preview_image = Image.open(file_input)
-        except Exception:
-            pass
+    # 1. 安全获取第一个结果（兼容生成器/列表/字典）
+    if hasattr(ocr_result, "__iter__") and not isinstance(ocr_result, dict):
+        res = next(iter(ocr_result))
     else:
-        return None, "### ❌ 不支持的输入格式"
+        res = ocr_result
+
+    # 🔑 2. 兼容 PaddleX 3.x 与旧版字段名
+    boxes, texts = [], []
+    if isinstance(res, dict):
+        # PaddleX 3.x 标准字段优先
+        boxes = res.get("rec_boxes", []) or res.get("dt_polys", [])
+        texts = res.get("rec_texts", []) or res.get("rec_text", [])
+        # 兜底旧版嵌套字段
+        if not boxes:
+            rec_res = res.get("rec_res", {})
+            if isinstance(rec_res, dict):
+                boxes = rec_res.get("boxes", [])
+                texts = rec_res.get("texts", [])
+    else:
+        # 对象属性访问兜底
+        boxes = getattr(res, "rec_boxes", []) or getattr(res, "dt_polys", [])
+        texts = getattr(res, "rec_texts", []) or getattr(res, "rec_text", [])
+
+    if not boxes or not texts or len(boxes) != len(texts):
+        return (
+            f"<p style='color:#999;'>⚠️ 字段解析失败: boxes={len(boxes)}, texts={len(texts)}<br>"
+            "请检查控制台打印的原始返回结构</p>"
+        )
+
+    # 3. 提取坐标与文本（兼容多种 bbox 格式）
+    for box, text in zip(boxes, texts):
+        txt = str(text).strip()
+        if not txt:
+            continue
+        try:
+            if isinstance(box, list) and len(box) == 4:
+                if isinstance(box[0], (list, tuple)):  # [[x1,y1],[x2,y2]...] 四点格式
+                    y_center = sum(p[1] for p in box) / 4
+                    x_start = min(p[0] for p in box)
+                else:  # [x1,y1,x2,y2] 矩形格式
+                    y_center = (box[1] + box[3]) / 2
+                    x_start = box[0]
+            else:
+                continue
+            items.append({"y": y_center, "x": x_start, "text": txt})
+        except (TypeError, IndexError):
+            continue
+
+    if not items:
+        return "<p style='color:#999;'>⚠️ 有效文字提取为空</p>"
+
+    # 4. 动态行聚类（替代固定 15px 容差，自适应不同分辨率）
+    items.sort(key=lambda i: i["y"])
+    avg_height = 20
+    rows = []
+    current_row = [items[0]]
+
+    for item in items[1:]:
+        tolerance = max(10, avg_height * 0.6)
+        if abs(item["y"] - current_row[-1]["y"]) < tolerance:
+            current_row.append(item)
+            ys = [i["y"] for i in current_row]
+            avg_height = (max(ys) - min(ys)) / max(len(ys) - 1, 1) or 20
+        else:
+            rows.append(sorted(current_row, key=lambda i: i["x"]))
+            current_row = [item]
+            avg_height = 20
+    rows.append(sorted(current_row, key=lambda i: i["x"]))
+
+    # 5. 生成 HTML 表格
+    html = [
+        '<table border="1" cellspacing="0" cellpadding="6" '
+        'style="border-collapse:collapse;width:100%;font-size:14px;">'
+    ]
+    for row in rows:
+        html.append("<tr>")
+        for cell in row:
+            txt = cell["text"]
+            # 金额格式化：去除前导零和千分位逗号
+            if re.match(r"^0[\d,]*\.\d+$", txt):
+                clean = txt.replace(",", "").lstrip("0")
+                if clean.startswith("."):
+                    clean = "0" + clean
+                txt = f"<b>{clean}</b>"
+            html.append(f"<td>{txt}</td>")
+        html.append("</tr>")
+    html.append("</table>")
+    return "\n".join(html)
+
+
+# ==================== 解析入口 ====================
+def parse_document(file_path, progress=gr.Progress(track_tqdm=True)):
+    if not file_path or not os.path.exists(file_path):
+        return '<div class="paddlex-preview"><p>⚠️ 请先上传文件</p></div>'
 
     try:
-        # 👇 修改2: 更新进度条提示文案
-        progress(0.1, desc="🔍 正在解析文档（GPU加速中）...")
-        result = doc_parser.predict(input_data)
-
-        progress(0.5, desc="📝 正在提取 Markdown...")
-        md_content = extract_markdown(result)
-
+        progress(0.2, desc="🔍 OCR 识别中...")
+        result = ocr_pipeline.predict(file_path)
+        progress(0.8, desc="📊 重建表格结构中...")
+        table_html = rebuild_table_from_ocr(result)
         progress(1.0, desc="✅ 完成！")
 
+        paddle.device.cuda.empty_cache()
+        gc.collect()
+        return f'<div class="paddlex-preview">{table_html}</div>'
+
     except Exception as e:
-        return preview_image, f"### ❌ 解析失败\n```{str(e)}```"
-
-    if not md_content.strip():
-        md_content = "### 🔍 未提取到结构化内容\n可能原因：\n1. 图片清晰度不足\n2. 当前流水线不支持该版式\n3. 请尝试更换为 `layout_parsing` 流水线"
-
-    return preview_image, md_content
+        logging.exception("解析异常")
+        return f'<div class="paddlex-preview"><p style="color:red;">❌ 错误: {str(e)}</p></div>'
 
 
-with gr.Blocks(title="文档转 Markdown 工具") as demo:
-    # 👇 修改3: 标题显示 GPU 而非 CPU
-    gr.Markdown(f"# 📑 文档/图片 → Markdown 转换\n当前流水线: `{used_pipeline_name}` | 设备: **GPU**")
+# ==================== UI ====================
+CSS = """
+<style>
+.paddlex-preview { padding: 16px; line-height: 1.6; }
+.paddlex-preview table { margin: 10px 0; }
+.paddlex-preview th, .paddlex-preview td {
+    border: 1px solid #ccc; padding: 6px 10px; text-align: left;
+}
+.paddlex-preview tr:nth-child(even) { background: #fafafa; }
+</style>
+"""
 
-    with gr.Row(equal_height=True):
-        with gr.Column(scale=1):
-            file_input = gr.File(
-                label="📁 上传文档 (图片/PDF)",
-                file_types=["image", ".pdf"],
-                type="filepath"
-            )
-        with gr.Column(scale=1):
-            img_preview = gr.Image(type="pil", label="🖼️ 原图预览", interactive=False)
-
-    md_output = gr.Markdown(
-        value="### 📭 等待上传...\n支持表格、标题、列表、公式的结构化还原",
-        label="还原后的 Markdown"
+with gr.Blocks(title="银行对账单解析器") as demo:
+    gr.Markdown(
+        "# 🏦 银行对账单结构化解析\n"
+        "> 基于 PaddleX 3.x OCR + 动态坐标聚类算法，专治弱边框表格"
     )
-
-    btn = gr.Button("🔍 开始解析", variant="primary", size="lg")
-
-    btn.click(
-        fn=parse_document,
-        inputs=[file_input],
-        outputs=[img_preview, md_output]
-    )
+    with gr.Row():
+        inp = gr.File(
+            label="上传图片/PDF", file_types=["image", ".pdf"], type="filepath"
+        )
+        out = gr.HTML(
+            value=CSS + '<div class="paddlex-preview"><p>📤 等待上传...</p></div>'
+        )
+    gr.Button("🔍 开始解析", variant="primary").click(parse_document, [inp], [out])
 
 if __name__ == "__main__":
-    demo.launch(server_name="127.0.0.1", server_port=7861, theme=gr.themes.Default())
+    demo.launch(server_name="127.0.0.1", server_port=7861)
