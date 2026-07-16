@@ -47,7 +47,6 @@ def draw_ocr_boxes(image, ocr_result):
 
     txt_lines = []
     info_lines = []
-    md_lines = ["## 📄 OCR 识别结果\n"]
 
     # 👇 2.9.x 返回格式: List[List[ [box, (text, score)] ]]
     for page in ocr_result:
@@ -65,23 +64,21 @@ def draw_ocr_boxes(image, ocr_result):
 
             txt_lines.append(text)
             info_lines.append(f"{text} (置信度: {score:.4f})")
-            md_lines.append(f"- **{text}** _(置信度: {score:.2f})_")
 
-    return img, "\n".join(txt_lines), "\n".join(info_lines), "\n".join(md_lines)
+    return img, "\n".join(txt_lines), "\n".join(info_lines)
 
 
 def recognize_image(image):
     if image is None:
-        return None, "", "请上传图片", "### ⚠️ 请先上传图片"
+        return None, "", "请上传图片"
 
     result = ocr.ocr(np.array(image), cls=True)  # 👈 2.9.x 用 ocr() 方法
-    annotated_img, full_text, detail_info, md_content = draw_ocr_boxes(image, result)
+    annotated_img, full_text, detail_info = draw_ocr_boxes(image, result)
 
     return (
         annotated_img,
         full_text,
         detail_info if detail_info else "未识别到文字",
-        md_content if md_content.strip() else "### ⚠️ 未识别到文字"
     )
 
 
@@ -96,13 +93,11 @@ with gr.Blocks(title="PaddleOCR 可视化测试") as demo:
         text_output = gr.Textbox(label="识别文本", lines=8)
         detail_output = gr.Textbox(label="详细信息(含置信度)", lines=8)
 
-    md_output = gr.Markdown(value="### 📭 等待上传图片...")
-
     btn = gr.Button("🔍 开始识别", variant="primary", size="lg")
     btn.click(
         fn=recognize_image,
         inputs=img_input,
-        outputs=[img_output, text_output, detail_output, md_output]
+        outputs=[img_output, text_output, detail_output]
     )
 
 if __name__ == "__main__":
