@@ -4,6 +4,7 @@ import os
 import re
 
 import gradio as gr
+import numpy as np
 import paddle
 
 os.environ["PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK"] = "True"
@@ -38,61 +39,86 @@ ocr_pipeline = load_ocr_pipeline()
 
 # ==================== 核心：基于坐标的表格重建算法 ====================
 def rebuild_table_from_ocr(ocr_result):
-    """适配 PaddleX 3.x OCR 返回结构的表格重建"""
+    """适配 PaddleX 3.x OCR 返回结构的表格重建（修复 NumPy 布尔歧义）"""
     items = []
 
-    # 1. 安全获取第一个结果（兼容生成器/列表/字典）
+    # 1. 安全获取第一个结果
     if hasattr(ocr_result, "__iter__") and not isinstance(ocr_result, dict):
         res = next(iter(ocr_result))
     else:
         res = ocr_result
 
-    # 🔑 2. 兼容 PaddleX 3.x 与旧版字段名
-    boxes, texts = [], []
+    # 🔑 2. 兼容 PaddleX 3.x 字段（避免对 ndarray 使用 or 运算符）
+    boxes, texts = None, None
     if isinstance(res, dict):
-        # PaddleX 3.x 标准字段优先
-        boxes = res.get("rec_boxes", []) or res.get("dt_polys", [])
-        texts = res.get("rec_texts", []) or res.get("rec_text", [])
-        # 兜底旧版嵌套字段
-        if not boxes:
+        # 按优先级逐个检查，不使用 or 连接
+        for key in ("rec_boxes", "dt_polys"):
+            val = res.get(key)
+            if val is not None and len(val) > 0:
+                boxes = val
+                break
+        for key in ("rec_texts", "rec_text"):
+            val = res.get(key)
+            if val is not None and len(val) > 0:
+                texts = val
+                break
+        # 兜底旧版嵌套结构
+        if boxes is None or texts is None:
             rec_res = res.get("rec_res", {})
             if isinstance(rec_res, dict):
-                boxes = rec_res.get("boxes", [])
-                texts = rec_res.get("texts", [])
+                if boxes is None:
+                    boxes = rec_res.get("boxes")
+                if texts is None:
+                    texts = rec_res.get("texts")
     else:
-        # 对象属性访问兜底
-        boxes = getattr(res, "rec_boxes", []) or getattr(res, "dt_polys", [])
-        texts = getattr(res, "rec_texts", []) or getattr(res, "rec_text", [])
+        for attr in ("rec_boxes", "dt_polys"):
+            val = getattr(res, attr, None)
+            if val is not None and len(val) > 0:
+                boxes = val
+                break
+        for attr in ("rec_texts", "rec_text"):
+            val = getattr(res, attr, None)
+            if val is not None and len(val) > 0:
+                texts = val
+                break
+
+    # 统一转为 Python list，避免后续 NumPy 索引问题
+    if isinstance(boxes, np.ndarray):
+        boxes = boxes.tolist()
+    if isinstance(texts, np.ndarray):
+        texts = texts.tolist()
 
     if not boxes or not texts or len(boxes) != len(texts):
+        box_len = len(boxes) if boxes is not None else 0
+        text_len = len(texts) if texts is not None else 0
         return (
-            f"<p style='color:#999;'>⚠️ 字段解析失败: boxes={len(boxes)}, texts={len(texts)}<br>"
+            f"<p style='color:#999;'>⚠️ 字段解析失败: boxes={box_len}, texts={text_len}<br>"
             "请检查控制台打印的原始返回结构</p>"
         )
 
-    # 3. 提取坐标与文本（兼容多种 bbox 格式）
+    # 3. 提取坐标与文本
     for box, text in zip(boxes, texts):
         txt = str(text).strip()
         if not txt:
             continue
         try:
-            if isinstance(box, list) and len(box) == 4:
-                if isinstance(box[0], (list, tuple)):  # [[x1,y1],[x2,y2]...] 四点格式
+            if isinstance(box, (list, tuple)) and len(box) == 4:
+                if isinstance(box[0], (list, tuple)):
                     y_center = sum(p[1] for p in box) / 4
                     x_start = min(p[0] for p in box)
-                else:  # [x1,y1,x2,y2] 矩形格式
+                else:
                     y_center = (box[1] + box[3]) / 2
                     x_start = box[0]
             else:
                 continue
             items.append({"y": y_center, "x": x_start, "text": txt})
-        except (TypeError, IndexError):
+        except (TypeError, IndexError, ValueError):
             continue
 
     if not items:
         return "<p style='color:#999;'>⚠️ 有效文字提取为空</p>"
 
-    # 4. 动态行聚类（替代固定 15px 容差，自适应不同分辨率）
+    # 4. 动态行聚类
     items.sort(key=lambda i: i["y"])
     avg_height = 20
     rows = []
@@ -119,7 +145,6 @@ def rebuild_table_from_ocr(ocr_result):
         html.append("<tr>")
         for cell in row:
             txt = cell["text"]
-            # 金额格式化：去除前导零和千分位逗号
             if re.match(r"^0[\d,]*\.\d+$", txt):
                 clean = txt.replace(",", "").lstrip("0")
                 if clean.startswith("."):
