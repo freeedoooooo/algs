@@ -1,0 +1,31 @@
+services:
+  onlyoffice:
+    image: onlyoffice/documentserver:latest
+    container_name: onlyoffice
+    restart: always
+    ports:
+      - "9898:80"   # 主机端口:容器端口
+    environment:
+      - TZ=Asia/Shanghai
+      # --- 关闭 JWT（适合内网测试）---
+      - JWT_ENABLED=false
+
+      # --- 如需开启 JWT，请注释上面一行，并取消注释下面两行 ---
+      # - JWT_ENABLED=true
+      # - JWT_SECRET=your_strong_secret_here   # ← 请修改为强密钥！
+
+      # 可选：自定义 JWT Header 名（默认为 Authorization）
+      # - JWT_HEADER=token
+    volumes:
+      - ./onlyoffice/logs:/var/log/onlyoffice
+      - ./onlyoffice/data:/var/www/onlyoffice/Data
+      - ./onlyoffice/lib:/var/lib/onlyoffice
+      - ./onlyoffice/db:/var/lib/postgresql
+      # 👇 关键：挂载自定义配置
+      - ./onlyoffice/config/default.json:/etc/onlyoffice/documentserver/default.json
+    networks:
+      - onlyoffice-net
+
+networks:
+  onlyoffice-net:
+    driver: bridge

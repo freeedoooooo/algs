@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>ONLYOFFICE 本地文档编辑 Demo</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        #editor {
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+</head>
+<body>
+<div id="editor"></div>
+
+<!-- 替换为你的 ONLYOFFICE 服务器地址 -->
+<script src="http://localhost:9898/web-apps/apps/api/documents/api.js"></script>
+
+<script>
+    // === 配置区（请根据实际情况修改）===
+    const ONLYOFFICE_URL = "http://localhost:9898"; // ONLYOFFICE 服务地址
+    const DOCUMENT_URL = "https://oss.dibdata.cn/toubao/tmp/%E6%8A%80%E6%9C%AF%E6%B5%8B%E8%AF%95%E6%8A%A5%E5%91%8A.docx"; // 你的文档 HTTP 地址
+    const DOCUMENT_TITLE = "sample.docx";
+    const DOCUMENT_KEY = "demo_" + new Date().getTime(); // 必须唯一！
+
+    // === 初始化编辑器 ===
+    const config = {
+        document: {
+            fileType: "docx",
+            key: DOCUMENT_KEY,
+            title: DOCUMENT_TITLE,
+            url: DOCUMENT_URL,
+            permissions: {
+                edit: true,   // 允许编辑
+                download: true,
+                print: true
+            }
+        },
+        documentType: "word", // word | cell | slide
+        editorConfig: {
+            mode: "edit", // view | edit
+            lang: "zh-CN",
+            customization: {
+                feedback: false,
+                help: false
+            },
+            user: {
+                id: "demo-user-001",
+                name: "Demo User"
+            }
+            // 如果启用了 JWT，需在此添加 token:
+            // token: "your-jwt-token-here"
+        },
+        events: {
+            onReady: () => console.log("ONLYOFFICE 编辑器已就绪"),
+            onSave: (event) => console.log("文档保存事件:", event),
+            onError: (event) => console.error("ONLYOFFICE 错误:", event)
+        }
+    };
+
+    // 启动编辑器
+    new DocsAPI.DocEditor("editor", config);
+</script>
+</body>
+</html>

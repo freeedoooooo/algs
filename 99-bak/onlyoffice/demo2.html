@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Test</title>
+    <script src="http://localhost:9898/web-apps/apps/api/documents/api.js"></script>
+</head>
+<body>
+<div id="editor"></div>
+<script>
+    new DocsAPI.DocEditor("editor", {
+        document: {
+            fileType: "docx",
+            key: "test_key",
+            title: "Test",
+            url: "https://oss.dibdata.cn/toubao/tmp/%E6%8A%80%E6%9C%AF%E6%B5%8B%E8%AF%95%E6%8A%A5%E5%91%8A.docx"
+        },
+        editorConfig: {
+            mode: "edit",
+            lang: "zh-CN",
+            debug: true
+        }
+    });
+</script>
+</body>
+</html>
