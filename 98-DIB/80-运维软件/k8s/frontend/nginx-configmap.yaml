@@ -1,0 +1,114 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: dib-c1
+data:
+  nginx.conf: |
+    worker_processes  1;
+
+    events {
+        worker_connections  1024;
+    }
+
+    http {
+        include       mime.types;
+        default_type  application/octet-stream;
+
+        sendfile        on;
+        keepalive_timeout  65;
+        proxy_read_timeout 60s;
+
+        # 开启 gzip 压缩
+        gzip on;
+        gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss;
+        gzip_min_length 1024;
+        gzip_comp_level 6;
+        gzip_vary on;
+
+        # Docker DNS 解析器，用于刷新后端 DNS
+        resolver 127.0.0.11 valid=10s ipv6=off;
+
+        server {
+            listen       80;
+            server_name  localhost;
+
+            location ^~ /sso/ {
+                return 302 http://$host:8090$request_uri;
+            }
+
+            location / {
+                root   html;
+                index  index.html index.htm;
+            }
+        }
+
+        server {
+            listen 8090;
+            root /opt/app/frontend/c1-client;
+            index index.html index.htm;
+            client_max_body_size 200m;
+
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Forwarded-Host $http_host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Forwarded-Port $server_port;
+
+            # 认证中心 -> auth-server K8s Service
+            location ^~ /sso/ {
+                proxy_pass http://auth-server.dib-c1.svc.cluster.local:9090/sso/;
+            }
+
+            # 业务 API -> gateway K8s Service
+            location ~ ^/(?:api-oauth|api/(?:auth|mdm|extract|report|data|rule))/ {
+                proxy_pass http://gateway.dib-c1.svc.cluster.local:20000;
+            }
+
+            # BI 代理（按实际环境修改地址）
+            location ~ ^/bi/(?<bi_api>de2api|websocket)/ {
+                rewrite ^/bi/(de2api|websocket)/(.*)$ /$1/$2 break;
+                proxy_pass http://10.0.5.70:8100;
+            }
+
+            location /bi/ {
+                alias /opt/app/frontend/bi-client/;
+                try_files $uri $uri/ /index.html;
+            }
+
+            # 静态资源
+            location ~ ^/(?:[^/]+/)*(?<app_name>app-[^/]+)(?<asset_path>/.*\.(?:js|css|woff2?|ttf|eot|otf|png|jpe?g|gif|ico|webp|svg))$ {
+                try_files /$app_name$asset_path =404;
+                access_log off;
+            }
+
+            location ~ ^(?<asset_path>/assets/.*\.(?:js|css|woff2?|ttf|eot|otf|png|jpe?g|gif|ico|webp|svg))$ {
+                try_files /app-portal$asset_path =404;
+                access_log off;
+            }
+
+            # 路由
+            location = / {
+                if (-f $document_root/app-portal/index.html) {
+                    return 302 /portal;
+                }
+                return 302 /app-report;
+            }
+
+            location ~ ^/(?:[^/]+/)*(?<app_name>app-(?:report|data|system-v2))(?<app_path>/.*)?$ {
+                try_files /$app_name$app_path /$app_name$app_path/ /$app_name/index.html;
+            }
+
+            location / {
+                try_files /app-portal$uri /app-portal$uri/ /app-portal/index.html /app-report/index.html;
+            }
+
+            error_page 504 /custom_504.html;
+            location = /custom_504.html {
+                internal;
+                default_type text/plain;
+                return 504 '抱歉，您的请求未能及时得到响应。请稍后刷新查看执行结果！';
+            }
+        }
+    }

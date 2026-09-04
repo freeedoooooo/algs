@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nacos-headless
+  namespace: dib-c1
+  labels:
+    app: nacos
+spec:
+  clusterIP: None
+  ports:
+    - port: 8848
+      name: client
+      targetPort: 8848
+    - port: 9848
+      name: grpc
+      targetPort: 9848
+  selector:
+    app: nacos
+---
+# 可选：暴露一个 ClusterIP Service 方便外部访问 Nacos 控制台
+apiVersion: v1
+kind: Service
+metadata:
+  name: nacos
+  namespace: dib-c1
+  labels:
+    app: nacos
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8848
+      name: client
+      targetPort: 8848
+    - port: 9848
+      name: grpc
+      targetPort: 9848
+  selector:
+    app: nacos

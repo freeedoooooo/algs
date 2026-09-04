@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dib-c1-ingress
+  namespace: dib-c1
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "200m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
+spec:
+  ingressClassName: nginx        # TODO: 根据实际 Ingress Controller 调整
+  rules:
+    - host: c1.your-domain.com   # TODO: 按实际域名修改
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nginx-frontend
+                port:
+                  number: 8090

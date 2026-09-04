@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-data-dg
+  namespace: dib-c1
+  labels:
+    app: service-data-dg
+spec:
+  type: ClusterIP
+  ports:
+    - port: 30005
+      targetPort: 30005
+      protocol: TCP
+      name: http
+  selector:
+    app: service-data-dg

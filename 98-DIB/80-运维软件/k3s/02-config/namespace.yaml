@@ -1,0 +1,9 @@
+﻿# ============================================================
+# DIB 微服务命名空间
+# ============================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: c1-idc-test
+  labels:
+    app.kubernetes.io/part-of: dib-platform

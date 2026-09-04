@@ -1,0 +1,60 @@
+﻿# ============================================================
+# DIB 微服务公共配置（全部明文，后续可迁移至 Secret 加密）
+# ============================================================
+# 说明: 存放所有配置（含密码），各微服务通过 envFrom 引用
+# 修改后需重启 Pod 生效（或使用 ConfigMap 热更新）
+# TODO: 生产环境稳定后，将密码字段迁移至 Secret 加密管理
+# ============================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dib-common-config
+  namespace: c1-idc-test
+  labels:
+    app.kubernetes.io/part-of: dib-platform
+data:
+  # ---------- Spring Profile ----------
+  # 环境标识，对应 Docker Compose 中的 C1_ENV
+  # 可选值: dev / test / pro
+  C1_ENV: "idc-test-c1"
+
+  # ---------- Nacos 注册中心 ----------
+  # K3s 内部 Nacos 地址（部署 infra/nacos.yaml 后可用）
+  NACOS_SERVER_ADDR: "http://nacos.c1-idc-test.svc.cluster.local:8848"
+  # 如需连接外部 Nacos，修改为外部地址，如:
+  # NACOS_SERVER_ADDR: "http://10.0.5.70:8848"
+  NACOS_NAMESPACE: "dev-c1"
+  NACOS_USERNAME: "c1"
+
+  # ---------- Redis ----------
+  # K3s 内部 Redis 地址（部署 infra/redis.yaml 后可用）
+  REDIS_HOST: "redis.c1-idc-test.svc.cluster.local"
+  REDIS_PORT: "6379"
+  REDIS_DATABASE: "0"
+
+  # ---------- 数据库（外部 MySQL）----------
+  # 完整 JDBC URL，对应 Docker Compose 中的 C1_DB_URL
+  DB_URL: "jdbc:mysql://10.0.6.161:3306/dib_report_copilot?characterEncoding=utf8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true&useSSL=false&zeroDateTimeBehavior=convertToNull"
+  DB_DRIVER: "com.mysql.cj.jdbc.Driver"
+
+  # ---------- MinIO（外部部署）----------
+  MINIO_ENDPOINT: "http://10.0.6.163:9000"
+
+  # ---------- OCR 服务 ----------
+  OCR_SERVER: "http://192.168.10.91:8089/"
+
+  # ---------- 数据库凭据（明文，后续迁移至 Secret）----------
+  DB_USERNAME: "root"
+  DB_PASSWORD: "Dib12345*"
+
+  # ---------- Redis 凭据 ----------
+  REDIS_PASSWORD: "dibredis"
+
+  # ---------- Nacos 认证 ----------
+  NACOS_PASSWORD: "c1@2025"
+
+  # ---------- OAuth / Gateway ----------
+  GATEWAY_OAUTH_CLIENT_HOST: "http://10.0.5.70:8090"
+  GATEWAY_OAUTH_SERVER_HOST: "http://10.0.5.70:9090"
+  GATEWAY_OAUTH_SERVER_HOST_INNER: "http://10.0.5.70:9090"
+  OAUTH_CLIENT_CREDENTIALS: "123456"

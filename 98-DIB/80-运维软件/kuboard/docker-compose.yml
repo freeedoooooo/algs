@@ -1,17 +1,39 @@
+# ============================================================
+# Kuboard v4 Docker Compose 配置
+# ============================================================
+# 启动: docker compose up -d
+# 停止: docker compose down
+# 查看日志: docker compose logs -f
+# 访问地址: http://<HOST_IP>:38000
+# 默认账号: admin / Kuboard12345
+# ============================================================
+
+# -------------------- 环境变量 --------------------
+# 可通过同目录 .env 文件覆盖以下默认值
+# KUBOARD_DB_PASSWORD=kuboardpwd
+# KUBOARD_ROOT_PASSWORD=kuboardpwd
+# KUBOARD_PORT=8000
+
+# -------------------- SQL 初始化 --------------------
 configs:
   create_db_sql:
     content: |
-      CREATE DATABASE kuboard DEFAULT CHARACTER SET = 'utf8mb4' DEFAULT COLLATE = 'utf8mb4_unicode_ci';
-      CREATE USER 'kuboard'@'%' IDENTIFIED BY 'kuboardpwd';
+      CREATE DATABASE IF NOT EXISTS kuboard DEFAULT CHARACTER SET = 'utf8mb4' DEFAULT COLLATE = 'utf8mb4_unicode_ci';
+      CREATE USER IF NOT EXISTS 'kuboard'@'%' IDENTIFIED BY '${KUBOARD_DB_PASSWORD:-kuboardpwd}';
       GRANT ALL PRIVILEGES ON kuboard.* TO 'kuboard'@'%';
       FLUSH PRIVILEGES;
 
 services:
+  # -------------------- MariaDB 数据库 --------------------
   db:
     image: swr.cn-east-2.myhuaweicloud.com/kuboard/mariadb:11.3.2-jammy
+    # image: mariadb:11.3.2-jammy  # 华为云镜像与官方镜像完全一致，可按需切换
+    container_name: kuboard-db
+    hostname: kuboard-db
+    restart: unless-stopped
     environment:
-      MARIADB_ROOT_PASSWORD: kuboardpwd
-      MYSQL_ROOT_PASSWORD: kuboardpwd
+      MARIADB_ROOT_PASSWORD: ${KUBOARD_ROOT_PASSWORD:-kuboardpwd}
+      MYSQL_ROOT_PASSWORD: ${KUBOARD_ROOT_PASSWORD:-kuboardpwd}
       TZ: Asia/Shanghai
     volumes:
       - ./kuboard-mariadb-data:/var/lib/mysql
@@ -23,34 +45,57 @@ services:
       kuboard_v4_dev:
         aliases:
           - db
-    # 🔧 新增：健康检查，确保 MariaDB 真正可连接
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 10
       start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
+  # -------------------- Kuboard v4 --------------------
   kuboard:
     image: swr.cn-east-2.myhuaweicloud.com/kuboard/kuboard:v4
+    # image: eipwork/kuboard:v4  # 备选镜像地址
+    container_name: kuboard-app
+    hostname: kuboard-app
+    restart: unless-stopped
     environment:
       - DB_DRIVER=org.mariadb.jdbc.Driver
       - DB_URL=jdbc:mariadb://db:3306/kuboard?serverTimezone=Asia/Shanghai
       - DB_USERNAME=kuboard
-      - DB_PASSWORD=kuboardpwd
+      - DB_PASSWORD=${KUBOARD_DB_PASSWORD:-kuboardpwd}
+      - TZ=Asia/Shanghai
+      # 禁用 Swagger API 文档（生产环境建议关闭，安全扫描合规）
+      - KUBOARD_SWAGGER_ENABLED=false
     ports:
-      - "8000:80"
+      - "${KUBOARD_PORT:-8000}:80"
     volumes:
       - ./kuboard-log:/app/logs
     networks:
       kuboard_v4_dev:
         aliases:
           - kuboard
-    # 🔧 修改：等待 db 健康检查通过后再启动
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
 
 networks:
   kuboard_v4_dev:
+    name: kuboard_v4_dev
     driver: bridge

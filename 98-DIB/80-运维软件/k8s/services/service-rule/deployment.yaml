@@ -1,0 +1,107 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-rule
+  namespace: dib-c1
+  labels:
+    app: service-rule
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-rule
+  template:
+    metadata:
+      labels:
+        app: service-rule
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "30004"
+        prometheus.io/path: "/actuator/prometheus"
+    spec:
+      containers:
+        - name: service-rule
+          image: hub.dibtime.com/dib-c1/c1-rule:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 30004
+              name: http
+          env:
+            - name: C1_ENV
+              value: "k8s"
+            # Redis
+            - name: SPRING_DATA_REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: dib-c1-config
+                  key: REDIS_HOST
+            - name: SPRING_DATA_REDIS_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: dib-c1-config
+                  key: REDIS_PORT
+            - name: SPRING_DATA_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: dib-c1-redis-secret
+                  key: REDIS_PASSWORD
+            # MySQL
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:mysql://$(MYSQL_HOST):$(MYSQL_PORT)/$(MYSQL_DATABASE)?characterEncoding=utf8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true&useSSL=false&zeroDateTimeBehavior=convertToNull"
+            - name: MYSQL_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: dib-c1-config
+                  key: MYSQL_HOST
+            - name: MYSQL_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: dib-c1-config
+                  key: MYSQL_PORT
+            - name: MYSQL_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: dib-c1-config
+                  key: MYSQL_DATABASE
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: dib-c1-db-secret
+                  key: MYSQL_USERNAME
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: dib-c1-db-secret
+                  key: MYSQL_PASSWORD
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "1"
+              memory: "2Gi"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 30004
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 30004
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: app-logs
+              mountPath: /opt/app/logs
+      volumes:
+        - name: app-logs
+          emptyDir: {}
+      imagePullSecrets:
+        - name: harbor-registry-secret

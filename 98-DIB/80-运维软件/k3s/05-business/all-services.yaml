@@ -1,0 +1,511 @@
+﻿# ============================================================
+# DIB 业务服务 - Deployment + Service
+# ============================================================
+# 包含 5 个业务微服务:
+#   1. service-extract  :30001  (资料提取, 高内存)
+#   2. service-report   :30002  (报告生成)
+#   3. service-data     :30003  (数据资源, 高内存)
+#   4. service-rule     :30004  (规则引擎)
+#   5. data-dg          :30005  (数据治理)
+# ============================================================
+
+# ==================== 1. service-extract ====================
+# 注意: 该服务 JVM 配置为 12g-16g，属于高内存服务
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-extract
+  namespace: c1-idc-test
+  labels:
+    app: service-extract
+    tier: business
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-extract
+  template:
+    metadata:
+      labels:
+        app: service-extract
+        tier: business
+    spec:
+      imagePullSecrets:
+        - name: dib-registry-secret
+      containers:
+        - name: service-extract
+          image: 10.0.6.183:8088/c1/c1-extract:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 30001
+              name: http
+              protocol: TCP
+          env:
+            - name: C1_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: dib-common-config
+                  key: C1_ENV
+            - name: TZ
+              value: "Asia/Shanghai"
+            - name: OCR_SERVER
+              valueFrom:
+                configMapKeyRef:
+                  name: dib-common-config
+                  key: OCR_SERVER
+          envFrom:
+            - configMapRef:
+                name: dib-common-config
+
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "12Gi"
+            limits:
+              cpu: "2000m"
+              memory: "18Gi"
+          volumeMounts:
+            - name: app-logs
+              mountPath: /opt/app/logs
+            - name: app-tmp
+              mountPath: /tmp
+            - name: fonts
+              mountPath: /usr/share/fonts
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /api/extract/actuator/health
+              port: 30001
+            initialDelaySeconds: 90
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /api/extract/actuator/health
+              port: 30001
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: app-logs
+          emptyDir: {}
+        - name: app-tmp
+          emptyDir:
+            sizeLimit: 5Gi
+        - name: fonts
+          hostPath:
+            path: /usr/share/fonts
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-extract
+  namespace: c1-idc-test
+  labels:
+    app: service-extract
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 30001
+      targetPort: 30001
+      protocol: TCP
+  selector:
+    app: service-extract
+
+# ==================== 2. service-report ====================
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-report
+  namespace: c1-idc-test
+  labels:
+    app: service-report
+    tier: business
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-report
+  template:
+    metadata:
+      labels:
+        app: service-report
+        tier: business
+    spec:
+      imagePullSecrets:
+        - name: dib-registry-secret
+      containers:
+        - name: service-report
+          image: 10.0.6.183:8088/c1/c1-report:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 30002
+              name: http
+              protocol: TCP
+          env:
+            - name: C1_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: dib-common-config
+                  key: C1_ENV
+            - name: TZ
+              value: "Asia/Shanghai"
+          envFrom:
+            - configMapRef:
+                name: dib-common-config
+
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "1Gi"
+            limits:
+              cpu: "1000m"
+              memory: "3Gi"
+          volumeMounts:
+            - name: app-logs
+              mountPath: /opt/app/logs
+            - name: app-tmp
+              mountPath: /opt/app/tmp
+            - name: fonts
+              mountPath: /usr/share/fonts
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /api/report/actuator/health
+              port: 30002
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /api/report/actuator/health
+              port: 30002
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: app-logs
+          emptyDir: {}
+        - name: app-tmp
+          emptyDir: {}
+        - name: fonts
+          hostPath:
+            path: /usr/share/fonts
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-report
+  namespace: c1-idc-test
+  labels:
+    app: service-report
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 30002
+      targetPort: 30002
+      protocol: TCP
+  selector:
+    app: service-report
+
+# ==================== 3. service-data ====================
+# 注意: 该服务 JVM 配置为 4g，属于高内存服务
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-data
+  namespace: c1-idc-test
+  labels:
+    app: service-data
+    tier: business
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-data
+  template:
+    metadata:
+      labels:
+        app: service-data
+        tier: business
+    spec:
+      imagePullSecrets:
+        - name: dib-registry-secret
+      containers:
+        - name: service-data
+          image: 10.0.6.183:8088/c1/c1-data:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 30003
+              name: http
+              protocol: TCP
+          env:
+            - name: C1_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: dib-common-config
+                  key: C1_ENV
+            - name: TZ
+              value: "Asia/Shanghai"
+          envFrom:
+            - configMapRef:
+                name: dib-common-config
+
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "4Gi"
+            limits:
+              cpu: "1500m"
+              memory: "6Gi"
+          volumeMounts:
+            - name: app-logs
+              mountPath: /opt/app/logs
+            - name: fonts
+              mountPath: /usr/share/fonts
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /api/data/actuator/health
+              port: 30003
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /api/data/actuator/health
+              port: 30003
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: app-logs
+          emptyDir: {}
+        - name: fonts
+          hostPath:
+            path: /usr/share/fonts
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-data
+  namespace: c1-idc-test
+  labels:
+    app: service-data
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 30003
+      targetPort: 30003
+      protocol: TCP
+  selector:
+    app: service-data
+
+# ==================== 4. service-rule ====================
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-rule
+  namespace: c1-idc-test
+  labels:
+    app: service-rule
+    tier: business
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-rule
+  template:
+    metadata:
+      labels:
+        app: service-rule
+        tier: business
+    spec:
+      imagePullSecrets:
+        - name: dib-registry-secret
+      containers:
+        - name: service-rule
+          image: 10.0.6.183:8088/c1/c1-rule:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 30004
+              name: http
+              protocol: TCP
+          env:
+            - name: C1_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: dib-common-config
+                  key: C1_ENV
+            - name: TZ
+              value: "Asia/Shanghai"
+          envFrom:
+            - configMapRef:
+                name: dib-common-config
+
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "1Gi"
+            limits:
+              cpu: "1000m"
+              memory: "3Gi"
+          volumeMounts:
+            - name: app-logs
+              mountPath: /opt/app/logs
+            - name: fonts
+              mountPath: /usr/share/fonts
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /api/rule/actuator/health
+              port: 30004
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /api/rule/actuator/health
+              port: 30004
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: app-logs
+          emptyDir: {}
+        - name: fonts
+          hostPath:
+            path: /usr/share/fonts
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-rule
+  namespace: c1-idc-test
+  labels:
+    app: service-rule
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 30004
+      targetPort: 30004
+      protocol: TCP
+  selector:
+    app: service-rule
+
+# ==================== 5. data-dg ====================
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-dg
+  namespace: c1-idc-test
+  labels:
+    app: data-dg
+    tier: business
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: data-dg
+  template:
+    metadata:
+      labels:
+        app: data-dg
+        tier: business
+    spec:
+      imagePullSecrets:
+        - name: dib-registry-secret
+      containers:
+        - name: data-dg
+          image: 10.0.6.183:8088/c1/c1-dg:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 30005
+              name: http
+              protocol: TCP
+          env:
+            - name: C1_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: dib-common-config
+                  key: C1_ENV
+            - name: TZ
+              value: "Asia/Shanghai"
+          envFrom:
+            - configMapRef:
+                name: dib-common-config
+
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1536Mi"
+          volumeMounts:
+            - name: app-logs
+              mountPath: /opt/app/logs
+            - name: fonts
+              mountPath: /usr/share/fonts
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /api/dg/actuator/health
+              port: 30005
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /api/dg/actuator/health
+              port: 30005
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: app-logs
+          emptyDir: {}
+        - name: fonts
+          hostPath:
+            path: /usr/share/fonts
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: data-dg
+  namespace: c1-idc-test
+  labels:
+    app: data-dg
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 30005
+      targetPort: 30005
+      protocol: TCP
+  selector:
+    app: data-dg

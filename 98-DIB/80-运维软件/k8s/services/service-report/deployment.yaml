@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-report
+  namespace: dib-c1
+  labels:
+    app: service-report
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-report
+  template:
+    metadata:
+      labels:
+        app: service-report
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "30002"
+        prometheus.io/path: "/actuator/prometheus"
+    spec:
+      containers:
+        - name: service-report
+          image: hub.dibtime.com/dib-c1/c1-report:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 30002
+              name: http
+          env:
+            - name: C1_ENV
+              value: "k8s"
+            # Redis
+            - name: SPRING_DATA_REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: dib-c1-config
+                  key: REDIS_HOST
+            - name: SPRING_DATA_REDIS_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: dib-c1-config
+                  key: REDIS_PORT
+            - name: SPRING_DATA_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: dib-c1-redis-secret
+                  key: REDIS_PASSWORD
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "1"
+              memory: "2Gi"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 30002
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 30002
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: app-logs
+              mountPath: /opt/app/logs
+            - name: app-tmp
+              mountPath: /opt/app/tmp
+      volumes:
+        - name: app-logs
+          emptyDir: {}
+        - name: app-tmp
+          emptyDir: {}
+      imagePullSecrets:
+        - name: harbor-registry-secret

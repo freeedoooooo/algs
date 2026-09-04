@@ -1,0 +1,120 @@
+﻿# ============================================================
+# Nacos v2.3.2 注册中心（Standalone 模式）
+# ============================================================
+# 服务名: nacos
+# 端口:   8848 (HTTP API), 9848 (gRPC)
+# 存储:   PVC 持久化 /home/nacos/data
+# ============================================================
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nacos-data-pvc
+  namespace: c1-idc-test
+  labels:
+    app: nacos
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nacos
+  namespace: c1-idc-test
+  labels:
+    app: nacos
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # 单副本使用 Recreate 避免数据冲突
+  selector:
+    matchLabels:
+      app: nacos
+  template:
+    metadata:
+      labels:
+        app: nacos
+    spec:
+      containers:
+        - name: nacos
+          image: nacos/nacos-server:v2.3.2
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8848
+              name: http
+              protocol: TCP
+            - containerPort: 9848
+              name: grpc
+              protocol: TCP
+          env:
+            - name: MODE
+              value: "standalone"
+            - name: NACOS_AUTH_ENABLE
+              value: "true"
+            - name: NACOS_AUTH_IDENTITY_KEY
+              value: "admin"
+            - name: NACOS_AUTH_IDENTITY_VALUE
+              value: "admin"
+            - name: NACOS_AUTH_TOKEN
+              value: "VGhpc0lzTXlDdXN0b21TZWNyZXRLZXkwMTIzNDU2Nzg="
+            - name: TZ
+              value: "Asia/Shanghai"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          volumeMounts:
+            - name: nacos-data
+              mountPath: /home/nacos/data
+            - name: nacos-logs
+              mountPath: /home/nacos/logs
+          livenessProbe:
+            httpGet:
+              path: /nacos/actuator/health
+              port: 8848
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /nacos/actuator/health
+              port: 8848
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: nacos-data
+          persistentVolumeClaim:
+            claimName: nacos-data-pvc
+        - name: nacos-logs
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nacos
+  namespace: c1-idc-test
+  labels:
+    app: nacos
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8848
+      targetPort: 8848
+      protocol: TCP
+    - name: grpc
+      port: 9848
+      targetPort: 9848
+      protocol: TCP
+  selector:
+    app: nacos

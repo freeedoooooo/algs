@@ -1,0 +1,35 @@
+# ============================================================
+# K8s / Compose 环境配置 - service-report
+# 部署时通过环境变量注入 Redis 连接信息
+# 对应原模块：dib-agent-service-report/dib-agent-service-report-web
+# 目标路径：dib-agent-service-report-web/src/main/resources/application-k8s.yml
+# ============================================================
+spring:
+  application:
+    name: service-report
+  # nacos（service-report 当前未注册到 Nacos，如需服务发现可启用）
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR:nacos-headless.dib-c1.svc.cluster.local:8848}
+        namespace: ${SPRING_CLOUD_NACOS_DISCOVERY_NAMESPACE:dev-c1}
+        service: ${spring.application.name}
+        username: ${SPRING_CLOUD_NACOS_DISCOVERY_USERNAME:c1}
+        password: ${SPRING_CLOUD_NACOS_DISCOVERY_PASSWORD:}
+    loadbalancer:
+      nacos:
+        enabled: true
+
+dib:
+  report:
+    auto-generate-enabled: false
+    area-report-generate-enabled: false
+    sync-area-report-to-doc-enabled: false
+  converter:
+    tmp-path: /opt/app/tmp
+    outputType: PURE_TEXT
+    wordToPdf: false
+    needCoordinate: false
+    genDoublePdf: false
+  doc-manage:
+    fulltext-enabled: false

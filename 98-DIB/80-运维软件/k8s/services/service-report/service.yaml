@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-report
+  namespace: dib-c1
+  labels:
+    app: service-report
+spec:
+  type: ClusterIP
+  ports:
+    - port: 30002
+      targetPort: 30002
+      protocol: TCP
+      name: http
+  selector:
+    app: service-report
