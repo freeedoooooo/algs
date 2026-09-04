@@ -1,0 +1,56 @@
+configs:
+  create_db_sql:
+    content: |
+      CREATE DATABASE kuboard DEFAULT CHARACTER SET = 'utf8mb4' DEFAULT COLLATE = 'utf8mb4_unicode_ci';
+      CREATE USER 'kuboard'@'%' IDENTIFIED BY 'kuboardpwd';
+      GRANT ALL PRIVILEGES ON kuboard.* TO 'kuboard'@'%';
+      FLUSH PRIVILEGES;
+
+services:
+  db:
+    image: swr.cn-east-2.myhuaweicloud.com/kuboard/mariadb:11.3.2-jammy
+    environment:
+      MARIADB_ROOT_PASSWORD: kuboardpwd
+      MYSQL_ROOT_PASSWORD: kuboardpwd
+      TZ: Asia/Shanghai
+    volumes:
+      - ./kuboard-mariadb-data:/var/lib/mysql
+    configs:
+      - source: create_db_sql
+        target: /docker-entrypoint-initdb.d/create_db.sql
+        mode: 0777
+    networks:
+      kuboard_v4_dev:
+        aliases:
+          - db
+    # 🔧 新增：健康检查，确保 MariaDB 真正可连接
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  kuboard:
+    image: swr.cn-east-2.myhuaweicloud.com/kuboard/kuboard:v4
+    environment:
+      - DB_DRIVER=org.mariadb.jdbc.Driver
+      - DB_URL=jdbc:mariadb://db:3306/kuboard?serverTimezone=Asia/Shanghai
+      - DB_USERNAME=kuboard
+      - DB_PASSWORD=kuboardpwd
+    ports:
+      - "8000:80"
+    volumes:
+      - ./kuboard-log:/app/logs
+    networks:
+      kuboard_v4_dev:
+        aliases:
+          - kuboard
+    # 🔧 修改：等待 db 健康检查通过后再启动
+    depends_on:
+      db:
+        condition: service_healthy
+
+networks:
+  kuboard_v4_dev:
+    driver: bridge
