@@ -5,8 +5,12 @@ DIB 的 5 个核心业务微服务，处理资料提取、报告生成、数据�
 ## 文件清单
 
 | 文件 | 包含服务 |
-|------|---------|
-| `all-services.yaml` | 5 个 Deployment + 5 个 Service |
+|------|--------|
+| `service-extract.yaml` | 资料提取 (Deployment + Service, 高内存) |
+| `service-report.yaml` | 报告生成 (Deployment + Service) |
+| `service-data.yaml` | 数据资源 (Deployment + Service, 高内存) |
+| `service-rule.yaml` | 规则引擎 (Deployment + Service) |
+| `data-dg.yaml` | 数据治理 (Deployment + Service) |
 
 ## 服务概览
 
@@ -24,7 +28,7 @@ DIB 的 5 个核心业务微服务，处理资料提取、报告生成、数据�
 
 ```bash
 # 单独部署业务服务（需先部署 02-config、03-infra、04-platform）
-kubectl apply -f 05-business/all-services.yaml
+kubectl apply -f 05-business/
 
 # 或通过部署脚本
 bash 06-scripts/deploy-all.sh business

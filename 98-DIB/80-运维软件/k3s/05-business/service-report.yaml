@@ -1,0 +1,99 @@
+# service-report — 报告生成
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-report
+  namespace: c1-idc-test
+  labels:
+    app: service-report
+    tier: business
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-report
+  template:
+    metadata:
+      labels:
+        app: service-report
+        tier: business
+    spec:
+      imagePullSecrets:
+        - name: dib-registry-secret
+      containers:
+        - name: service-report
+          image: 10.0.6.183:8088/c1/c1-report:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 30002
+              name: http
+              protocol: TCP
+          env:
+            - name: C1_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: dib-common-config
+                  key: C1_ENV
+            - name: TZ
+              value: "Asia/Shanghai"
+          envFrom:
+            - configMapRef:
+                name: dib-common-config
+
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "1Gi"
+            limits:
+              cpu: "1000m"
+              memory: "3Gi"
+          volumeMounts:
+            - name: app-logs
+              mountPath: /opt/app/logs
+            - name: app-tmp
+              mountPath: /opt/app/tmp
+            - name: fonts
+              mountPath: /usr/share/fonts
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /api/report/actuator/health
+              port: 30002
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /api/report/actuator/health
+              port: 30002
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: app-logs
+          emptyDir: {}
+        - name: app-tmp
+          emptyDir: {}
+        - name: fonts
+          hostPath:
+            path: /usr/share/fonts
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-report
+  namespace: c1-idc-test
+  labels:
+    app: service-report
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 30002
+      targetPort: 30002
+      protocol: TCP
+  selector:
+    app: service-report

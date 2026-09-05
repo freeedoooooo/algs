@@ -19,9 +19,16 @@ k3s/
 │   ├── nacos.yaml                      # Nacos 注册中心 (Deployment + Service + PVC)
 │   └── redis.yaml                      # Redis 缓存 (Deployment + Service + PVC)
 ├── 04-platform/
-│   └── all-services.yaml               # 4 个平台服务 (auth-server / gateway / auth-resource / mdm)
+│   ├── auth-server.yaml              # SSO 认证中心 (Deployment + Service)
+│   ├── gateway.yaml                  # API 网关 (Deployment + Service)
+│   ├── auth-resource.yaml            # 权限资源管理 (Deployment + Service)
+│   └── mdm.yaml                      # 主数据管理 (Deployment + Service)
 ├── 05-business/
-│   └── all-services.yaml               # 5 个业务服务 (extract / report / data / rule / dg)
+│   ├── service-extract.yaml          # 资料提取 (高内存)
+│   ├── service-report.yaml           # 报告生成
+│   ├── service-data.yaml             # 数据资源 (高内存)
+│   ├── service-rule.yaml             # 规则引擎
+│   └── data-dg.yaml                  # 数据治理
 ├── 06-scripts/
 │   ├── deploy-all.sh                   # 一键部署脚本
 │   └── verify.sh                       # 健康检查验证脚本

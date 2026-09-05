@@ -5,8 +5,11 @@ DIB 平台的 4 个基础微服务，属于平台层（认证、网关、权限�
 ## 文件清单
 
 | 文件 | 包含服务 |
-|------|---------|
-| `all-services.yaml` | 4 个 Deployment + 4 个 Service |
+|------|--------|
+| `auth-server.yaml` | SSO 认证中心 (Deployment + Service) |
+| `gateway.yaml` | API 网关 (Deployment + Service) |
+| `auth-resource.yaml` | 权限资源管理 (Deployment + Service) |
+| `mdm.yaml` | 主数据管理 (Deployment + Service) |
 
 ## 服务概览
 
@@ -21,7 +24,7 @@ DIB 平台的 4 个基础微服务，属于平台层（认证、网关、权限�
 
 ```bash
 # 单独部署平台服务（需先部署 02-config 和 03-infra）
-kubectl apply -f 04-platform/all-services.yaml
+kubectl apply -f 04-platform/
 
 # 或通过部署脚本
 bash 06-scripts/deploy-all.sh platform
@@ -76,9 +79,9 @@ bash 06-scripts/deploy-all.sh platform
 
 ---
 
-## all-services.yaml 通用结构详解
+## YAML 通用结构详解
 
-4 个服务的 YAML 结构高度一致，每个服务都包含一对 **Deployment**（运行容器）+ **Service**（提供网络入口）。理解了一个，其余三个只是端口和镜像名不同。
+每个服务的 YAML 结构高度一致，都包含一对 **Deployment**（运行容器）+ **Service**（提供网络入口）。理解了一个，其余只是端口和镜像名不同。
 
 ### 一、Deployment 通用部分
 
@@ -672,14 +675,14 @@ kubectl -n c1-idc-test logs deployment/gateway --previous
 
 #### Q3: 4 个服务可以同时部署吗？有依赖关系吗？
 
-**Q：** `all-services.yaml` 里 4 个服务一起 `kubectl apply`，它们之间有启动顺序吗？
+**Q：** 4 个服务的 YAML 文件可以同时 `kubectl apply`，它们之间有启动顺序吗？
 
-**A：** 可以同时 apply，K3s 会同时创建 4 个 Deployment。但各服务的 Pod **启动速度不同**，先启动完的会等后启动的：
+**A：** 可以同时 apply 整个目录（`kubectl apply -f 04-platform/`），K3s 会同时创建 4 个 Deployment。但各服务的 Pod **启动速度不同**，先启动完的会等后启动的：
 
 - **auth-server** 和 **gateway** 启动时会尝试连接 Nacos 注册，如果 Nacos 还没好会重试
 - **gateway** 路由到 auth-resource / mdm 时，如果目标 Pod 还没 Ready，就绪探针会阻止流量转发
 
-所以 `kubectl apply -f all-services.yaml` 一条命令即可，不需要手动按顺序。但前提条件是 **03-infra 的 Nacos 和 Redis 已经 Ready**。
+所以 `kubectl apply -f 04-platform/` 一条命令即可，不需要手动按顺序。但前提条件是 **03-infra 的 Nacos 和 Redis 已经 Ready**。
 
 ---
 
@@ -693,7 +696,7 @@ kubectl -n c1-idc-test logs deployment/gateway --previous
 
 **方案一：换一个 NodePort**（推荐）
 
-修改 `all-services.yaml` 中 gateway 的 `nodePort` 值：
+修改 YAML 中 gateway 的 `nodePort` 值：
 
 ```yaml
   ports:

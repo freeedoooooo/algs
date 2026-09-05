@@ -1,0 +1,96 @@
+# service-data — 数据资源（高内存服务）
+# 注意: 该服务 JVM 配置为 4g，属于高内存服务
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-data
+  namespace: c1-idc-test
+  labels:
+    app: service-data
+    tier: business
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-data
+  template:
+    metadata:
+      labels:
+        app: service-data
+        tier: business
+    spec:
+      imagePullSecrets:
+        - name: dib-registry-secret
+      containers:
+        - name: service-data
+          image: 10.0.6.183:8088/c1/c1-data:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 30003
+              name: http
+              protocol: TCP
+          env:
+            - name: C1_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: dib-common-config
+                  key: C1_ENV
+            - name: TZ
+              value: "Asia/Shanghai"
+          envFrom:
+            - configMapRef:
+                name: dib-common-config
+
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "4Gi"
+            limits:
+              cpu: "1500m"
+              memory: "6Gi"
+          volumeMounts:
+            - name: app-logs
+              mountPath: /opt/app/logs
+            - name: fonts
+              mountPath: /usr/share/fonts
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /api/data/actuator/health
+              port: 30003
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /api/data/actuator/health
+              port: 30003
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: app-logs
+          emptyDir: {}
+        - name: fonts
+          hostPath:
+            path: /usr/share/fonts
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-data
+  namespace: c1-idc-test
+  labels:
+    app: service-data
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 30003
+      targetPort: 30003
+      protocol: TCP
+  selector:
+    app: service-data

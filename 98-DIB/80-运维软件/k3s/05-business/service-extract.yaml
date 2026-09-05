@@ -1,0 +1,106 @@
+# service-extract — 资料提取（高内存服务）
+# 注意: 该服务 JVM 配置为 12g-16g，属于高内存服务
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-extract
+  namespace: c1-idc-test
+  labels:
+    app: service-extract
+    tier: business
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-extract
+  template:
+    metadata:
+      labels:
+        app: service-extract
+        tier: business
+    spec:
+      imagePullSecrets:
+        - name: dib-registry-secret
+      containers:
+        - name: service-extract
+          image: 10.0.6.183:8088/c1/c1-extract:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 30001
+              name: http
+              protocol: TCP
+          env:
+            - name: C1_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: dib-common-config
+                  key: C1_ENV
+            - name: TZ
+              value: "Asia/Shanghai"
+            - name: OCR_SERVER
+              valueFrom:
+                configMapKeyRef:
+                  name: dib-common-config
+                  key: OCR_SERVER
+          envFrom:
+            - configMapRef:
+                name: dib-common-config
+
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "12Gi"
+            limits:
+              cpu: "2000m"
+              memory: "18Gi"
+          volumeMounts:
+            - name: app-logs
+              mountPath: /opt/app/logs
+            - name: app-tmp
+              mountPath: /tmp
+            - name: fonts
+              mountPath: /usr/share/fonts
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /api/extract/actuator/health
+              port: 30001
+            initialDelaySeconds: 90
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /api/extract/actuator/health
+              port: 30001
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: app-logs
+          emptyDir: {}
+        - name: app-tmp
+          emptyDir:
+            sizeLimit: 5Gi
+        - name: fonts
+          hostPath:
+            path: /usr/share/fonts
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-extract
+  namespace: c1-idc-test
+  labels:
+    app: service-extract
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 30001
+      targetPort: 30001
+      protocol: TCP
+  selector:
+    app: service-extract

@@ -1,0 +1,96 @@
+# auth-server — SSO 认证中心
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-server
+  namespace: c1-idc-test
+  labels:
+    app: auth-server
+    tier: platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auth-server
+  template:
+    metadata:
+      labels:
+        app: auth-server
+        tier: platform
+    spec:
+      imagePullSecrets:
+        - name: dib-registry-secret
+      containers:
+        - name: auth-server
+          image: 10.0.6.183:8088/c1/platform-auth-server:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 9090
+              name: http
+              protocol: TCP
+          env:
+            - name: C1_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: dib-common-config
+                  key: C1_ENV
+            - name: TZ
+              value: "Asia/Shanghai"
+          envFrom:
+            - configMapRef:
+                name: dib-common-config
+
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+          volumeMounts:
+            - name: app-logs
+              mountPath: /opt/app/logs
+            - name: fonts
+              mountPath: /usr/share/fonts
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 9090
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 9090
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: app-logs
+          emptyDir: {}
+        - name: fonts
+          hostPath:
+            path: /usr/share/fonts
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-server
+  namespace: c1-idc-test
+  labels:
+    app: auth-server
+spec:
+  type: NodePort
+  ports:
+    - name: http
+      port: 9090
+      targetPort: 9090
+      nodePort: 30090
+      protocol: TCP
+  selector:
+    app: auth-server

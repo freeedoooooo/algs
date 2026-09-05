@@ -67,8 +67,8 @@ deploy_infra() {
 deploy_platform() {
     log_step "部署平台服务..."
 
-    log_info "  部署 auth-server / gateway / auth-resource / mdm..."
-    kubectl apply -f "${BASE_DIR}/04-platform/all-services.yaml"
+    log_info "  部署平台服务 (04-platform/ 目录下所有 YAML)..."
+    kubectl apply -f "${BASE_DIR}/04-platform/"
 
     log_info "等待平台服务就绪（首次启动较慢，请耐心等待）..."
     kubectl -n c1-idc-test rollout status deployment/auth-server --timeout=180s
@@ -82,8 +82,8 @@ deploy_platform() {
 deploy_business() {
     log_step "部署业务服务..."
 
-    log_info "  部署 extract / report / data / rule / dg..."
-    kubectl apply -f "${BASE_DIR}/05-business/all-services.yaml"
+    log_info "  部署业务服务 (05-business/ 目录下所有 YAML)..."
+    kubectl apply -f "${BASE_DIR}/05-business/"
 
     log_info "等待业务服务就绪..."
     kubectl -n c1-idc-test rollout status deployment/service-extract --timeout=300s
@@ -104,10 +104,10 @@ delete_all() {
     fi
 
     log_step "删除业务服务..."
-    kubectl delete -f "${BASE_DIR}/05-business/all-services.yaml" --ignore-not-found
+    kubectl delete -f "${BASE_DIR}/05-business/" --ignore-not-found
 
     log_step "删除平台服务..."
-    kubectl delete -f "${BASE_DIR}/04-platform/all-services.yaml" --ignore-not-found
+    kubectl delete -f "${BASE_DIR}/04-platform/" --ignore-not-found
 
     log_step "删除基础设施..."
     kubectl delete -f "${BASE_DIR}/03-infra/nacos.yaml" --ignore-not-found
