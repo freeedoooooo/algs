@@ -1,0 +1,40 @@
+# ============================================================
+# 生产环境配置 — 仅包含与 values.yaml 不同的部分
+# ============================================================
+# 用法: helm install dib-prod . --values values-prod.yaml
+# ============================================================
+
+namespace: c1-idc-prod
+
+image:
+  tag: v2.0.0          # 生产环境必须用固定版本，禁止 latest
+
+config:
+  C1_ENV: "pro"
+  NACOS_NAMESPACE: "pro-c1"
+  DB_URL: "jdbc:mysql://10.0.6.162:3306/dib_report_copilot?characterEncoding=utf8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true&useSSL=false&zeroDateTimeBehavior=convertToNull"
+  DB_USERNAME: "dib_prod"
+  DB_PASSWORD: "ProdStrong@2025"
+  REDIS_PASSWORD: "ProdRedis@2025"
+  NACOS_PASSWORD: "ProdNacos@2025"
+  MINIO_ENDPOINT: "http://10.0.6.164:9000"
+
+services:
+  gateway:
+    replicas: 2        # 生产环境网关双副本
+  auth-server:
+    replicas: 2        # 认证中心双副本
+  auth-resource:
+    replicas: 1
+  mdm:
+    replicas: 1
+  service-extract:
+    replicas: 1
+  service-report:
+    replicas: 2        # 报告生成双副本
+  service-data:
+    replicas: 1
+  service-rule:
+    replicas: 1
+  data-dg:
+    replicas: 1

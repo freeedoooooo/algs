@@ -1,0 +1,86 @@
+# auth-server — SSO 认证中心
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-server
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: auth-server
+    tier: platform
+spec:
+  replicas: {{ .Values.services.auth-server.replicas }}
+  selector:
+    matchLabels:
+      app: auth-server
+  template:
+    metadata:
+      labels:
+        app: auth-server
+        tier: platform
+    spec:
+      imagePullSecrets:
+        - name: dib-registry-secret
+      containers:
+        - name: auth-server
+          image: {{ .Values.imageRegistry }}/c1/platform-auth-server:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - containerPort: 9090
+              protocol: TCP
+          env:
+            - name: TZ
+              value: "Asia/Shanghai"
+          envFrom:
+            - configMapRef:
+                name: dib-common-config
+          resources:
+            {{- toYaml .Values.services.auth-server.resources | nindent 12 }}
+          volumeMounts:
+            - name: app-logs
+              mountPath: /opt/app/logs
+            - name: fonts
+              mountPath: /usr/share/fonts
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 9090
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 9090
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: app-logs
+          emptyDir: {}
+        - name: fonts
+          hostPath:
+            path: /usr/share/fonts
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-server
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: auth-server
+spec:
+  type: {{ .Values.services.auth-server.serviceType }}
+  ports:
+    - name: http
+      port: 9090
+      targetPort: 9090
+      protocol: TCP
+      {{- if eq .Values.services.auth-server.serviceType "NodePort" }}
+      nodePort: {{ .Values.services.auth-server.nodePort }}
+      {{- end }}
+  selector:
+    app: auth-server

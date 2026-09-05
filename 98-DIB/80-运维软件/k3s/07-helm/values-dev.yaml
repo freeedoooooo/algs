@@ -1,0 +1,39 @@
+# ============================================================
+# 开发环境配置 — 仅包含与 values.yaml 不同的部分
+# ============================================================
+# 用法: helm install dib-dev . --values values-dev.yaml
+# ============================================================
+
+namespace: c1-idc-dev
+
+image:
+  tag: latest          # 开发环境始终用 latest
+
+config:
+  C1_ENV: "dev"
+  NACOS_NAMESPACE: "dev-c1"
+  DB_URL: "jdbc:mysql://10.0.6.161:3306/dib_dev?characterEncoding=utf8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true&useSSL=false&zeroDateTimeBehavior=convertToNull"
+  DB_USERNAME: "root"
+  DB_PASSWORD: "dev123"
+  REDIS_PASSWORD: "devredis"
+  NACOS_PASSWORD: "dev@2025"
+
+services:
+  gateway:
+    replicas: 1
+  auth-server:
+    replicas: 1
+  auth-resource:
+    replicas: 1
+  mdm:
+    replicas: 1
+  service-extract:
+    replicas: 1
+  service-report:
+    replicas: 1
+  service-data:
+    replicas: 1
+  service-rule:
+    replicas: 1
+  data-dg:
+    replicas: 1

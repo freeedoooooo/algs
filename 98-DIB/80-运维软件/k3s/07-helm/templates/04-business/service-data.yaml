@@ -1,0 +1,83 @@
+# service-data — 数据资源（高内存服务）
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-data
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: service-data
+    tier: business
+spec:
+  replicas: {{ .Values.services.service-data.replicas }}
+  selector:
+    matchLabels:
+      app: service-data
+  template:
+    metadata:
+      labels:
+        app: service-data
+        tier: business
+    spec:
+      imagePullSecrets:
+        - name: dib-registry-secret
+      containers:
+        - name: service-data
+          image: {{ .Values.imageRegistry }}/c1/c1-data:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - containerPort: 30003
+              protocol: TCP
+          env:
+            - name: TZ
+              value: "Asia/Shanghai"
+          envFrom:
+            - configMapRef:
+                name: dib-common-config
+          resources:
+            {{- toYaml .Values.services.service-data.resources | nindent 12 }}
+          volumeMounts:
+            - name: app-logs
+              mountPath: /opt/app/logs
+            - name: fonts
+              mountPath: /usr/share/fonts
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /api/data/actuator/health
+              port: 30003
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /api/data/actuator/health
+              port: 30003
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: app-logs
+          emptyDir: {}
+        - name: fonts
+          hostPath:
+            path: /usr/share/fonts
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-data
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: service-data
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 30003
+      targetPort: 30003
+      protocol: TCP
+  selector:
+    app: service-data

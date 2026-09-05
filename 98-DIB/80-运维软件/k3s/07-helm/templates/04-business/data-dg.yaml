@@ -1,0 +1,83 @@
+# data-dg — 数据治理
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-dg
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: data-dg
+    tier: business
+spec:
+  replicas: {{ .Values.services.data-dg.replicas }}
+  selector:
+    matchLabels:
+      app: data-dg
+  template:
+    metadata:
+      labels:
+        app: data-dg
+        tier: business
+    spec:
+      imagePullSecrets:
+        - name: dib-registry-secret
+      containers:
+        - name: data-dg
+          image: {{ .Values.imageRegistry }}/c1/c1-dg:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - containerPort: 30005
+              protocol: TCP
+          env:
+            - name: TZ
+              value: "Asia/Shanghai"
+          envFrom:
+            - configMapRef:
+                name: dib-common-config
+          resources:
+            {{- toYaml .Values.services.data-dg.resources | nindent 12 }}
+          volumeMounts:
+            - name: app-logs
+              mountPath: /opt/app/logs
+            - name: fonts
+              mountPath: /usr/share/fonts
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /api/dg/actuator/health
+              port: 30005
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /api/dg/actuator/health
+              port: 30005
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: app-logs
+          emptyDir: {}
+        - name: fonts
+          hostPath:
+            path: /usr/share/fonts
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: data-dg
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: data-dg
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 30005
+      targetPort: 30005
+      protocol: TCP
+  selector:
+    app: data-dg

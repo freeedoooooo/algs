@@ -1,0 +1,88 @@
+# service-extract — 资料提取（高内存服务）
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-extract
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: service-extract
+    tier: business
+spec:
+  replicas: {{ .Values.services.service-extract.replicas }}
+  selector:
+    matchLabels:
+      app: service-extract
+  template:
+    metadata:
+      labels:
+        app: service-extract
+        tier: business
+    spec:
+      imagePullSecrets:
+        - name: dib-registry-secret
+      containers:
+        - name: service-extract
+          image: {{ .Values.imageRegistry }}/c1/c1-extract:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - containerPort: 30001
+              protocol: TCP
+          env:
+            - name: TZ
+              value: "Asia/Shanghai"
+          envFrom:
+            - configMapRef:
+                name: dib-common-config
+          resources:
+            {{- toYaml .Values.services.service-extract.resources | nindent 12 }}
+          volumeMounts:
+            - name: app-logs
+              mountPath: /opt/app/logs
+            - name: app-tmp
+              mountPath: /tmp
+            - name: fonts
+              mountPath: /usr/share/fonts
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /api/extract/actuator/health
+              port: 30001
+            initialDelaySeconds: 90
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /api/extract/actuator/health
+              port: 30001
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: app-logs
+          emptyDir: {}
+        - name: app-tmp
+          emptyDir:
+            sizeLimit: 5Gi
+        - name: fonts
+          hostPath:
+            path: /usr/share/fonts
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-extract
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: service-extract
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 30001
+      targetPort: 30001
+      protocol: TCP
+  selector:
+    app: service-extract

@@ -1,0 +1,39 @@
+# ============================================================
+# 测试环境配置 — 仅包含与 values.yaml 不同的部分
+# ============================================================
+# 用法: helm install dib-test . --values values-test.yaml
+# ============================================================
+
+namespace: c1-idc-test
+
+image:
+  tag: v2.0.0          # 测试环境用固定版本
+
+config:
+  C1_ENV: "idc-test-c1"
+  NACOS_NAMESPACE: "dev-c1"
+  DB_URL: "jdbc:mysql://10.0.6.161:3306/dib_report_copilot?characterEncoding=utf8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true&useSSL=false&zeroDateTimeBehavior=convertToNull"
+  DB_USERNAME: "root"
+  DB_PASSWORD: "Dib12345*"
+  REDIS_PASSWORD: "dibredis"
+  NACOS_PASSWORD: "c1@2025"
+
+services:
+  gateway:
+    replicas: 1
+  auth-server:
+    replicas: 1
+  auth-resource:
+    replicas: 1
+  mdm:
+    replicas: 1
+  service-extract:
+    replicas: 1
+  service-report:
+    replicas: 1
+  service-data:
+    replicas: 1
+  service-rule:
+    replicas: 1
+  data-dg:
+    replicas: 1

@@ -1,0 +1,87 @@
+# service-report — 报告生成
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-report
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: service-report
+    tier: business
+spec:
+  replicas: {{ .Values.services.service-report.replicas }}
+  selector:
+    matchLabels:
+      app: service-report
+  template:
+    metadata:
+      labels:
+        app: service-report
+        tier: business
+    spec:
+      imagePullSecrets:
+        - name: dib-registry-secret
+      containers:
+        - name: service-report
+          image: {{ .Values.imageRegistry }}/c1/c1-report:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - containerPort: 30002
+              protocol: TCP
+          env:
+            - name: TZ
+              value: "Asia/Shanghai"
+          envFrom:
+            - configMapRef:
+                name: dib-common-config
+          resources:
+            {{- toYaml .Values.services.service-report.resources | nindent 12 }}
+          volumeMounts:
+            - name: app-logs
+              mountPath: /opt/app/logs
+            - name: app-tmp
+              mountPath: /opt/app/tmp
+            - name: fonts
+              mountPath: /usr/share/fonts
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /api/report/actuator/health
+              port: 30002
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /api/report/actuator/health
+              port: 30002
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: app-logs
+          emptyDir: {}
+        - name: app-tmp
+          emptyDir: {}
+        - name: fonts
+          hostPath:
+            path: /usr/share/fonts
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-report
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: service-report
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 30002
+      targetPort: 30002
+      protocol: TCP
+  selector:
+    app: service-report

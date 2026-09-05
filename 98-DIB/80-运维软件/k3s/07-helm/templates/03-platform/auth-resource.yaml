@@ -1,0 +1,83 @@
+# auth-resource — 权限资源管理
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-resource
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: auth-resource
+    tier: platform
+spec:
+  replicas: {{ .Values.services.auth-resource.replicas }}
+  selector:
+    matchLabels:
+      app: auth-resource
+  template:
+    metadata:
+      labels:
+        app: auth-resource
+        tier: platform
+    spec:
+      imagePullSecrets:
+        - name: dib-registry-secret
+      containers:
+        - name: auth-resource
+          image: {{ .Values.imageRegistry }}/c1/platform-auth-resource:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - containerPort: 20001
+              protocol: TCP
+          env:
+            - name: TZ
+              value: "Asia/Shanghai"
+          envFrom:
+            - configMapRef:
+                name: dib-common-config
+          resources:
+            {{- toYaml .Values.services.auth-resource.resources | nindent 12 }}
+          volumeMounts:
+            - name: app-logs
+              mountPath: /opt/app/logs
+            - name: fonts
+              mountPath: /usr/share/fonts
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /api/auth/actuator/health
+              port: 20001
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /api/auth/actuator/health
+              port: 20001
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: app-logs
+          emptyDir: {}
+        - name: fonts
+          hostPath:
+            path: /usr/share/fonts
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-resource
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: auth-resource
+spec:
+  type: {{ .Values.services.auth-resource.serviceType }}
+  ports:
+    - name: http
+      port: 20001
+      targetPort: 20001
+      protocol: TCP
+  selector:
+    app: auth-resource

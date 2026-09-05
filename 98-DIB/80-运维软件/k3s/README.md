@@ -22,10 +22,17 @@ k3s/
 │   └── all-services.yaml               # 4 个平台服务 (auth-server / gateway / auth-resource / mdm)
 ├── 05-business/
 │   └── all-services.yaml               # 5 个业务服务 (extract / report / data / rule / dg)
-└── 06-scripts/
-    ├── deploy-all.sh                   # 一键部署脚本
-    └── verify.sh                       # 健康检查验证脚本
+├── 06-scripts/
+│   ├── deploy-all.sh                   # 一键部署脚本
+│   └── verify.sh                       # 健康检查验证脚本
+└── 07-helm/                            # Helm Chart 方案（与 01~06 等价，模板 + 变量）
+    ├── Chart.yaml                      # Chart 元信息
+    ├── values.yaml                     # 默认配置（所有参数完整定义）
+    ├── values-dev/test/prod.yaml       # 多环境覆盖配置
+    └── templates/                      # YAML 模板（渲染后等价于 02~05 的所有 YAML）
 ```
+
+> **两种部署方案并存**：`01~06` 是 kubectl 方案（直接 apply YAML），`07-helm` 是 Helm 方案（模板 + values）。两者功能等价，首次部署用 kubectl 方案更直观，多环境/版本管理时迁移到 Helm。
 
 > 当前所有配置（含密码）均为明文存放在 `02-config/configmap.yaml` 中，方便调试。生产环境稳定后可迁移至 K8s Secret 进行加密管理。
 

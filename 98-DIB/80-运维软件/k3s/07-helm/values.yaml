@@ -1,0 +1,235 @@
+# ============================================================
+# DIB 微服务 Helm Chart — 默认配置
+# ============================================================
+# 说明: 此文件包含所有可变参数，不同环境通过 --values 覆盖
+# 用法: helm install dib . --values values-prod.yaml
+# ============================================================
+
+# ---------- 全局配置 ----------
+namespace: c1-idc-test
+
+# 镜像仓库地址（所有微服务镜像的前缀）
+imageRegistry: "10.0.6.183:8088"
+
+# 镜像版本（所有微服务的默认 tag，各服务可单独覆盖）
+image:
+  tag: latest
+
+# 镜像拉取策略
+imagePullPolicy: Always
+
+# ---------- 镜像仓库认证 ----------
+registry:
+  server: "10.0.6.183:8088"
+  username: "admin"
+  password: "admin123"
+  email: "admin@example.com"
+
+# ---------- 公共配置（ConfigMap） ----------
+# 所有微服务通过 envFrom 注入以下环境变量
+config:
+  C1_ENV: "idc-test-c1"
+  NACOS_SERVER_ADDR: "http://nacos.c1-idc-test.svc.cluster.local:8848"
+  NACOS_NAMESPACE: "dev-c1"
+  NACOS_USERNAME: "c1"
+  REDIS_HOST: "redis.c1-idc-test.svc.cluster.local"
+  REDIS_PORT: "6379"
+  REDIS_DATABASE: "0"
+  DB_URL: "jdbc:mysql://10.0.6.161:3306/dib_report_copilot?characterEncoding=utf8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true&useSSL=false&zeroDateTimeBehavior=convertToNull"
+  DB_DRIVER: "com.mysql.cj.jdbc.Driver"
+  MINIO_ENDPOINT: "http://10.0.6.163:9000"
+  OCR_SERVER: "http://192.168.10.91:8089/"
+  DB_USERNAME: "root"
+  DB_PASSWORD: "Dib12345*"
+  REDIS_PASSWORD: "dibredis"
+  NACOS_PASSWORD: "c1@2025"
+  GATEWAY_OAUTH_CLIENT_HOST: "http://10.0.5.70:8090"
+  GATEWAY_OAUTH_SERVER_HOST: "http://10.0.5.70:9090"
+  GATEWAY_OAUTH_SERVER_HOST_INNER: "http://10.0.5.70:9090"
+  OAUTH_CLIENT_CREDENTIALS: "123456"
+
+# ============================================================
+# 基础设施层
+# ============================================================
+
+# ---------- Nacos 注册中心 ----------
+nacos:
+  image: "nacos/nacos-server:v2.3.2"
+  storage: 5Gi
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+
+# ---------- Redis 缓存 ----------
+redis:
+  image: "redis:7.0"
+  storage: 2Gi
+  maxmemory: "512mb"
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "768Mi"
+
+# ============================================================
+# 微服务定义
+# ============================================================
+# 每个服务的可配置参数:
+#   image       - 镜像名（不含 registry 和 tag）
+#   tag         - 镜像版本（覆盖全局 image.tag）
+#   port        - 容器端口
+#   serviceType - Service 类型（ClusterIP / NodePort）
+#   nodePort    - NodePort 端口（仅 serviceType=NodePort 时有效）
+#   healthPath  - 健康检查路径
+#   replicas    - 副本数
+#   resources   - 资源限制
+# ============================================================
+
+services:
+
+  # ==================== 平台服务层 ====================
+
+  auth-server:
+    tier: platform
+    image: "c1/platform-auth-server"
+    port: 9090
+    serviceType: NodePort
+    nodePort: 30090
+    healthPath: /actuator/health
+    replicas: 1
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "512Mi"
+      limits:
+        cpu: "1000m"
+        memory: "2Gi"
+
+  gateway:
+    tier: platform
+    image: "c1/platform-gateway"
+    port: 20000
+    serviceType: NodePort
+    nodePort: 30000
+    healthPath: /actuator/health
+    replicas: 1
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "512Mi"
+      limits:
+        cpu: "1000m"
+        memory: "2Gi"
+
+  auth-resource:
+    tier: platform
+    image: "c1/platform-auth-resource"
+    port: 20001
+    serviceType: ClusterIP
+    healthPath: /api/auth/actuator/health
+    replicas: 1
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "512Mi"
+      limits:
+        cpu: "1000m"
+        memory: "2Gi"
+
+  mdm:
+    tier: platform
+    image: "c1/platform-mdm"
+    port: 20002
+    serviceType: ClusterIP
+    healthPath: /api/mdm/actuator/health
+    replicas: 1
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "512Mi"
+      limits:
+        cpu: "1000m"
+        memory: "2Gi"
+
+  # ==================== 业务服务层 ====================
+
+  service-extract:
+    tier: business
+    image: "c1/c1-extract"
+    port: 30001
+    serviceType: ClusterIP
+    healthPath: /api/extract/actuator/health
+    replicas: 1
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "12Gi"
+      limits:
+        cpu: "2000m"
+        memory: "18Gi"
+
+  service-report:
+    tier: business
+    image: "c1/c1-report"
+    port: 30002
+    serviceType: ClusterIP
+    healthPath: /api/report/actuator/health
+    replicas: 1
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "1Gi"
+      limits:
+        cpu: "1000m"
+        memory: "3Gi"
+
+  service-data:
+    tier: business
+    image: "c1/c1-data"
+    port: 30003
+    serviceType: ClusterIP
+    healthPath: /api/data/actuator/health
+    replicas: 1
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "4Gi"
+      limits:
+        cpu: "1500m"
+        memory: "6Gi"
+
+  service-rule:
+    tier: business
+    image: "c1/c1-rule"
+    port: 30004
+    serviceType: ClusterIP
+    healthPath: /api/rule/actuator/health
+    replicas: 1
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "1Gi"
+      limits:
+        cpu: "1000m"
+        memory: "3Gi"
+
+  data-dg:
+    tier: business
+    image: "c1/c1-dg"
+    port: 30005
+    serviceType: ClusterIP
+    healthPath: /api/dg/actuator/health
+    replicas: 1
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "512Mi"
+      limits:
+        cpu: "1000m"
+        memory: "1536Mi"

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: dib-platform
+description: DIB 微服务全栈部署 Chart
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
