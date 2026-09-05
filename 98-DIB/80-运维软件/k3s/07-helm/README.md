@@ -60,16 +60,16 @@ Helm 方案：模板只有一份，不同环境只改 values 文件
     │   ├── nacos.yaml              #   Nacos 注册中心
     │   └── redis.yaml              #   Redis 缓存
     ├── 03-platform/                # 平台服务层
-    │   ├── auth-server.yaml        #   SSO 认证中心
-    │   ├── gateway.yaml            #   API 网关
-    │   ├── auth-resource.yaml      #   权限资源管理
-    │   └── mdm.yaml                #   主数据管理
+    │   ├── c1-p-oauth.yaml         #   OAuth2 认证中心
+    │   ├── c1-p-gateway.yaml       #   API 网关
+    │   ├── c1-p-rbac.yaml          #   权限资源管理
+    │   └── c1-p-mdm.yaml           #   主数据管理
     └── 04-business/                # 业务服务层
-        ├── service-extract.yaml    #   资料提取
-        ├── service-report.yaml     #   报告生成
-        ├── service-data.yaml       #   数据资源
-        ├── service-rule.yaml       #   规则引擎
-        └── data-dg.yaml            #   数据治理
+        ├── c1-b-extract.yaml       #   资料提取
+        ├── c1-b-report.yaml        #   报告生成
+        ├── c1-b-data.yaml          #   数据资源
+        ├── c1-b-rule.yaml          #   规则引擎
+        └── c1-b-govern.yaml        #   数据治理
 ```
 
 **对比 kubectl 方案的目录**：
@@ -311,9 +311,9 @@ helm rollback dib-prod 1
 
 ```yaml
 services:
-  gateway:                        # 服务名
-    tier: platform                # 层级：platform / business
-    image: "c1/platform-gateway"  # 镜像名（不含 registry 和 tag）
+  c1-p-gateway:                     # 服务名
+    tier: platform                  # 层级：platform / business
+    image: "c1/p-gateway"           # 镜像名（不含 registry 和 tag）
     port: 20000                   # 容器端口
     serviceType: NodePort         # Service 类型：ClusterIP / NodePort
     nodePort: 30000               # NodePort 端口（仅 NodePort 类型有效）
@@ -440,9 +440,9 @@ helm template dib-test . --values values-test.yaml -s templates/configmap.yaml
 ```yaml
 # 在 values.yaml 的 services 下新增：
 
-  service-new:
+  c1-b-new:
     tier: business
-    image: "c1/c1-new"
+    image: "c1/b-new"
     port: 30006
     serviceType: ClusterIP
     healthPath: /api/new/actuator/health
@@ -461,7 +461,7 @@ helm template dib-test . --values values-test.yaml -s templates/configmap.yaml
 helm upgrade dib-test . --values values-test.yaml
 ```
 
-不需要改任何模板文件 — 因为 `business-deployments.yaml` 和 `business-services.yaml` 用的是 `range` 循环，会自动遍历 `services` 下的所有服务。
+不需要改任何模板文件 — 因为每个服务都有独立的模板文件，新增服务只需添加对应的模板文件和 values 配置。
 
 ---
 

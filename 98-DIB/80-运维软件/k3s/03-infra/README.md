@@ -780,9 +780,9 @@ targetPort: 8848      # 转发到 Pod 的 8848
 
 **多个 Service 可以配相同的 port 吗？** 可以。因为每个 Service 有独立的 DNS 名和 ClusterIP，互不冲突：
 ```bash
-http://gateway:80          → gateway Pod:20000
-http://auth-server:80      → auth-server Pod:9090
-http://mdm:80              → mdm Pod:20002
+http://c1-p-gateway:80     → c1-p-gateway Pod:20000
+http://c1-p-oauth:80       → c1-p-oauth Pod:9090
+http://c1-p-mdm:80         → c1-p-mdm Pod:20002
 # 三个 Service 都是 port=80，但 DNS 名不同，不会串
 ```
 

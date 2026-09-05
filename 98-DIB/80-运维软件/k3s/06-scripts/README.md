@@ -25,8 +25,8 @@ bash 06-scripts/deploy-all.sh
 # 仅部署某一层
 bash 06-scripts/deploy-all.sh base       # 基础配置（Namespace + ConfigMap + Secret）
 bash 06-scripts/deploy-all.sh infra      # 基础设施（Nacos + Redis）
-bash 06-scripts/deploy-all.sh platform   # 平台服务（auth-server / gateway / auth-resource / mdm）
-bash 06-scripts/deploy-all.sh business   # 业务服务（extract / report / data / rule / dg）
+bash 06-scripts/deploy-all.sh platform   # 平台服务（c1-p-oauth / c1-p-gateway / c1-p-rbac / c1-p-mdm）
+bash 06-scripts/deploy-all.sh business   # 业务服务（c1-b-extract / c1-b-report / c1-b-data / c1-b-rule / c1-b-govern）
 
 # 删除所有资源（需确认）
 bash 06-scripts/deploy-all.sh delete
@@ -44,9 +44,9 @@ all 模式:
   deploy_infra()      → kubectl apply nacos / redis
        ↓                 等待 nacos 就绪 (120s)
        ↓                 等待 redis 就绪 (60s)
-  deploy_platform()   → kubectl apply all-services.yaml (platform)
+  deploy_platform()   → kubectl apply 04-platform/ (platform)
        ↓                 等待 4 个服务逐一就绪 (各 180s)
-  deploy_business()   → kubectl apply all-services.yaml (business)
+  deploy_business()   → kubectl apply 05-business/ (business)
        ↓                 等待 5 个服务逐一就绪 (extract 300s, 其余 180s)
   print_summary()     → 输出访问地址和常用命令
 ```
@@ -57,8 +57,8 @@ all 模式:
 |------|-----------|---------|
 | `deploy_base` | `02-config/namespace.yaml`<br>`02-config/configmap.yaml`<br>`02-config/image-pull-secret.yaml` | 无等待 |
 | `deploy_infra` | `03-infra/nacos.yaml`<br>`03-infra/redis.yaml` | nacos 120s<br>redis 60s |
-| `deploy_platform` | `04-platform/all-services.yaml` | 每个服务 180s |
-| `deploy_business` | `05-business/all-services.yaml` | extract 300s<br>其余 180s |
+| `deploy_platform` | `04-platform/*.yaml` | 每个服务 180s |
+| `deploy_business` | `05-business/*.yaml` | extract 300s<br>其余 180s |
 | `delete_all` | 按 business → platform → infra → base 逆序删除 | — |
 
 ### 输出示例
@@ -74,8 +74,8 @@ all 模式:
   镜像版本: latest
 
   外部访问地址:
-    Gateway:       http://<NODE_IP>:30000
-    Auth Server:   http://<NODE_IP>:30090
+    Gateway:       http://<NODE_IP>:30000  (c1-p-gateway)
+    OAuth:         http://<NODE_IP>:30090  (c1-p-oauth)
 
   内部服务地址 (K3s DNS):
     Nacos:         http://nacos.c1-idc-test.svc.cluster.local:8848
@@ -109,8 +109,8 @@ bash 06-scripts/verify.sh quick
 
 ```
 基础设施:  nacos, redis
-平台服务:  auth-server, gateway, auth-resource, mdm
-业务服务:  service-extract, service-report, service-data, service-rule, data-dg
+平台服务:  c1-p-oauth, c1-p-gateway, c1-p-rbac, c1-p-mdm
+业务服务:  c1-b-extract, c1-b-report, c1-b-data, c1-b-rule, c1-b-govern
 ```
 
 ### 输出示例
@@ -126,9 +126,9 @@ bash 06-scripts/verify.sh quick
 
   [OK]   nacos: Pod Running
   [OK]   redis: Pod Running
-  [OK]   auth-server: Pod Running
+  [OK]   c1-p-oauth: Pod Running
   ...
-  [FAIL] service-extract: Pod 状态异常 (Pending)
+  [FAIL] c1-b-extract: Pod 状态异常 (Pending)
 
 ============================================
   检查结果: 10 通过, 1 失败

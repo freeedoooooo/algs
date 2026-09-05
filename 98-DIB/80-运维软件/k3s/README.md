@@ -19,16 +19,16 @@ k3s/
 │   ├── nacos.yaml                      # Nacos 注册中心 (Deployment + Service + PVC)
 │   └── redis.yaml                      # Redis 缓存 (Deployment + Service + PVC)
 ├── 04-platform/
-│   ├── auth-server.yaml              # SSO 认证中心 (Deployment + Service)
-│   ├── gateway.yaml                  # API 网关 (Deployment + Service)
-│   ├── auth-resource.yaml            # 权限资源管理 (Deployment + Service)
-│   └── mdm.yaml                      # 主数据管理 (Deployment + Service)
+│   ├── c1-p-oauth.yaml              # OAuth2 认证中心 (Deployment + Service)
+│   ├── c1-p-gateway.yaml            # API 网关 (Deployment + Service)
+│   ├── c1-p-rbac.yaml               # 权限资源管理 (Deployment + Service)
+│   └── c1-p-mdm.yaml                # 主数据管理 (Deployment + Service)
 ├── 05-business/
-│   ├── service-extract.yaml          # 资料提取 (高内存)
-│   ├── service-report.yaml           # 报告生成
-│   ├── service-data.yaml             # 数据资源 (高内存)
-│   ├── service-rule.yaml             # 规则引擎
-│   └── data-dg.yaml                  # 数据治理
+│   ├── c1-b-extract.yaml            # 资料提取 (高内存)
+│   ├── c1-b-report.yaml             # 报告生成
+│   ├── c1-b-data.yaml               # 数据资源 (高内存)
+│   ├── c1-b-rule.yaml               # 规则引擎
+│   └── c1-b-govern.yaml             # 数据治理
 ├── 06-scripts/
 │   ├── deploy-all.sh                   # 一键部署脚本
 │   └── verify.sh                       # 健康检查验证脚本
@@ -53,16 +53,16 @@ K3s 集群 (namespace: c1-idc-test)
 │   ├── Nacos v2.3.2    → ClusterIP :8848  (注册中心)
 │   └── Redis 7.0       → ClusterIP :6379  (缓存)
 ├── 平台服务层
-│   ├── auth-server      → NodePort 30090  (SSO 认证，对外暴露)
-│   ├── gateway          → NodePort 30000  (API 网关，对外暴露)
-│   ├── auth-resource    → ClusterIP :20001 (权限资源，内部访问)
-│   └── mdm              → ClusterIP :20002 (主数据，内部访问)
+│   ├── c1-p-oauth       → NodePort 30090  (OAuth2 认证，对外暴露)
+│   ├── c1-p-gateway     → NodePort 30000  (API 网关，对外暴露)
+│   ├── c1-p-rbac        → ClusterIP :20001 (权限资源，内部访问)
+│   └── c1-p-mdm         → ClusterIP :20002 (主数据，内部访问)
 ├── 业务服务层
-│   ├── service-extract  → ClusterIP :30001 (资料提取)
-│   ├── service-report   → ClusterIP :30002 (报告生成)
-│   ├── service-data     → ClusterIP :30003 (数据资源)
-│   ├── service-rule     → ClusterIP :30004 (规则引擎)
-│   └── data-dg          → ClusterIP :30005 (数据治理)
+│   ├── c1-b-extract     → ClusterIP :30001 (资料提取)
+│   ├── c1-b-report      → ClusterIP :30002 (报告生成)
+│   ├── c1-b-data        → ClusterIP :30003 (数据资源)
+│   ├── c1-b-rule        → ClusterIP :30004 (规则引擎)
+│   └── c1-b-govern      → ClusterIP :30005 (数据治理)
 └── 外部依赖 (保持独立部署)
     ├── MySQL/OpenGauss  → 192.168.10.141:5432
     └── MinIO            → 10.0.6.163:9000
@@ -227,8 +227,8 @@ bash 06-scripts/deploy-all.sh business   # 仅部署业务服务
 部署顺序（自动执行）：
 1. **基础配置** → 命名空间、ConfigMap、镜像认证
 2. **基础设施** → Nacos、Redis（等待就绪后继续）
-3. **平台服务** → auth-server → gateway → auth-resource → mdm
-4. **业务服务** → extract → report → data → rule → dg
+3. **平台服务** → c1-p-oauth → c1-p-gateway → c1-p-rbac → c1-p-mdm
+4. **业务服务** → c1-b-extract → c1-b-report → c1-b-data → c1-b-rule → c1-b-govern
 
 指定镜像版本：
 
@@ -294,18 +294,18 @@ kubectl -n c1-idc-test top pods
 kubectl -n c1-idc-test get svc -o wide
 
 # 查看 Pod 日志
-kubectl -n c1-idc-test logs -f deployment/auth-server
-kubectl -n c1-idc-test logs -f deployment/gateway --tail=100
+kubectl -n c1-idc-test logs -f deployment/c1-p-oauth
+kubectl -n c1-idc-test logs -f deployment/c1-p-gateway --tail=100
 ```
 
 ### 重启服务
 
 ```bash
 # 重启单个服务
-kubectl -n c1-idc-test rollout restart deployment/auth-server
+kubectl -n c1-idc-test rollout restart deployment/c1-p-oauth
 
 # 重启所有业务服务
-kubectl -n c1-idc-test rollout restart deployment/service-extract deployment/service-report deployment/service-data deployment/service-rule deployment/data-dg
+kubectl -n c1-idc-test rollout restart deployment/c1-b-extract deployment/c1-b-report deployment/c1-b-data deployment/c1-b-rule deployment/c1-b-govern
 ```
 
 ### 更新配置
@@ -334,13 +334,13 @@ kubectl -n c1-idc-test scale deployment/gateway --replicas=1
 
 ```bash
 # 更新单个服务镜像
-kubectl -n c1-idc-test set image deployment/auth-server auth-server=10.0.6.183:8088/c1/platform-auth-server:v2.0.0
+kubectl -n c1-idc-test set image deployment/c1-p-oauth c1-p-oauth=10.0.6.183:8088/c1/p-oauth:v2.0.0
 
 # 查看 rollout 状态
-kubectl -n c1-idc-test rollout status deployment/auth-server
+kubectl -n c1-idc-test rollout status deployment/c1-p-oauth
 
 # 回滚到上一版本
-kubectl -n c1-idc-test rollout undo deployment/auth-server
+kubectl -n c1-idc-test rollout undo deployment/c1-p-oauth
 ```
 
 ### 删除资源
@@ -398,15 +398,15 @@ kubectl -n c1-idc-test run test-dns --image=busybox --rm -it -- nslookup gateway
 
 | 服务 | JVM 堆内存 | K8s requests | K8s limits | 端口 |
 |------|-----------|-------------|-----------|------|
-| auth-server | 512m ~ 2g | 512Mi / 250m | 2Gi / 1000m | 9090 |
-| gateway | 512m ~ 2g | 512Mi / 250m | 2Gi / 1000m | 20000 |
-| auth-resource | 512m ~ 2g | 512Mi / 250m | 2Gi / 1000m | 20001 |
-| mdm | 512m ~ 2g | 512Mi / 250m | 2Gi / 1000m | 20002 |
-| service-extract | 12g ~ 16g | 12Gi / 500m | 18Gi / 2000m | 30001 |
-| service-report | 1g ~ 2g | 1Gi / 250m | 3Gi / 1000m | 30002 |
-| service-data | 4g | 4Gi / 500m | 6Gi / 1500m | 30003 |
-| service-rule | 1g ~ 2g | 1Gi / 250m | 3Gi / 1000m | 30004 |
-| data-dg | 512m ~ 1g | 512Mi / 250m | 1.5Gi / 1000m | 30005 |
+| c1-p-oauth | 512m ~ 2g | 512Mi / 250m | 2Gi / 1000m | 9090 |
+| c1-p-gateway | 512m ~ 2g | 512Mi / 250m | 2Gi / 1000m | 20000 |
+| c1-p-rbac | 512m ~ 2g | 512Mi / 250m | 2Gi / 1000m | 20001 |
+| c1-p-mdm | 512m ~ 2g | 512Mi / 250m | 2Gi / 1000m | 20002 |
+| c1-b-extract | 12g ~ 16g | 12Gi / 500m | 18Gi / 2000m | 30001 |
+| c1-b-report | 1g ~ 2g | 1Gi / 250m | 3Gi / 1000m | 30002 |
+| c1-b-data | 4g | 4Gi / 500m | 6Gi / 1500m | 30003 |
+| c1-b-rule | 1g ~ 2g | 1Gi / 250m | 3Gi / 1000m | 30004 |
+| c1-b-govern | 512m ~ 1g | 512Mi / 250m | 1.5Gi / 1000m | 30005 |
 
 > 所有服务总内存需求约 **40Gi**，建议 K3s 节点配置 64GB 以上内存。
 

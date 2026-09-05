@@ -6,19 +6,19 @@ DIB 平台的 4 个基础微服务，属于平台层（认证、网关、权限�
 
 | 文件 | 包含服务 |
 |------|--------|
-| `auth-server.yaml` | SSO 认证中心 (Deployment + Service) |
-| `gateway.yaml` | API 网关 (Deployment + Service) |
-| `auth-resource.yaml` | 权限资源管理 (Deployment + Service) |
-| `mdm.yaml` | 主数据管理 (Deployment + Service) |
+| `c1-p-oauth.yaml` | OAuth2 认证中心 (Deployment + Service) |
+| `c1-p-gateway.yaml` | API 网关 (Deployment + Service) |
+| `c1-p-rbac.yaml` | 权限资源管理 (Deployment + Service) |
+| `c1-p-mdm.yaml` | 主数据管理 (Deployment + Service) |
 
 ## 服务概览
 
 | 服务 | 容器端口 | 访问类型 | 外部端口 | 说明 |
 |------|---------|---------|---------|------|
-| auth-server | 9090 | **NodePort** | 30090 | SSO 认证中心，外部可访问 |
-| gateway | 20000 | **NodePort** | 30000 | API 网关，外部流量入口 |
-| auth-resource | 20001 | ClusterIP | — | 权限资源管理，仅集群内部访问 |
-| mdm | 20002 | ClusterIP | — | 主数据管理，仅集群内部访问 |
+| c1-p-oauth | 9090 | **NodePort** | 30090 | OAuth2 认证中心，外部可访问 |
+| c1-p-gateway | 20000 | **NodePort** | 30000 | API 网关，外部流量入口 |
+| c1-p-rbac | 20001 | ClusterIP | — | 权限资源管理，仅集群内部访问 |
+| c1-p-mdm | 20002 | ClusterIP | — | 主数据管理，仅集群内部访问 |
 
 ## 部署命令
 
@@ -45,12 +45,12 @@ bash 06-scripts/deploy-all.sh platform
 │                    平台服务层（本目录）                     │
 │                                                         │
 │  ┌─────────────┐    ┌─────────────┐                     │
-│  │ auth-server  │    │  gateway    │  ← NodePort 对外    │
-│  │ (SSO 认证)   │    │ (API 网关)  │    外部流量从这里进   │
+│  │ c1-p-oauth   │    │c1-p-gateway │  ← NodePort 对外    │
+│  │ (OAuth2 认证) │    │ (API 网关)  │    外部流量从这里进   │
 │  └─────────────┘    └──────┬──────┘                     │
 │                            │ 路由转发                     │
 │  ┌─────────────┐    ┌──────┴──────┐                     │
-│  │auth-resource│    │    mdm      │  ← ClusterIP 内部    │
+│  │ c1-p-rbac   │    │ c1-p-mdm    │  ← ClusterIP 内部    │
 │  │(权限/角色)   │    │ (主数据)    │    只被 gateway 调用  │
 │  └─────────────┘    └─────────────┘                     │
 └─────────────────────────────────────────────────────────┘
@@ -58,7 +58,7 @@ bash 06-scripts/deploy-all.sh platform
     ▼                        ▼
 ┌─────────────────────────────────────────────────────────┐
 │                    业务服务层（05-business）               │
-│  service-extract / service-report / service-data / ...  │
+│  c1-b-extract / c1-b-report / c1-b-data / ...          │
 └─────────────────────────────────────────────────────────┘
     │
     ▼
@@ -70,12 +70,12 @@ bash 06-scripts/deploy-all.sh platform
 
 **通俗理解**：把整个系统想象成一家公司——
 
-- **gateway** = 公司前台，所有外来访客（API 请求）先到前台，前台指引你去正确的部门
-- **auth-server** = 门卫 / 保安，负责检查你的工牌（Token），确认你有权进入
-- **auth-resource** = HR 部门，管理谁能访问哪些系统功能（权限、角色、菜单）
-- **mdm** = 档案室，管理公司最基础的数据（组织架构、人员信息、字典等）
+- **c1-p-gateway** = 公司前台，所有外来访客（API 请求）先到前台，前台指引你去正确的部门
+- **c1-p-oauth** = 门卫 / 保安，负责检查你的工牌（Token），确认你有权进入
+- **c1-p-rbac** = HR 部门，管理谁能访问哪些系统功能（权限、角色、菜单）
+- **c1-p-mdm** = 档案室，管理公司最基础的数据（组织架构、人员信息、字典等）
 
-为什么 auth-resource 和 mdm 不对外暴露？因为它们不直接接待外部请求，所有请求都由 gateway 统一转发。这样做的好处是**安全**（减少攻击面）和**解耦**（内部服务可以随意改端口，不影响外部）。
+为什么 c1-p-rbac 和 c1-p-mdm 不对外暴露？因为它们不直接接待外部请求，所有请求都由 gateway 统一转发。这样做的好处是**安全**（减少攻击面）和**解耦**（内部服务可以随意改端口，不影响外部）。
 
 ---
 
@@ -85,7 +85,7 @@ bash 06-scripts/deploy-all.sh platform
 
 ### 一、Deployment 通用部分
 
-以 auth-server 为例，逐段讲解每个 Deployment 都相同的结构：
+以 c1-p-oauth 为例，逐段讲解每个 Deployment 都相同的结构：
 
 #### 1.1 外层元信息与副本控制
 
@@ -93,10 +93,10 @@ bash 06-scripts/deploy-all.sh platform
 apiVersion: apps/v1
 kind: Deployment                     # 资源类型：Deployment
 metadata:
-  name: auth-server                  # Deployment 名称，kubectl 操作时用
+  name: c1-p-oauth                     # Deployment 名称，kubectl 操作时用
   namespace: c1-idc-test             # 所属命名空间
   labels:
-    app: auth-server                 # 标签
+    app: c1-p-oauth                    # 标签
     tier: platform                   # tier 标签标识"层级"：platform = 平台层
 spec:
   replicas: 1                        # 副本数：始终保持 1 个 Pod
@@ -108,7 +108,7 @@ spec:
                                      # 没有 PVC 数据冲突，可以安全地同时运行新旧 Pod
   selector:
     matchLabels:
-      app: auth-server               # 通过标签匹配 Pod（与 03-infra 中 Q7 讲的原理相同）
+      app: c1-p-oauth                  # 通过标签匹配 Pod（与 03-infra 中 Q7 讲的原理相同）
 ```
 
 **与 03-infra 的区别**：Nacos/Redis 使用 `Recreate` 策略是因为它们有 PVC，两个 Pod 同时写同一个 PVC 会冲突。平台服务不使用 PVC（日志用 emptyDir），所以可以用 `RollingUpdate`，实现零停机更新。
@@ -387,8 +387,8 @@ K3s 的反应：         重启容器                       不重启，但停�
 
 | 类型 | 含义 | 使用场景 | 本目录中的服务 |
 |------|------|---------|--------------|
-| **NodePort** | 在每个节点上开一个固定端口，外部可通过 `节点IP:端口` 访问 | 需要外部直接访问的服务 | auth-server、gateway |
-| **ClusterIP** | 仅分配集群内部 IP，外部无法直接访问 | 只被内部服务调用的服务 | auth-resource、mdm |
+| **NodePort** | 在每个节点上开一个固定端口，外部可通过 `节点IP:端口` 访问 | 需要外部直接访问的服务 | c1-p-oauth、c1-p-gateway |
+| **ClusterIP** | 仅分配集群内部 IP，外部无法直接访问 | 只被内部服务调用的服务 | c1-p-rbac、c1-p-mdm |
 
 **NodePort 的流量路径**：
 
@@ -416,12 +416,12 @@ K3s 的反应：         重启容器                       不重启，但停�
     │           └─────────────┘
 ```
 
-**ClusterIP 的流量路径**（以 auth-resource 为例）：
+**ClusterIP 的流量路径**（以 c1-p-rbac 为例）：
 
 ```
 gateway Pod 内部
     │
-    │  http://auth-resource.c1-idc-test.svc.cluster.local:20001
+    │  http://c1-p-rbac.c1-idc-test.svc.cluster.local:20001
     │                                          │
     │                                          ▼
     │                                    ┌─────────────┐
@@ -431,7 +431,7 @@ gateway Pod 内部
     │                                           │
     │                                           ▼
     │                                    ┌─────────────┐
-    │                                    │auth-resource│  ← targetPort: 20001
+    │                                    │ c1-p-rbac   │  ← targetPort: 20001
     │                                    │ Pod :20001  │
     │                                    └─────────────┘
 ```
@@ -440,9 +440,9 @@ gateway Pod 内部
 
 ## 各服务详解
 
-### 1. auth-server（SSO 认证中心）
+### 1. c1-p-oauth（OAuth2 认证中心）
 
-- **镜像**：`10.0.6.183:8088/c1/platform-auth-server:latest`
+- **镜像**：`10.0.6.183:8088/c1/p-oauth:latest`
 - **端口**：9090
 - **访问**：NodePort 30090，外部可通过 `http://<任意节点IP>:30090` 访问
 - **健康检查**：`GET /actuator/health`
@@ -452,15 +452,15 @@ gateway Pod 内部
 **在系统中的角色**：当用户在前端登录时，请求流程如下：
 
 ```
-前端 → gateway(:30000) → auth-server(:30090) → 验证用户名密码 → 返回 Token
+前端 → c1-p-gateway(:30000) → c1-p-oauth(:30090) → 验证用户名密码 → 返回 Token
                                                                   │
 后续请求：                                                         │
-前端 → gateway → 携带 Token → gateway 校验 Token 有效性 ←────────┘
+前端 → c1-p-gateway → 携带 Token → c1-p-gateway 校验 Token 有效性 ←────────┘
 ```
 
-### 2. gateway（API 网关）
+### 2. c1-p-gateway（API 网关）
 
-- **镜像**：`10.0.6.183:8088/c1/platform-gateway:latest`
+- **镜像**：`10.0.6.183:8088/c1/p-gateway:latest`
 - **端口**：20000
 - **访问**：NodePort 30000，**所有外部 API 请求的入口**
 - **健康检查**：`GET /actuator/health`
@@ -476,29 +476,29 @@ gateway Pod 内部
     ▼
 gateway(:20000)
     │
-    ├── /api/auth/**    → auth-resource(:20001)
-    ├── /api/mdm/**     → mdm(:20002)
-    ├── /api/extract/** → service-extract(:30001)
-    ├── /api/report/**  → service-report(:30002)
-    ├── /api/data/**    → service-data(:30003)
-    ├── /api/rule/**    → service-rule(:30004)
-    └── /api/dg/**      → data-dg(:30005)
+    ├── /api/rbac/**    → c1-p-rbac(:20001)
+    ├── /api/mdm/**     → c1-p-mdm(:20002)
+    ├── /api/extract/** → c1-b-extract(:30001)
+    ├── /api/report/**  → c1-b-report(:30002)
+    ├── /api/data/**    → c1-b-data(:30003)
+    ├── /api/rule/**    → c1-b-rule(:30004)
+    └── /api/dg/**      → c1-b-govern(:30005)
 ```
 
-### 3. auth-resource（权限资源管理）
+### 3. c1-p-rbac（权限资源管理）
 
-- **镜像**：`10.0.6.183:8088/c1/platform-auth-resource:latest`
+- **镜像**：`10.0.6.183:8088/c1/p-rbac:latest`
 - **端口**：20001
 - **访问**：ClusterIP，仅集群内部访问（由 gateway 转发）
-- **健康检查**：`GET /api/auth/actuator/health`
+- **健康检查**：`GET /api/rbac/actuator/health`
 - **资源**：512Mi ~ 2Gi 内存
 - **作用**：管理用户、角色、菜单、权限等数据
 
-**注意健康检查路径**：与 auth-server 不同，auth-resource 的健康检查路径是 `/api/auth/actuator/health`（多了 `/api/auth` 前缀）。这是因为 auth-resource 配置了 context-path，所有接口都在 `/api/auth` 路径下。
+**注意健康检查路径**：与 c1-p-oauth 不同，c1-p-rbac 的健康检查路径是 `/api/rbac/actuator/health`（多了 `/api/rbac` 前缀）。这是因为 c1-p-rbac 配置了 context-path，所有接口都在 `/api/rbac` 路径下。
 
-### 4. mdm（主数据管理）
+### 4. c1-p-mdm（主数据管理）
 
-- **镜像**：`10.0.6.183:8088/c1/platform-mdm:latest`
+- **镜像**：`10.0.6.183:8088/c1/p-mdm:latest`
 - **端口**：20002
 - **访问**：ClusterIP，仅集群内部访问
 - **健康检查**：`GET /api/mdm/actuator/health`
@@ -513,10 +513,10 @@ gateway(:20000)
 
 | 服务 | 集群内部 DNS | 端口 |
 |------|-------------|------|
-| auth-server | `auth-server.c1-idc-test.svc.cluster.local` | 9090 |
-| gateway | `gateway.c1-idc-test.svc.cluster.local` | 20000 |
-| auth-resource | `auth-resource.c1-idc-test.svc.cluster.local` | 20001 |
-| mdm | `mdm.c1-idc-test.svc.cluster.local` | 20002 |
+| c1-p-oauth | `c1-p-oauth.c1-idc-test.svc.cluster.local` | 9090 |
+| c1-p-gateway | `c1-p-gateway.c1-idc-test.svc.cluster.local` | 20000 |
+| c1-p-rbac | `c1-p-rbac.c1-idc-test.svc.cluster.local` | 20001 |
+| c1-p-mdm | `c1-p-mdm.c1-idc-test.svc.cluster.local` | 20002 |
 
 **DNS 规则**：`<Service名称>.<命名空间>.svc.cluster.local`
 
@@ -535,37 +535,37 @@ gateway (NodePort 30000)
     │
     │  路由转发（根据 URL 路径匹配）
     │
-    ├─→ auth-server     (NodePort 30090, 也可被 gateway 内部调用)
+    ├─→ c1-p-oauth      (NodePort 30090, 也可被 gateway 内部调用)
     │
-    ├─→ auth-resource   (ClusterIP :20001)
+    ├─→ c1-p-rbac       (ClusterIP :20001)
     │
-    ├─→ mdm             (ClusterIP :20002)
+    ├─→ c1-p-mdm        (ClusterIP :20002)
     │
-    ├─→ service-extract (ClusterIP :30001, 05-business 部署)
-    ├─→ service-report  (ClusterIP :30002)
-    ├─→ service-data    (ClusterIP :30003)
-    ├─→ service-rule    (ClusterIP :30004)
-    └─→ data-dg         (ClusterIP :30005)
+    ├─→ c1-b-extract    (ClusterIP :30001, 05-business 部署)
+    ├─→ c1-b-report     (ClusterIP :30002)
+    ├─→ c1-b-data       (ClusterIP :30003)
+    ├─→ c1-b-rule       (ClusterIP :30004)
+    └─→ c1-b-govern     (ClusterIP :30005)
 ```
 
 **一次完整的 API 请求流程**（以"查询用户列表"为例）：
 
 ```
 ① 浏览器发起请求
-   GET http://10.0.6.100:30000/api/auth/users
+   GET http://10.0.6.100:30000/api/rbac/users
    │
 ② 请求到达 K3s 节点的 30000 端口（NodePort）
    │  K3s 根据 Service 配置，转发到 gateway 的 Service
    │
 ③ gateway 收到请求
-   │  解析 URL：/api/auth/users → 匹配路由 → 转发到 auth-resource
-   │  同时校验请求头中的 Token（调用 auth-server 验证）
+   │  解析 URL：/api/rbac/users → 匹配路由 → 转发到 c1-p-rbac
+   │  同时校验请求头中的 Token（调用 c1-p-oauth 验证）
    │
-④ auth-resource 处理请求
+④ c1-p-rbac 处理请求
    │  查询数据库，获取用户列表
    │
 ⑤ 原路返回
-   auth-resource → gateway → 节点 30000 端口 → 浏览器
+   c1-p-rbac → gateway → 节点 30000 端口 → 浏览器
 ```
 
 ---
@@ -577,11 +577,11 @@ gateway (NodePort 30000)
 ```bash
 # 直接通过节点 IP 访问
 curl http://<节点IP>:30000/actuator/health    # gateway 健康检查
-curl http://<节点IP>:30090/actuator/health    # auth-server 健康检查
+curl http://<节点IP>:30090/actuator/health    # c1-p-oauth 健康检查
 
 # 浏览器访问
 # http://<节点IP>:30000  → gateway API 入口
-# http://<节点IP>:30090  → auth-server SSO 服务
+# http://<节点IP>:30090  → c1-p-oauth OAuth2 认证服务
 ```
 
 ### 从外部访问 ClusterIP 服务（调试用）
@@ -589,12 +589,12 @@ curl http://<节点IP>:30090/actuator/health    # auth-server 健康检查
 ClusterIP 服务外部无法直接访问，需要用 `port-forward` 建隧道：
 
 ```bash
-# 把 auth-resource 的 20001 端口转发到本地
-kubectl -n c1-idc-test port-forward svc/auth-resource 20001:20001
-# 然后浏览器访问 http://localhost:20001/api/auth/actuator/health
+# 把 c1-p-rbac 的 20001 端口转发到本地
+kubectl -n c1-idc-test port-forward svc/c1-p-rbac 20001:20001
+# 然后浏览器访问 http://localhost:20001/api/rbac/actuator/health
 
-# 把 mdm 的 20002 端口转发到本地
-kubectl -n c1-idc-test port-forward svc/mdm 20002:20002
+# 把 c1-p-mdm 的 20002 端口转发到本地
+kubectl -n c1-idc-test port-forward svc/c1-p-mdm 20002:20002
 # 然后浏览器访问 http://localhost:20002/api/mdm/actuator/health
 ```
 
@@ -609,8 +609,8 @@ kubectl -n c1-idc-test exec -it deploy/gateway -- /bin/sh
 env | grep C1_ENV
 
 # 测试到其他服务的网络连通性
-wget -qO- http://auth-resource:20001/api/auth/actuator/health
-wget -qO- http://mdm:20002/api/mdm/actuator/health
+wget -qO- http://c1-p-rbac:20001/api/rbac/actuator/health
+wget -qO- http://c1-p-mdm:20002/api/mdm/actuator/health
 wget -qO- http://nacos:8848/nacos/actuator/health
 ```
 
@@ -679,8 +679,8 @@ kubectl -n c1-idc-test logs deployment/gateway --previous
 
 **A：** 可以同时 apply 整个目录（`kubectl apply -f 04-platform/`），K3s 会同时创建 4 个 Deployment。但各服务的 Pod **启动速度不同**，先启动完的会等后启动的：
 
-- **auth-server** 和 **gateway** 启动时会尝试连接 Nacos 注册，如果 Nacos 还没好会重试
-- **gateway** 路由到 auth-resource / mdm 时，如果目标 Pod 还没 Ready，就绪探针会阻止流量转发
+- **c1-p-oauth** 和 **gateway** 启动时会尝试连接 Nacos 注册，如果 Nacos 还没好会重试
+- **gateway** 路由到 c1-p-rbac / c1-p-mdm 时，如果目标 Pod 还没 Ready，就绪探针会阻止流量转发
 
 所以 `kubectl apply -f 04-platform/` 一条命令即可，不需要手动按顺序。但前提条件是 **03-infra 的 Nacos 和 Redis 已经 Ready**。
 
@@ -735,15 +735,15 @@ NodePort 只是给外部访问用的"后门"，内部流量走 NodePort 会多�
 
 ---
 
-#### Q6: auth-server 既是 NodePort 又能被 gateway 内部调用？
+#### Q6: c1-p-oauth 既是 NodePort 又能被 gateway 内部调用？
 
-**Q：** auth-server 配了 NodePort 30090，gateway 内部调用它时也用 30090 吗？
+**Q：** c1-p-oauth 配了 NodePort 30090，gateway 内部调用它时也用 30090 吗？
 
-**A：** 不是。gateway 内部调用 auth-server 用的是 **Service 名称 + port**：
+**A：** 不是。gateway 内部调用 c1-p-oauth 用的是 **Service 名称 + port**：
 
 ```
-外部访问 auth-server：  http://<节点IP>:30090   （走 NodePort）
-gateway 调用 auth-server：http://auth-server:9090 （走 ClusterIP，即 Service 的 port）
+外部访问 c1-p-oauth：  http://<节点IP>:30090   （走 NodePort）
+gateway 调用 c1-p-oauth：http://c1-p-oauth:9090 （走 ClusterIP，即 Service 的 port）
 ```
 
 NodePort 不影响 ClusterIP 的功能——NodePort 只是在 ClusterIP 的基础上，额外在每个节点上开了一个端口。集群内部的 DNS 和 port 始终可用。
@@ -760,10 +760,10 @@ NodePort 不影响 ClusterIP 的功能——NodePort 只是在 ClusterIP 的基�
 
 ```bash
 # 重启所有平台服务
-kubectl -n c1-idc-test rollout restart deployment/auth-server
-kubectl -n c1-idc-test rollout restart deployment/gateway
-kubectl -n c1-idc-test rollout restart deployment/auth-resource
-kubectl -n c1-idc-test rollout restart deployment/mdm
+kubectl -n c1-idc-test rollout restart deployment/c1-p-oauth
+kubectl -n c1-idc-test rollout restart deployment/c1-p-c1-p-c1-p-c1-p-gateway
+kubectl -n c1-idc-test rollout restart deployment/c1-p-rbac
+kubectl -n c1-idc-test rollout restart deployment/c1-p-c1-p-c1-p-mdm
 
 # 或一条命令重启所有 Deployment
 kubectl -n c1-idc-test rollout restart deployment
@@ -789,10 +789,10 @@ kubectl -n c1-idc-test get pods -l tier=platform
 
 ```
 NAME                              READY   STATUS    RESTARTS   AGE
-auth-server-xxxxx-yyyyy           1/1     Running   0          5m
-gateway-xxxxx-yyyyy               1/1     Running   0          5m
-auth-resource-xxxxx-yyyyy         1/1     Running   0          5m
-mdm-xxxxx-yyyyy                   1/1     Running   0          5m
+c1-p-oauth-xxxxx-yyyyy        1/1     Running   0          5m
+c1-p-gateway-xxxxx-yyyyy      1/1     Running   0          5m
+c1-p-rbac-xxxxx-yyyyy         1/1     Running   0          5m
+c1-p-mdm-xxxxx-yyyyy          1/1     Running   0          5m
 ```
 
 **第二步：检查健康状态**
@@ -811,7 +811,7 @@ curl http://localhost:20000/actuator/health
 kubectl -n c1-idc-test port-forward svc/nacos 8848:8848
 # 浏览器打开 http://localhost:8848/nacos
 # 登录 → 服务管理 → 服务列表
-# 应该能看到 auth-server、gateway、auth-resource、mdm 都已注册
+# 应该能看到 c1-p-oauth、c1-p-gateway、c1-p-rbac、c1-p-mdm 都已注册
 ```
 
 ---
@@ -824,7 +824,7 @@ kubectl -n c1-idc-test port-forward svc/nacos 8848:8848
 
 ```bash
 # 实时查看日志（类似 tail -f）
-kubectl -n c1-idc-test logs -f deployment/gateway
+kubectl -n c1-idc-test logs -f deployment/c1-p-c1-p-c1-p-c1-p-gateway
 
 # 查看最近 100 行
 kubectl -n c1-idc-test logs deployment/gateway --tail=100
@@ -847,13 +847,13 @@ kubectl -n c1-idc-test exec -it deploy/gateway -- cat /opt/app/logs/gateway.log
 ```bash
 # 方法一：直接 set image（快速更新）
 kubectl -n c1-idc-test set image deployment/gateway \
-  gateway=10.0.6.183:8088/c1/platform-gateway:v2.0.0
+  gateway=10.0.6.183:8088/c1/p-gateway:v2.0.0
 
 # 观察更新进度
-kubectl -n c1-idc-test rollout status deployment/gateway
+kubectl -n c1-idc-test rollout status deployment/c1-p-c1-p-c1-p-c1-p-gateway
 
 # 如果新版本有问题，回滚到上一版本
-kubectl -n c1-idc-test rollout undo deployment/gateway
+kubectl -n c1-idc-test rollout undo deployment/c1-p-c1-p-c1-p-c1-p-gateway
 ```
 
 **滚动更新过程**（因为策略是 `RollingUpdate`）：
