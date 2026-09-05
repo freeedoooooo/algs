@@ -1,6 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: dib-c1
-  labels:
-    app.kubernetes.io/part-of: dib-c1
