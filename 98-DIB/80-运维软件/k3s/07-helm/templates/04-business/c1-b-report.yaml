@@ -1,31 +1,31 @@
-# mdm — 主数据管理
+# c1-b-report — 报告生成
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: mdm
+  name: c1-b-report
   namespace: {{ .Values.namespace }}
   labels:
-    app: mdm
-    tier: platform
+    app: c1-b-report
+    tier: business
 spec:
-  replicas: {{ .Values.services.mdm.replicas }}
+  replicas: {{ .Values.services.c1-b-report.replicas }}
   selector:
     matchLabels:
-      app: mdm
+      app: c1-b-report
   template:
     metadata:
       labels:
-        app: mdm
-        tier: platform
+        app: c1-b-report
+        tier: business
     spec:
       imagePullSecrets:
         - name: dib-registry-secret
       containers:
-        - name: mdm
-          image: {{ .Values.imageRegistry }}/c1/platform-mdm:{{ .Values.image.tag }}
+        - name: c1-b-report
+          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1-b-report.image }}:{{ .Values.image.tag }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           ports:
-            - containerPort: 20002
+            - containerPort: 30002
               protocol: TCP
           env:
             - name: TZ
@@ -34,31 +34,35 @@ spec:
             - configMapRef:
                 name: dib-common-config
           resources:
-            {{- toYaml .Values.services.mdm.resources | nindent 12 }}
+            {{- toYaml .Values.services.c1-b-report.resources | nindent 12 }}
           volumeMounts:
             - name: app-logs
               mountPath: /opt/app/logs
+            - name: app-tmp
+              mountPath: /opt/app/tmp
             - name: fonts
               mountPath: /usr/share/fonts
               readOnly: true
           livenessProbe:
             httpGet:
-              path: /api/mdm/actuator/health
-              port: 20002
+              path: {{ .Values.services.c1-b-report.healthPath }}
+              port: 30002
             initialDelaySeconds: 60
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 5
           readinessProbe:
             httpGet:
-              path: /api/mdm/actuator/health
-              port: 20002
+              path: {{ .Values.services.c1-b-report.healthPath }}
+              port: 30002
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
       volumes:
         - name: app-logs
+          emptyDir: {}
+        - name: app-tmp
           emptyDir: {}
         - name: fonts
           hostPath:
@@ -68,16 +72,16 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: mdm
+  name: c1-b-report
   namespace: {{ .Values.namespace }}
   labels:
-    app: mdm
+    app: c1-b-report
 spec:
-  type: {{ .Values.services.mdm.serviceType }}
+  type: {{ .Values.services.c1-b-report.serviceType }}
   ports:
     - name: http
-      port: 20002
-      targetPort: 20002
+      port: 30002
+      targetPort: 30002
       protocol: TCP
   selector:
-    app: mdm
+    app: c1-b-report

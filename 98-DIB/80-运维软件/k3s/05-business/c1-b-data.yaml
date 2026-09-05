@@ -1,40 +1,53 @@
-# gateway — API 网关
+# c1-b-data — 数据资源（高内存服务）
+# 注意: 该服务 JVM 配置为 4g，属于高内存服务
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: gateway
-  namespace: {{ .Values.namespace }}
+  name: c1-b-data
+  namespace: c1-idc-test
   labels:
-    app: gateway
-    tier: platform
+    app: c1-b-data
+    tier: business
 spec:
-  replicas: {{ .Values.services.gateway.replicas }}
+  replicas: 1
   selector:
     matchLabels:
-      app: gateway
+      app: c1-b-data
   template:
     metadata:
       labels:
-        app: gateway
-        tier: platform
+        app: c1-b-data
+        tier: business
     spec:
       imagePullSecrets:
         - name: dib-registry-secret
       containers:
-        - name: gateway
-          image: {{ .Values.imageRegistry }}/c1/platform-gateway:{{ .Values.image.tag }}
-          imagePullPolicy: {{ .Values.imagePullPolicy }}
+        - name: c1-b-data
+          image: 10.0.6.183:8088/c1/b-data:latest
+          imagePullPolicy: Always
           ports:
-            - containerPort: 20000
+            - containerPort: 30003
+              name: http
               protocol: TCP
           env:
+            - name: C1_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: dib-common-config
+                  key: C1_ENV
             - name: TZ
               value: "Asia/Shanghai"
           envFrom:
             - configMapRef:
                 name: dib-common-config
+
           resources:
-            {{- toYaml .Values.services.gateway.resources | nindent 12 }}
+            requests:
+              cpu: "500m"
+              memory: "4Gi"
+            limits:
+              cpu: "1500m"
+              memory: "6Gi"
           volumeMounts:
             - name: app-logs
               mountPath: /opt/app/logs
@@ -43,16 +56,16 @@ spec:
               readOnly: true
           livenessProbe:
             httpGet:
-              path: /actuator/health
-              port: 20000
+              path: /api/data/actuator/health
+              port: 30003
             initialDelaySeconds: 60
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 5
           readinessProbe:
             httpGet:
-              path: /actuator/health
-              port: 20000
+              path: /api/data/actuator/health
+              port: 30003
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
@@ -68,19 +81,16 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: gateway
-  namespace: {{ .Values.namespace }}
+  name: c1-b-data
+  namespace: c1-idc-test
   labels:
-    app: gateway
+    app: c1-b-data
 spec:
-  type: {{ .Values.services.gateway.serviceType }}
+  type: ClusterIP
   ports:
     - name: http
-      port: 20000
-      targetPort: 20000
+      port: 30003
+      targetPort: 30003
       protocol: TCP
-      {{- if eq .Values.services.gateway.serviceType "NodePort" }}
-      nodePort: {{ .Values.services.gateway.nodePort }}
-      {{- end }}
   selector:
-    app: gateway
+    app: c1-b-data

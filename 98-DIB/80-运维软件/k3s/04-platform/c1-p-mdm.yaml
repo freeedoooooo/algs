@@ -1,31 +1,31 @@
-# data-dg — 数据治理
+# c1-p-mdm — 主数据管理
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: data-dg
+  name: c1-p-mdm
   namespace: c1-idc-test
   labels:
-    app: data-dg
-    tier: business
+    app: c1-p-mdm
+    tier: platform
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: data-dg
+      app: c1-p-mdm
   template:
     metadata:
       labels:
-        app: data-dg
-        tier: business
+        app: c1-p-mdm
+        tier: platform
     spec:
       imagePullSecrets:
         - name: dib-registry-secret
       containers:
-        - name: data-dg
-          image: 10.0.6.183:8088/c1/c1-dg:latest
+        - name: c1-p-mdm
+          image: 10.0.6.183:8088/c1/p-mdm:latest
           imagePullPolicy: Always
           ports:
-            - containerPort: 30005
+            - containerPort: 20002
               name: http
               protocol: TCP
           env:
@@ -46,7 +46,7 @@ spec:
               memory: "512Mi"
             limits:
               cpu: "1000m"
-              memory: "1536Mi"
+              memory: "2Gi"
           volumeMounts:
             - name: app-logs
               mountPath: /opt/app/logs
@@ -55,16 +55,16 @@ spec:
               readOnly: true
           livenessProbe:
             httpGet:
-              path: /api/dg/actuator/health
-              port: 30005
+              path: /api/mdm/actuator/health
+              port: 20002
             initialDelaySeconds: 60
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 5
           readinessProbe:
             httpGet:
-              path: /api/dg/actuator/health
-              port: 30005
+              path: /api/mdm/actuator/health
+              port: 20002
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
@@ -80,16 +80,16 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: data-dg
+  name: c1-p-mdm
   namespace: c1-idc-test
   labels:
-    app: data-dg
+    app: c1-p-mdm
 spec:
   type: ClusterIP
   ports:
     - name: http
-      port: 30005
-      targetPort: 30005
+      port: 20002
+      targetPort: 20002
       protocol: TCP
   selector:
-    app: data-dg
+    app: c1-p-mdm

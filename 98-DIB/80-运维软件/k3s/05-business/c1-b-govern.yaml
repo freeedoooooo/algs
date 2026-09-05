@@ -1,40 +1,52 @@
-# data-dg — 数据治理
+# c1-b-govern — 数据治理
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: data-dg
-  namespace: {{ .Values.namespace }}
+  name: c1-b-govern
+  namespace: c1-idc-test
   labels:
-    app: data-dg
+    app: c1-b-govern
     tier: business
 spec:
-  replicas: {{ .Values.services.data-dg.replicas }}
+  replicas: 1
   selector:
     matchLabels:
-      app: data-dg
+      app: c1-b-govern
   template:
     metadata:
       labels:
-        app: data-dg
+        app: c1-b-govern
         tier: business
     spec:
       imagePullSecrets:
         - name: dib-registry-secret
       containers:
-        - name: data-dg
-          image: {{ .Values.imageRegistry }}/c1/c1-dg:{{ .Values.image.tag }}
-          imagePullPolicy: {{ .Values.imagePullPolicy }}
+        - name: c1-b-govern
+          image: 10.0.6.183:8088/c1/b-govern:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 30005
+              name: http
               protocol: TCP
           env:
+            - name: C1_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: dib-common-config
+                  key: C1_ENV
             - name: TZ
               value: "Asia/Shanghai"
           envFrom:
             - configMapRef:
                 name: dib-common-config
+
           resources:
-            {{- toYaml .Values.services.data-dg.resources | nindent 12 }}
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1536Mi"
           volumeMounts:
             - name: app-logs
               mountPath: /opt/app/logs
@@ -68,10 +80,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: data-dg
-  namespace: {{ .Values.namespace }}
+  name: c1-b-govern
+  namespace: c1-idc-test
   labels:
-    app: data-dg
+    app: c1-b-govern
 spec:
   type: ClusterIP
   ports:
@@ -80,4 +92,4 @@ spec:
       targetPort: 30005
       protocol: TCP
   selector:
-    app: data-dg
+    app: c1-b-govern

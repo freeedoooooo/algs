@@ -114,17 +114,17 @@ main() {
     check_pod_status "redis"
 
     # 平台服务
-    check_pod_status "auth-server"
-    check_pod_status "gateway"
-    check_pod_status "auth-resource"
-    check_pod_status "mdm"
+    check_pod_status "c1-p-oauth"
+    check_pod_status "c1-p-gateway"
+    check_pod_status "c1-p-rbac"
+    check_pod_status "c1-p-mdm"
 
     # 业务服务
-    check_pod_status "service-extract"
-    check_pod_status "service-report"
-    check_pod_status "service-data"
-    check_pod_status "service-rule"
-    check_pod_status "data-dg"
+    check_pod_status "c1-b-extract"
+    check_pod_status "c1-b-report"
+    check_pod_status "c1-b-data"
+    check_pod_status "c1-b-rule"
+    check_pod_status "c1-b-govern"
 
     echo ""
 
@@ -135,15 +135,15 @@ main() {
 
         check_readiness "nacos"
         check_readiness "redis"
-        check_readiness "auth-server"
-        check_readiness "gateway"
-        check_readiness "auth-resource"
-        check_readiness "mdm"
-        check_readiness "service-extract"
-        check_readiness "service-report"
-        check_readiness "service-data"
-        check_readiness "service-rule"
-        check_readiness "data-dg"
+        check_readiness "c1-p-oauth"
+        check_readiness "c1-p-gateway"
+        check_readiness "c1-p-rbac"
+        check_readiness "c1-p-mdm"
+        check_readiness "c1-b-extract"
+        check_readiness "c1-b-report"
+        check_readiness "c1-b-data"
+        check_readiness "c1-b-rule"
+        check_readiness "c1-b-govern"
 
         echo ""
 
@@ -153,15 +153,15 @@ main() {
 
         check_service "nacos" "8848"
         check_service "redis" "6379"
-        check_service "auth-server" "9090"
-        check_service "gateway" "20000"
-        check_service "auth-resource" "20001"
-        check_service "mdm" "20002"
-        check_service "service-extract" "30001"
-        check_service "service-report" "30002"
-        check_service "service-data" "30003"
-        check_service "service-rule" "30004"
-        check_service "data-dg" "30005"
+        check_service "c1-p-oauth" "9090"
+        check_service "c1-p-gateway" "20000"
+        check_service "c1-p-rbac" "20001"
+        check_service "c1-p-mdm" "20002"
+        check_service "c1-b-extract" "30001"
+        check_service "c1-b-report" "30002"
+        check_service "c1-b-data" "30003"
+        check_service "c1-b-rule" "30004"
+        check_service "c1-b-govern" "30005"
 
         echo ""
     fi

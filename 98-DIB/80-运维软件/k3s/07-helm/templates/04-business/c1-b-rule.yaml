@@ -1,31 +1,31 @@
-# service-report — 报告生成
+# c1-b-rule — 规则引擎
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: service-report
+  name: c1-b-rule
   namespace: {{ .Values.namespace }}
   labels:
-    app: service-report
+    app: c1-b-rule
     tier: business
 spec:
-  replicas: {{ .Values.services.service-report.replicas }}
+  replicas: {{ .Values.services.c1-b-rule.replicas }}
   selector:
     matchLabels:
-      app: service-report
+      app: c1-b-rule
   template:
     metadata:
       labels:
-        app: service-report
+        app: c1-b-rule
         tier: business
     spec:
       imagePullSecrets:
         - name: dib-registry-secret
       containers:
-        - name: service-report
-          image: {{ .Values.imageRegistry }}/c1/c1-report:{{ .Values.image.tag }}
+        - name: c1-b-rule
+          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1-b-rule.image }}:{{ .Values.image.tag }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           ports:
-            - containerPort: 30002
+            - containerPort: 30004
               protocol: TCP
           env:
             - name: TZ
@@ -34,35 +34,31 @@ spec:
             - configMapRef:
                 name: dib-common-config
           resources:
-            {{- toYaml .Values.services.service-report.resources | nindent 12 }}
+            {{- toYaml .Values.services.c1-b-rule.resources | nindent 12 }}
           volumeMounts:
             - name: app-logs
               mountPath: /opt/app/logs
-            - name: app-tmp
-              mountPath: /opt/app/tmp
             - name: fonts
               mountPath: /usr/share/fonts
               readOnly: true
           livenessProbe:
             httpGet:
-              path: /api/report/actuator/health
-              port: 30002
+              path: {{ .Values.services.c1-b-rule.healthPath }}
+              port: 30004
             initialDelaySeconds: 60
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 5
           readinessProbe:
             httpGet:
-              path: /api/report/actuator/health
-              port: 30002
+              path: {{ .Values.services.c1-b-rule.healthPath }}
+              port: 30004
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
       volumes:
         - name: app-logs
-          emptyDir: {}
-        - name: app-tmp
           emptyDir: {}
         - name: fonts
           hostPath:
@@ -72,16 +68,16 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: service-report
+  name: c1-b-rule
   namespace: {{ .Values.namespace }}
   labels:
-    app: service-report
+    app: c1-b-rule
 spec:
-  type: ClusterIP
+  type: {{ .Values.services.c1-b-rule.serviceType }}
   ports:
     - name: http
-      port: 30002
-      targetPort: 30002
+      port: 30004
+      targetPort: 30004
       protocol: TCP
   selector:
-    app: service-report
+    app: c1-b-rule

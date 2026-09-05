@@ -1,64 +1,80 @@
-# service-data — 数据资源（高内存服务）
+# c1-b-report — 报告生成
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: service-data
-  namespace: {{ .Values.namespace }}
+  name: c1-b-report
+  namespace: c1-idc-test
   labels:
-    app: service-data
+    app: c1-b-report
     tier: business
 spec:
-  replicas: {{ .Values.services.service-data.replicas }}
+  replicas: 1
   selector:
     matchLabels:
-      app: service-data
+      app: c1-b-report
   template:
     metadata:
       labels:
-        app: service-data
+        app: c1-b-report
         tier: business
     spec:
       imagePullSecrets:
         - name: dib-registry-secret
       containers:
-        - name: service-data
-          image: {{ .Values.imageRegistry }}/c1/c1-data:{{ .Values.image.tag }}
-          imagePullPolicy: {{ .Values.imagePullPolicy }}
+        - name: c1-b-report
+          image: 10.0.6.183:8088/c1/b-report:latest
+          imagePullPolicy: Always
           ports:
-            - containerPort: 30003
+            - containerPort: 30002
+              name: http
               protocol: TCP
           env:
+            - name: C1_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: dib-common-config
+                  key: C1_ENV
             - name: TZ
               value: "Asia/Shanghai"
           envFrom:
             - configMapRef:
                 name: dib-common-config
+
           resources:
-            {{- toYaml .Values.services.service-data.resources | nindent 12 }}
+            requests:
+              cpu: "250m"
+              memory: "1Gi"
+            limits:
+              cpu: "1000m"
+              memory: "3Gi"
           volumeMounts:
             - name: app-logs
               mountPath: /opt/app/logs
+            - name: app-tmp
+              mountPath: /opt/app/tmp
             - name: fonts
               mountPath: /usr/share/fonts
               readOnly: true
           livenessProbe:
             httpGet:
-              path: /api/data/actuator/health
-              port: 30003
+              path: /api/report/actuator/health
+              port: 30002
             initialDelaySeconds: 60
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 5
           readinessProbe:
             httpGet:
-              path: /api/data/actuator/health
-              port: 30003
+              path: /api/report/actuator/health
+              port: 30002
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
       volumes:
         - name: app-logs
+          emptyDir: {}
+        - name: app-tmp
           emptyDir: {}
         - name: fonts
           hostPath:
@@ -68,16 +84,16 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: service-data
-  namespace: {{ .Values.namespace }}
+  name: c1-b-report
+  namespace: c1-idc-test
   labels:
-    app: service-data
+    app: c1-b-report
 spec:
   type: ClusterIP
   ports:
     - name: http
-      port: 30003
-      targetPort: 30003
+      port: 30002
+      targetPort: 30002
       protocol: TCP
   selector:
-    app: service-data
+    app: c1-b-report

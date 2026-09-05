@@ -1,52 +1,40 @@
-# auth-resource — 权限资源管理
+# c1-b-govern — 数据治理
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: auth-resource
-  namespace: c1-idc-test
+  name: c1-b-govern
+  namespace: {{ .Values.namespace }}
   labels:
-    app: auth-resource
-    tier: platform
+    app: c1-b-govern
+    tier: business
 spec:
-  replicas: 1
+  replicas: {{ .Values.services.c1-b-govern.replicas }}
   selector:
     matchLabels:
-      app: auth-resource
+      app: c1-b-govern
   template:
     metadata:
       labels:
-        app: auth-resource
-        tier: platform
+        app: c1-b-govern
+        tier: business
     spec:
       imagePullSecrets:
         - name: dib-registry-secret
       containers:
-        - name: auth-resource
-          image: 10.0.6.183:8088/c1/platform-auth-resource:latest
-          imagePullPolicy: Always
+        - name: c1-b-govern
+          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1-b-govern.image }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
           ports:
-            - containerPort: 20001
-              name: http
+            - containerPort: 30005
               protocol: TCP
           env:
-            - name: C1_ENV
-              valueFrom:
-                configMapKeyRef:
-                  name: dib-common-config
-                  key: C1_ENV
             - name: TZ
               value: "Asia/Shanghai"
           envFrom:
             - configMapRef:
                 name: dib-common-config
-
           resources:
-            requests:
-              cpu: "250m"
-              memory: "512Mi"
-            limits:
-              cpu: "1000m"
-              memory: "2Gi"
+            {{- toYaml .Values.services.c1-b-govern.resources | nindent 12 }}
           volumeMounts:
             - name: app-logs
               mountPath: /opt/app/logs
@@ -55,16 +43,16 @@ spec:
               readOnly: true
           livenessProbe:
             httpGet:
-              path: /api/auth/actuator/health
-              port: 20001
+              path: {{ .Values.services.c1-b-govern.healthPath }}
+              port: 30005
             initialDelaySeconds: 60
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 5
           readinessProbe:
             httpGet:
-              path: /api/auth/actuator/health
-              port: 20001
+              path: {{ .Values.services.c1-b-govern.healthPath }}
+              port: 30005
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
@@ -80,16 +68,16 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: auth-resource
-  namespace: c1-idc-test
+  name: c1-b-govern
+  namespace: {{ .Values.namespace }}
   labels:
-    app: auth-resource
+    app: c1-b-govern
 spec:
-  type: ClusterIP
+  type: {{ .Values.services.c1-b-govern.serviceType }}
   ports:
     - name: http
-      port: 20001
-      targetPort: 20001
+      port: 30005
+      targetPort: 30005
       protocol: TCP
   selector:
-    app: auth-resource
+    app: c1-b-govern

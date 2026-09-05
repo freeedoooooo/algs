@@ -1,31 +1,31 @@
-# auth-server — SSO 认证中心
+# c1-b-extract — 资料提取（高内存服务）
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: auth-server
+  name: c1-b-extract
   namespace: {{ .Values.namespace }}
   labels:
-    app: auth-server
-    tier: platform
+    app: c1-b-extract
+    tier: business
 spec:
-  replicas: {{ .Values.services.auth-server.replicas }}
+  replicas: {{ .Values.services.c1-b-extract.replicas }}
   selector:
     matchLabels:
-      app: auth-server
+      app: c1-b-extract
   template:
     metadata:
       labels:
-        app: auth-server
-        tier: platform
+        app: c1-b-extract
+        tier: business
     spec:
       imagePullSecrets:
         - name: dib-registry-secret
       containers:
-        - name: auth-server
-          image: {{ .Values.imageRegistry }}/c1/platform-auth-server:{{ .Values.image.tag }}
+        - name: c1-b-extract
+          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1-b-extract.image }}:{{ .Values.image.tag }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           ports:
-            - containerPort: 9090
+            - containerPort: 30001
               protocol: TCP
           env:
             - name: TZ
@@ -34,32 +34,37 @@ spec:
             - configMapRef:
                 name: dib-common-config
           resources:
-            {{- toYaml .Values.services.auth-server.resources | nindent 12 }}
+            {{- toYaml .Values.services.c1-b-extract.resources | nindent 12 }}
           volumeMounts:
             - name: app-logs
               mountPath: /opt/app/logs
+            - name: app-tmp
+              mountPath: /tmp
             - name: fonts
               mountPath: /usr/share/fonts
               readOnly: true
           livenessProbe:
             httpGet:
-              path: /actuator/health
-              port: 9090
-            initialDelaySeconds: 60
+              path: {{ .Values.services.c1-b-extract.healthPath }}
+              port: 30001
+            initialDelaySeconds: 90
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 5
           readinessProbe:
             httpGet:
-              path: /actuator/health
-              port: 9090
-            initialDelaySeconds: 30
+              path: {{ .Values.services.c1-b-extract.healthPath }}
+              port: 30001
+            initialDelaySeconds: 60
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
       volumes:
         - name: app-logs
           emptyDir: {}
+        - name: app-tmp
+          emptyDir:
+            sizeLimit: 5Gi
         - name: fonts
           hostPath:
             path: /usr/share/fonts
@@ -68,19 +73,16 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: auth-server
+  name: c1-b-extract
   namespace: {{ .Values.namespace }}
   labels:
-    app: auth-server
+    app: c1-b-extract
 spec:
-  type: {{ .Values.services.auth-server.serviceType }}
+  type: {{ .Values.services.c1-b-extract.serviceType }}
   ports:
     - name: http
-      port: 9090
-      targetPort: 9090
+      port: 30001
+      targetPort: 30001
       protocol: TCP
-      {{- if eq .Values.services.auth-server.serviceType "NodePort" }}
-      nodePort: {{ .Values.services.auth-server.nodePort }}
-      {{- end }}
   selector:
-    app: auth-server
+    app: c1-b-extract

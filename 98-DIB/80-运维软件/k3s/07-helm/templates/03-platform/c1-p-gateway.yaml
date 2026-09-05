@@ -1,52 +1,40 @@
-# auth-server — SSO 认证中心
+# c1-p-gateway — API 网关
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: auth-server
-  namespace: c1-idc-test
+  name: c1-p-gateway
+  namespace: {{ .Values.namespace }}
   labels:
-    app: auth-server
+    app: c1-p-gateway
     tier: platform
 spec:
-  replicas: 1
+  replicas: {{ .Values.services.c1-p-gateway.replicas }}
   selector:
     matchLabels:
-      app: auth-server
+      app: c1-p-gateway
   template:
     metadata:
       labels:
-        app: auth-server
+        app: c1-p-gateway
         tier: platform
     spec:
       imagePullSecrets:
         - name: dib-registry-secret
       containers:
-        - name: auth-server
-          image: 10.0.6.183:8088/c1/platform-auth-server:latest
-          imagePullPolicy: Always
+        - name: c1-p-gateway
+          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1-p-gateway.image }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
           ports:
-            - containerPort: 9090
-              name: http
+            - containerPort: 20000
               protocol: TCP
           env:
-            - name: C1_ENV
-              valueFrom:
-                configMapKeyRef:
-                  name: dib-common-config
-                  key: C1_ENV
             - name: TZ
               value: "Asia/Shanghai"
           envFrom:
             - configMapRef:
                 name: dib-common-config
-
           resources:
-            requests:
-              cpu: "250m"
-              memory: "512Mi"
-            limits:
-              cpu: "1000m"
-              memory: "2Gi"
+            {{- toYaml .Values.services.c1-p-gateway.resources | nindent 12 }}
           volumeMounts:
             - name: app-logs
               mountPath: /opt/app/logs
@@ -55,16 +43,16 @@ spec:
               readOnly: true
           livenessProbe:
             httpGet:
-              path: /actuator/health
-              port: 9090
+              path: {{ .Values.services.c1-p-gateway.healthPath }}
+              port: 20000
             initialDelaySeconds: 60
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 5
           readinessProbe:
             httpGet:
-              path: /actuator/health
-              port: 9090
+              path: {{ .Values.services.c1-p-gateway.healthPath }}
+              port: 20000
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
@@ -80,17 +68,19 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: auth-server
-  namespace: c1-idc-test
+  name: c1-p-gateway
+  namespace: {{ .Values.namespace }}
   labels:
-    app: auth-server
+    app: c1-p-gateway
 spec:
-  type: NodePort
+  type: {{ .Values.services.c1-p-gateway.serviceType }}
   ports:
     - name: http
-      port: 9090
-      targetPort: 9090
-      nodePort: 30090
+      port: 20000
+      targetPort: 20000
       protocol: TCP
+      {{- if eq .Values.services.c1-p-gateway.serviceType "NodePort" }}
+      nodePort: {{ .Values.services.c1-p-gateway.nodePort }}
+      {{- end }}
   selector:
-    app: auth-server
+    app: c1-p-gateway

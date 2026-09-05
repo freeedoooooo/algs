@@ -1,31 +1,31 @@
-# service-rule — 规则引擎
+# c1-b-data — 数据资源（高内存服务）
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: service-rule
+  name: c1-b-data
   namespace: {{ .Values.namespace }}
   labels:
-    app: service-rule
+    app: c1-b-data
     tier: business
 spec:
-  replicas: {{ .Values.services.service-rule.replicas }}
+  replicas: {{ .Values.services.c1-b-data.replicas }}
   selector:
     matchLabels:
-      app: service-rule
+      app: c1-b-data
   template:
     metadata:
       labels:
-        app: service-rule
+        app: c1-b-data
         tier: business
     spec:
       imagePullSecrets:
         - name: dib-registry-secret
       containers:
-        - name: service-rule
-          image: {{ .Values.imageRegistry }}/c1/c1-rule:{{ .Values.image.tag }}
+        - name: c1-b-data
+          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1-b-data.image }}:{{ .Values.image.tag }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           ports:
-            - containerPort: 30004
+            - containerPort: 30003
               protocol: TCP
           env:
             - name: TZ
@@ -34,7 +34,7 @@ spec:
             - configMapRef:
                 name: dib-common-config
           resources:
-            {{- toYaml .Values.services.service-rule.resources | nindent 12 }}
+            {{- toYaml .Values.services.c1-b-data.resources | nindent 12 }}
           volumeMounts:
             - name: app-logs
               mountPath: /opt/app/logs
@@ -43,16 +43,16 @@ spec:
               readOnly: true
           livenessProbe:
             httpGet:
-              path: /api/rule/actuator/health
-              port: 30004
+              path: {{ .Values.services.c1-b-data.healthPath }}
+              port: 30003
             initialDelaySeconds: 60
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 5
           readinessProbe:
             httpGet:
-              path: /api/rule/actuator/health
-              port: 30004
+              path: {{ .Values.services.c1-b-data.healthPath }}
+              port: 30003
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
@@ -68,16 +68,16 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: service-rule
+  name: c1-b-data
   namespace: {{ .Values.namespace }}
   labels:
-    app: service-rule
+    app: c1-b-data
 spec:
-  type: ClusterIP
+  type: {{ .Values.services.c1-b-data.serviceType }}
   ports:
     - name: http
-      port: 30004
-      targetPort: 30004
+      port: 30003
+      targetPort: 30003
       protocol: TCP
   selector:
-    app: service-rule
+    app: c1-b-data

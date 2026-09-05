@@ -95,9 +95,9 @@ services:
 
   # ==================== 平台服务层 ====================
 
-  auth-server:
+  c1-p-oauth:
     tier: platform
-    image: "c1/platform-auth-server"
+    image: "c1/p-oauth"
     port: 9090
     serviceType: NodePort
     nodePort: 30090
@@ -111,9 +111,9 @@ services:
         cpu: "1000m"
         memory: "2Gi"
 
-  gateway:
+  c1-p-gateway:
     tier: platform
-    image: "c1/platform-gateway"
+    image: "c1/p-gateway"
     port: 20000
     serviceType: NodePort
     nodePort: 30000
@@ -127,12 +127,12 @@ services:
         cpu: "1000m"
         memory: "2Gi"
 
-  auth-resource:
+  c1-p-rbac:
     tier: platform
-    image: "c1/platform-auth-resource"
+    image: "c1/p-rbac"
     port: 20001
     serviceType: ClusterIP
-    healthPath: /api/auth/actuator/health
+    healthPath: /api/rbac/actuator/health
     replicas: 1
     resources:
       requests:
@@ -142,9 +142,9 @@ services:
         cpu: "1000m"
         memory: "2Gi"
 
-  mdm:
+  c1-p-mdm:
     tier: platform
-    image: "c1/platform-mdm"
+    image: "c1/p-mdm"
     port: 20002
     serviceType: ClusterIP
     healthPath: /api/mdm/actuator/health
@@ -159,9 +159,9 @@ services:
 
   # ==================== 业务服务层 ====================
 
-  service-extract:
+  c1-b-extract:
     tier: business
-    image: "c1/c1-extract"
+    image: "c1/b-extract"
     port: 30001
     serviceType: ClusterIP
     healthPath: /api/extract/actuator/health
@@ -174,9 +174,9 @@ services:
         cpu: "2000m"
         memory: "18Gi"
 
-  service-report:
+  c1-b-report:
     tier: business
-    image: "c1/c1-report"
+    image: "c1/b-report"
     port: 30002
     serviceType: ClusterIP
     healthPath: /api/report/actuator/health
@@ -189,9 +189,9 @@ services:
         cpu: "1000m"
         memory: "3Gi"
 
-  service-data:
+  c1-b-data:
     tier: business
-    image: "c1/c1-data"
+    image: "c1/b-data"
     port: 30003
     serviceType: ClusterIP
     healthPath: /api/data/actuator/health
@@ -204,9 +204,9 @@ services:
         cpu: "1500m"
         memory: "6Gi"
 
-  service-rule:
+  c1-b-rule:
     tier: business
-    image: "c1/c1-rule"
+    image: "c1/b-rule"
     port: 30004
     serviceType: ClusterIP
     healthPath: /api/rule/actuator/health
@@ -219,9 +219,9 @@ services:
         cpu: "1000m"
         memory: "3Gi"
 
-  data-dg:
+  c1-b-govern:
     tier: business
-    image: "c1/c1-dg"
+    image: "c1/b-govern"
     port: 30005
     serviceType: ClusterIP
     healthPath: /api/dg/actuator/health

@@ -71,10 +71,10 @@ deploy_platform() {
     kubectl apply -f "${BASE_DIR}/04-platform/"
 
     log_info "等待平台服务就绪（首次启动较慢，请耐心等待）..."
-    kubectl -n c1-idc-test rollout status deployment/auth-server --timeout=180s
-    kubectl -n c1-idc-test rollout status deployment/gateway --timeout=180s
-    kubectl -n c1-idc-test rollout status deployment/auth-resource --timeout=180s
-    kubectl -n c1-idc-test rollout status deployment/mdm --timeout=180s
+    kubectl -n c1-idc-test rollout status deployment/c1-p-oauth --timeout=180s
+    kubectl -n c1-idc-test rollout status deployment/c1-p-gateway --timeout=180s
+    kubectl -n c1-idc-test rollout status deployment/c1-p-rbac --timeout=180s
+    kubectl -n c1-idc-test rollout status deployment/c1-p-mdm --timeout=180s
 
     log_info "平台服务部署完成"
 }
@@ -86,11 +86,11 @@ deploy_business() {
     kubectl apply -f "${BASE_DIR}/05-business/"
 
     log_info "等待业务服务就绪..."
-    kubectl -n c1-idc-test rollout status deployment/service-extract --timeout=300s
-    kubectl -n c1-idc-test rollout status deployment/service-report --timeout=180s
-    kubectl -n c1-idc-test rollout status deployment/service-data --timeout=180s
-    kubectl -n c1-idc-test rollout status deployment/service-rule --timeout=180s
-    kubectl -n c1-idc-test rollout status deployment/data-dg --timeout=180s
+    kubectl -n c1-idc-test rollout status deployment/c1-b-extract --timeout=300s
+    kubectl -n c1-idc-test rollout status deployment/c1-b-report --timeout=180s
+    kubectl -n c1-idc-test rollout status deployment/c1-b-data --timeout=180s
+    kubectl -n c1-idc-test rollout status deployment/c1-b-rule --timeout=180s
+    kubectl -n c1-idc-test rollout status deployment/c1-b-govern --timeout=180s
 
     log_info "业务服务部署完成"
 }
@@ -131,21 +131,21 @@ print_summary() {
     echo "  镜像版本: ${C1_VERSION}"
     echo ""
     echo "  外部访问地址:"
-    echo "    Gateway:       http://<NODE_IP>:30000"
-    echo "    Auth Server:   http://<NODE_IP>:30090"
+    echo "    Gateway:       http://<NODE_IP>:30000  (c1-p-gateway)"
+    echo "    OAuth:         http://<NODE_IP>:30090  (c1-p-oauth)"
     echo ""
     echo "  内部服务地址 (K3s DNS):"
     echo "    Nacos:         http://nacos.c1-idc-test.svc.cluster.local:8848"
     echo "    Redis:         redis.c1-idc-test.svc.cluster.local:6379"
-    echo "    Auth Server:   http://auth-server.c1-idc-test.svc.cluster.local:9090"
-    echo "    Gateway:       http://gateway.c1-idc-test.svc.cluster.local:20000"
-    echo "    Auth Resource: http://auth-resource.c1-idc-test.svc.cluster.local:20001"
-    echo "    MDM:           http://mdm.c1-idc-test.svc.cluster.local:20002"
-    echo "    Extract:       http://service-extract.c1-idc-test.svc.cluster.local:30001"
-    echo "    Report:        http://service-report.c1-idc-test.svc.cluster.local:30002"
-    echo "    Data:          http://service-data.c1-idc-test.svc.cluster.local:30003"
-    echo "    Rule:          http://service-rule.c1-idc-test.svc.cluster.local:30004"
-    echo "    DG:            http://data-dg.c1-idc-test.svc.cluster.local:30005"
+    echo "    OAuth:         http://c1-p-oauth.c1-idc-test.svc.cluster.local:9090"
+    echo "    Gateway:       http://c1-p-gateway.c1-idc-test.svc.cluster.local:20000"
+    echo "    RBAC:          http://c1-p-rbac.c1-idc-test.svc.cluster.local:20001"
+    echo "    MDM:           http://c1-p-mdm.c1-idc-test.svc.cluster.local:20002"
+    echo "    Extract:       http://c1-b-extract.c1-idc-test.svc.cluster.local:30001"
+    echo "    Report:        http://c1-b-report.c1-idc-test.svc.cluster.local:30002"
+    echo "    Data:          http://c1-b-data.c1-idc-test.svc.cluster.local:30003"
+    echo "    Rule:          http://c1-b-rule.c1-idc-test.svc.cluster.local:30004"
+    echo "    Govern:        http://c1-b-govern.c1-idc-test.svc.cluster.local:30005"
     echo ""
     echo "  常用命令:"
     echo "    kubectl -n c1-idc-test get pods           # 查看 Pod 状态"

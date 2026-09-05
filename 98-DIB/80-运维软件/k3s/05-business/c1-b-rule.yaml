@@ -1,28 +1,28 @@
-# service-rule — 规则引擎
+# c1-b-rule — 规则引擎
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: service-rule
+  name: c1-b-rule
   namespace: c1-idc-test
   labels:
-    app: service-rule
+    app: c1-b-rule
     tier: business
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: service-rule
+      app: c1-b-rule
   template:
     metadata:
       labels:
-        app: service-rule
+        app: c1-b-rule
         tier: business
     spec:
       imagePullSecrets:
         - name: dib-registry-secret
       containers:
-        - name: service-rule
-          image: 10.0.6.183:8088/c1/c1-rule:latest
+        - name: c1-b-rule
+          image: 10.0.6.183:8088/c1/b-rule:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 30004
@@ -80,10 +80,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: service-rule
+  name: c1-b-rule
   namespace: c1-idc-test
   labels:
-    app: service-rule
+    app: c1-b-rule
 spec:
   type: ClusterIP
   ports:
@@ -92,4 +92,4 @@ spec:
       targetPort: 30004
       protocol: TCP
   selector:
-    app: service-rule
+    app: c1-b-rule

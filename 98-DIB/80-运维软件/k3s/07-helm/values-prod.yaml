@@ -20,21 +20,21 @@ config:
   MINIO_ENDPOINT: "http://10.0.6.164:9000"
 
 services:
-  gateway:
+  c1-p-gateway:
     replicas: 2        # 生产环境网关双副本
-  auth-server:
+  c1-p-oauth:
     replicas: 2        # 认证中心双副本
-  auth-resource:
+  c1-p-rbac:
     replicas: 1
-  mdm:
+  c1-p-mdm:
     replicas: 1
-  service-extract:
+  c1-b-extract:
     replicas: 1
-  service-report:
+  c1-b-report:
     replicas: 2        # 报告生成双副本
-  service-data:
+  c1-b-data:
     replicas: 1
-  service-rule:
+  c1-b-rule:
     replicas: 1
-  data-dg:
+  c1-b-govern:
     replicas: 1

@@ -1,31 +1,31 @@
-# gateway — API 网关
+# c1-p-rbac — 权限资源管理
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: gateway
+  name: c1-p-rbac
   namespace: c1-idc-test
   labels:
-    app: gateway
+    app: c1-p-rbac
     tier: platform
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: gateway
+      app: c1-p-rbac
   template:
     metadata:
       labels:
-        app: gateway
+        app: c1-p-rbac
         tier: platform
     spec:
       imagePullSecrets:
         - name: dib-registry-secret
       containers:
-        - name: gateway
-          image: 10.0.6.183:8088/c1/platform-gateway:latest
+        - name: c1-p-rbac
+          image: 10.0.6.183:8088/c1/p-rbac:latest
           imagePullPolicy: Always
           ports:
-            - containerPort: 20000
+            - containerPort: 20001
               name: http
               protocol: TCP
           env:
@@ -55,16 +55,16 @@ spec:
               readOnly: true
           livenessProbe:
             httpGet:
-              path: /actuator/health
-              port: 20000
+              path: /api/rbac/actuator/health
+              port: 20001
             initialDelaySeconds: 60
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 5
           readinessProbe:
             httpGet:
-              path: /actuator/health
-              port: 20000
+              path: /api/rbac/actuator/health
+              port: 20001
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
@@ -80,17 +80,16 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: gateway
+  name: c1-p-rbac
   namespace: c1-idc-test
   labels:
-    app: gateway
+    app: c1-p-rbac
 spec:
-  type: NodePort
+  type: ClusterIP
   ports:
     - name: http
-      port: 20000
-      targetPort: 20000
-      nodePort: 30000
+      port: 20001
+      targetPort: 20001
       protocol: TCP
   selector:
-    app: gateway
+    app: c1-p-rbac

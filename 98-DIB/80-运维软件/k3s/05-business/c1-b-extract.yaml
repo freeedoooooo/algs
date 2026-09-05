@@ -1,32 +1,32 @@
-# service-data — 数据资源（高内存服务）
-# 注意: 该服务 JVM 配置为 4g，属于高内存服务
+# c1-b-extract — 资料提取（高内存服务）
+# 注意: 该服务 JVM 配置为 12g-16g，属于高内存服务
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: service-data
+  name: c1-b-extract
   namespace: c1-idc-test
   labels:
-    app: service-data
+    app: c1-b-extract
     tier: business
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: service-data
+      app: c1-b-extract
   template:
     metadata:
       labels:
-        app: service-data
+        app: c1-b-extract
         tier: business
     spec:
       imagePullSecrets:
         - name: dib-registry-secret
       containers:
-        - name: service-data
-          image: 10.0.6.183:8088/c1/c1-data:latest
+        - name: c1-b-extract
+          image: 10.0.6.183:8088/c1/b-extract:latest
           imagePullPolicy: Always
           ports:
-            - containerPort: 30003
+            - containerPort: 30001
               name: http
               protocol: TCP
           env:
@@ -37,6 +37,11 @@ spec:
                   key: C1_ENV
             - name: TZ
               value: "Asia/Shanghai"
+            - name: OCR_SERVER
+              valueFrom:
+                configMapKeyRef:
+                  name: dib-common-config
+                  key: OCR_SERVER
           envFrom:
             - configMapRef:
                 name: dib-common-config
@@ -44,35 +49,40 @@ spec:
           resources:
             requests:
               cpu: "500m"
-              memory: "4Gi"
+              memory: "12Gi"
             limits:
-              cpu: "1500m"
-              memory: "6Gi"
+              cpu: "2000m"
+              memory: "18Gi"
           volumeMounts:
             - name: app-logs
               mountPath: /opt/app/logs
+            - name: app-tmp
+              mountPath: /tmp
             - name: fonts
               mountPath: /usr/share/fonts
               readOnly: true
           livenessProbe:
             httpGet:
-              path: /api/data/actuator/health
-              port: 30003
-            initialDelaySeconds: 60
+              path: /api/extract/actuator/health
+              port: 30001
+            initialDelaySeconds: 90
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 5
           readinessProbe:
             httpGet:
-              path: /api/data/actuator/health
-              port: 30003
-            initialDelaySeconds: 30
+              path: /api/extract/actuator/health
+              port: 30001
+            initialDelaySeconds: 60
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
       volumes:
         - name: app-logs
           emptyDir: {}
+        - name: app-tmp
+          emptyDir:
+            sizeLimit: 5Gi
         - name: fonts
           hostPath:
             path: /usr/share/fonts
@@ -81,16 +91,16 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: service-data
+  name: c1-b-extract
   namespace: c1-idc-test
   labels:
-    app: service-data
+    app: c1-b-extract
 spec:
   type: ClusterIP
   ports:
     - name: http
-      port: 30003
-      targetPort: 30003
+      port: 30001
+      targetPort: 30001
       protocol: TCP
   selector:
-    app: service-data
+    app: c1-b-extract
