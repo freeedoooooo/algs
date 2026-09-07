@@ -69,6 +69,9 @@ mirrors:
   "${REGISTRY_URL}":
     endpoint:
       - "http://${REGISTRY_URL}"
+  docker.io:
+    endpoint:
+      - "http://${REGISTRY_URL}"
 EOF
 
     log_info "registries.yaml 已写入"
