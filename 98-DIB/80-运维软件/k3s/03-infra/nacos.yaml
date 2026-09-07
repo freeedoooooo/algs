@@ -38,6 +38,8 @@ spec:
     metadata:
       labels:
         app: nacos
+    nodeSelector:
+      role: dib-worker
     spec:
       containers:
         - name: nacos
