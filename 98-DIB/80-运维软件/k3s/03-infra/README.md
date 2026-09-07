@@ -2,12 +2,15 @@
 
 部署 DIB 微服务前，需要先启动 Nacos（注册中心）和 Redis（缓存）。
 
+> 📖 **部署踩坑记录**：Nacos 在离线 K3s 环境的完整部署踩坑与解决方案（离线镜像链、节点调度、Derby 建库超时、外挂 MySQL 等 10 个坑）见 [nacos-troubleshooting.md](./nacos-troubleshooting.md)。
+
 ## 文件清单
 
 | 文件 | 服务 | 端口 | 存储 |
 |------|------|------|------|
 | `nacos.yaml` | Nacos v2.3.2（Standalone） | 8848 (HTTP), 9848 (gRPC) | PVC 5Gi |
 | `redis.yaml` | Redis 7.0 | 6379 | PVC 2Gi |
+| `nacos-troubleshooting.md` | Nacos 部署踩坑记录与解决方案 | — | — |
 
 ## 部署命令
 
