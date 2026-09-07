@@ -62,20 +62,20 @@ spec:
             initialDelaySeconds: 60
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 30
+            failureThreshold: 5
           livenessProbe:
             httpGet:
               path: /api/rbac/actuator/health
               port: 20001
-            initialDelaySeconds: 60
-            periodSeconds: 15
+            initialDelaySeconds: 5
+            periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 5
           readinessProbe:
             httpGet:
               path: /api/rbac/actuator/health
               port: 20001
-            initialDelaySeconds: 30
+            initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
