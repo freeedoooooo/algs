@@ -30,10 +30,7 @@ metadata:
 spec:
   replicas: 1
   strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
+    type: Recreate
   selector:
     matchLabels:
       app: nacos
@@ -101,23 +98,23 @@ spec:
             httpGet:
               path: /nacos/actuator/health
               port: 8848
-            initialDelaySeconds: 20
+            initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 30
+            failureThreshold: 5
           livenessProbe:
             httpGet:
               path: /nacos/actuator/health
               port: 8848
-            initialDelaySeconds: 30
-            periodSeconds: 15
+            initialDelaySeconds: 5
+            periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 5
           readinessProbe:
             httpGet:
               path: /nacos/actuator/health
               port: 8848
-            initialDelaySeconds: 20
+            initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
@@ -150,6 +147,8 @@ spec:
       protocol: TCP
   selector:
     app: nacos
+
+
 
 
 
