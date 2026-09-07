@@ -20,16 +20,16 @@ data:
 
   # ---------- Nacos 注册中心 ----------
   # K3s 内部 Nacos 地址（部署 infra/nacos.yaml 后可用）
-  C1_NACOS_SERVER_ADDR: "http://nacos:8848"
+  C1_NACOS_SERVER_ADDR: "http://nacos.c1-idc-test.svc.cluster.local:8848"
   # 如需连接外部 Nacos，修改为外部地址，如:
   # C1_NACOS_SERVER_ADDR: "http://10.0.5.70:8848"
-  C1_NACOS_NAMESPACE: "dev-c1"
+  C1_NACOS_NAMESPACE: "c1-dev"
   C1_NACOS_USERNAME: "nacos"
   C1_NACOS_PASSWORD: "nacos"
 
   # ---------- Redis ----------
   # K3s 内部 Redis 地址（部署 infra/redis.yaml 后可用）
-  C1_REDIS_HOST: "redis"
+  C1_REDIS_HOST: "redis.c1-idc-test.svc.cluster.local"
   C1_REDIS_PORT: "6379"
   C1_REDIS_DATABASE: "0"
   C1_REDIS_PASSWORD: "dibredis"
