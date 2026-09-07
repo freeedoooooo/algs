@@ -38,9 +38,9 @@ spec:
     metadata:
       labels:
         app: nacos
-    nodeSelector:
-      role: dib-worker
     spec:
+      nodeSelector:
+        role: dib-worker
       containers:
         - name: nacos
           image: nacos/nacos-server:v2.3.2
@@ -77,6 +77,14 @@ spec:
               mountPath: /home/nacos/data
             - name: nacos-logs
               mountPath: /home/nacos/logs
+          startupProbe:
+            httpGet:
+              path: /nacos/actuator/health
+              port: 8848
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
           livenessProbe:
             httpGet:
               path: /nacos/actuator/health
