@@ -55,6 +55,22 @@ spec:
           env:
             - name: MODE
               value: "standalone"
+            # ---------- 外挂 MySQL：替代内嵌 Derby，绕开 agent 节点磁盘 iowait 瓶颈 ----------
+            - name: SPRING_DATASOURCE_PLATFORM
+              value: "mysql"                   # ★关键开关：设为 mysql 才走外挂库；不设=内嵌 Derby
+            - name: MYSQL_SERVICE_HOST
+              value: "10.0.6.161"              # MySQL 主机地址
+            - name: MYSQL_SERVICE_PORT
+              value: "3306"                    # MySQL 端口
+            - name: MYSQL_SERVICE_DB_NAME
+              value: "nacos_dev"            # ★Nacos 专用库，切勿混用产品库 dib_report_copilot
+            - name: MYSQL_SERVICE_USER
+              value: "root"                    # MySQL 账号
+            - name: MYSQL_SERVICE_PASSWORD
+              value: "Dib12345*"               # MySQL 密码
+            - name: MYSQL_SERVICE_DB_PARAM
+              value: "characterEncoding=utf8&connectTimeout=1000&socketTimeout=3000&autoReconnect=true&useUnicode=true&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true"
+            # ---------- 鉴权 ----------
             - name: NACOS_AUTH_ENABLE
               value: "true"
             - name: NACOS_AUTH_IDENTITY_KEY
@@ -63,6 +79,7 @@ spec:
               value: "admin"
             - name: NACOS_AUTH_TOKEN
               value: "VGhpc0lzTXlDdXN0b21TZWNyZXRLZXkwMTIzNDU2Nzg="
+            # ---------- 时区 ----------
             - name: TZ
               value: "Asia/Shanghai"
           resources:
@@ -70,7 +87,7 @@ spec:
               cpu: "500m"
               memory: "512Mi"
             limits:
-              cpu: "2000m"
+              cpu: "1000m"
               memory: "1Gi"
           volumeMounts:
             - name: nacos-data
