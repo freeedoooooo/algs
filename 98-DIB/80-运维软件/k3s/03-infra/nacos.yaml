@@ -30,7 +30,10 @@ metadata:
 spec:
   replicas: 1
   strategy:
-    type: Recreate  # 单副本使用 Recreate 避免数据冲突
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: nacos
@@ -133,15 +136,21 @@ metadata:
   labels:
     app: nacos
 spec:
-  type: ClusterIP
+  type: NodePort
   ports:
     - name: http
       port: 8848
       targetPort: 8848
+      nodePort: 30848
       protocol: TCP
     - name: grpc
       port: 9848
       targetPort: 9848
+      nodePort: 30849
       protocol: TCP
   selector:
     app: nacos
+
+
+
+
