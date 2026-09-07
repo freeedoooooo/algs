@@ -20,38 +20,32 @@ data:
 
   # ---------- Nacos 注册中心 ----------
   # K3s 内部 Nacos 地址（部署 infra/nacos.yaml 后可用）
-  NACOS_SERVER_ADDR: "http://nacos.c1-idc-test.svc.cluster.local:8848"
+  C1_NACOS_SERVER_ADDR: "http://nacos:8848"
   # 如需连接外部 Nacos，修改为外部地址，如:
-  # NACOS_SERVER_ADDR: "http://10.0.5.70:8848"
-  NACOS_NAMESPACE: "c1-dev"
-  NACOS_USERNAME: "c1"
+  # C1_NACOS_SERVER_ADDR: "http://10.0.5.70:8848"
+  C1_NACOS_NAMESPACE: "dev-c1"
+  C1_NACOS_USERNAME: "nacos"
+  C1_NACOS_PASSWORD: "nacos"
 
   # ---------- Redis ----------
   # K3s 内部 Redis 地址（部署 infra/redis.yaml 后可用）
-  REDIS_HOST: "redis.c1-idc-test.svc.cluster.local"
-  REDIS_PORT: "6379"
-  REDIS_DATABASE: "0"
+  C1_REDIS_HOST: "redis"
+  C1_REDIS_PORT: "6379"
+  C1_REDIS_DATABASE: "0"
+  C1_REDIS_PASSWORD: "dibredis"
 
   # ---------- 数据库（外部 MySQL）----------
-  # 完整 JDBC URL，对应 Docker Compose 中的 C1_DB_URL
-  DB_URL: "jdbc:mysql://10.0.6.161:3306/dib_report_copilot?characterEncoding=utf8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true&useSSL=false&zeroDateTimeBehavior=convertToNull"
-  DB_DRIVER: "com.mysql.cj.jdbc.Driver"
+  # 完整 JDBC URL
+  C1_DB_URL: "jdbc:mysql://10.0.6.161:3306/dib_report_copilot?characterEncoding=utf8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true&useSSL=false&zeroDateTimeBehavior=convertToNull"
+  C1_DB_DRIVER: "com.mysql.cj.jdbc.Driver"
+  C1_DB_USERNAME: "root"
+  C1_DB_PASSWORD: "Dib12345*"
 
   # ---------- MinIO（外部部署）----------
   MINIO_ENDPOINT: "http://10.0.6.163:9000"
 
   # ---------- OCR 服务 ----------
   OCR_SERVER: "http://192.168.10.91:8089/"
-
-  # ---------- 数据库凭据（明文，后续迁移至 Secret）----------
-  DB_USERNAME: "root"
-  DB_PASSWORD: "Dib12345*"
-
-  # ---------- Redis 凭据 ----------
-  REDIS_PASSWORD: "dibredis"
-
-  # ---------- Nacos 认证 ----------
-  NACOS_PASSWORD: "c1@2025"
 
   # ---------- OAuth / Gateway ----------
   GATEWAY_OAUTH_CLIENT_HOST: "http://10.0.5.70:8090"
