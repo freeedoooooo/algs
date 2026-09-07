@@ -63,7 +63,7 @@ spec:
             - name: MYSQL_SERVICE_PORT
               value: "3306"                    # MySQL 端口
             - name: MYSQL_SERVICE_DB_NAME
-              value: "nacos_dev"            # ★Nacos 专用库，切勿混用产品库 dib_report_copilot
+              value: "nacos_dev"               # ★Nacos 专用库，切勿混用产品库 dib_report_copilot
             - name: MYSQL_SERVICE_USER
               value: "root"                    # MySQL 账号
             - name: MYSQL_SERVICE_PASSWORD
