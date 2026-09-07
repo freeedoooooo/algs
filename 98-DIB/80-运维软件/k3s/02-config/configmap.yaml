@@ -24,8 +24,8 @@ data:
   # 如需连接外部 Nacos，修改为外部地址，如:
   # C1_NACOS_SERVER_ADDR: "http://10.0.5.70:8848"
   C1_NACOS_NAMESPACE: "c1-dev"
-  C1_NACOS_USERNAME: "nacos"
-  C1_NACOS_PASSWORD: "nacos"
+  C1_NACOS_USERNAME: "c1"
+  C1_NACOS_PASSWORD: "c1@2025"
 
   # ---------- Redis ----------
   # K3s 内部 Redis 地址（部署 infra/redis.yaml 后可用）
