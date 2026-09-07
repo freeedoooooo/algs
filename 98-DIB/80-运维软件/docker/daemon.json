@@ -1,4 +1,9 @@
 {
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "50m",
+    "max-file": "5"
+  },
   "insecure-registries": [
     "10.0.6.183:8088",
     "hub.dibtime.com"
