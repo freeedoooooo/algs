@@ -1,4 +1,4 @@
-﻿# c1-p-rbac — 权限资源管理
+# c1-p-rbac — 权限资源管理
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -20,8 +20,6 @@ spec:
         app: c1-p-rbac
         tier: platform
     spec:
-      imagePullSecrets:
-        - name: dib-registry-secret
       containers:
         - name: c1-p-rbac
           image: 10.0.6.183:8088/c1/c1-p-rbac:latest
