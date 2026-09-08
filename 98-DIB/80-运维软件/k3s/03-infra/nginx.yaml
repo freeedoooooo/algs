@@ -1,0 +1,90 @@
+# ============================================================
+# Nginx Deployment + Service
+# 前置条件: 需先在 Kuboard 手动创建 ConfigMap
+#   - 名称: c1-nginx-config
+#   - Key:  nginx.conf
+#   - Value: nginx.conf 的完整内容
+# 配置参考: nginx.conf（同目录）
+# ============================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: c1-nginx
+  namespace: c1-idc-test
+  labels:
+    app: c1-nginx
+    tier: frontend
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: c1-nginx
+  template:
+    metadata:
+      labels:
+        app: c1-nginx
+        tier: frontend
+    spec:
+      containers:
+        - name: c1-nginx
+          image: 10.0.6.183:8088/c1/nginx:1.17.8
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8090
+              name: http
+              protocol: TCP
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          livenessProbe:
+            tcpSocket:
+              port: 8090
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: 8090
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+              readOnly: true
+            # 前端静态文件目录（暂时用 emptyDir，后续可挂载 PVC 或打包进镜像）
+            - name: c1-client
+              mountPath: /opt/app/c1-client
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: c1-nginx-config
+        - name: c1-client
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: c1-nginx
+  namespace: c1-idc-test
+  labels:
+    app: c1-nginx
+spec:
+  type: NodePort
+  ports:
+    - name: http
+      port: 8090
+      targetPort: 8090
+      nodePort: 30091
+      protocol: TCP
+  selector:
+    app: c1-nginx
