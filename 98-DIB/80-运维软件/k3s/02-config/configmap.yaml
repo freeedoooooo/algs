@@ -48,7 +48,9 @@ data:
   C1_OCR_SERVER: "http://192.168.10.91:8089/"
 
   # ---------- OAuth / Gateway ----------
-  C1_GATEWAY_OAUTH_CLIENT_HOST: "http://10.0.5.70:8090"
-  C1_GATEWAY_OAUTH_SERVER_HOST: "http://10.0.5.70:9090"
-  C1_GATEWAY_OAUTH_SERVER_HOST_INNER: "http://10.0.5.70:9090"
+  # OAuth 回调地址（给浏览器用，必须是外部可访问的 URL）
+  C1_GATEWAY_OAUTH_CLIENT_HOST: "http://10.0.5.142:30091"
+  # Gateway 访问 OAuth 的地址（K8s 内部 Service）
+  C1_GATEWAY_OAUTH_SERVER_HOST: "http://c1-p-oauth.c1-idc-test.svc.cluster.local:9090"
+  C1_GATEWAY_OAUTH_SERVER_HOST_INNER: "http://c1-p-oauth.c1-idc-test.svc.cluster.local:9090"
   C1_OAUTH_CLIENT_CREDENTIALS: "123456"
