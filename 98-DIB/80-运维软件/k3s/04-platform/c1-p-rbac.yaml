@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: c1-p-rbac
-          image: 10.0.6.183:8088/c1/c1-p-rbac:latest
+          image: 10.0.6.183:8088/c1/c1-p-rbac:idc-test-c1_latest
           imagePullPolicy: Always
           ports:
             - containerPort: 20001
