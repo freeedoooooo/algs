@@ -61,15 +61,23 @@ spec:
               mountPath: /etc/nginx/nginx.conf
               subPath: nginx.conf
               readOnly: true
-            # 前端静态文件目录（暂时用 emptyDir，后续可挂载 PVC 或打包进镜像）
+            # 前端静态文件目录（hostPath 挂载宿主机）
             - name: c1-client
-              mountPath: /opt/app/c1-client
+              mountPath: /opt/app/frontend/c1-client
+            - name: bi-client
+              mountPath: /opt/app/frontend/bi-client
       volumes:
         - name: nginx-config
           configMap:
             name: c1-nginx-config
         - name: c1-client
-          emptyDir: {}
+          hostPath:
+            path: /opt/app/frontend/c1-client
+            type: DirectoryOrCreate
+        - name: bi-client
+          hostPath:
+            path: /opt/app/frontend/bi-client
+            type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: Service
