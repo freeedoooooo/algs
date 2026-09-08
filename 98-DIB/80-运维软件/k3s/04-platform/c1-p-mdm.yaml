@@ -9,6 +9,8 @@ metadata:
     tier: platform
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
   selector:
     matchLabels:
       app: c1-p-mdm
@@ -18,11 +20,9 @@ spec:
         app: c1-p-mdm
         tier: platform
     spec:
-      imagePullSecrets:
-        - name: dib-registry-secret
       containers:
         - name: c1-p-mdm
-          image: 10.0.6.183:8088/c1/p-mdm:latest
+          image: 10.0.6.183:8088/c1/c1-p-mdm:idc-test-c1_latest
           imagePullPolicy: Always
           ports:
             - containerPort: 20002
@@ -53,19 +53,27 @@ spec:
             - name: fonts
               mountPath: /usr/share/fonts
               readOnly: true
-          livenessProbe:
+          startupProbe:
             httpGet:
               path: /api/mdm/actuator/health
               port: 20002
             initialDelaySeconds: 60
-            periodSeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /api/mdm/actuator/health
+              port: 20002
+            initialDelaySeconds: 5
+            periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 5
           readinessProbe:
             httpGet:
               path: /api/mdm/actuator/health
               port: 20002
-            initialDelaySeconds: 30
+            initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
@@ -85,11 +93,12 @@ metadata:
   labels:
     app: c1-p-mdm
 spec:
-  type: ClusterIP
+  type: NodePort
   ports:
     - name: http
       port: 20002
       targetPort: 20002
+      nodePort: 30022
       protocol: TCP
   selector:
     app: c1-p-mdm
