@@ -19,7 +19,7 @@ image:
 imagePullPolicy: Always
 
 # 节点调度（所有服务调度到该节点，改这里即可切换节点）
-nodeName: worker-5142
+nodeName: worker-5.142
 
 # ---------- 公共配置（ConfigMap） ----------
 # 所有微服务通过 envFrom 注入以下环境变量
