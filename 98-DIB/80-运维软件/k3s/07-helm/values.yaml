@@ -59,6 +59,14 @@ config:
 nacos:
   image: "nacos/nacos-server:v2.3.2"
   storage: 1Gi
+  # 外挂 MySQL 配置（替代内嵌 Derby）
+  mysql:
+    host: "10.0.6.161"
+    port: "3306"
+    database: "nacos_dev"
+    username: "root"
+    password: "Dib12345*"
+    params: "characterEncoding=utf8&connectTimeout=1000&socketTimeout=3000&autoReconnect=true&useUnicode=true&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true"
   resources:
     requests:
       cpu: "250m"

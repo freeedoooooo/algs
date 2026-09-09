@@ -55,17 +55,17 @@ spec:
             - name: SPRING_DATASOURCE_PLATFORM
               value: "mysql"
             - name: MYSQL_SERVICE_HOST
-              value: "10.0.6.161"
+              value: {{ .Values.nacos.mysql.host | quote }}
             - name: MYSQL_SERVICE_PORT
-              value: "3306"
+              value: {{ .Values.nacos.mysql.port | quote }}
             - name: MYSQL_SERVICE_DB_NAME
-              value: "nacos_dev"
+              value: {{ .Values.nacos.mysql.database | quote }}
             - name: MYSQL_SERVICE_USER
-              value: "root"
+              value: {{ .Values.nacos.mysql.username | quote }}
             - name: MYSQL_SERVICE_PASSWORD
-              value: "Dib12345*"
+              value: {{ .Values.nacos.mysql.password | quote }}
             - name: MYSQL_SERVICE_DB_PARAM
-              value: "characterEncoding=utf8&connectTimeout=1000&socketTimeout=3000&autoReconnect=true&useUnicode=true&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true"
+              value: {{ .Values.nacos.mysql.params | quote }}
             # ---------- 鉴权 ----------
             - name: NACOS_AUTH_ENABLE
               value: "true"
