@@ -34,7 +34,7 @@ spec:
               value: "Asia/Shanghai"
           envFrom:
             - configMapRef:
-                name: dib-common-config
+                name: c1-common-config
           resources:
             {{- toYaml .Values.services.c1_p_gateway.resources | nindent 12 }}
           volumeMounts:
