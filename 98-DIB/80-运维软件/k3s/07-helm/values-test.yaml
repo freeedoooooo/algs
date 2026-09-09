@@ -11,12 +11,12 @@ image:
 
 config:
   C1_ENV: "idc-test-c1"
-  NACOS_NAMESPACE: "dev-c1"
-  DB_URL: "jdbc:mysql://10.0.6.161:3306/dib_report_copilot?characterEncoding=utf8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true&useSSL=false&zeroDateTimeBehavior=convertToNull"
-  DB_USERNAME: "root"
-  DB_PASSWORD: "Dib12345*"
-  REDIS_PASSWORD: "dibredis"
-  NACOS_PASSWORD: "c1@2025"
+  C1_NACOS_NAMESPACE: "c1-dev"
+  C1_DB_URL: "jdbc:mysql://10.0.6.161:3306/dib_report_copilot?characterEncoding=utf8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true&useSSL=false&zeroDateTimeBehavior=convertToNull"
+  C1_DB_USERNAME: "root"
+  C1_DB_PASSWORD: "Dib12345*"
+  C1_REDIS_PASSWORD: "dibredis"
+  C1_NACOS_PASSWORD: "c1@2025"
 
 services:
   c1-p-gateway:

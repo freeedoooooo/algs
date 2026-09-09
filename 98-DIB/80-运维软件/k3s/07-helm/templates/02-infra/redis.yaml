@@ -61,7 +61,7 @@ spec:
               valueFrom:
                 configMapKeyRef:
                   name: dib-common-config
-                  key: REDIS_PASSWORD
+                  key: C1_REDIS_PASSWORD
             - name: TZ
               value: "Asia/Shanghai"
           resources:

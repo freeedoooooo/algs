@@ -43,6 +43,14 @@ spec:
             - name: fonts
               mountPath: /usr/share/fonts
               readOnly: true
+          startupProbe:
+            httpGet:
+              path: {{ .Values.services.c1-p-mdm.healthPath }}
+              port: 20002
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
           livenessProbe:
             httpGet:
               path: {{ .Values.services.c1-p-mdm.healthPath }}
