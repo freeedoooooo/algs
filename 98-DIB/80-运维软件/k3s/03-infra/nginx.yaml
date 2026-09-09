@@ -27,6 +27,8 @@ spec:
         app: c1-nginx
         tier: frontend
     spec:
+      nodeSelector:
+        node-name: worker-5142
       containers:
         - name: c1-nginx
           image: 10.0.6.183:8088/c1/nginx:1.17.8

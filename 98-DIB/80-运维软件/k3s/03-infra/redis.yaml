@@ -39,6 +39,8 @@ spec:
       labels:
         app: redis
     spec:
+      nodeSelector:
+        node-name: worker-5142
       containers:
         - name: redis
           image: redis:7.0
