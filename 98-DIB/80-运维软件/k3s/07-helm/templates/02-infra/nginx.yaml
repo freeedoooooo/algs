@@ -1,0 +1,90 @@
+# Nginx 前端网关
+# 注意: ConfigMap c1-nginx-config 需提前创建（Kuboard 手动管理）
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: c1-nginx
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: c1-nginx
+    tier: frontend
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: c1-nginx
+  template:
+    metadata:
+      labels:
+        app: c1-nginx
+        tier: frontend
+    spec:
+      nodeSelector:
+        node-name: {{ .Values.nodeName }}
+      containers:
+        - name: c1-nginx
+          image: {{ .Values.nginx.image }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: {{ .Values.nginx.port }}
+              name: http
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.nginx.resources | nindent 12 }}
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.nginx.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.nginx.port }}
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+              readOnly: true
+            - name: c1-client
+              mountPath: /opt/app/frontend/c1-client
+            - name: bi-client
+              mountPath: /opt/app/frontend/bi-client
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: c1-nginx-config
+        - name: c1-client
+          hostPath:
+            path: /opt/app/frontend/c1-client
+            type: DirectoryOrCreate
+        - name: bi-client
+          hostPath:
+            path: /opt/app/frontend/bi-client
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: c1-nginx
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: c1-nginx
+spec:
+  type: {{ .Values.nginx.serviceType }}
+  ports:
+    - name: http
+      port: {{ .Values.nginx.port }}
+      targetPort: {{ .Values.nginx.port }}
+      protocol: TCP
+      {{- if eq .Values.nginx.serviceType "NodePort" }}
+      nodePort: {{ .Values.nginx.nodePort }}
+      {{- end }}
+  selector:
+    app: c1-nginx

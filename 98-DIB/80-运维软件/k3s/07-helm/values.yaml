@@ -21,13 +21,6 @@ imagePullPolicy: Always
 # 节点调度（所有服务调度到该节点，改这里即可切换节点）
 nodeName: worker-5142
 
-# ---------- 镜像仓库认证 ----------
-registry:
-  server: "10.0.6.183:8088"
-  username: "admin"
-  password: "admin123"
-  email: "admin@example.com"
-
 # ---------- 公共配置（ConfigMap） ----------
 # 所有微服务通过 envFrom 注入以下环境变量
 config:
@@ -54,6 +47,9 @@ config:
 
   # ---------- MinIO 对象存储 ----------
   C1_MINIO_ENDPOINT: "http://10.0.6.163:9000"
+  C1_MINIO_ACCESS_KEY: "minioadmin"
+  C1_MINIO_SECRET_KEY: "minioadmin"
+  C1_MINIO_BUCKET_NAME: "c1-bucket"
 
   # ---------- OCR 服务 ----------
   C1_OCR_SERVER: "http://192.168.10.91:8089/"
@@ -101,6 +97,20 @@ redis:
     limits:
       cpu: "200m"
       memory: "768Mi"
+
+# ---------- Nginx 前端网关 ----------
+nginx:
+  image: "10.0.6.183:8088/c1/nginx:1.17.8"
+  port: 30091
+  serviceType: NodePort
+  nodePort: 30091
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
 
 # ============================================================
 # 微服务定义
