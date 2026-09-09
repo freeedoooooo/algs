@@ -31,25 +31,39 @@ registry:
 # ---------- 公共配置（ConfigMap） ----------
 # 所有微服务通过 envFrom 注入以下环境变量
 config:
+  # ---------- 环境标识 ----------
   C1_ENV: "idc-test-c1"
+
+  # ---------- Nacos 注册中心 ----------
   C1_NACOS_SERVER_ADDR: "http://nacos.c1-idc-test.svc.cluster.local:8848"
   C1_NACOS_NAMESPACE: "c1-dev"
   C1_NACOS_USERNAME: "c1"
   C1_NACOS_PASSWORD: "c1@2025"
+
+  # ---------- Redis 缓存 ----------
   C1_REDIS_HOST: "redis.c1-idc-test.svc.cluster.local"
   C1_REDIS_PORT: "6379"
   C1_REDIS_DATABASE: "0"
   C1_REDIS_PASSWORD: "dibredis"
+
+  # ---------- 数据库（MySQL） ----------
   C1_DB_URL: "jdbc:mysql://10.0.6.161:3306/dib_report_copilot?characterEncoding=utf8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true&useSSL=false&zeroDateTimeBehavior=convertToNull"
   C1_DB_DRIVER: "com.mysql.cj.jdbc.Driver"
   C1_DB_USERNAME: "root"
   C1_DB_PASSWORD: "Dib12345*"
+
+  # ---------- MinIO 对象存储 ----------
   C1_MINIO_ENDPOINT: "http://10.0.6.163:9000"
+
+  # ---------- OCR 服务 ----------
   C1_OCR_SERVER: "http://192.168.10.91:8089/"
-  C1_GATEWAY_OAUTH_CLIENT_HOST: "http://10.0.5.142:30091"
-  C1_GATEWAY_OAUTH_SERVER_HOST: "http://10.0.5.142:30091/sso"
-  C1_GATEWAY_OAUTH_SERVER_HOST_INNER: "http://c1-p-oauth.c1-idc-test.svc.cluster.local:9090/sso"
+
+  # ---------- OAuth 认证 ----------
+  C1_OAUTH_CLIENT_HOST: "http://10.0.5.142:30091"
+  C1_OAUTH_SERVER_HOST: "http://10.0.5.142:30091/sso"
+  C1_OAUTH_SERVER_HOST_INNER: "http://c1-p-oauth.c1-idc-test.svc.cluster.local:9090/sso"
   C1_OAUTH_CLIENT_CREDENTIALS: "123456"
+  C1_OAUTH_REDIRECT_URI: "http://10.0.5.142:30091/api/oauth/callback,http://10.0.5.142:30091/api-oauth/callback"
 
 # ============================================================
 # 基础设施层
