@@ -2,5 +2,5 @@ apiVersion: v2
 name: c1
 description: c1 微服务全栈部署 Chart
 type: application
-version: 1.0.1
+version: 1.0.2
 appVersion: "4.0.0"
