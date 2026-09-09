@@ -7,7 +7,6 @@ metadata:
   namespace: {{ .Values.namespace }}
   labels:
     app: redis
-    {{- include "dib.labels" . | nindent 4 }}
 spec:
   accessModes:
     - ReadWriteOnce
@@ -22,7 +21,6 @@ metadata:
   namespace: {{ .Values.namespace }}
   labels:
     app: redis
-    {{- include "dib.labels" . | nindent 4 }}
 spec:
   replicas: 1
   strategy:
@@ -101,7 +99,6 @@ metadata:
   namespace: {{ .Values.namespace }}
   labels:
     app: redis
-    {{- include "dib.labels" . | nindent 4 }}
 spec:
   type: ClusterIP
   ports:

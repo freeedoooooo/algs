@@ -20,8 +20,6 @@ spec:
     spec:
       nodeSelector:
         node-name: {{ .Values.nodeName }}
-      imagePullSecrets:
-        - name: dib-registry-secret
       containers:
         - name: c1-b-govern
           image: {{ .Values.imageRegistry }}/{{ .Values.services.c1-b-govern.image }}:{{ .Values.image.tag }}
