@@ -8,7 +8,7 @@ metadata:
     app: c1-p-rbac
     tier: platform
 spec:
-  replicas: {{ .Values.services.c1-p-rbac.replicas }}
+  replicas: {{ .Values.services.c1_p_rbac.replicas }}
   strategy:
     type: RollingUpdate
   selector:
@@ -24,7 +24,7 @@ spec:
         node-name: {{ .Values.nodeName }}
       containers:
         - name: c1-p-rbac
-          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1-p-rbac.image }}:{{ .Values.image.tag }}
+          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1_p_rbac.image }}:{{ .Values.image.tag }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           ports:
             - containerPort: 20001
@@ -36,7 +36,7 @@ spec:
             - configMapRef:
                 name: dib-common-config
           resources:
-            {{- toYaml .Values.services.c1-p-rbac.resources | nindent 12 }}
+            {{- toYaml .Values.services.c1_p_rbac.resources | nindent 12 }}
           volumeMounts:
             - name: app-logs
               mountPath: /opt/app/logs
@@ -45,7 +45,7 @@ spec:
               readOnly: true
           startupProbe:
             httpGet:
-              path: {{ .Values.services.c1-p-rbac.healthPath }}
+              path: {{ .Values.services.c1_p_rbac.healthPath }}
               port: 20001
             initialDelaySeconds: 60
             periodSeconds: 10
@@ -53,7 +53,7 @@ spec:
             failureThreshold: 5
           livenessProbe:
             httpGet:
-              path: {{ .Values.services.c1-p-rbac.healthPath }}
+              path: {{ .Values.services.c1_p_rbac.healthPath }}
               port: 20001
             initialDelaySeconds: 60
             periodSeconds: 15
@@ -61,7 +61,7 @@ spec:
             failureThreshold: 5
           readinessProbe:
             httpGet:
-              path: {{ .Values.services.c1-p-rbac.healthPath }}
+              path: {{ .Values.services.c1_p_rbac.healthPath }}
               port: 20001
             initialDelaySeconds: 30
             periodSeconds: 10
@@ -83,14 +83,14 @@ metadata:
   labels:
     app: c1-p-rbac
 spec:
-  type: {{ .Values.services.c1-p-rbac.serviceType }}
+  type: {{ .Values.services.c1_p_rbac.serviceType }}
   ports:
     - name: http
       port: 20001
       targetPort: 20001
       protocol: TCP
-      {{- if eq .Values.services.c1-p-rbac.serviceType "NodePort" }}
-      nodePort: {{ .Values.services.c1-p-rbac.nodePort }}
+      {{- if eq .Values.services.c1_p_rbac.serviceType "NodePort" }}
+      nodePort: {{ .Values.services.c1_p_rbac.nodePort }}
       {{- end }}
   selector:
     app: c1-p-rbac

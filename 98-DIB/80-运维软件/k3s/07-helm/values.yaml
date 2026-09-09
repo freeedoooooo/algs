@@ -135,7 +135,7 @@ services:
 
   # ==================== 平台服务层 ====================
 
-  c1-p-oauth:
+  c1_p_oauth:
     tier: platform
     image: "c1/c1-p-oauth"
     port: 9090
@@ -151,7 +151,7 @@ services:
         cpu: "1000m"
         memory: "2Gi"
 
-  c1-p-gateway:
+  c1_p_gateway:
     tier: platform
     image: "c1/c1-p-gateway"
     port: 20000
@@ -167,7 +167,7 @@ services:
         cpu: "1000m"
         memory: "2Gi"
 
-  c1-p-rbac:
+  c1_p_rbac:
     tier: platform
     image: "c1/c1-p-rbac"
     port: 20001
@@ -183,7 +183,7 @@ services:
         cpu: "1000m"
         memory: "2Gi"
 
-  c1-p-mdm:
+  c1_p_mdm:
     tier: platform
     image: "c1/c1-p-mdm"
     port: 20002
@@ -201,7 +201,7 @@ services:
 
   # ==================== 业务服务层 ====================
 
-  c1-b-extract:
+  c1_b_extract:
     tier: business
     image: "c1/c1-b-extract"
     port: 30001
@@ -217,7 +217,7 @@ services:
         cpu: "2000m"
         memory: "18Gi"
 
-  c1-b-report:
+  c1_b_report:
     tier: business
     image: "c1/c1-b-report"
     port: 30002
@@ -233,7 +233,7 @@ services:
         cpu: "1000m"
         memory: "3Gi"
 
-  c1-b-data:
+  c1_b_data:
     tier: business
     image: "c1/c1-b-data"
     port: 30003
@@ -249,7 +249,7 @@ services:
         cpu: "1500m"
         memory: "6Gi"
 
-  c1-b-rule:
+  c1_b_rule:
     tier: business
     image: "c1/c1-b-rule"
     port: 30004
@@ -265,7 +265,7 @@ services:
         cpu: "1000m"
         memory: "3Gi"
 
-  c1-b-govern:
+  c1_b_govern:
     tier: business
     image: "c1/c1-b-govern"
     port: 30005

@@ -8,7 +8,7 @@ metadata:
     app: c1-p-gateway
     tier: platform
 spec:
-  replicas: {{ .Values.services.c1-p-gateway.replicas }}
+  replicas: {{ .Values.services.c1_p_gateway.replicas }}
   strategy:
     type: RollingUpdate
   selector:
@@ -24,7 +24,7 @@ spec:
         node-name: {{ .Values.nodeName }}
       containers:
         - name: c1-p-gateway
-          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1-p-gateway.image }}:{{ .Values.image.tag }}
+          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1_p_gateway.image }}:{{ .Values.image.tag }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           ports:
             - containerPort: 20000
@@ -36,7 +36,7 @@ spec:
             - configMapRef:
                 name: dib-common-config
           resources:
-            {{- toYaml .Values.services.c1-p-gateway.resources | nindent 12 }}
+            {{- toYaml .Values.services.c1_p_gateway.resources | nindent 12 }}
           volumeMounts:
             - name: app-logs
               mountPath: /opt/app/logs
@@ -45,7 +45,7 @@ spec:
               readOnly: true
           startupProbe:
             httpGet:
-              path: {{ .Values.services.c1-p-gateway.healthPath }}
+              path: {{ .Values.services.c1_p_gateway.healthPath }}
               port: 20000
             initialDelaySeconds: 60
             periodSeconds: 10
@@ -53,7 +53,7 @@ spec:
             failureThreshold: 30
           livenessProbe:
             httpGet:
-              path: {{ .Values.services.c1-p-gateway.healthPath }}
+              path: {{ .Values.services.c1_p_gateway.healthPath }}
               port: 20000
             initialDelaySeconds: 60
             periodSeconds: 15
@@ -61,7 +61,7 @@ spec:
             failureThreshold: 5
           readinessProbe:
             httpGet:
-              path: {{ .Values.services.c1-p-gateway.healthPath }}
+              path: {{ .Values.services.c1_p_gateway.healthPath }}
               port: 20000
             initialDelaySeconds: 30
             periodSeconds: 10
@@ -83,14 +83,14 @@ metadata:
   labels:
     app: c1-p-gateway
 spec:
-  type: {{ .Values.services.c1-p-gateway.serviceType }}
+  type: {{ .Values.services.c1_p_gateway.serviceType }}
   ports:
     - name: http
       port: 20000
       targetPort: 20000
       protocol: TCP
-      {{- if eq .Values.services.c1-p-gateway.serviceType "NodePort" }}
-      nodePort: {{ .Values.services.c1-p-gateway.nodePort }}
+      {{- if eq .Values.services.c1_p_gateway.serviceType "NodePort" }}
+      nodePort: {{ .Values.services.c1_p_gateway.nodePort }}
       {{- end }}
   selector:
     app: c1-p-gateway

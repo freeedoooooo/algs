@@ -8,7 +8,7 @@ metadata:
     app: c1-b-rule
     tier: business
 spec:
-  replicas: {{ .Values.services.c1-b-rule.replicas }}
+  replicas: {{ .Values.services.c1_b_rule.replicas }}
   selector:
     matchLabels:
       app: c1-b-rule
@@ -22,7 +22,7 @@ spec:
         node-name: {{ .Values.nodeName }}
       containers:
         - name: c1-b-rule
-          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1-b-rule.image }}:{{ .Values.image.tag }}
+          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1_b_rule.image }}:{{ .Values.image.tag }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           ports:
             - containerPort: 30004
@@ -34,7 +34,7 @@ spec:
             - configMapRef:
                 name: dib-common-config
           resources:
-            {{- toYaml .Values.services.c1-b-rule.resources | nindent 12 }}
+            {{- toYaml .Values.services.c1_b_rule.resources | nindent 12 }}
           volumeMounts:
             - name: app-logs
               mountPath: /opt/app/logs
@@ -43,7 +43,7 @@ spec:
               readOnly: true
           livenessProbe:
             httpGet:
-              path: {{ .Values.services.c1-b-rule.healthPath }}
+              path: {{ .Values.services.c1_b_rule.healthPath }}
               port: 30004
             initialDelaySeconds: 60
             periodSeconds: 15
@@ -51,7 +51,7 @@ spec:
             failureThreshold: 5
           readinessProbe:
             httpGet:
-              path: {{ .Values.services.c1-b-rule.healthPath }}
+              path: {{ .Values.services.c1_b_rule.healthPath }}
               port: 30004
             initialDelaySeconds: 30
             periodSeconds: 10
@@ -73,14 +73,14 @@ metadata:
   labels:
     app: c1-b-rule
 spec:
-  type: {{ .Values.services.c1-b-rule.serviceType }}
+  type: {{ .Values.services.c1_b_rule.serviceType }}
   ports:
     - name: http
       port: 30004
       targetPort: 30004
       protocol: TCP
-      {{- if eq .Values.services.c1-b-rule.serviceType "NodePort" }}
-      nodePort: {{ .Values.services.c1-b-rule.nodePort }}
+      {{- if eq .Values.services.c1_b_rule.serviceType "NodePort" }}
+      nodePort: {{ .Values.services.c1_b_rule.nodePort }}
       {{- end }}
   selector:
     app: c1-b-rule

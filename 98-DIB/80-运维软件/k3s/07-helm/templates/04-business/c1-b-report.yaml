@@ -8,7 +8,7 @@ metadata:
     app: c1-b-report
     tier: business
 spec:
-  replicas: {{ .Values.services.c1-b-report.replicas }}
+  replicas: {{ .Values.services.c1_b_report.replicas }}
   selector:
     matchLabels:
       app: c1-b-report
@@ -22,7 +22,7 @@ spec:
         node-name: {{ .Values.nodeName }}
       containers:
         - name: c1-b-report
-          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1-b-report.image }}:{{ .Values.image.tag }}
+          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1_b_report.image }}:{{ .Values.image.tag }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           ports:
             - containerPort: 30002
@@ -34,7 +34,7 @@ spec:
             - configMapRef:
                 name: dib-common-config
           resources:
-            {{- toYaml .Values.services.c1-b-report.resources | nindent 12 }}
+            {{- toYaml .Values.services.c1_b_report.resources | nindent 12 }}
           volumeMounts:
             - name: app-logs
               mountPath: /opt/app/logs
@@ -45,7 +45,7 @@ spec:
               readOnly: true
           livenessProbe:
             httpGet:
-              path: {{ .Values.services.c1-b-report.healthPath }}
+              path: {{ .Values.services.c1_b_report.healthPath }}
               port: 30002
             initialDelaySeconds: 60
             periodSeconds: 15
@@ -53,7 +53,7 @@ spec:
             failureThreshold: 5
           readinessProbe:
             httpGet:
-              path: {{ .Values.services.c1-b-report.healthPath }}
+              path: {{ .Values.services.c1_b_report.healthPath }}
               port: 30002
             initialDelaySeconds: 30
             periodSeconds: 10
@@ -77,14 +77,14 @@ metadata:
   labels:
     app: c1-b-report
 spec:
-  type: {{ .Values.services.c1-b-report.serviceType }}
+  type: {{ .Values.services.c1_b_report.serviceType }}
   ports:
     - name: http
       port: 30002
       targetPort: 30002
       protocol: TCP
-      {{- if eq .Values.services.c1-b-report.serviceType "NodePort" }}
-      nodePort: {{ .Values.services.c1-b-report.nodePort }}
+      {{- if eq .Values.services.c1_b_report.serviceType "NodePort" }}
+      nodePort: {{ .Values.services.c1_b_report.nodePort }}
       {{- end }}
   selector:
     app: c1-b-report

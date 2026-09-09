@@ -8,7 +8,7 @@ metadata:
     app: c1-p-oauth
     tier: platform
 spec:
-  replicas: {{ .Values.services.c1-p-oauth.replicas }}
+  replicas: {{ .Values.services.c1_p_oauth.replicas }}
   strategy:
     type: RollingUpdate
   selector:
@@ -24,7 +24,7 @@ spec:
         node-name: {{ .Values.nodeName }}
       containers:
         - name: c1-p-oauth
-          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1-p-oauth.image }}:{{ .Values.image.tag }}
+          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1_p_oauth.image }}:{{ .Values.image.tag }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           ports:
             - containerPort: 9090
@@ -36,7 +36,7 @@ spec:
             - configMapRef:
                 name: dib-common-config
           resources:
-            {{- toYaml .Values.services.c1-p-oauth.resources | nindent 12 }}
+            {{- toYaml .Values.services.c1_p_oauth.resources | nindent 12 }}
           volumeMounts:
             - name: app-logs
               mountPath: /opt/app/logs
@@ -45,7 +45,7 @@ spec:
               readOnly: true
           startupProbe:
             httpGet:
-              path: {{ .Values.services.c1-p-oauth.healthPath }}
+              path: {{ .Values.services.c1_p_oauth.healthPath }}
               port: 9090
             initialDelaySeconds: 60
             periodSeconds: 10
@@ -53,7 +53,7 @@ spec:
             failureThreshold: 30
           livenessProbe:
             httpGet:
-              path: {{ .Values.services.c1-p-oauth.healthPath }}
+              path: {{ .Values.services.c1_p_oauth.healthPath }}
               port: 9090
             initialDelaySeconds: 60
             periodSeconds: 15
@@ -61,7 +61,7 @@ spec:
             failureThreshold: 5
           readinessProbe:
             httpGet:
-              path: {{ .Values.services.c1-p-oauth.healthPath }}
+              path: {{ .Values.services.c1_p_oauth.healthPath }}
               port: 9090
             initialDelaySeconds: 30
             periodSeconds: 10
@@ -83,14 +83,14 @@ metadata:
   labels:
     app: c1-p-oauth
 spec:
-  type: {{ .Values.services.c1-p-oauth.serviceType }}
+  type: {{ .Values.services.c1_p_oauth.serviceType }}
   ports:
     - name: http
       port: 9090
       targetPort: 9090
       protocol: TCP
-      {{- if eq .Values.services.c1-p-oauth.serviceType "NodePort" }}
-      nodePort: {{ .Values.services.c1-p-oauth.nodePort }}
+      {{- if eq .Values.services.c1_p_oauth.serviceType "NodePort" }}
+      nodePort: {{ .Values.services.c1_p_oauth.nodePort }}
       {{- end }}
   selector:
     app: c1-p-oauth

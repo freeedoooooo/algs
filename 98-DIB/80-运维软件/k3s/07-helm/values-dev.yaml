@@ -19,21 +19,21 @@ config:
   NACOS_PASSWORD: "dev@2025"
 
 services:
-  c1-p-gateway:
+  c1_p_gateway:
     replicas: 1
-  c1-p-oauth:
+  c1_p_oauth:
     replicas: 1
-  c1-p-rbac:
+  c1_p_rbac:
     replicas: 1
-  c1-p-mdm:
+  c1_p_mdm:
     replicas: 1
-  c1-b-extract:
+  c1_b_extract:
     replicas: 1
-  c1-b-report:
+  c1_b_report:
     replicas: 1
-  c1-b-data:
+  c1_b_data:
     replicas: 1
-  c1-b-rule:
+  c1_b_rule:
     replicas: 1
-  c1-b-govern:
+  c1_b_govern:
     replicas: 1
