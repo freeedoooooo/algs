@@ -205,7 +205,8 @@ services:
     tier: business
     image: "c1/c1-b-extract"
     port: 30001
-    serviceType: ClusterIP
+    serviceType: NodePort
+    nodePort: 30031
     healthPath: /api/extract/actuator/health
     replicas: 1
     resources:
@@ -220,7 +221,8 @@ services:
     tier: business
     image: "c1/c1-b-report"
     port: 30002
-    serviceType: ClusterIP
+    serviceType: NodePort
+    nodePort: 30032
     healthPath: /api/report/actuator/health
     replicas: 1
     resources:
@@ -235,7 +237,8 @@ services:
     tier: business
     image: "c1/c1-b-data"
     port: 30003
-    serviceType: ClusterIP
+    serviceType: NodePort
+    nodePort: 30033
     healthPath: /api/data/actuator/health
     replicas: 1
     resources:
@@ -250,7 +253,8 @@ services:
     tier: business
     image: "c1/c1-b-rule"
     port: 30004
-    serviceType: ClusterIP
+    serviceType: NodePort
+    nodePort: 30034
     healthPath: /api/rule/actuator/health
     replicas: 1
     resources:
@@ -265,7 +269,8 @@ services:
     tier: business
     image: "c1/c1-b-govern"
     port: 30005
-    serviceType: ClusterIP
+    serviceType: NodePort
+    nodePort: 30035
     healthPath: /api/dg/actuator/health
     replicas: 1
     resources:

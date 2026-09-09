@@ -85,11 +85,12 @@ metadata:
   labels:
     app: c1-b-govern
 spec:
-  type: ClusterIP
+  type: NodePort
   ports:
     - name: http
       port: 30005
       targetPort: 30005
+      nodePort: 30035
       protocol: TCP
   selector:
     app: c1-b-govern

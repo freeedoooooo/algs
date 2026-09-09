@@ -84,5 +84,8 @@ spec:
       port: 30001
       targetPort: 30001
       protocol: TCP
+      {{- if eq .Values.services.c1-b-extract.serviceType "NodePort" }}
+      nodePort: {{ .Values.services.c1-b-extract.nodePort }}
+      {{- end }}
   selector:
     app: c1-b-extract

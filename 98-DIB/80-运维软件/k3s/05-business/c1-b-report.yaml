@@ -89,11 +89,12 @@ metadata:
   labels:
     app: c1-b-report
 spec:
-  type: ClusterIP
+  type: NodePort
   ports:
     - name: http
       port: 30002
       targetPort: 30002
+      nodePort: 30032
       protocol: TCP
   selector:
     app: c1-b-report

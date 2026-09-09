@@ -79,5 +79,8 @@ spec:
       port: 30005
       targetPort: 30005
       protocol: TCP
+      {{- if eq .Values.services.c1-b-govern.serviceType "NodePort" }}
+      nodePort: {{ .Values.services.c1-b-govern.nodePort }}
+      {{- end }}
   selector:
     app: c1-b-govern

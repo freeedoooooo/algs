@@ -86,11 +86,12 @@ metadata:
   labels:
     app: c1-b-data
 spec:
-  type: ClusterIP
+  type: NodePort
   ports:
     - name: http
       port: 30003
       targetPort: 30003
+      nodePort: 30033
       protocol: TCP
   selector:
     app: c1-b-data

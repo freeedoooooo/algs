@@ -96,11 +96,12 @@ metadata:
   labels:
     app: c1-b-extract
 spec:
-  type: ClusterIP
+  type: NodePort
   ports:
     - name: http
       port: 30001
       targetPort: 30001
+      nodePort: 30031
       protocol: TCP
   selector:
     app: c1-b-extract
