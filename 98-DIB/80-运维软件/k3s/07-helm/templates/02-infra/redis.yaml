@@ -35,6 +35,8 @@ spec:
       labels:
         app: redis
     spec:
+      nodeSelector:
+        node-name: {{ .Values.nodeName }}
       containers:
         - name: redis
           image: {{ .Values.redis.image }}

@@ -35,6 +35,8 @@ spec:
       labels:
         app: nacos
     spec:
+      nodeSelector:
+        node-name: {{ .Values.nodeName }}
       containers:
         - name: nacos
           image: {{ .Values.nacos.image }}

@@ -18,6 +18,9 @@ image:
 # 镜像拉取策略
 imagePullPolicy: Always
 
+# 节点调度（所有服务调度到该节点，改这里即可切换节点）
+nodeName: worker-5142
+
 # ---------- 镜像仓库认证 ----------
 registry:
   server: "10.0.6.183:8088"

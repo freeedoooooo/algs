@@ -18,6 +18,8 @@ spec:
         app: c1-p-oauth
         tier: platform
     spec:
+      nodeSelector:
+        node-name: {{ .Values.nodeName }}
       imagePullSecrets:
         - name: dib-registry-secret
       containers:

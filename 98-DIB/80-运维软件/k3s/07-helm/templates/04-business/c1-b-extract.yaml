@@ -18,6 +18,8 @@ spec:
         app: c1-b-extract
         tier: business
     spec:
+      nodeSelector:
+        node-name: {{ .Values.nodeName }}
       imagePullSecrets:
         - name: dib-registry-secret
       containers:
