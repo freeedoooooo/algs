@@ -18,11 +18,11 @@ spec:
         app: c1-b-govern
         tier: business
     spec:
-      imagePullSecrets:
-        - name: dib-registry-secret
+      nodeSelector:
+        node-name: worker-5.142
       containers:
         - name: c1-b-govern
-          image: 10.0.6.183:8088/c1/b-govern:latest
+          image: 10.0.6.183:8088/c1/c1-b-govern:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 30005

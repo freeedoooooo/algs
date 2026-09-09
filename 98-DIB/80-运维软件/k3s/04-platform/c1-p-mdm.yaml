@@ -21,7 +21,7 @@ spec:
         tier: platform
     spec:
       nodeSelector:
-        node-name: worker-5142
+        node-name: worker-5.142
       containers:
         - name: c1-p-mdm
           image: 10.0.6.183:8088/c1/c1-p-mdm:idc-test-c1_latest

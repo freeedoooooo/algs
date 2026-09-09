@@ -41,16 +41,18 @@ data:
   C1_DB_USERNAME: "root"
   C1_DB_PASSWORD: "Dib12345*"
 
-  # ---------- MinIO（外部部署）----------
-  C1_MINIO_ENDPOINT: "http://10.0.6.163:9000"
-
   # ---------- OCR 服务 ----------
   C1_OCR_SERVER: "http://192.168.10.91:8089/"
 
   # ---------- OAuth / Gateway ----------
-  # OAuth 回调地址（给浏览器用，必须是外部可访问的 URL）
-  C1_GATEWAY_OAUTH_CLIENT_HOST: "http://10.0.5.142:30091"
-  # Gateway 访问 OAuth 的地址（K8s 内部 Service）
-  C1_GATEWAY_OAUTH_SERVER_HOST: "http://10.0.5.142:30091/sso"
-  C1_GATEWAY_OAUTH_SERVER_HOST_INNER: "http://c1-p-oauth.c1-idc-test.svc.cluster.local:9090/sso"
+  C1_OAUTH_CLIENT_HOST: "http://10.0.5.142:30091"
+  C1_OAUTH_SERVER_HOST: "http://10.0.5.142:30091/sso"
+  C1_OAUTH_SERVER_HOST_INNER: "http://c1-p-oauth.c1-idc-test.svc.cluster.local:9090/sso"
   C1_OAUTH_CLIENT_CREDENTIALS: "123456"
+  C1_OAUTH_REDIRECT_URI: "http://10.0.5.142:30091/api/oauth/callback,http://10.0.5.142:30091/api-oauth/callback"
+
+  # ---------- MinIO（外部部署）----------
+  C1_MINIO_ENDPOINT: "http://10.0.6.163:9000"
+  C1_MINIO_ACCESS_KEY: "minioadmin"
+  C1_MINIO_SECRET_KEY: "minioadmin"
+  C1_MINIO_BUCKET_NAME: "c1-bucket"

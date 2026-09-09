@@ -18,11 +18,11 @@ spec:
         app: c1-b-rule
         tier: business
     spec:
-      imagePullSecrets:
-        - name: dib-registry-secret
+      nodeSelector:
+        node-name: worker-5.142
       containers:
         - name: c1-b-rule
-          image: 10.0.6.183:8088/c1/b-rule:latest
+          image: 10.0.6.183:8088/c1/c1-b-rule:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 30004
