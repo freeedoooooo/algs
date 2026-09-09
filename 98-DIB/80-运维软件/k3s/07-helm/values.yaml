@@ -69,6 +69,9 @@ config:
 nacos:
   image: "nacos/nacos-server:v2.3.2"
   storage: 1Gi
+  serviceType: NodePort
+  nodePortHttp: 30848
+  nodePortGrpc: 30849
   # 外挂 MySQL 配置（替代内嵌 Derby）
   mysql:
     host: "10.0.6.161"
@@ -90,6 +93,8 @@ redis:
   image: "redis:7.0"
   storage: 2Gi
   maxmemory: "512mb"
+  serviceType: NodePort
+  nodePort: 30379
   resources:
     requests:
       cpu: "50m"

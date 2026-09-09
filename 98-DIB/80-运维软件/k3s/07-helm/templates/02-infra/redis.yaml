@@ -100,11 +100,14 @@ metadata:
   labels:
     app: redis
 spec:
-  type: ClusterIP
+  type: {{ .Values.redis.serviceType }}
   ports:
     - name: redis
       port: 6379
       targetPort: 6379
       protocol: TCP
+      {{- if eq .Values.redis.serviceType "NodePort" }}
+      nodePort: {{ .Values.redis.nodePort }}
+      {{- end }}
   selector:
     app: redis

@@ -9,6 +9,8 @@ metadata:
     tier: platform
 spec:
   replicas: {{ .Values.services.c1-p-mdm.replicas }}
+  strategy:
+    type: RollingUpdate
   selector:
     matchLabels:
       app: c1-p-mdm
@@ -87,5 +89,8 @@ spec:
       port: 20002
       targetPort: 20002
       protocol: TCP
+      {{- if eq .Values.services.c1-p-mdm.serviceType "NodePort" }}
+      nodePort: {{ .Values.services.c1-p-mdm.nodePort }}
+      {{- end }}
   selector:
     app: c1-p-mdm

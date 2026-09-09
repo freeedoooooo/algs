@@ -9,6 +9,8 @@ metadata:
     tier: platform
 spec:
   replicas: {{ .Values.services.c1-p-oauth.replicas }}
+  strategy:
+    type: RollingUpdate
   selector:
     matchLabels:
       app: c1-p-oauth

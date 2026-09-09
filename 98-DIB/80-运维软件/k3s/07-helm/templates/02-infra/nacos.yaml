@@ -122,15 +122,21 @@ metadata:
   labels:
     app: nacos
 spec:
-  type: ClusterIP
+  type: {{ .Values.nacos.serviceType }}
   ports:
     - name: http
       port: 8848
       targetPort: 8848
       protocol: TCP
+      {{- if eq .Values.nacos.serviceType "NodePort" }}
+      nodePort: {{ .Values.nacos.nodePortHttp }}
+      {{- end }}
     - name: grpc
       port: 9848
       targetPort: 9848
       protocol: TCP
+      {{- if eq .Values.nacos.serviceType "NodePort" }}
+      nodePort: {{ .Values.nacos.nodePortGrpc }}
+      {{- end }}
   selector:
     app: nacos
