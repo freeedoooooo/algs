@@ -11,9 +11,9 @@ namespace: c1-idc-test
 # 镜像仓库地址（所有微服务镜像的前缀）
 imageRegistry: "10.0.6.183:8088"
 
-# 镜像版本（所有微服务的默认 tag，各服务可单独覆盖）
+# 镜像版本（所有服务统一）
 image:
-  tag: latest
+  tag: idc-test-c1_latest
 
 # 镜像拉取策略
 imagePullPolicy: Always
