@@ -76,13 +76,16 @@ spec:
             # ---------- 时区 ----------
             - name: TZ
               value: "Asia/Shanghai"
+            # ---------- JVM 内存（容器 limits 2Gi，堆设 1g 留余量） ----------
+            - name: JVM_OPT
+              value: "-Xms1g -Xmx1g -Xmn256m"
           resources:
             requests:
               cpu: "100m"
-              memory: "512Mi"
+              memory: "1Gi"
             limits:
               cpu: "200m"
-              memory: "1Gi"
+              memory: "2Gi"
           volumeMounts:
             - name: nacos-data
               mountPath: /home/nacos/data
