@@ -28,13 +28,13 @@ config:
   C1_ENV: "idc-test-c1"
 
   # ---------- Nacos 注册中心 ----------
-  C1_NACOS_SERVER_ADDR: "http://c1-nacos.{{ .Values.namespace }}.svc.cluster.local:8848"
+  C1_NACOS_SERVER_ADDR: "http://c1-nacos.NAMESPACE.svc.cluster.local:8848"
   C1_NACOS_NAMESPACE: "c1"
   C1_NACOS_USERNAME: "c1"
   C1_NACOS_PASSWORD: "c1@2025"
 
   # ---------- Redis 缓存 ----------
-  C1_REDIS_HOST: "c1-redis.{{ .Values.namespace }}.svc.cluster.local"
+  C1_REDIS_HOST: "c1-redis.NAMESPACE.svc.cluster.local"
   C1_REDIS_PORT: "6379"
   C1_REDIS_DATABASE: "0"
   C1_REDIS_PASSWORD: "dibredis"
@@ -57,7 +57,7 @@ config:
   # ---------- OAuth 认证 ----------
   C1_OAUTH_CLIENT_HOST: "http://10.0.5.142:30091"
   C1_OAUTH_SERVER_HOST: "http://10.0.5.142:30091/sso"
-  C1_OAUTH_SERVER_HOST_INNER: "http://c1-p-oauth.c1-idc-test.svc.cluster.local:9090/sso"
+  C1_OAUTH_SERVER_HOST_INNER: "http://c1-p-oauth.NAMESPACE.svc.cluster.local:9090/sso"
   C1_OAUTH_CLIENT_CREDENTIALS: "123456"
   C1_OAUTH_REDIRECT_URI: "http://10.0.5.142:30091/api/oauth/callback,http://10.0.5.142:30091/api-oauth/callback"
 
