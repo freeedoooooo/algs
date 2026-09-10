@@ -3,10 +3,10 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: redis-data-pvc
+  name: c1-redis-data-pvc
   namespace: {{ .Values.namespace }}
   labels:
-    app: redis
+    app: c1-redis
 spec:
   accessModes:
     - ReadWriteOnce
@@ -17,26 +17,26 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: redis
+  name: c1-redis
   namespace: {{ .Values.namespace }}
   labels:
-    app: redis
+    app: c1-redis
 spec:
   replicas: 1
   strategy:
     type: Recreate
   selector:
     matchLabels:
-      app: redis
+      app: c1-redis
   template:
     metadata:
       labels:
-        app: redis
+        app: c1-redis
     spec:
       nodeSelector:
         node-name: {{ .Values.nodeName }}
       containers:
-        - name: redis
+        - name: c1-redis
           image: {{ .Values.redis.image }}
           imagePullPolicy: IfNotPresent
           ports:
@@ -58,12 +58,17 @@ spec:
             - name: REDIS_PASSWORD
               valueFrom:
                 configMapKeyRef:
-                  name: dib-common-config
+                  name: c1-common-config
                   key: C1_REDIS_PASSWORD
             - name: TZ
               value: "Asia/Shanghai"
           resources:
-            {{- toYaml .Values.redis.resources | nindent 12 }}
+            requests:
+              cpu: "50m"
+              memory: "256Mi"
+            limits:
+              cpu: "200m"
+              memory: "768Mi"
           volumeMounts:
             - name: redis-data
               mountPath: /data
@@ -90,15 +95,15 @@ spec:
       volumes:
         - name: redis-data
           persistentVolumeClaim:
-            claimName: redis-data-pvc
+            claimName: c1-redis-data-pvc
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: redis
+  name: c1-redis
   namespace: {{ .Values.namespace }}
   labels:
-    app: redis
+    app: c1-redis
 spec:
   type: {{ .Values.redis.serviceType }}
   ports:
@@ -110,4 +115,4 @@ spec:
       nodePort: {{ .Values.redis.nodePort }}
       {{- end }}
   selector:
-    app: redis
+    app: c1-redis

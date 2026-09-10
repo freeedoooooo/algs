@@ -32,7 +32,12 @@ spec:
               name: http
               protocol: TCP
           resources:
-            {{- toYaml .Values.nginx.resources | nindent 12 }}
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
           livenessProbe:
             tcpSocket:
               port: {{ .Values.nginx.port }}

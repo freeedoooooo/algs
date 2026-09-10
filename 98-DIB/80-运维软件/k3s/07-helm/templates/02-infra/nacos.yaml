@@ -3,10 +3,10 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: nacos-data-pvc
-  namespace: {{ .Values.namespace }}
+  name: c1-nacos-data-pvc
+  namespace: c1
   labels:
-    app: nacos
+    app: c1-nacos
 spec:
   accessModes:
     - ReadWriteOnce
@@ -17,26 +17,26 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: nacos
-  namespace: {{ .Values.namespace }}
+  name: c1-nacos
+  namespace: c1
   labels:
-    app: nacos
+    app: c1-nacos
 spec:
   replicas: 1
   strategy:
     type: Recreate
   selector:
     matchLabels:
-      app: nacos
+      app: c1-nacos
   template:
     metadata:
       labels:
-        app: nacos
+        app: c1-nacos
     spec:
       nodeSelector:
         node-name: {{ .Values.nodeName }}
       containers:
-        - name: nacos
+        - name: c1-nacos
           image: {{ .Values.nacos.image }}
           imagePullPolicy: IfNotPresent
           ports:
@@ -77,7 +77,12 @@ spec:
             - name: TZ
               value: "Asia/Shanghai"
           resources:
-            {{- toYaml .Values.nacos.resources | nindent 12 }}
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
           volumeMounts:
             - name: nacos-data
               mountPath: /home/nacos/data
@@ -110,17 +115,17 @@ spec:
       volumes:
         - name: nacos-data
           persistentVolumeClaim:
-            claimName: nacos-data-pvc
+            claimName: c1-nacos-data-pvc
         - name: nacos-logs
           emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: nacos
-  namespace: {{ .Values.namespace }}
+  name: c1-nacos
+  namespace: c1
   labels:
-    app: nacos
+    app: c1-nacos
 spec:
   type: {{ .Values.nacos.serviceType }}
   ports:
@@ -139,4 +144,4 @@ spec:
       nodePort: {{ .Values.nacos.nodePortGrpc }}
       {{- end }}
   selector:
-    app: nacos
+    app: c1-nacos

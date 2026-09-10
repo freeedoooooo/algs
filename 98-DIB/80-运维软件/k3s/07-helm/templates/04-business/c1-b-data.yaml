@@ -34,7 +34,12 @@ spec:
             - configMapRef:
                 name: c1-common-config
           resources:
-            {{- toYaml .Values.services.c1_b_data.resources | nindent 12 }}
+            requests:
+              cpu: "500m"
+              memory: "2Gi"
+            limits:
+              cpu: "1500m"
+              memory: "6Gi"
           volumeMounts:
             - name: app-logs
               mountPath: /opt/app/logs
