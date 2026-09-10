@@ -1,6 +1,6 @@
 ﻿# DIB 微服务 K3s 部署指南
 
-本目录包含 DIB 微服务体系从 Docker Compose 迁移至 K3s 集群的完整部署配置。
+本目录包含 DIB 微服务体系在 K3s 集群上的完整部署配置，使用 Helm Chart 统一管理。
 
 ---
 
@@ -11,61 +11,45 @@ k3s/
 ├── README.md                           # 本文档
 ├── 01-install/
 │   └── install.sh                      # K3s 集群安装脚本 (支持 server + agent 多节点)
-├── 02-config/
-│   ├── namespace.yaml                  # 命名空间 (c1-idc-test)
-│   ├── configmap.yaml                  # 全部配置 (地址 + 密码明文，后续可迁移至 Secret)
-│   └── image-pull-secret.yaml          # 私有镜像仓库认证凭据
-├── 03-infra/
-│   ├── nacos.yaml                      # Nacos 注册中心 (Deployment + Service + PVC)
-│   └── redis.yaml                      # Redis 缓存 (Deployment + Service + PVC)
-├── 04-platform/
-│   ├── c1-p-oauth.yaml              # OAuth2 认证中心 (Deployment + Service)
-│   ├── c1-p-gateway.yaml            # API 网关 (Deployment + Service)
-│   ├── c1-p-rbac.yaml               # 权限资源管理 (Deployment + Service)
-│   └── c1-p-mdm.yaml                # 主数据管理 (Deployment + Service)
-├── 05-business/
-│   ├── c1-b-extract.yaml            # 资料提取 (高内存)
-│   ├── c1-b-report.yaml             # 报告生成
-│   ├── c1-b-data.yaml               # 数据资源 (高内存)
-│   ├── c1-b-rule.yaml               # 规则引擎
-│   └── c1-b-govern.yaml             # 数据治理
-├── 06-scripts/
-│   ├── deploy-all.sh                   # 一键部署脚本
-│   └── verify.sh                       # 健康检查验证脚本
-└── 07-helm/                            # Helm Chart 方案（与 01~06 等价，模板 + 变量）
+└── 07-helm/                            # Helm Chart（所有 K8s 资源定义）
     ├── Chart.yaml                      # Chart 元信息
     ├── values.yaml                     # 默认配置（所有参数完整定义）
-    ├── values-dev/test/prod.yaml       # 多环境覆盖配置
-    └── templates/                      # YAML 模板（渲染后等价于 02~05 的所有 YAML）
+    ├── values-dev.yaml                 # 开发环境覆盖
+    ├── values-test.yaml                # 测试环境覆盖
+    ├── values-prod.yaml                # 生产环境覆盖
+    ├── nginx.conf                      # Nginx 配置文件
+    └── templates/                      # YAML 模板
+        ├── 01-base/configmap.yaml      # 公共环境变量 ConfigMap
+        ├── 02-infra/                   # 基础设施：Nacos、Redis、Nginx
+        ├── 03-platform/                # 平台服务：Gateway、OAuth、RBAC、MDM
+        └── 04-business/                # 业务服务：Extract、Report、Data、Rule、Govern
 ```
-
-> **两种部署方案并存**：`01~06` 是 kubectl 方案（直接 apply YAML），`07-helm` 是 Helm 方案（模板 + values）。两者功能等价，首次部署用 kubectl 方案更直观，多环境/版本管理时迁移到 Helm。
-
-> 当前所有配置（含密码）均为明文存放在 `02-config/configmap.yaml` 中，方便调试。生产环境稳定后可迁移至 K8s Secret 进行加密管理。
 
 ---
 
 ## 架构概览
 
 ```
-K3s 集群 (namespace: c1-idc-test)
+K3s 集群 (namespace: c1-ns-test)
 ├── 基础设施层
-│   ├── Nacos v2.3.2    → ClusterIP :8848  (注册中心)
-│   └── Redis 7.0       → ClusterIP :6379  (缓存)
+│   ├── Nginx 1.17.8     → NodePort 30091  (前端网关)
+│   ├── Nacos v2.3.2     → NodePort 30848  (注册中心，外挂 MySQL)
+│   └── Redis 7.0        → NodePort 30379  (缓存，maxmemory 2G)
 ├── 平台服务层
-│   ├── c1-p-oauth       → NodePort 30090  (OAuth2 认证，对外暴露)
-│   ├── c1-p-gateway     → NodePort 30000  (API 网关，对外暴露)
-│   ├── c1-p-rbac        → ClusterIP :20001 (权限资源，内部访问)
-│   └── c1-p-mdm         → ClusterIP :20002 (主数据，内部访问)
+│   ├── c1-p-oauth       → NodePort 30090  (OAuth2 认证中心)
+│   ├── c1-p-gateway     → NodePort 30020  (API 网关)
+│   ├── c1-p-rbac        → NodePort 30021  (权限资源管理)
+│   └── c1-p-mdm         → NodePort 30022  (主数据管理)
 ├── 业务服务层
-│   ├── c1-b-extract     → ClusterIP :30001 (资料提取)
-│   ├── c1-b-report      → ClusterIP :30002 (报告生成)
-│   ├── c1-b-data        → ClusterIP :30003 (数据资源)
-│   ├── c1-b-rule        → ClusterIP :30004 (规则引擎)
-│   └── c1-b-govern      → ClusterIP :30005 (数据治理)
-└── 外部依赖 (保持独立部署)
-    ├── MySQL/OpenGauss  → 192.168.10.141:5432
-    └── MinIO            → 10.0.6.163:9000
+│   ├── c1-b-extract     → NodePort 30031  (资料提取，高内存)
+│   ├── c1-b-report      → NodePort 30032  (报告生成)
+│   ├── c1-b-data        → NodePort 30033  (数据资源，高内存)
+│   ├── c1-b-rule        → NodePort 30034  (规则引擎)
+│   └── c1-b-govern      → NodePort 30035  (数据治理)
+└── 外部依赖
+    ├── MySQL            → 10.0.6.161:3306
+    ├── MinIO            → 10.0.6.163:9000
+    └── OCR              → 192.168.10.91:8089
 ```
 
 ---
@@ -75,10 +59,10 @@ K3s 集群 (namespace: c1-idc-test)
 | 项目 | 要求 |
 |------|------|
 | 操作系统 | CentOS 7/8、Ubuntu 20.04/22.04、Debian 11/12 |
-| CPU | >= 4 核 |
-| 内存 | >= 32 GB (extract 服务需要 18G) |
+| CPU | >= 8 核 |
+| 内存 | >= 32 GB |
 | 磁盘 | >= 100 GB |
-| Docker | 已安装 (用于构建镜像) |
+| Helm | >= v3.x |
 | 网络 | 能访问私有仓库 `10.0.6.183:8088` |
 
 ---
@@ -87,195 +71,128 @@ K3s 集群 (namespace: c1-idc-test)
 
 ### 第一步：安装 K3s 集群
 
-将整个 `k3s/` 目录上传到所有目标 Linux 服务器（Server 节点 + Agent 节点）：
+将整个 `k3s/` 目录上传到所有目标 Linux 服务器：
 
 ```bash
-# 从本地上传到每台服务器
 scp -r k3s/ root@<Server_IP>:/opt/k3s-deploy/
-scp -r k3s/ root@<Agent1_IP>:/opt/k3s-deploy/
-scp -r k3s/ root@<Agent2_IP>:/opt/k3s-deploy/
 ```
 
-#### 1.1 安装 Server 节点（控制面，有且仅有一个）
+#### 1.1 安装 Server 节点
 
 ```bash
-# 登录 Server 节点
 cd /opt/k3s-deploy
 bash 01-install/install.sh server
 ```
 
-安装完成后，脚本会自动：
-- 配置私有镜像仓库 `10.0.6.183:8088`
-- 安装 K3s Server（使用国内镜像加速）
-- 配置 kubectl 访问权限
-- 验证节点就绪
-- **输出 Agent 加入命令**（包含 Server IP 和 Token，务必保存）
+安装完成后保存输出的 Agent 加入命令。
 
-输出示例：
-```
-  Agent 节点加入命令:
-  ─────────────────────────────────────────
-  bash 01-install/install.sh agent \
-    --server-ip 10.0.6.100 \
-    --token K10xxxxxxxxx::server:xxxxxxxxx
-  ─────────────────────────────────────────
-```
-
-#### 1.2 安装 Agent 节点（工作节点，可多个）
+#### 1.2 安装 Agent 节点
 
 ```bash
-# 登录每台 Agent 节点
-cd /opt/k3s-deploy
 bash 01-install/install.sh agent \
   --server-ip <Server节点IP> \
-  --token <Server输出的Token>
+  --token <Token>
 ```
-
-> Token 获取方式（在 Server 节点执行）：`cat /var/lib/rancher/k3s/server/node-token`
 
 #### 1.3 验证集群
 
-回到 Server 节点，确认所有节点就绪：
-
 ```bash
 kubectl get nodes -o wide
-# 应看到所有节点状态为 Ready，ROLE 分别为 control-plane / worker
 ```
 
-#### 1.4 卸载
+### 第二步：配置 Helm values
 
-```bash
-# 在 Server 或 Agent 节点执行均可
-bash 01-install/install.sh --uninstall
-```
-
-### 第二步：修改配置文件
-
-**部署前必须修改以下文件中的占位值为实际环境参数。**
-
-#### 2.1 修改 `02-config/configmap.yaml`
-
-打开 `02-config/configmap.yaml`，根据实际环境修改以下配置项：
+编辑 `07-helm/values.yaml`，根据实际环境修改以下关键配置：
 
 ```yaml
-# 环境标识 (idc-test-c1 / pro)
-C1_ENV: "idc-test-c1"
+# 命名空间
+namespace: c1-ns-test
 
-# 数据库 JDBC URL（完整连接地址，对应 .env 中的 C1_DB_URL）
-DB_URL: "jdbc:mysql://10.0.6.161:3306/dib_report_copilot?..."
+# 镜像仓库
+imageRegistry: "10.0.6.183:8088"
+image:
+  tag: idc-test-c1_latest
 
-# Nacos 地址
-# 如果使用 K3s 内部 Nacos（本方案默认），保持不动
-# 如果使用外部 Nacos，改为外部地址：
-# NACOS_SERVER_ADDR: "http://10.0.5.70:8848"
+# 节点调度（所有 Pod 调度到该节点）
+nodeName: worker-5.142
 
-# MinIO 地址
-MINIO_ENDPOINT: "http://10.0.6.163:9000"  # ← 改为实际 MinIO 地址
+# 数据库
+config:
+  C1_DB_URL: "jdbc:mysql://10.0.6.161:3306/dib_report_copilot?..."
+  C1_DB_USERNAME: "root"
+  C1_DB_PASSWORD: "Dib12345*"
 
-# OCR 服务地址
-OCR_SERVER: "http://192.168.10.91:8089/"  # ← 改为实际 OCR 地址
+# Nacos 外挂 MySQL
+nacos:
+  mysql:
+    host: "10.0.6.161"
+    database: "nacos_dev"
+
+# MinIO / OCR 等外部服务地址
+config:
+  C1_MINIO_ENDPOINT: "http://10.0.6.163:9000"
+  C1_OCR_SERVER: "http://192.168.10.91:8089/"
 ```
 
-#### 2.2 修改 `02-config/configmap.yaml` 中的密码
+### 第三步：打包并推送 Chart
 
-`02-config/configmap.yaml` 底部包含所有密码（明文），根据实际环境修改：
+在 Windows 开发机上执行：
 
-```yaml
-# 数据库凭据
-DB_USERNAME: "gaussdb"         # ← 改为实际用户名
-DB_PASSWORD: "Dib@123456"      # ← 改为实际密码
+```powershell
+# 打包
+helm package 07-helm
 
-# Redis 密码
-REDIS_PASSWORD: "dibredis"     # ← 改为实际密码
-
-# Nacos 认证
-NACOS_PASSWORD: "c1@2025"      # ← 改为实际密码
-
-# OAuth 客户端凭据
-OAUTH_CLIENT_CREDENTIALS: "123456"
+# 推送到 Harbor（HTTP 仓库需加 --plain-http）
+helm push c1-1.0.0.tgz oci://10.0.6.183:8088/helm --plain-http
 ```
 
-#### 2.3 生成 `02-config/image-pull-secret.yaml`
+### 第四步：安装部署
 
-使用 kubectl 命令自动生成正确的镜像仓库认证（替换实际的用户名密码）：
+在 K3s Server 节点执行：
 
 ```bash
-kubectl create secret docker-registry dib-registry-secret \
-  --namespace=c1-idc-test \
-  --docker-server=10.0.6.183:8088 \
-  --docker-username=<仓库用户名> \
-  --docker-password=<仓库密码> \
-  --docker-email=<邮箱> \
-  --dry-run=client -o yaml > 02-config/image-pull-secret.yaml
+# 首次安装（自动创建 namespace）
+helm install c1 oci://10.0.6.183:8088/helm/c1 \
+  --version 1.0.0 \
+  -n c1-ns-test \
+  --plain-http \
+  --create-namespace
+
+# 后续更新（修改 values.yaml 后重新打包推送）
+helm upgrade c1 oci://10.0.6.183:8088/helm/c1 \
+  --version 1.0.1 \
+  -n c1-ns-test \
+  --plain-http
 ```
 
-> 如果镜像仓库无需认证（匿名拉取），可以跳过此步骤，并删除所有 Deployment YAML 中的 `imagePullSecrets` 段落。
-
-### 第三步：一键部署
+### 第五步：验证部署
 
 ```bash
-# 全量部署（推荐首次使用）
-bash 06-scripts/deploy-all.sh
+# 查看所有 Pod
+kubectl -n c1-ns-test get pods -o wide
 
-# 也可以分步部署：
-bash 06-scripts/deploy-all.sh base       # 仅部署基础配置
-bash 06-scripts/deploy-all.sh infra      # 仅部署 Nacos + Redis
-bash 06-scripts/deploy-all.sh platform   # 仅部署平台服务
-bash 06-scripts/deploy-all.sh business   # 仅部署业务服务
-```
+# 查看 Service
+kubectl -n c1-ns-test get svc
 
-部署顺序（自动执行）：
-1. **基础配置** → 命名空间、ConfigMap、镜像认证
-2. **基础设施** → Nacos、Redis（等待就绪后继续）
-3. **平台服务** → c1-p-oauth → c1-p-gateway → c1-p-rbac → c1-p-mdm
-4. **业务服务** → c1-b-extract → c1-b-report → c1-b-data → c1-b-rule → c1-b-govern
+# 查看某个 Pod 详情（排查启动问题）
+kubectl -n c1-ns-test describe pod <pod-name>
 
-指定镜像版本：
-
-```bash
-C1_VERSION=v1.0.0 bash 06-scripts/deploy-all.sh
-```
-
-### 第四步：验证部署
-
-```bash
-# 完整验证（Pod 状态 + Ready + Service）
-bash 06-scripts/verify.sh
-
-# 快速检查（仅 Pod 状态）
-bash 06-scripts/verify.sh quick
-```
-
-手动验证：
-
-```bash
-# 查看所有 Pod 状态
-kubectl -n c1-idc-test get pods -o wide
-
-# 查看某个 Pod 的详细事件（排查启动失败）
-kubectl -n c1-idc-test describe pod <pod-name>
-
-# 查看容器日志
-kubectl -n c1-idc-test logs -f <pod-name>
-
-# 查看所有 Service
-kubectl -n c1-idc-test get svc
+# 查看日志
+kubectl -n c1-ns-test logs -f <pod-name>
 ```
 
 ---
 
 ## 访问地址
 
-部署完成后，通过以下地址访问：
-
 | 服务 | 地址 | 说明 |
 |------|------|------|
-| API 网关 | `http://<节点IP>:30000` | 所有业务 API 入口 |
-| SSO 认证 | `http://<节点IP>:30090` | 单点登录服务 |
-| Nacos 控制台 | `http://<节点IP>:8848/nacos` | 需额外配置 NodePort |
+| Nginx 前端 | `http://<节点IP>:30091` | 前端页面 + SSO 代理 |
+| API 网关 | `http://<节点IP>:30020` | 所有业务 API 入口 |
+| SSO 认证 | `http://<节点IP>:30090` | OAuth2 认证服务 |
+| Nacos 控制台 | `http://<节点IP>:30848/nacos` | 注册中心管理 |
+| Redis | `<节点IP>:30379` | 缓存服务 |
 | Kuboard | `http://<Kuboard_IP>:8000` | K8s 可视化管理 |
-
-> 注意：Nacos 默认是 ClusterIP，如需从外部访问需将其 Service 类型改为 NodePort。
 
 ---
 
@@ -285,73 +202,112 @@ kubectl -n c1-idc-test get svc
 
 ```bash
 # Pod 状态
-kubectl -n c1-idc-test get pods -o wide
+kubectl -n c1-ns-test get pods -o wide
 
 # 资源使用
-kubectl -n c1-idc-test top pods
+kubectl -n c1-ns-test top pods
 
 # Service 列表
-kubectl -n c1-idc-test get svc -o wide
+kubectl -n c1-ns-test get svc -o wide
+```
 
-# 查看 Pod 日志
-kubectl -n c1-idc-test logs -f deployment/c1-p-oauth
-kubectl -n c1-idc-test logs -f deployment/c1-p-gateway --tail=100
+### 升级 / 回滚
+
+```bash
+# 升级到新版本
+helm upgrade c1 oci://10.0.6.183:8088/helm/c1 --version 1.0.1 -n c1-ns-test --plain-http
+
+# 查看 release 历史
+helm history c1 -n c1-ns-test
+
+# 回滚到上一版本
+helm rollback c1 -n c1-ns-test
+
+# 回滚到指定版本
+helm rollback c1 <revision> -n c1-ns-test
 ```
 
 ### 重启服务
 
 ```bash
 # 重启单个服务
-kubectl -n c1-idc-test rollout restart deployment/c1-p-oauth
+kubectl -n c1-ns-test rollout restart deployment/c1-p-oauth
 
 # 重启所有业务服务
-kubectl -n c1-idc-test rollout restart deployment/c1-b-extract deployment/c1-b-report deployment/c1-b-data deployment/c1-b-rule deployment/c1-b-govern
-```
-
-### 更新配置
-
-修改 ConfigMap 后需要重启 Pod 才能生效：
-
-```bash
-# 修改配置
-kubectl -n c1-idc-test edit configmap dib-common-config
-
-# 重启所有 Pod 使配置生效
-kubectl -n c1-idc-test rollout restart deployment
-```
-
-### 扩缩容
-
-```bash
-# 将 gateway 扩展到 2 副本
-kubectl -n c1-idc-test scale deployment/gateway --replicas=2
-
-# 缩回 1 副本
-kubectl -n c1-idc-test scale deployment/gateway --replicas=1
+kubectl -n c1-ns-test rollout restart deploy/c1-b-extract deploy/c1-b-report deploy/c1-b-data deploy/c1-b-rule deploy/c1-b-govern
 ```
 
 ### 更新镜像版本
 
-```bash
-# 更新单个服务镜像
-kubectl -n c1-idc-test set image deployment/c1-p-oauth c1-p-oauth=10.0.6.183:8088/c1/p-oauth:v2.0.0
+修改 `values.yaml` 中的 `image.tag`，重新打包推送后执行 `helm upgrade`。
 
-# 查看 rollout 状态
-kubectl -n c1-idc-test rollout status deployment/c1-p-oauth
-
-# 回滚到上一版本
-kubectl -n c1-idc-test rollout undo deployment/c1-p-oauth
-```
-
-### 删除资源
+### 卸载
 
 ```bash
-# 删除所有 DIB 资源（有确认提示）
-bash 06-scripts/deploy-all.sh delete
+# 卸载 release（保留 namespace）
+helm uninstall c1 -n c1-ns-test
 
-# 或手动删除
-kubectl delete namespace dib
+# 删除整个 namespace（清除所有资源）
+kubectl delete namespace c1-ns-test
 ```
+
+---
+
+## 服务资源配额
+
+### 基础设施层
+
+| 服务 | CPU req | CPU lim | Mem req | Mem lim | 端口 |
+|------|---------|---------|---------|---------|------|
+| c1-nginx | 100m | 1000m | 128Mi | 256Mi | 30091 |
+| c1-nacos | 100m | 1000m | 1Gi | 2Gi | 30848 |
+| c1-redis | 100m | 1000m | 1Gi | 3Gi | 30379 |
+
+### 平台服务层
+
+| 服务 | CPU req | CPU lim | Mem req | Mem lim | 端口 |
+|------|---------|---------|---------|---------|------|
+| c1-p-oauth | 100m | 500m | 512Mi | 1Gi | 30090 |
+| c1-p-gateway | 100m | 500m | 512Mi | 1Gi | 30020 |
+| c1-p-rbac | 100m | 500m | 512Mi | 1Gi | 30021 |
+| c1-p-mdm | 100m | 500m | 512Mi | 1Gi | 30022 |
+
+### 业务服务层
+
+| 服务 | CPU req | CPU lim | Mem req | Mem lim | 端口 |
+|------|---------|---------|---------|---------|------|
+| c1-b-extract | 250m | 2000m | 3Gi | 6Gi | 30031 |
+| c1-b-report | 250m | 2000m | 1536Mi | 3Gi | 30032 |
+| c1-b-data | 250m | 2000m | 2Gi | 4Gi | 30033 |
+| c1-b-rule | 250m | 2000m | 1Gi | 2Gi | 30034 |
+| c1-b-govern | 250m | 2000m | 512Mi | 1Gi | 30035 |
+
+### 资源汇总
+
+| 指标 | 值 |
+|------|------|
+| CPU requests 总计 | ~1950m（约 2 核） |
+| CPU limits 总计 | ~13.7 核 |
+| 内存 requests 总计 | ~12Gi |
+| 内存 limits 总计 | ~24Gi |
+
+> CPU limits 可以超过物理核数，K8s 调度只看 requests。limits 是突发上限，服务不会一直跑满。
+
+---
+
+## 健康探针配置
+
+所有 Java 服务统一 startupProbe 配置：
+
+```yaml
+startupProbe:
+  initialDelaySeconds: 60    # 容器启动后 60 秒开始探测
+  periodSeconds: 10          # 每 10 秒探测一次
+  failureThreshold: 10       # 最多允许 10 次失败
+  # 最大等待时间 = 60 + 10×10 = 160 秒
+```
+
+livenessProbe 和 readinessProbe 不设 `initialDelaySeconds`，等 startupProbe 成功后自动开始。
 
 ---
 
@@ -360,73 +316,54 @@ kubectl delete namespace dib
 ### Pod 一直处于 Pending
 
 ```bash
-kubectl -n c1-idc-test describe pod <pod-name>
+kubectl -n c1-ns-test describe pod <pod-name>
 ```
 
 常见原因：
-- 镜像拉取失败 → 检查 `imagePullSecrets` 和仓库连通性
-- 资源不足 → 检查节点内存是否满足 extract (18Gi) 等高内存服务需求
+- 镜像拉取失败 → 检查 imagePullSecrets 和仓库连通性
+- PVC 不存在 → 重新 `helm install` 会自动创建
+- CPU requests 超过 limits → 检查 values.yaml 资源配置
 
 ### Pod 反复重启 (CrashLoopBackOff)
 
 ```bash
 # 查看容器日志
-kubectl -n c1-idc-test logs <pod-name> --previous
+kubectl -n c1-ns-test logs <pod-name> --previous
 
 # 查看事件
-kubectl -n c1-idc-test describe pod <pod-name>
+kubectl -n c1-ns-test describe pod <pod-name>
 ```
 
 常见原因：
-- 数据库连接失败 → 检查 `02-config/configmap.yaml` 中的 DB_URL
-- Nacos 注册失败 → 检查 Nacos 是否已启动、NACOS_SERVER_ADDR 是否正确
-- 密码错误 → 检查 `02-config/configmap.yaml` 中的密码字段
+- Nacos 启动慢被杀 → 检查 startupProbe 配置和 CPU limits
+- 数据库连接失败 → 检查 ConfigMap 中的 DB_URL
+- OOM → 检查 JVM 内存参数和容器 limits
 
-### Service 无法访问
+### Namespace 删除卡住 (Terminating)
 
 ```bash
-# 检查 Endpoint 是否存在
-kubectl -n c1-idc-test get endpoints
-
-# 测试集群内 DNS 解析
-kubectl -n c1-idc-test run test-dns --image=busybox --rm -it -- nslookup gateway.c1-idc-test.svc.cluster.local
+# 强制清除 finalizers
+kubectl proxy &
+curl -X PUT http://localhost:8001/api/v1/namespaces/c1-ns-test/finalize \
+  -H "Content-Type: application/json" \
+  --data '{"kind":"Namespace","apiVersion":"v1","metadata":{"name":"c1-ns-test"},"spec":{"finalizers":[]}}'
 ```
-
----
-
-## 服务资源参考
-
-| 服务 | JVM 堆内存 | K8s requests | K8s limits | 端口 |
-|------|-----------|-------------|-----------|------|
-| c1-p-oauth | 512m ~ 2g | 512Mi / 250m | 2Gi / 1000m | 9090 |
-| c1-p-gateway | 512m ~ 2g | 512Mi / 250m | 2Gi / 1000m | 20000 |
-| c1-p-rbac | 512m ~ 2g | 512Mi / 250m | 2Gi / 1000m | 20001 |
-| c1-p-mdm | 512m ~ 2g | 512Mi / 250m | 2Gi / 1000m | 20002 |
-| c1-b-extract | 12g ~ 16g | 12Gi / 500m | 18Gi / 2000m | 30001 |
-| c1-b-report | 1g ~ 2g | 1Gi / 250m | 3Gi / 1000m | 30002 |
-| c1-b-data | 4g | 4Gi / 500m | 6Gi / 1500m | 30003 |
-| c1-b-rule | 1g ~ 2g | 1Gi / 250m | 3Gi / 1000m | 30004 |
-| c1-b-govern | 512m ~ 1g | 512Mi / 250m | 1.5Gi / 1000m | 30005 |
-
-> 所有服务总内存需求约 **40Gi**，建议 K3s 节点配置 64GB 以上内存。
 
 ---
 
 ## 与 Kuboard 集成
 
-K3s 安装完成后，脚本会输出 Kuboard 连接指引。核心步骤：
-
 1. 登录 Kuboard → 点击「导入集群」
 2. API Server 地址填写：`https://<K3s节点IP>:6443`
 3. 获取 Token：
    ```bash
-   # 创建 Kuboard 专用 ServiceAccount
    kubectl create sa kuboard-sa -n kube-system
    kubectl create clusterrolebinding kuboard-sa --clusterrole=cluster-admin --serviceaccount=kube-system:kuboard-sa
-   
-   # 获取 Token
-   kubectl -n kube-system create secret generic kuboard-sa-token --from-literal=token=$(kubectl -n kube-system get secret $(kubectl -n kube-system get sa kuboard-sa -o jsonpath='{.secrets[0].name}') -o jsonpath='{.data.token}') -o jsonpath='{.data.token}' | base64 -d
+   kubectl -n kube-system create secret generic kuboard-sa-token \
+     --from-literal=token=$(kubectl -n kube-system get secret \
+     $(kubectl -n kube-system get sa kuboard-sa -o jsonpath='{.secrets[0].name}') \
+     -o jsonpath='{.data.token}') -o jsonpath='{.data.token}' | base64 -d
    ```
 4. 将 Token 粘贴到 Kuboard 完成导入
 
-导入后可在 Kuboard 中直观地查看 `c1-idc-test` 命名空间下所有工作负载的状态、日志和资源使用情况。
+导入后可在 `c1-ns-test` 命名空间下直观查看所有工作负载状态、日志和资源使用情况。
