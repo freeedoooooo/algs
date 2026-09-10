@@ -28,13 +28,13 @@ config:
   C1_ENV: "idc-test-c1"
 
   # ---------- Nacos 注册中心 ----------
-  C1_NACOS_SERVER_ADDR: "http://nacos.c1-idc-test.svc.cluster.local:8848"
-  C1_NACOS_NAMESPACE: "c1-dev"
+  C1_NACOS_SERVER_ADDR: "http://c1-nacos.{{ .Values.namespace }}.svc.cluster.local:8848"
+  C1_NACOS_NAMESPACE: "c1"
   C1_NACOS_USERNAME: "c1"
   C1_NACOS_PASSWORD: "c1@2025"
 
   # ---------- Redis 缓存 ----------
-  C1_REDIS_HOST: "redis.c1-idc-test.svc.cluster.local"
+  C1_REDIS_HOST: "c1-redis.{{ .Values.namespace }}.svc.cluster.local"
   C1_REDIS_PORT: "6379"
   C1_REDIS_DATABASE: "0"
   C1_REDIS_PASSWORD: "dibredis"
