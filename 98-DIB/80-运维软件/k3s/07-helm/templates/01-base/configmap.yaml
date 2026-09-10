@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: c1-common-config
+  name: c1-configmap-common
   namespace: {{ .Values.namespace }}
 data:
   {{- range $key, $value := .Values.config }}

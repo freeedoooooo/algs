@@ -34,7 +34,7 @@ spec:
               value: "Asia/Shanghai"
           envFrom:
             - configMapRef:
-                name: c1-common-config
+                name: c1-configmap-common
           resources:
             requests:
               cpu: "100m"

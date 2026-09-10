@@ -58,7 +58,7 @@ spec:
             - name: REDIS_PASSWORD
               valueFrom:
                 configMapKeyRef:
-                  name: c1-common-config
+                  name: c1-configmap-common
                   key: C1_REDIS_PASSWORD
             - name: TZ
               value: "Asia/Shanghai"

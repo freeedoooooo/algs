@@ -1,5 +1,5 @@
 # Nginx 前端网关
-# 注意: ConfigMap c1-nginx-config 需提前创建（Kuboard 手动管理）
+# 注意: ConfigMap c1-configmap-nginx 需提前创建（Kuboard 手动管理）
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -64,7 +64,7 @@ spec:
       volumes:
         - name: nginx-config
           configMap:
-            name: c1-nginx-config
+            name: c1-configmap-nginx
         - name: c1-client
           hostPath:
             path: /opt/app/frontend/c1-client
