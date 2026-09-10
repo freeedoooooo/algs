@@ -121,12 +121,12 @@ data:
 ```yaml
 # values.yaml（默认配置）
 
-namespace: c1-idc-test
+namespace: c1-ns-test
 
 config:
   C1_ENV: "idc-test-c1"
   DB_URL: "jdbc:mysql://10.0.6.161:3306/..."
-  REDIS_HOST: "redis.c1-idc-test.svc.cluster.local"
+  REDIS_HOST: "redis.c1-ns-test.svc.cluster.local"
   ...
 ```
 
@@ -196,7 +196,7 @@ helm list
 helm template dib-test . --values values-test.yaml
 
 # 查看 K8s 资源
-kubectl -n c1-idc-test get pods
+kubectl -n c1-ns-test get pods
 ```
 
 ---
@@ -294,7 +294,7 @@ helm rollback dib-prod 1
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `namespace` | K8s 命名空间 | `c1-idc-test` |
+| `namespace` | K8s 命名空间 | `c1-ns-test` |
 | `imageRegistry` | 镜像仓库地址 | `10.0.6.183:8088` |
 | `image.tag` | 默认镜像版本 | `latest` |
 | `imagePullPolicy` | 镜像拉取策略 | `Always` |
@@ -371,7 +371,7 @@ services:
 
 ```bash
 # 正确做法：先清理 kubectl 部署的资源
-kubectl delete namespace c1-idc-test
+kubectl delete namespace c1-ns-test
 
 # 然后用 Helm 重新部署
 helm install dib-test . --values values-test.yaml
@@ -390,7 +390,7 @@ helm install dib-test . --values values-test.yaml
 
 values.yaml（默认值）          values-prod.yaml（覆盖值）
 ┌────────────────────┐         ┌────────────────────┐
-│ namespace: c1-idc-test│       │ namespace: c1-idc-prod│
+│ namespace: c1-ns-test│       │ namespace: c1-idc-prod│
 │ image.tag: latest    │  +    │ image.tag: v2.0.0    │
 │ nacos.image: ...     │       │ (没有 nacos 配置)     │
 │ redis.storage: 2Gi   │       │ (没有 redis 配置)     │
