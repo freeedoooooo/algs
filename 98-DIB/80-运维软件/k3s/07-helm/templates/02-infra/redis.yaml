@@ -64,11 +64,11 @@ spec:
               value: "Asia/Shanghai"
           resources:
             requests:
-              cpu: "50m"
-              memory: "256Mi"
+              cpu: "100m"
+              memory: "1Gi"
             limits:
-              cpu: "200m"
-              memory: "768Mi"
+              cpu: "300m"
+              memory: "3Gi"
           volumeMounts:
             - name: redis-data
               mountPath: /data

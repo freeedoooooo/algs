@@ -85,7 +85,7 @@ nacos:
 redis:
   image: "redis:7.0"
   storage: 2Gi
-  maxmemory: "512mb"
+  maxmemory: "2g"
   serviceType: NodePort
   nodePort: 30379
 

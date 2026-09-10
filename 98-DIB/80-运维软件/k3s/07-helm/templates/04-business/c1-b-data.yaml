@@ -35,11 +35,11 @@ spec:
                 name: c1-common-config
           resources:
             requests:
-              cpu: "500m"
+              cpu: "250m"
               memory: "2Gi"
             limits:
-              cpu: "1500m"
-              memory: "6Gi"
+              cpu: "1300m"
+              memory: "4Gi"
           volumeMounts:
             - name: app-logs
               mountPath: /opt/app/logs
