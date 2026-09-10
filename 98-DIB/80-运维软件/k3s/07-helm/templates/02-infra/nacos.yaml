@@ -103,7 +103,6 @@ spec:
             httpGet:
               path: /nacos/actuator/health
               port: 8848
-            initialDelaySeconds: 30
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 5
@@ -111,7 +110,6 @@ spec:
             httpGet:
               path: /nacos/actuator/health
               port: 8848
-            initialDelaySeconds: 20
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3

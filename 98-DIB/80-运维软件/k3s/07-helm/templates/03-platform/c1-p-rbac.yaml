@@ -60,7 +60,6 @@ spec:
             httpGet:
               path: {{ .Values.services.c1_p_rbac.healthPath }}
               port: 20001
-            initialDelaySeconds: 60
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 5
@@ -68,7 +67,6 @@ spec:
             httpGet:
               path: {{ .Values.services.c1_p_rbac.healthPath }}
               port: 20001
-            initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
