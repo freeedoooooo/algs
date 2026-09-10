@@ -55,7 +55,7 @@ spec:
             initialDelaySeconds: 60
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 30
+            failureThreshold: 10
           livenessProbe:
             httpGet:
               path: {{ .Values.services.c1_p_mdm.healthPath }}

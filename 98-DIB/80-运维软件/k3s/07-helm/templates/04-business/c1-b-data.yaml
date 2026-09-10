@@ -38,7 +38,7 @@ spec:
               cpu: "250m"
               memory: "2Gi"
             limits:
-              cpu: "1300m"
+              cpu: "2000m"
               memory: "4Gi"
           volumeMounts:
             - name: app-logs
@@ -46,11 +46,18 @@ spec:
             - name: fonts
               mountPath: /usr/share/fonts
               readOnly: true
-          livenessProbe:
+          startupProbe:
             httpGet:
               path: {{ .Values.services.c1_b_data.healthPath }}
               port: 30003
             initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.services.c1_b_data.healthPath }}
+              port: 30003
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 5
@@ -58,7 +65,6 @@ spec:
             httpGet:
               path: {{ .Values.services.c1_b_data.healthPath }}
               port: 30003
-            initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
