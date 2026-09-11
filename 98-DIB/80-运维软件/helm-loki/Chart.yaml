@@ -1,0 +1,45 @@
+apiVersion: v2
+name: c1-loki-stack
+description: DIB 日志系统 — 基于 Grafana 官方 Helm Chart 的最佳实践部署（Loki + Promtail + Grafana）
+type: application
+version: 1.0.0
+appVersion: "3.3.2"
+
+# ============================================================
+# Umbrella Chart：依赖 Grafana 官方 Chart，复用官方最佳实践
+# ------------------------------------------------------------
+# 好处：无需手写 templates —— __path__ 精确拼接、CRI 解析、
+#       标签提取、探针、存储/schema/retention 等官方 Chart 已内置。
+#
+# 在线拉取依赖： helm dependency update .
+# 离线使用：     在有网机器上 helm pull 后，将 .tgz 放入 charts/ 目录
+#
+# ✅ 版本号已核对（chart 版本 → 默认 appVersion，详见下方各依赖注释）
+#    helm search repo grafana/loki     --versions
+#    helm search repo grafana/promtail --versions
+#    helm search repo grafana/grafana  --versions
+#
+# ⚠️ 官方变更（重要，影响后续升级）：
+#    1) Loki OSS chart 自 2026-03 起迁移到 grafana-community/helm-charts，
+#       grafana/loki 转为企业版(GEL)专用；本 chart 锁定的 6.24.0 旧仓库仍可拉取。
+#    2) Promtail 已 EOL(2026-03)，官方替代品为 Grafana Alloy(grafana/alloy)；
+#       离线环境已有 promtail 镜像可继续沿用，新建集群建议评估迁移 Alloy。
+# ============================================================
+dependencies:
+  # ---------- Loki：日志存储（官方 chart，SingleBinary 模式）----------
+  - name: loki
+    version: "6.24.0"                          # ✅ 已核对：chart 6.24.0 → appVersion 3.3.2（与 values 锁定 tag 完全一致）
+    repository: "https://grafana.github.io/helm-charts"
+    condition: loki.enabled
+
+  # ---------- Promtail：日志采集（官方 chart，DaemonSet）----------
+  - name: promtail
+    version: "6.16.6"                          # ⚠️ 已核对：chart 6.16.6 默认 appVersion 3.0.0；values 已锁镜像 3.3.2（3.x 配置向后兼容，无 chart 精确对应 3.3.2）
+    repository: "https://grafana.github.io/helm-charts"
+    condition: promtail.enabled
+
+  # ---------- Grafana：可视化（官方 chart，可选）----------
+  - name: grafana
+    version: "8.7.1"                           # ✅ 已核对：chart 8.7.1 → appVersion 11.4.0（与 values 锁定 tag 一致；原 8.6.4 对应 11.3.1，已修正）
+    repository: "https://grafana.github.io/helm-charts"
+    condition: grafana.enabled

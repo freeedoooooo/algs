@@ -1,0 +1,243 @@
+# ============================================================
+# DIB 日志系统（官方 Chart 版）— 关键配置覆盖
+# ============================================================
+# 本文件只覆盖【离线环境的差异项】，其余全部沿用官方 Chart 默认值。
+# 需要查看/覆盖更多配置时：
+#   helm show values grafana/loki     --version <ver>
+#   helm show values grafana/promtail --version <ver>
+#   helm show values grafana/grafana  --version <ver>
+#
+# ✅ 已用 helm template 实测校准（锁定版本 loki 6.24.0 / promtail 6.16.6 / grafana 8.7.1）：
+#   渲染 947 行、3 镜像全指向私有仓库、service c1-loki:3100 命中、无 validate 报错。
+#   已修复 5 处离线部署阻断项（见 README「部署前校准」第 5 节）：
+#     ① SingleBinary 归零 read/write/backend 副本  ② loki 镜像放内层 loki.loki.image
+#     ③ 关 sidecar.rules(kiwigrid) ④ 关 initChownData(busybox) ⑤ 关 testFramework(bats)
+#   ⚠️ 升级 chart 版本时 key 可能漂移，需重新 helm template 核对。
+# ============================================================
+
+# ============================================================
+# Loki —— 官方 grafana/loki chart
+# ============================================================
+loki:
+  enabled: true
+  fullnameOverride: c1-loki          # 固定资源名，便于 promtail/grafana 拼接地址
+
+  # 部署模式：SingleBinary（monolithic，K3s / 小规模最佳实践）
+  deploymentMode: SingleBinary
+
+  # ⚠️ SingleBinary 模式必须显式把 simple-scalable 三目标副本置 0：
+  #    chart 默认 read/write/backend 各 3 副本，与 singleBinary.replicas>0 并存会
+  #    触发官方 validate.yaml 直接报错（helm install 失败）：
+  #    "more than zero replicas configured for both the single binary and simple scalable targets"
+  read:
+    replicas: 0
+  write:
+    replicas: 0
+  backend:
+    replicas: 0
+
+  loki:
+    # ⭐ 镜像必须放在这个「内层 loki 块」：chart helper(loki.lokiImage) 读取的是 .Values.loki.image，
+    #    而不是根级 loki.image。放错位置 registry 不生效，镜像会回退 docker.io 导致离线拉取失败。
+    image:
+      registry: 10.0.6.183:8088        # 私有镜像仓库
+      repository: grafana/loki
+      tag: 3.3.2
+    auth:
+      enabled: false                 # 关闭多租户鉴权（集群内部使用）
+    commonConfig:
+      replication_factor: 1            # ⚠️ 必须 snake_case！commonConfig 直接透传到 Loki config.yaml，camelCase 会报 "field replicationFactor not found"
+    storage:
+      type: filesystem               # 单机 PVC 文件系统存储
+    schemaConfig:
+      configs:
+        - from: "2024-01-01"
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index:
+            prefix: index_
+            period: 24h
+    limits_config:
+      retention_period: 168h         # 日志保留 7 天
+      reject_old_samples: true
+      reject_old_samples_max_age: 168h
+    compactor:
+      retention_enabled: true        # 启用过期日志清理
+      delete_request_store: filesystem
+
+  # SingleBinary 实例
+  singleBinary:
+    replicas: 1
+    # 容忍 master 污点：master 带 NoSchedule 污点时，不加 tolerations 会一直 Pending
+    tolerations:
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+    persistence:
+      enabled: true
+      size: 10Gi
+      # storageClass: local-path     # K3s 默认 local-path，留空即用默认 SC
+    nodeSelector:
+      node-name: master-6.183        # 调度到指定节点
+
+  # 关闭小规模用不到的组件，节省资源
+  gateway:
+    enabled: false                   # 直连 Loki 3100，不经 nginx 网关
+  # 关闭规则 sidecar：否则 singleBinary pod 会多一个 kiwigrid/k8s-sidecar:1.28.0 容器，
+  # 该镜像走 docker.io，离线环境无此镜像会 ImagePullBackOff（本项目未用 recording/alerting 规则）
+  sidecar:
+    rules:
+      enabled: false
+  chunksCache:
+    enabled: false
+  resultsCache:
+    enabled: false
+  lokiCanary:
+    enabled: false
+  test:
+    enabled: false
+  monitoring:
+    selfMonitoring:
+      enabled: false
+      grafanaAgent:
+        installOperator: false
+    lokiCanary:
+      enabled: false
+
+# ============================================================
+# Promtail —— 官方 grafana/promtail chart
+# ============================================================
+# ⭐ 官方 chart 默认已内置正确的 kubernetes-pods 采集：
+#    - kubernetes_sd_configs 自动发现 Pod
+#    - relabel 提取 namespace/pod/container/node 标签
+#    - __path__ 用 pod_uid + container_name 精确拼接（你手写折腾的那套，官方默认就有）
+promtail:
+  enabled: true
+  fullnameOverride: c1-promtail
+
+  image:
+    registry: 10.0.6.183:8088
+    repository: grafana/promtail
+    tag: 3.3.2
+
+  config:
+    # 推送到 Loki（⚠️ 部署后 kubectl -n c1-ns-log get svc 核对 service 名与端口）
+    clients:
+      - url: http://c1-loki:3100/loki/api/v1/push
+        tenant_id: fake              # Loki 3.x 要求 X-Scope-OrgID 头，设 fake 即可（与 Grafana 数据源一致）
+    snippets:
+      # 注入到 kubernetes-pods job 的 pipeline_stages
+      pipelineStages:
+        - cri: {}                    # ① 解析 containerd CRI 格式（剥离 时间戳/stdout/F 前缀）
+        - multiline:                 # ② 合并 Java 异常堆栈（以 logback 时间戳开头算新的一条）
+            firstline: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}'
+            max_wait_time: 3s
+            max_lines: 500
+        - regex:                     # ③ 提取日志级别
+            expression: '^\S+\s+(?P<level>INFO|WARN|ERROR|DEBUG|TRACE)\s'
+        - labels:                    #    提升为 Loki 标签，便于按 level 过滤
+            level:
+      # 额外 relabel：排除 promtail 自身 pod，避免采集自己的日志形成反馈循环
+      # （官方 chart 默认 kubernetes_sd_configs 会采集所有 pod，包括 promtail DaemonSet 自身）
+      extraRelabelConfigs:
+        - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+          regex: promtail
+          action: drop
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+  # 容忍 master 污点，确保所有节点都采集
+  tolerations:
+    - key: node-role.kubernetes.io/master
+      operator: Exists
+      effect: NoSchedule
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+
+# ============================================================
+# Grafana —— 官方 grafana/grafana chart
+# ============================================================
+grafana:
+  enabled: true
+  fullnameOverride: c1-grafana
+
+  image:
+    registry: 10.0.6.183:8088
+    repository: grafana/grafana
+    tag: 11.4.0
+
+  # 关闭 initChown：其默认镜像 docker.io/library/busybox:1.31.1 离线拉不到；
+  # grafana pod 已带 fsGroup:472 + runAsUser:472，可直接写 local-path PVC（Grafana 官方镜像默认 472 用户）
+  initChownData:
+    enabled: false
+  # 关闭 helm test 框架：其 bats 镜像 docker.io/bats/bats 离线拉不到（仅 helm test 时用，install 不需要）
+  testFramework:
+    enabled: false
+
+  adminPassword: "admin123"          # 首次登录后建议修改
+  service:
+    type: NodePort
+    nodePort: 30300
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  persistence:
+    enabled: true
+    size: 2Gi
+  nodeSelector:
+    node-name: master-6.183
+  # 容忍 master 污点：与 Loki 一致，否则 Grafana 也会 Pending 调度不上 master
+  tolerations:
+    - key: node-role.kubernetes.io/master
+      operator: Exists
+      effect: NoSchedule
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+
+  # 自动配置数据源（⚠️ url 需与对应 service 名一致）
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        # ---------- Loki 日志数据源 ----------
+        - name: Loki
+          type: loki
+          url: http://c1-loki:3100
+          access: proxy
+          isDefault: true
+          # Loki 3.x 即使 auth.enabled=false，API 仍要求 X-Scope-OrgID 请求头（租户 ID）
+          # 缺了会报 "no org id"。设为 "fake" 即可（单租户模式标准做法）
+          jsonData:
+            httpHeaderName1: "X-Scope-OrgID"
+          secureJsonData:
+            httpHeaderValue1: "fake"
+        # ---------- Prometheus 指标数据源（由 helm-prometheus 部署）----------
+        # ⚠️ helm-prometheus 部署后此数据源才可用；同一 namespace 可省略 namespace 后缀
+        - name: Prometheus
+          type: prometheus
+          url: http://c1-prometheus:9090
+          access: proxy
+          isDefault: false

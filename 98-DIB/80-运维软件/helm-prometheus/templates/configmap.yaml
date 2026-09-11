@@ -1,0 +1,80 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: c1-prometheus-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: c1-prometheus
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      scrape_timeout: 10s
+
+    scrape_configs:
+      # ===== Prometheus 自身监控 =====
+      - job_name: prometheus
+        static_configs:
+          - targets: ["localhost:9090"]
+
+      # ===== Spring Boot Actuator 自动发现 =====
+      # Pod 加注解即可被采集：
+      #   prometheus.io/scrape: "true"
+      #   prometheus.io/port: "8080"          (可选)
+      #   prometheus.io/path: "/actuator/prometheus"  (可选)
+      - job_name: spring-boot
+        metrics_path: /actuator/prometheus
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                {{- range .Values.scrapeNamespaces }}
+                - {{ . }}
+                {{- end }}
+        relabel_configs:
+          # 只采集带 prometheus.io/scrape=true 注解的 Pod
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          # 支持自定义 path
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          # 支持自定义 port
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          # 提取常用标签
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          # 微服务 Pod 标签用的是 app: c1-p-xxx（不是 app.kubernetes.io/name）
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
+          # instance 用 Pod 名（比 IP 可读性好，重启后变名是正常的）
+          # Dashboard 聚合查询用 app 标签：sum(rate(xxx{app="c1-p-mdm"}[5m]))
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: instance
+
+      {{- if .Values.nodeExporter.enabled }}
+      # ===== Node Exporter（节点指标）=====
+      - job_name: node-exporter
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - action: replace
+            source_labels: [__address__]
+            regex: (.+):.+
+            replacement: ${1}:{{ .Values.nodeExporter.port }}
+            target_label: __address__
+          # 补充 namespace 和 instance 标签，方便 Dashboard 筛选
+          - source_labels: [__meta_kubernetes_node_name]
+            target_label: instance
+          - target_label: namespace
+            replacement: {{ .Release.Namespace }}
+      {{- end }}

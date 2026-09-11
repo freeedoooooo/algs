@@ -1,33 +1,34 @@
-# c1-p-gateway — API 网关
+# c1-b-rule — 规则引擎
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: c1-p-gateway
+  name: c1-b-rule
   namespace: {{ .Values.namespace }}
   labels:
-    app: c1-p-gateway
-    tier: platform
+    app: c1-b-rule
+    tier: business
 spec:
-  replicas: {{ .Values.services.c1_p_gateway.replicas }}
-  strategy:
-    type: RollingUpdate
+  replicas: {{ .Values.services.c1_b_rule.replicas }}
   selector:
     matchLabels:
-      app: c1-p-gateway
+      app: c1-b-rule
   template:
     metadata:
       labels:
-        app: c1-p-gateway
-        tier: platform
+        app: c1-b-rule
+        tier: business
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/api/rule/actuator/prometheus"
     spec:
       nodeSelector:
         node-name: {{ .Values.nodeName }}
       containers:
-        - name: c1-p-gateway
-          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1_p_gateway.image }}:{{ .Values.image.tag }}
+        - name: c1-b-rule
+          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1_b_rule.image }}:{{ .Values.image.tag }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           ports:
-            - containerPort: 20000
+            - containerPort: 30004
               protocol: TCP
           env:
             - name: TZ
@@ -37,11 +38,11 @@ spec:
                 name: c1-configmap-common
           resources:
             requests:
-              cpu: "100m"
-              memory: "512Mi"
-            limits:
-              cpu: "500m"
+              cpu: "250m"
               memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
           volumeMounts:
             - name: app-logs
               mountPath: /opt/app/logs
@@ -50,23 +51,23 @@ spec:
               readOnly: true
           startupProbe:
             httpGet:
-              path: {{ .Values.services.c1_p_gateway.healthPath }}
-              port: 20000
+              path: {{ .Values.services.c1_b_rule.healthPath }}
+              port: 30004
             initialDelaySeconds: 60
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 10
           livenessProbe:
             httpGet:
-              path: {{ .Values.services.c1_p_gateway.healthPath }}
-              port: 20000
+              path: {{ .Values.services.c1_b_rule.healthPath }}
+              port: 30004
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 5
           readinessProbe:
             httpGet:
-              path: {{ .Values.services.c1_p_gateway.healthPath }}
-              port: 20000
+              path: {{ .Values.services.c1_b_rule.healthPath }}
+              port: 30004
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
@@ -81,19 +82,19 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: c1-p-gateway
+  name: c1-b-rule
   namespace: {{ .Values.namespace }}
   labels:
-    app: c1-p-gateway
+    app: c1-b-rule
 spec:
-  type: {{ .Values.services.c1_p_gateway.serviceType }}
+  type: {{ .Values.services.c1_b_rule.serviceType }}
   ports:
     - name: http
-      port: 20000
-      targetPort: 20000
+      port: 30004
+      targetPort: 30004
       protocol: TCP
-      {{- if eq .Values.services.c1_p_gateway.serviceType "NodePort" }}
-      nodePort: {{ .Values.services.c1_p_gateway.nodePort }}
+      {{- if eq .Values.services.c1_b_rule.serviceType "NodePort" }}
+      nodePort: {{ .Values.services.c1_b_rule.nodePort }}
       {{- end }}
   selector:
-    app: c1-p-gateway
+    app: c1-b-rule

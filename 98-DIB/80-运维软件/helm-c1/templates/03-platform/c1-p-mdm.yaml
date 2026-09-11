@@ -1,33 +1,36 @@
-# c1-p-rbac — 权限资源管理
+# c1-p-mdm — 主数据管理
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: c1-p-rbac
+  name: c1-p-mdm
   namespace: {{ .Values.namespace }}
   labels:
-    app: c1-p-rbac
+    app: c1-p-mdm
     tier: platform
 spec:
-  replicas: {{ .Values.services.c1_p_rbac.replicas }}
+  replicas: {{ .Values.services.c1_p_mdm.replicas }}
   strategy:
     type: RollingUpdate
   selector:
     matchLabels:
-      app: c1-p-rbac
+      app: c1-p-mdm
   template:
     metadata:
       labels:
-        app: c1-p-rbac
+        app: c1-p-mdm
         tier: platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/api/mdm/actuator/prometheus"
     spec:
       nodeSelector:
         node-name: {{ .Values.nodeName }}
       containers:
-        - name: c1-p-rbac
-          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1_p_rbac.image }}:{{ .Values.image.tag }}
+        - name: c1-p-mdm
+          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1_p_mdm.image }}:{{ .Values.image.tag }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           ports:
-            - containerPort: 20001
+            - containerPort: 20002
               protocol: TCP
           env:
             - name: TZ
@@ -50,23 +53,23 @@ spec:
               readOnly: true
           startupProbe:
             httpGet:
-              path: {{ .Values.services.c1_p_rbac.healthPath }}
-              port: 20001
+              path: {{ .Values.services.c1_p_mdm.healthPath }}
+              port: 20002
             initialDelaySeconds: 60
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 10
           livenessProbe:
             httpGet:
-              path: {{ .Values.services.c1_p_rbac.healthPath }}
-              port: 20001
+              path: {{ .Values.services.c1_p_mdm.healthPath }}
+              port: 20002
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 5
           readinessProbe:
             httpGet:
-              path: {{ .Values.services.c1_p_rbac.healthPath }}
-              port: 20001
+              path: {{ .Values.services.c1_p_mdm.healthPath }}
+              port: 20002
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
@@ -81,19 +84,19 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: c1-p-rbac
+  name: c1-p-mdm
   namespace: {{ .Values.namespace }}
   labels:
-    app: c1-p-rbac
+    app: c1-p-mdm
 spec:
-  type: {{ .Values.services.c1_p_rbac.serviceType }}
+  type: {{ .Values.services.c1_p_mdm.serviceType }}
   ports:
     - name: http
-      port: 20001
-      targetPort: 20001
+      port: 20002
+      targetPort: 20002
       protocol: TCP
-      {{- if eq .Values.services.c1_p_rbac.serviceType "NodePort" }}
-      nodePort: {{ .Values.services.c1_p_rbac.nodePort }}
+      {{- if eq .Values.services.c1_p_mdm.serviceType "NodePort" }}
+      nodePort: {{ .Values.services.c1_p_mdm.nodePort }}
       {{- end }}
   selector:
-    app: c1-p-rbac
+    app: c1-p-mdm

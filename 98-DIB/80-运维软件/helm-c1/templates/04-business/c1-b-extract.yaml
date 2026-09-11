@@ -17,6 +17,9 @@ spec:
       labels:
         app: c1-b-extract
         tier: business
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/api/extract/actuator/prometheus"
     spec:
       nodeSelector:
         node-name: {{ .Values.nodeName }}

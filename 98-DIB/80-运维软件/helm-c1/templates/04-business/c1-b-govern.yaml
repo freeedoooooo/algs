@@ -1,31 +1,34 @@
-# c1-b-report — 报告生成
+# c1-b-govern — 数据治理
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: c1-b-report
+  name: c1-b-govern
   namespace: {{ .Values.namespace }}
   labels:
-    app: c1-b-report
+    app: c1-b-govern
     tier: business
 spec:
-  replicas: {{ .Values.services.c1_b_report.replicas }}
+  replicas: {{ .Values.services.c1_b_govern.replicas }}
   selector:
     matchLabels:
-      app: c1-b-report
+      app: c1-b-govern
   template:
     metadata:
       labels:
-        app: c1-b-report
+        app: c1-b-govern
         tier: business
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/api/dg/actuator/prometheus"
     spec:
       nodeSelector:
         node-name: {{ .Values.nodeName }}
       containers:
-        - name: c1-b-report
-          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1_b_report.image }}:{{ .Values.image.tag }}
+        - name: c1-b-govern
+          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1_b_govern.image }}:{{ .Values.image.tag }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           ports:
-            - containerPort: 30002
+            - containerPort: 30005
               protocol: TCP
           env:
             - name: TZ
@@ -36,44 +39,40 @@ spec:
           resources:
             requests:
               cpu: "250m"
-              memory: "1536Mi"
+              memory: "512Mi"
             limits:
               cpu: "2000m"
-              memory: "3Gi"
+              memory: "1Gi"
           volumeMounts:
             - name: app-logs
               mountPath: /opt/app/logs
-            - name: app-tmp
-              mountPath: /opt/app/tmp
             - name: fonts
               mountPath: /usr/share/fonts
               readOnly: true
           startupProbe:
             httpGet:
-              path: {{ .Values.services.c1_b_report.healthPath }}
-              port: 30002
+              path: {{ .Values.services.c1_b_govern.healthPath }}
+              port: 30005
             initialDelaySeconds: 60
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 10
           livenessProbe:
             httpGet:
-              path: {{ .Values.services.c1_b_report.healthPath }}
-              port: 30002
+              path: {{ .Values.services.c1_b_govern.healthPath }}
+              port: 30005
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 5
           readinessProbe:
             httpGet:
-              path: {{ .Values.services.c1_b_report.healthPath }}
-              port: 30002
+              path: {{ .Values.services.c1_b_govern.healthPath }}
+              port: 30005
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
       volumes:
         - name: app-logs
-          emptyDir: {}
-        - name: app-tmp
           emptyDir: {}
         - name: fonts
           hostPath:
@@ -83,19 +82,19 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: c1-b-report
+  name: c1-b-govern
   namespace: {{ .Values.namespace }}
   labels:
-    app: c1-b-report
+    app: c1-b-govern
 spec:
-  type: {{ .Values.services.c1_b_report.serviceType }}
+  type: {{ .Values.services.c1_b_govern.serviceType }}
   ports:
     - name: http
-      port: 30002
-      targetPort: 30002
+      port: 30005
+      targetPort: 30005
       protocol: TCP
-      {{- if eq .Values.services.c1_b_report.serviceType "NodePort" }}
-      nodePort: {{ .Values.services.c1_b_report.nodePort }}
+      {{- if eq .Values.services.c1_b_govern.serviceType "NodePort" }}
+      nodePort: {{ .Values.services.c1_b_govern.nodePort }}
       {{- end }}
   selector:
-    app: c1-b-report
+    app: c1-b-govern

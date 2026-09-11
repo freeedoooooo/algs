@@ -1,33 +1,36 @@
-# c1-p-mdm — 主数据管理
+# c1-p-oauth — OAuth2 认证中心
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: c1-p-mdm
+  name: c1-p-oauth
   namespace: {{ .Values.namespace }}
   labels:
-    app: c1-p-mdm
+    app: c1-p-oauth
     tier: platform
 spec:
-  replicas: {{ .Values.services.c1_p_mdm.replicas }}
+  replicas: {{ .Values.services.c1_p_oauth.replicas }}
   strategy:
     type: RollingUpdate
   selector:
     matchLabels:
-      app: c1-p-mdm
+      app: c1-p-oauth
   template:
     metadata:
       labels:
-        app: c1-p-mdm
+        app: c1-p-oauth
         tier: platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/sso/actuator/prometheus"
     spec:
       nodeSelector:
         node-name: {{ .Values.nodeName }}
       containers:
-        - name: c1-p-mdm
-          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1_p_mdm.image }}:{{ .Values.image.tag }}
+        - name: c1-p-oauth
+          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1_p_oauth.image }}:{{ .Values.image.tag }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           ports:
-            - containerPort: 20002
+            - containerPort: 9090
               protocol: TCP
           env:
             - name: TZ
@@ -50,23 +53,23 @@ spec:
               readOnly: true
           startupProbe:
             httpGet:
-              path: {{ .Values.services.c1_p_mdm.healthPath }}
-              port: 20002
+              path: {{ .Values.services.c1_p_oauth.healthPath }}
+              port: 9090
             initialDelaySeconds: 60
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 10
           livenessProbe:
             httpGet:
-              path: {{ .Values.services.c1_p_mdm.healthPath }}
-              port: 20002
+              path: {{ .Values.services.c1_p_oauth.healthPath }}
+              port: 9090
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 5
           readinessProbe:
             httpGet:
-              path: {{ .Values.services.c1_p_mdm.healthPath }}
-              port: 20002
+              path: {{ .Values.services.c1_p_oauth.healthPath }}
+              port: 9090
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
@@ -81,19 +84,19 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: c1-p-mdm
+  name: c1-p-oauth
   namespace: {{ .Values.namespace }}
   labels:
-    app: c1-p-mdm
+    app: c1-p-oauth
 spec:
-  type: {{ .Values.services.c1_p_mdm.serviceType }}
+  type: {{ .Values.services.c1_p_oauth.serviceType }}
   ports:
     - name: http
-      port: 20002
-      targetPort: 20002
+      port: 9090
+      targetPort: 9090
       protocol: TCP
-      {{- if eq .Values.services.c1_p_mdm.serviceType "NodePort" }}
-      nodePort: {{ .Values.services.c1_p_mdm.nodePort }}
+      {{- if eq .Values.services.c1_p_oauth.serviceType "NodePort" }}
+      nodePort: {{ .Values.services.c1_p_oauth.nodePort }}
       {{- end }}
   selector:
-    app: c1-p-mdm
+    app: c1-p-oauth

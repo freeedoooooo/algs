@@ -1,31 +1,36 @@
-# c1-b-rule — 规则引擎
+# c1-p-rbac — 权限资源管理
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: c1-b-rule
+  name: c1-p-rbac
   namespace: {{ .Values.namespace }}
   labels:
-    app: c1-b-rule
-    tier: business
+    app: c1-p-rbac
+    tier: platform
 spec:
-  replicas: {{ .Values.services.c1_b_rule.replicas }}
+  replicas: {{ .Values.services.c1_p_rbac.replicas }}
+  strategy:
+    type: RollingUpdate
   selector:
     matchLabels:
-      app: c1-b-rule
+      app: c1-p-rbac
   template:
     metadata:
       labels:
-        app: c1-b-rule
-        tier: business
+        app: c1-p-rbac
+        tier: platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/api/auth/actuator/prometheus"
     spec:
       nodeSelector:
         node-name: {{ .Values.nodeName }}
       containers:
-        - name: c1-b-rule
-          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1_b_rule.image }}:{{ .Values.image.tag }}
+        - name: c1-p-rbac
+          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1_p_rbac.image }}:{{ .Values.image.tag }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           ports:
-            - containerPort: 30004
+            - containerPort: 20001
               protocol: TCP
           env:
             - name: TZ
@@ -35,11 +40,11 @@ spec:
                 name: c1-configmap-common
           resources:
             requests:
-              cpu: "250m"
-              memory: "1Gi"
+              cpu: "100m"
+              memory: "512Mi"
             limits:
-              cpu: "2000m"
-              memory: "2Gi"
+              cpu: "500m"
+              memory: "1Gi"
           volumeMounts:
             - name: app-logs
               mountPath: /opt/app/logs
@@ -48,23 +53,23 @@ spec:
               readOnly: true
           startupProbe:
             httpGet:
-              path: {{ .Values.services.c1_b_rule.healthPath }}
-              port: 30004
+              path: {{ .Values.services.c1_p_rbac.healthPath }}
+              port: 20001
             initialDelaySeconds: 60
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 10
           livenessProbe:
             httpGet:
-              path: {{ .Values.services.c1_b_rule.healthPath }}
-              port: 30004
+              path: {{ .Values.services.c1_p_rbac.healthPath }}
+              port: 20001
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 5
           readinessProbe:
             httpGet:
-              path: {{ .Values.services.c1_b_rule.healthPath }}
-              port: 30004
+              path: {{ .Values.services.c1_p_rbac.healthPath }}
+              port: 20001
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
@@ -79,19 +84,19 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: c1-b-rule
+  name: c1-p-rbac
   namespace: {{ .Values.namespace }}
   labels:
-    app: c1-b-rule
+    app: c1-p-rbac
 spec:
-  type: {{ .Values.services.c1_b_rule.serviceType }}
+  type: {{ .Values.services.c1_p_rbac.serviceType }}
   ports:
     - name: http
-      port: 30004
-      targetPort: 30004
+      port: 20001
+      targetPort: 20001
       protocol: TCP
-      {{- if eq .Values.services.c1_b_rule.serviceType "NodePort" }}
-      nodePort: {{ .Values.services.c1_b_rule.nodePort }}
+      {{- if eq .Values.services.c1_p_rbac.serviceType "NodePort" }}
+      nodePort: {{ .Values.services.c1_p_rbac.nodePort }}
       {{- end }}
   selector:
-    app: c1-b-rule
+    app: c1-p-rbac

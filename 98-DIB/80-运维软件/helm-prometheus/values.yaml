@@ -1,0 +1,55 @@
+# ============================================================
+# DIB 监控系统（裸装 Prometheus）— 配置
+# ============================================================
+# 轻量方案：无 Operator、无 CRD，直接 ConfigMap 管理采集规则
+# 微服务只需加 Pod 注解即可被自动发现：
+#   prometheus.io/scrape: "true"
+#   prometheus.io/port: "8080"          (可选)
+#   prometheus.io/path: "/actuator/prometheus"  (可选)
+# ============================================================
+
+# ---------- Prometheus Server 镜像 ----------
+image:
+  registry: 10.0.6.183:8088
+  repository: prometheus/prometheus
+  tag: v2.55.0
+
+# ---------- 数据保留 ----------
+retention: 7d                             # TSDB 保留时间
+storage: 10Gi                             # PVC 大小
+
+# ---------- 资源限制 ----------
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+# ---------- 调度 ----------
+nodeSelector:
+  node-name: master-6.183
+
+tolerations:
+  - key: node-role.kubernetes.io/master
+    operator: Exists
+    effect: NoSchedule
+  - key: node-role.kubernetes.io/control-plane
+    operator: Exists
+    effect: NoSchedule
+
+# ---------- 采集 namespace 列表 ----------
+# Spring Boot actuator 自动发现只扫描这些 namespace 的 Pod
+scrapeNamespaces:
+  - c1-ns-test                            # 业务 namespace
+  - c1-ns-log                             # 日志/监控系统自身
+
+# ---------- Node Exporter（节点指标采集）----------
+nodeExporter:
+  enabled: true
+  port: 9100
+  image:
+    registry: 10.0.6.183:8088
+    repository: prometheus/node-exporter
+    tag: v1.8.2

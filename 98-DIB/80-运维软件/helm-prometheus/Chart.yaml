@@ -1,0 +1,18 @@
+apiVersion: v2
+name: c1-prometheus
+description: DIB 监控系统 — 裸装 Prometheus（无 Operator、无 CRD），轻量适合小团队
+type: application
+version: 1.0.0
+appVersion: "2.55.0"
+
+# ============================================================
+# 裸装 Prometheus：直接手写 templates，不依赖任何子 chart
+# ------------------------------------------------------------
+# 优势：
+#   - 仅 2 个镜像（prometheus + node-exporter）
+#   - 无 CRD、无 Operator，排查问题直接看 ConfigMap
+#   - ~300 行 YAML，资源占用 ~300Mi
+#
+# 自动发现：kubernetes_sd_configs + pod annotation，
+#   微服务只需加 prometheus.io/scrape: "true" 注解即可被采集。
+# ============================================================
