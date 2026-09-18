@@ -1,0 +1,74 @@
+# ============================================================
+# c1-frontend Helm Chart — test 环境（70 机器 / worker-5.70）
+# ============================================================
+# 说明: 完整独立配置，不依赖 values.yaml 默认值
+# 环境: 142=dev / 70=test(本文件) / 101=bank / 239=sh，四套同集群多节点
+# 用法: helm install c1-frontend . --values values-test.yaml --namespace c1-ns-test
+# NodePort 分段: 142→300xx / 70→301xx(本文件) / 101→302xx / 239→303xx
+# 注意: 同集群多环境，NodePort 全局唯一，test 网关对外用 30191（勿与 dev 30091 冲突）
+# ============================================================
+
+# ---------- 全局配置 ----------
+namespace: c1-ns-test
+
+# 镜像仓库地址
+imageRegistry: "10.0.6.183:8088"
+
+# 镜像版本（所有前端容器统一）—— 部署前请填写实际 tag
+image:
+  # fixme 改为 idc-test_latest
+  tag: idc-dev_latest
+
+# 镜像拉取策略
+imagePullPolicy: Always
+
+# 节点调度
+nodeName: worker-5.70
+
+
+# ============================================================
+# 第二层：微前端容器
+# ============================================================
+# 微前端容器默认资源（可在各 frontend 下用 resources 覆盖）
+frontendResources:
+  requests:
+    cpu: "20m"
+    memory: "32Mi"
+  limits:
+    cpu: "200m"
+    memory: "128Mi"
+
+# 所有容器共用相同的 nginx.conf 和 Dockerfile
+# 仅镜像名不同，端口统一为 80，serviceType 统一 ClusterIP
+frontends:
+
+  c1-app-portal:
+    image: "c1/c1-app-portal"
+    port: 80
+    replicas: 1
+
+  c1-app-data:
+    image: "c1/c1-app-data"
+    port: 80
+    replicas: 1
+
+  c1-app-nav:
+    image: "c1/c1-app-nav"
+    port: 80
+    replicas: 1
+
+  c1-app-report:
+    image: "c1/c1-app-report"
+    port: 80
+    replicas: 1
+
+  c1-app-system:
+    image: "c1/c1-app-system"
+    port: 80
+    replicas: 1
+
+  # BI 前端（如有独立容器化需求可启用）
+  # c1-app-bi:
+  #   image: "c1/c1-app-bi"
+  #   port: 80
+  #   replicas: 1

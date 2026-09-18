@@ -379,3 +379,147 @@ curl -X PUT http://localhost:8001/api/v1/namespaces/c1-ns-test/finalize \
 4. 将 Token 粘贴到 Kuboard 完成导入
 
 导入后可在 `c1-ns-test` 命名空间下直观查看所有工作负载状态、日志和资源使用情况。
+
+---
+
+## 磁盘空间不足（disk-pressure）排查与根治
+
+### 问题现象
+
+Pod 长时间 `Pending`，`kubectl describe pod` 的 Events 出现：
+
+```
+0/5 nodes are available: 1 node(s) had untolerated taint {node.kubernetes.io/disk-pressure: }.
+preemption: 0/5 nodes are available: 5 Preemption is not helpful for scheduling.
+```
+
+含义：某节点磁盘可用空间低于 kubelet 阈值（默认 nodefs 可用 <10% 或 imagefs 可用 <15%），kubelet 自动打上 `node.kubernetes.io/disk-pressure` 污点，调度器拒绝再往该节点放 Pod。由于本集群用 `nodeSelector: node-name=<节点>` 把工作负载钉在固定节点，一旦该节点磁盘满，Pod 就无处可调度（抢占也没用，因为拦路的是污点/磁盘，不是 CPU/内存）。
+
+### 根因
+
+K3s 默认把镜像和容器数据放在 `/var/lib/rancher/k3s`。如果该目录落在**容量很小的根分区 `/`**（如仅 24G），而节点上另有一块**大盘挂在 `/opt`**（如 295G）却没被 K3s 使用，那么：
+
+- 每次 Jenkins 构建推唯一时间戳镜像 + Deployment `imagePullPolicy: Always` → 节点不断拉新镜像；
+- 旧镜像从不清理、层层堆积 → 根分区很快被撑满。
+
+> 注意：若节点上还单独装了 Docker（数据在 `/opt/docker_lib`），`df` 里 Docker 的 overlay 在大盘上，但 **K3s 用的是自带 containerd**，其数据仍在根分区，二者互不相干，别被 Docker 的宽裕空间误导。
+
+### 诊断
+
+```bash
+# 1) 看各分区使用率，重点看 / 和 /var/lib/rancher/k3s 所在分区
+df -h
+
+# 2) 定位 K3s 数据目录占用
+du -h -d1 /var/lib/rancher/k3s 2>/dev/null | sort -h | tail
+du -h -d1 /var/lib/rancher/k3s/agent/containerd 2>/dev/null | sort -h | tail
+
+# 3) 确认节点角色（server=k3s.service / agent=k3s-agent.service）与运行时
+systemctl list-units --type=service | grep k3s
+ps -ef | grep -E "k3s server|k3s agent|k3s --docker" | grep -v grep
+
+# 4) 确认节点污点与磁盘压力状态
+kubectl describe node <节点名> | grep -iE "Taints|DiskPressure"
+```
+
+### 根治方案：把 K3s 数据目录迁到大盘（/opt）
+
+采用 **bind 挂载**：K3s 仍以为数据在 `/var/lib/rancher/k3s`，无需改启动参数，将来升级也不受影响。
+
+> ⚠️ 关键顺序（务必遵守，否则会踩坑）：
+> 1. **先停 K3s**，再迁数据；
+> 2. 迁完**必须清理 `/run/k3s` 下的残留 overlay 挂载**并 **reboot**——否则旧容器的 rootfs 仍挂在原根分区上继续写盘，根分区照样会被撑到 100%；
+> 3. `mv` 只是改名、**不会释放**根分区空间，真正的释放来自删除备份目录 `k3s.bak`（须在卸载残留挂载、确认大盘副本完好后再删）。
+
+多节点集群请**一台一台做**，先 `kubectl drain <节点>` 驱逐工作负载。
+
+```bash
+# 0)（多节点时）先驱逐该节点的 Pod
+kubectl drain <节点名> --ignore-daemonsets --delete-emptydir-data
+
+# 1) 停服务（server 用 k3s，agent 用 k3s-agent）
+systemctl stop k3s-agent
+
+# 2) 完整迁移数据到大盘（-aHAX 保留权限/硬链接/扩展属性，必须带）
+mkdir -p /opt/rancher/k3s
+rsync -aHAXx /var/lib/rancher/k3s/ /opt/rancher/k3s/
+
+# 3) 原目录改名备份，重建空挂载点
+mv /var/lib/rancher/k3s /var/lib/rancher/k3s.bak
+mkdir -p /var/lib/rancher/k3s
+
+# 4) 配置开机自动 bind 挂载
+#    x-systemd.requires-mounts-for=/opt 保证先挂 /opt 再 bind，避免重启进应急模式
+echo '/opt/rancher/k3s  /var/lib/rancher/k3s  none  bind,x-systemd.requires-mounts-for=/opt  0  0' >> /etc/fstab
+
+# 5) 立即挂载并核对
+mount -a
+df -h /var/lib/rancher/k3s     # 应显示大盘（如 /dev/mapper/optvg-optlv 295G）
+mount | grep '/var/lib/rancher/k3s'
+
+# 6) 清理迁移前遗留的容器 overlay 挂载（关键！）
+umount -R /run/k3s 2>/dev/null
+mount | grep '/run/k3s' | awk '{print $3}' | sort -r | xargs -r -n1 umount -l 2>/dev/null
+mount | grep '/run/k3s'        # 应为空
+
+# 7) 确认大盘副本完好后，删除根分区上的旧备份以释放空间
+du -sh /opt/rancher/k3s
+ls -la /opt/rancher/k3s/agent/containerd
+rm -rf /var/lib/rancher/k3s.bak
+df -h /                        # 根分区使用率应大幅下降
+
+# 8) 重启节点，彻底清干净所有挂载状态，开机自动 bind + 自启 K3s
+reboot
+```
+
+> bind 挂载在 `mount` 输出里显示的是**底层设备名**（如 `/dev/mapper/optvg-optlv on /var/lib/rancher/k3s`），而不是 `/opt/rancher/k3s on ...`，这是正常现象。
+
+### 重启后验证
+
+```bash
+df -h /                                     # 根分区不再紧张
+df -h /var/lib/rancher/k3s                  # 落在大盘
+mount | grep '/run/k3s' | head              # 新的 overlay 应显示大盘容量，不再是 24G
+systemctl status k3s-agent --no-pager       # running
+kubectl get nodes                           # 节点 Ready、disk-pressure 污点消失
+kubectl get pods -A -o wide | grep <节点名>  # Pod 正常 Running
+
+# 多节点时恢复调度
+kubectl uncordon <节点名>
+```
+
+彻底成功的标志：`df -h` 里所有 `/run/k3s/containerd/.../rootfs` 的 overlay 都显示**大盘容量**；只要还看到根分区容量（如 24G/100%），说明残留挂载没清干净，需重做第 6 步并 reboot。
+
+### 防止复发
+
+**1) containerd 镜像自动 GC** —— 编辑 `/var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl`：
+```toml
+[plugins."io.containerd.gc.v1.scheduler"]
+  min_free_space = "10GB"
+```
+重启：`systemctl restart k3s`（agent 节点为 `systemctl restart k3s-agent`）。
+
+**2) 限制 Pod 日志大小** —— 写入 `/etc/rancher/k3s/config.yaml`：
+```yaml
+kubelet-arg:
+  - "container-log-max-size=50Mi"
+  - "container-log-max-files=3"
+```
+
+**3) 定时清理未用镜像**（配合每次推时间戳镜像的 CI 习惯）：
+```bash
+crontab -e
+# 每天凌晨 3 点清理未被使用的镜像
+0 3 * * * /usr/local/bin/k3s crictl rmi --prune >> /var/log/crictl-prune.log 2>&1
+```
+
+### 应急快速清理（来不及迁移时先腾空间）
+
+```bash
+k3s crictl rmi --prune                                        # 清未使用的镜像
+k3s crictl rm $(k3s crictl ps -a -q --state exited) 2>/dev/null   # 清已退出容器
+journalctl --vacuum-size=500M                                 # 清系统日志
+apt-get clean                                                 # 清 apt 缓存
+```
+
+> 若镜像数据本就在大盘（如 `/opt`）而根分区满，上述清镜像对根分区无效——此时根分区占用多半来自 `k3s.bak` 或旧 overlay，需按上面的迁移流程处理。

@@ -154,6 +154,27 @@ values：namespace: c1-idc-prod
 
 ## 快速开始
 
+### ⚠️ 必读：所有 helm 命令都要带 `--namespace`（简写 `-n`）
+
+Helm 的 Release 记录**按 namespace 隔离存储**（存在目标 namespace 的 Secret 里），因此：
+
+- `helm install` 不带 `-n` → Release 被装进 `default` namespace；
+- 之后 `helm upgrade / rollback / uninstall / history / list` 不带同一个 `-n` → 会去 `default` 找，报 **`Error: release: not found`**。
+
+**从 install 到后续所有运维命令，必须始终带同一个 `-n`**，并与 values 里的 `namespace` 字段保持一致：
+
+| 环境 | values 文件 | Release 名 | namespace（`-n`） |
+|------|------------|-----------|------------------|
+| dev  | values-dev.yaml  | dib-dev  | `c1-ns-dev`  |
+| test | values-test.yaml | dib-test | `c1-ns-test` |
+| uat  | values-uat.yaml  | dib-uat  | `c1-ns-uat`  |
+| prod | values-prod.yaml | dib-prod | `c1-ns-prod` |
+
+> 说明：
+> - 首次安装到尚不存在的 namespace 时加 `--create-namespace`（本 Chart 模板不含 Namespace 资源，需由 Helm 自动创建或预先手动创建）。
+> - `helm list -A` 可一次查看**所有** namespace 的 Release。
+> - `helm template` 是本地渲染、不连集群，**不需要** `-n`（namespace 由 values 的 `namespace` 字段决定）。
+
 ### 安装 Helm
 
 ```bash
@@ -171,10 +192,10 @@ helm version
 cd 07-helm
 
 # 部署到测试环境（使用 values-test.yaml 覆盖默认配置）
-helm install dib-test . --values values-test.yaml
+helm install dib-test . --values values-test.yaml --namespace c1-ns-test --create-namespace
 
 # 部署到生产环境
-helm install dib-prod . --values values-prod.yaml
+helm install dib-prod . --values values-prod.yaml --namespace c1-ns-prod --create-namespace
 ```
 
 **命令拆解**：
@@ -185,14 +206,18 @@ helm install dib-prod . --values values-prod.yaml
 | `dib-test` | 给这次安装起的名字（Release 名称） |
 | `.` | Chart 位置：当前目录 |
 | `--values values-test.yaml` | 用这个文件覆盖 values.yaml 中的默认值 |
+| `--namespace c1-ns-test` | Release 存储的命名空间（简写 `-n`），install 及后续所有命令都必须带 |
+| `--create-namespace` | namespace 不存在时自动创建（仅首次安装需要） |
 
 ### 验证部署
 
 ```bash
-# 查看 Release 状态
-helm list
+# 查看 Release 状态（必须带 -n，否则只列 default 里的）
+helm list -n c1-ns-test
+# 或一次查看所有 namespace 的 Release
+helm list -A
 
-# 查看渲染后的 YAML（不部署，只看会生成什么）
+# 查看渲染后的 YAML（helm template 是纯本地渲染、不连集群，可不带 -n）
 helm template dib-test . --values values-test.yaml
 
 # 查看 K8s 资源
@@ -208,31 +233,31 @@ kubectl -n c1-ns-test get pods
 ```bash
 # 场景 1：修改了 values-prod.yaml 中的配置
 # 比如把 gateway.replicas 从 2 改为 3
-helm upgrade dib-prod . --values values-prod.yaml
+helm upgrade dib-prod . --values values-prod.yaml -n c1-ns-prod
 
 # 场景 2：升级镜像版本
 # 修改 values-prod.yaml 中的 image.tag: v2.0.0 → v3.0.0
-helm upgrade dib-prod . --values values-prod.yaml
+helm upgrade dib-prod . --values values-prod.yaml -n c1-ns-prod
 ```
 
 ### 回滚
 
 ```bash
 # 查看历史版本
-helm history dib-prod
+helm history dib-prod -n c1-ns-prod
 
 # 回滚到上一版本
-helm rollback dib-prod
+helm rollback dib-prod -n c1-ns-prod
 
 # 回滚到指定版本
-helm rollback dib-prod 1
+helm rollback dib-prod 1 -n c1-ns-prod
 ```
 
 ### 卸载
 
 ```bash
 # 删除整个 Release（所有资源都会被删除）
-helm uninstall dib-prod
+helm uninstall dib-prod -n c1-ns-prod
 ```
 
 ---
@@ -264,26 +289,26 @@ helm uninstall dib-prod
 ### 部署 4 个环境
 
 ```bash
-# 每个环境一条命令
-helm install dib-dev  . --values values-dev.yaml
-helm install dib-test . --values values-test.yaml
-helm install dib-uat  . --values values-uat.yaml     # 按需创建
-helm install dib-prod . --values values-prod.yaml
+# 每个环境一条命令（各自带对应 namespace）
+helm install dib-dev  . --values values-dev.yaml  --namespace c1-ns-dev  --create-namespace
+helm install dib-test . --values values-test.yaml --namespace c1-ns-test --create-namespace
+helm install dib-uat  . --values values-uat.yaml  --namespace c1-ns-uat  --create-namespace   # 按需创建
+helm install dib-prod . --values values-prod.yaml --namespace c1-ns-prod --create-namespace
 ```
 
 ### 各环境独立管理
 
 ```bash
 # 查看各环境状态
-helm list                    # 列出所有 Release
-helm history dib-dev         # 查看开发环境历史
-helm history dib-prod        # 查看生产环境历史
+helm list -A                        # 列出所有 namespace 的 Release
+helm history dib-dev  -n c1-ns-dev  # 查看开发环境历史
+helm history dib-prod -n c1-ns-prod # 查看生产环境历史
 
 # 单独升级某个环境
-helm upgrade dib-dev . --values values-dev.yaml
+helm upgrade dib-dev . --values values-dev.yaml -n c1-ns-dev
 
 # 单独回滚某个环境
-helm rollback dib-prod 1
+helm rollback dib-prod 1 -n c1-ns-prod
 ```
 
 ---
@@ -335,11 +360,11 @@ services:
 
 | 操作 | kubectl 方案（01~06） | Helm 方案（07） |
 |------|---------------------|----------------|
-| 部署 | `bash 06-scripts/deploy-all.sh` | `helm install dib . --values values.yaml` |
-| 改配置 | 改 YAML → `kubectl apply` | 改 values → `helm upgrade` |
+| 部署 | `bash 06-scripts/deploy-all.sh` | `helm install dib . --values values.yaml -n c1-ns-test --create-namespace` |
+| 改配置 | 改 YAML → `kubectl apply` | 改 values → `helm upgrade dib -n c1-ns-test` |
 | 换环境 | 手动改多个 YAML | 换 values 文件 |
-| 回滚 | 手动记住旧版本，逐个还原 | `helm rollback dib 1` |
-| 查看历史 | 没有 | `helm history dib` |
+| 回滚 | 手动记住旧版本，逐个还原 | `helm rollback dib 1 -n c1-ns-test` |
+| 查看历史 | 没有 | `helm history dib -n c1-ns-test` |
 | 新增服务 | 改 YAML + 改脚本 | 在 values.yaml 加一段服务配置 |
 
 ---
@@ -373,8 +398,8 @@ services:
 # 正确做法：先清理 kubectl 部署的资源
 kubectl delete namespace c1-ns-test
 
-# 然后用 Helm 重新部署
-helm install dib-test . --values values-test.yaml
+# 然后用 Helm 重新部署（带 -n，首次加 --create-namespace）
+helm install dib-test . --values values-test.yaml --namespace c1-ns-test --create-namespace
 ```
 
 ---
@@ -427,7 +452,7 @@ helm template dib-test . --values values-test.yaml > rendered.yaml
 helm template dib-test . --values values-test.yaml -s templates/configmap.yaml
 ```
 
-`helm template` 不会连接 K8s 集群，纯本地渲染，适合检查模板语法和变量替换是否正确。
+`helm template` 不会连接 K8s 集群，纯本地渲染，适合检查模板语法和变量替换是否正确。因为是本地渲染，**不需要带 `-n`**——渲染出的 namespace 由 values 里的 `namespace` 字段决定。
 
 ---
 
@@ -477,6 +502,7 @@ helm upgrade dib-test . --values values-test.yaml
 # values-prod.yaml 中不写 registry 密码
 # 部署时通过 --set 传入
 helm install dib-prod . \
+  --namespace c1-ns-prod \
   --values values-prod.yaml \
   --set registry.username=actual_user \
   --set registry.password=actual_password
@@ -487,6 +513,7 @@ helm install dib-prod . \
 ```bash
 # values-prod-secrets.yaml 不提交到 Git（加入 .gitignore）
 helm install dib-prod . \
+  --namespace c1-ns-prod \
   --values values-prod.yaml \
   --values values-prod-secrets.yaml
 ```

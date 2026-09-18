@@ -42,7 +42,10 @@ tolerations:
 # ---------- 采集 namespace 列表 ----------
 # Spring Boot actuator 自动发现只扫描这些 namespace 的 Pod
 scrapeNamespaces:
+  - c1-ns-dev                             # 业务 namespace（dev 环境）
   - c1-ns-test                            # 业务 namespace
+  - c1-ns-pro-bank
+  - c1-ns-pro-sh
   - c1-ns-log                             # 日志/监控系统自身
 
 # ---------- Node Exporter（节点指标采集）----------

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: c1-frontend
+description: c1 微前端容器化部署 Chart（双层 Nginx 架构）
+type: application
+version: 1.0.0
+appVersion: "1.0.0"

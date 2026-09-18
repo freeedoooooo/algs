@@ -115,6 +115,7 @@ management:
 
 在 `values.yaml` 的 `scrapeNamespaces` 列表中配置，当前：
 - `c1-ns-test`（业务 namespace）
+- `c1-ns-dev`（业务 namespace，dev 环境）
 - `c1-ns-log`（日志/监控系统）
 
 新增 namespace 时，编辑 `values.yaml` 后 `helm upgrade` 即可。
@@ -144,7 +145,7 @@ management:
 | `nodeSelector` | `node-name: master-6.183` | 调度到指定节点 |
 | `tolerations` | master / control-plane | 容忍 master 污点 |
 | `nodeExporter.enabled` | `true` | 是否部署 node-exporter |
-| `scrapeNamespaces` | c1-ns-test, c1-ns-log | 自动发现的 namespace |
+| `scrapeNamespaces` | c1-ns-test, c1-ns-dev, c1-ns-log | 自动发现的 namespace |
 
 ## 注意事项
 

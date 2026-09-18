@@ -1,109 +1,110 @@
 # ============================================================
-# DIB 微服务 Helm Chart — test 环境（70 机器 / worker-5.70）
+# DIB 微服务 Helm Chart — pro-sh 环境（239 机器 / worker-5.239）
 # ============================================================
 # 说明: 完整独立配置，不依赖 values.yaml 的默认值
-# 环境: 142=dev / 70=test(本文件) / 101=bank / 239=sh，四套同集群多节点
-# 用法: helm install dib-test . --values values-test.yaml --namespace c1-ns-test
-# NodePort 分段: 142→300xx / 70→301xx(本文件) / 101→302xx / 239→303xx
+# 环境: 142=dev / 70=test / 101=bank / 239=sh(本文件)，四套同集群多节点
+# 用法: helm install dib-sh . --values values-pro-sh.yaml --namespace c1-ns-sh
+# NodePort 分段: 142→300xx / 70→301xx / 101→302xx / 239→303xx(本文件)
 # ------------------------------------------------------------
-# profile: idc-test-c1 —— 该 profile 全部用 ${C1_*} 占位符，
-#          所以下面 config 块的值【真正生效】（由 ConfigMap 注入覆盖镜像默认值）
+# ⚠ profile: idc-pro-sh —— 已改造为 ${C1_*} 占位符，下方 config 块的变量【全部真正生效】，
+#   通过 envFrom 注入覆盖 profile 默认值。sh 与 bank 同一 MySQL 实例，仅 schema=dib_report_sh。
+#   （旧 sh yml 的分库 10.0.6.123/dib_data_auth_sh 等已废弃，统一为 10.0.5.60/dib_report_sh）
+#   （service-data / service-rule 的 dynamic 多数据源 mysql+doris 无对应 ConfigMap key，
+#     仍按 profile 内硬编码，与 test-c1 约定一致）
 # ============================================================
 
 # ---------- 全局配置 ----------
-namespace: c1-ns-test
+namespace: c1-ns-pro-sh
 
 # 镜像仓库地址（所有微服务镜像的前缀）
 imageRegistry: "10.0.6.183:8088"
 
 # 镜像版本（所有服务统一）—— 部署前请填写实际 tag
 image:
-  tag: idc-test_latest
+  tag: idc-pro-sh_latest
 
 # 镜像拉取策略
 imagePullPolicy: Always
 
 # 节点调度（所有服务调度到该节点）
-nodeName: worker-5.70
+nodeName: worker-5.239
 
 # ---------- 公共配置（ConfigMap） ----------
-# idc-test-c1 profile 使用 ${C1_*} 占位符，以下值全部生效
 config:
-  # ---------- 环境标识 ----------
-  C1_ENV: "idc-test"
+  # ---------- 环境标识（决定加载 application-idc-pro-sh.yml） ----------
+  C1_ENV: "idc-pro-sh"
 
-  # ---------- Nacos 注册中心（集群内部署，指向本 namespace 的 c1-nacos） ----------
+  # ---------- Nacos 注册中心（指向集群内 c1-nacos） ----------
   C1_NACOS_SERVER_ADDR: "http://c1-nacos.NAMESPACE.svc.cluster.local:8848"
-  C1_NACOS_NAMESPACE: "c1"
+  C1_NACOS_NAMESPACE: "pro-sh"
   C1_NACOS_USERNAME: "c1"
   C1_NACOS_PASSWORD: "c1@2025"
 
-  # ---------- Redis 缓存（集群内部署，指向本 namespace 的 c1-redis） ----------
+  # ---------- Redis 缓存（集群内 c1-redis，统一 db0） ----------
   C1_REDIS_HOST: "c1-redis.NAMESPACE.svc.cluster.local"
   C1_REDIS_PORT: "6379"
   C1_REDIS_DATABASE: "0"
   C1_REDIS_PASSWORD: "dibredis"
 
-  # ---------- 数据库（外部 MySQL） ----------
-  C1_DB_URL: "jdbc:mysql://10.0.6.161:3306/c1_test?characterEncoding=utf8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true&useSSL=false&zeroDateTimeBehavior=convertToNull"
+  # ---------- 数据库（与 bank 同实例，schema=dib_report_sh；mdm/rbac 会自动追加 allowMultiQueries） ----------
+  C1_DB_URL: "jdbc:mysql://10.0.5.60:3306/dib_report_sh?characterEncoding=utf8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true&useSSL=false&zeroDateTimeBehavior=convertToNull"
   C1_DB_DRIVER: "com.mysql.cj.jdbc.Driver"
   C1_DB_USERNAME: "root"
   C1_DB_PASSWORD: "Dib12345*"
 
-  # ---------- MinIO 对象存储（外部） ----------
-  C1_MINIO_ENDPOINT: "http://10.0.6.163:9000"
-  C1_MINIO_ACCESS_KEY: "minioadmin"
-  C1_MINIO_SECRET_KEY: "minioadmin"
-  C1_MINIO_BUCKET_NAME: "c1-bucket"
+  # ---------- MinIO 对象存储（外部 10.0.5.178:9000） ----------
+  C1_MINIO_ENDPOINT: "http://10.0.5.178:9000"
+  C1_MINIO_ACCESS_KEY: "agent"
+  C1_MINIO_SECRET_KEY: "2xgHH8sgY@6g"
+  C1_MINIO_BUCKET_NAME: "c1-sh"
 
   # ---------- OCR 服务 ----------
   C1_OCR_SERVER: "http://192.168.10.91:8089/"
 
-  # ---------- OAuth 认证（对外入口 = 本机 nginx NodePort 30191） ----------
-  C1_OAUTH_CLIENT_HOST: "http://10.0.5.70:30191"
-  C1_OAUTH_SERVER_HOST: "http://10.0.5.70:30191/sso"
+  # ---------- OAuth 认证（参考 142 风格: http://本机IP:nginx NodePort） ----------
+  C1_OAUTH_CLIENT_HOST: "http://10.0.5.239:30391"
+  C1_OAUTH_SERVER_HOST: "http://10.0.5.239:30391/sso"
   C1_OAUTH_SERVER_HOST_INNER: "http://c1-p-oauth.NAMESPACE.svc.cluster.local:9090/sso"
   C1_OAUTH_CLIENT_CREDENTIALS: "123456"
-  C1_OAUTH_REDIRECT_URI: "http://10.0.5.70:30191/api/oauth/callback,http://10.0.5.70:30191/api-oauth/callback"
+  C1_OAUTH_REDIRECT_URI: "http://10.0.5.239:30391/api/oauth/callback,http://10.0.5.239:30391/api-oauth/callback"
 
 # ============================================================
 # 基础设施层
 # ============================================================
 
-# ---------- Nacos 注册中心 ----------
+# ---------- Nacos 注册中心（集群内部署，后端 MySQL 用 10.0.5.60/nacos_sh） ----------
 nacos:
   image: "nacos/nacos-server:v2.3.2"
   storage: 1Gi
   serviceType: NodePort
-  nodePortHttp: 30148
-  nodePortGrpc: 30149
-  # 外挂 MySQL 配置（替代内嵌 Derby）
+  nodePortHttp: 30348
+  nodePortGrpc: 30349
   mysql:
-    host: "10.0.6.161"
+    host: "10.0.5.60"
     port: "3306"
-    database: "nacos_test"
+    database: "nacos_sh"
     username: "root"
     password: "Dib12345*"
     params: "characterEncoding=utf8&connectTimeout=1000&socketTimeout=3000&autoReconnect=true&useUnicode=true&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true"
 
-# ---------- Redis 缓存 ----------
+# ---------- Redis 缓存（集群内部署，C1_REDIS_HOST 指向此 in-cluster redis） ----------
 redis:
   image: "redis:7.0"
   storage: 2Gi
   maxmemory: "2g"
   serviceType: NodePort
-  nodePort: 30179
+  nodePort: 30379
 
 # ---------- Nginx 前端网关 ----------
 # 注意: port 是容器端口(nginx 镜像内监听 30091，勿改)，nodePort 才是对外端口(按段分)
 nginx:
   image: "10.0.6.183:8088/c1/nginx:1.17.8"
-  port: 30191
+  port: 30091
   serviceType: NodePort
-  nodePort: 30191
+  nodePort: 30391
 
 # ============================================================
-# 微服务定义（NodePort 段 301xx）
+# 微服务定义（NodePort 段 303xx）
 # ============================================================
 
 services:
@@ -115,7 +116,7 @@ services:
     image: "c1/c1-p-oauth"
     port: 9090
     serviceType: NodePort
-    nodePort: 30190
+    nodePort: 30390
     healthPath: /sso/actuator/health
     replicas: 1
 
@@ -124,7 +125,7 @@ services:
     image: "c1/c1-p-gateway"
     port: 20000
     serviceType: NodePort
-    nodePort: 30120
+    nodePort: 30320
     healthPath: /actuator/health
     replicas: 1
 
@@ -133,7 +134,7 @@ services:
     image: "c1/c1-p-rbac"
     port: 20001
     serviceType: NodePort
-    nodePort: 30121
+    nodePort: 30321
     healthPath: /api/auth/actuator/health
     replicas: 1
 
@@ -142,7 +143,7 @@ services:
     image: "c1/c1-p-mdm"
     port: 20002
     serviceType: NodePort
-    nodePort: 30122
+    nodePort: 30322
     healthPath: /api/mdm/actuator/health
     replicas: 1
 
@@ -153,7 +154,7 @@ services:
     image: "c1/c1-b-extract"
     port: 30001
     serviceType: NodePort
-    nodePort: 30131
+    nodePort: 30331
     healthPath: /api/extract/actuator/health
     replicas: 1
 
@@ -162,7 +163,7 @@ services:
     image: "c1/c1-b-report"
     port: 30002
     serviceType: NodePort
-    nodePort: 30132
+    nodePort: 30332
     healthPath: /api/report/actuator/health
     replicas: 1
 
@@ -171,7 +172,7 @@ services:
     image: "c1/c1-b-data"
     port: 30003
     serviceType: NodePort
-    nodePort: 30133
+    nodePort: 30333
     healthPath: /api/data/actuator/health
     replicas: 1
 
@@ -180,7 +181,7 @@ services:
     image: "c1/c1-b-rule"
     port: 30004
     serviceType: NodePort
-    nodePort: 30134
+    nodePort: 30334
     healthPath: /api/rule/actuator/health
     replicas: 1
 
@@ -189,6 +190,16 @@ services:
     image: "c1/c1-b-govern"
     port: 30005
     serviceType: NodePort
-    nodePort: 30135
+    nodePort: 30335
     healthPath: /api/dg/actuator/health
     replicas: 1
+
+# ============================================================
+# 附: pro-sh 数据库说明
+# ------------------------------------------------------------
+#   业务库(全部服务) : MySQL 10.0.5.60/dib_report_sh  (root / Dib12345*)
+#                     —— 与 bank 同一实例，仅 schema 不同
+#   service-data/rule : 额外 Doris 10.0.1.126/c1_pro_sh (root / dibdoris)，profile 内硬编码
+#   Redis(全部)       : 集群内 c1-redis:6379 db0          (dibredis)
+#   MinIO(全部)       : 10.0.5.178:9000  bucket=c1-sh    (agent / 2xgHH8sgY@6g)
+# ============================================================
