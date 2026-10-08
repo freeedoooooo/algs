@@ -1,10 +1,11 @@
 name: Deploy Personal Site
 
 on:
-  push:
-    branches:
-      - main
-      - master
+  # 注释掉，不需要自动部署的push事件
+  # push:
+  #   branches:
+  #     - main
+  #     - master
   workflow_dispatch:
 
 permissions:
