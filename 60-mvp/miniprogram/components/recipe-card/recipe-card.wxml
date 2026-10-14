@@ -3,11 +3,17 @@
   <view class="rc-head">
     <view class="rc-type {{typeClass}}">{{typeLabel}}</view>
     <view class="rc-name">{{recipe.name}}</view>
+    <view class="rc-fav {{favorited ? 'on' : ''}}" wx:if="{{selectable}}" catchtap="onFavTap">{{favorited ? '★' : '☆'}}</view>
   </view>
   <view class="rc-meta">
     <text class="rc-time">⏱ {{recipe.estimatedTime}}分钟</text>
     <text class="rc-serving" wx:if="{{recipe.servings}}">{{recipe.servings}}人份</text>
   </view>
   <view class="rc-tip" wx:if="{{recipe.tip}}">💡 {{recipe.tip}}</view>
+  <view class="rc-stock" wx:if="{{recipe.useStockText}}">
+    <text class="rc-stock-tag">🧊 用到库存</text>
+    <text class="rc-stock-names">{{recipe.useStockText}}</text>
+  </view>
+  <view class="rc-expiring" wx:if="{{recipe.useExpiringText}}">⏳ 临期优先：{{recipe.useExpiringText}}</view>
   <view class="rc-action" wx:if="{{selectable}}">点击查看备菜清单 ›</view>
 </view>

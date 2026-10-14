@@ -36,6 +36,16 @@
   color: #2B2B2B;
 }
 
+.rc-fav {
+  margin-left: auto;
+  font-size: 40rpx;
+  line-height: 1;
+  color: #CCC;
+  padding: 0 6rpx;
+  flex-shrink: 0;
+}
+.rc-fav.on { color: #FFB300; }
+
 .rc-meta {
   display: flex;
   align-items: center;
@@ -60,4 +70,35 @@
   font-size: 24rpx;
   color: #FF7043;
   text-align: right;
+}
+
+.rc-stock {
+  margin-top: 14rpx;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10rpx;
+}
+
+.rc-stock-tag {
+  font-size: 22rpx;
+  color: #1E88E5;
+  background: #E8F2FE;
+  border-radius: 10rpx;
+  padding: 4rpx 12rpx;
+  flex-shrink: 0;
+}
+
+.rc-stock-names {
+  font-size: 24rpx;
+  color: #5A5A5A;
+}
+
+.rc-expiring {
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  color: #FB8C00;
+  background: #FFF6E9;
+  border-radius: 10rpx;
+  padding: 8rpx 14rpx;
 }

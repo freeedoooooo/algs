@@ -9,7 +9,8 @@ Page({
     source: 'ai',
     scene: 'easy',
     items: [],
-    swapping: false
+    swapping: false,
+    favSet: {}
   },
 
   onLoad() {
@@ -32,10 +33,13 @@ Page({
     if (this.data.swapping) return;
     this.setData({ swapping: true });
 
+    const ctx = app.globalData.recommendCtx || {};
     callFunction('recommendMenu', {
       scene: this.data.scene,
       month: getMonth(),
-      preferences: (app.globalData.userInfo && app.globalData.userInfo.preferences) || {}
+      preferences: (app.globalData.userInfo && app.globalData.userInfo.preferences) || {},
+      preferInventory: !!ctx.preferInventory,
+      inventory: ctx.inventory || []
     }, { loadingText: '换一套...' })
       .then(res => {
         if (res && res.menu && res.menu.length) {
@@ -63,6 +67,45 @@ Page({
     const { recipe } = e.detail;
     if (!recipe || !recipe._id) return;
     wx.navigateTo({ url: `/pages/prep/prep?id=${recipe._id}` });
+  },
+
+  onShow() {
+    this.loadFavorites();
+  },
+
+  // 拉取收藏状态，标记每道菜是否已收藏
+  loadFavorites() {
+    callFunction('favorites', { action: 'list' }, { loading: false, showError: false })
+      .then(res => {
+        const favSet = {};
+        ((res && res.favorites) || []).forEach(f => { favSet[f.recipeId] = true; });
+        this.setData({ favSet });
+      })
+      .catch(() => {});
+  },
+
+  // 收藏 / 取消收藏单道菜（乐观更新，失败回滚）
+  onToggleFavorite(e) {
+    const { recipe, favorited } = e.detail;
+    if (!recipe || !recipe._id) return;
+    const recipeId = recipe._id;
+    const payload = favorited
+      ? { action: 'add', recipe }
+      : { action: 'remove', recipeId };
+
+    const favSet = Object.assign({}, this.data.favSet);
+    if (favorited) favSet[recipeId] = true; else delete favSet[recipeId];
+    this.setData({ favSet });
+
+    callFunction('favorites', payload, { loading: false, showError: false })
+      .then(() => {
+        wx.showToast({ title: favorited ? '已收藏' : '已取消收藏', icon: 'none' });
+      })
+      .catch(() => {
+        const back = Object.assign({}, this.data.favSet);
+        if (favorited) delete back[recipeId]; else back[recipeId] = true;
+        this.setData({ favSet: back });
+      });
   },
 
   onBack() {

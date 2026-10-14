@@ -4,4 +4,9 @@
     <text wx:if="{{checked}}" class="ci-tick">✓</text>
   </view>
   <text class="ci-text">{{text}}</text>
+  <block wx:if="{{showStock}}">
+    <text class="ci-badge ci-expiring" wx:if="{{expiring}}">临期</text>
+    <text class="ci-badge ci-have" wx:elif="{{have}}">库存</text>
+    <text class="ci-badge ci-buy" wx:else>需买</text>
+  </block>
 </view>

@@ -47,10 +47,12 @@
 .menu-footer {
   margin-top: 32rpx;
   display: flex;
+  gap: 20rpx;
   justify-content: center;
 }
 
-.menu-footer .btn-ghost {
-  width: 60%;
+.menu-footer .btn-ghost,
+.menu-footer .btn-primary {
+  flex: 1;
   height: 84rpx;
 }

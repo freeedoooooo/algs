@@ -10,10 +10,12 @@ Page({
     steps: [],          // 原始 timelineSteps 增强 _status / _remainText
     floatItems: [],     // 悬浮倒计时数据
     doneCount: 0,
-    allDone: false
+    allDone: false,
+    viewOnly: false     // 预览模式：只看步骤，不锁屏常亮
   },
 
-  onLoad() {
+  onLoad(query) {
+    const viewOnly = !!(query && query.viewOnly);
     const recipe = app.globalData.currentRecipe;
     if (!recipe || !recipe.timelineSteps || !recipe.timelineSteps.length) {
       wx.showToast({ title: '缺少烹饪步骤', icon: 'none' });
@@ -27,10 +29,12 @@ Page({
     const steps = recipe.timelineSteps.map(s =>
       Object.assign({}, s, { _status: 'pending', _remainText: '' })
     );
-    this.setData({ recipe, steps });
+    this.setData({ recipe, steps, viewOnly });
 
-    // 烹饪期间保持屏幕常亮
-    wx.setKeepScreenOn({ keepScreenOn: true, fail() {} });
+    // 正式烹饪时保持屏幕常亮；预览模式不锁屏
+    if (!viewOnly) {
+      wx.setKeepScreenOn({ keepScreenOn: true, fail() {} });
+    }
   },
 
   onUnload() {
@@ -57,6 +61,7 @@ Page({
 
   // 开始某个节点的倒计时
   onStartTimer(e) {
+    if (this.data.viewOnly) return; // 预览模式禁用倒计时
     const index = e.detail.index;
     const step = this.data.steps[index];
     if (!step || !step.timer) return;
@@ -72,8 +77,12 @@ Page({
         this.refreshFloat();
       },
       onFinish: () => {
-        // 到点提醒：震动 + 提示音 + 文案
-        remind(`「${step.action}」时间到！`);
+        // 到点提醒：预览模式仅文字提示，不震动/不响铃
+        if (this.data.viewOnly) {
+          wx.showToast({ title: `「${step.action}」时间到！（预览）`, icon: 'none' });
+        } else {
+          remind(`「${step.action}」时间到！`);
+        }
         this.markDone(index);
       }
     });
@@ -83,6 +92,7 @@ Page({
 
   // 手动标记完成
   onStepDone(e) {
+    if (this.data.viewOnly) return; // 预览模式禁用完成
     this.markDone(e.detail.index);
   },
 
@@ -114,6 +124,7 @@ Page({
   // 完成烹饪后按菜谱 BOM 自动扣减库存（静默、仅一次）
   deductInventory() {
     if (this.deducted) return;
+    if (this.data.viewOnly) return; // 预览模式不扣减库存，避免误触发
     const recipe = this.data.recipe;
     if (!recipe || !recipe._id) return;
     this.deducted = true;

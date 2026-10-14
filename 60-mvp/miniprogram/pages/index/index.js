@@ -44,17 +44,28 @@ Page({
     wx.navigateTo({ url: '/pages/inventory/inventory' });
   },
 
+  onGoFavorites() {
+    wx.navigateTo({ url: '/pages/favorites/favorites' });
+  },
+
   onRecommend() {
     if (this.data.loading) return;
     this.setData({ loading: true });
 
     const preferInventory = this.data.preferInventory;
+    const inventory = this._inventory || [];
+    // 保存推荐上下文，供菜单页「换一换」沿用（保证标注一致）
+    app.globalData.recommendCtx = {
+      scene: this.data.activeScene,
+      preferInventory,
+      inventory
+    };
     callFunction('recommendMenu', {
       scene: this.data.activeScene,
       month: getMonth(),
       preferences: (app.globalData.userInfo && app.globalData.userInfo.preferences) || {},
       preferInventory,
-      inventory: preferInventory ? (this._inventory || []) : []
+      inventory
     }, { loadingText: 'AI 正在配菜...' })
       .then(res => {
         if (!res || !res.menu || !res.menu.length) {

@@ -1,11 +1,13 @@
 // miniprogram/mock/index.js
 // 本地 Mock 云函数：在 USE_MOCK=true 时替代真实云函数，返回相同结构的数据。
-// 覆盖 login / recommendMenu / getRecipeDetail / inventory / seed 函数。
+// 覆盖 login / recommendMenu / getRecipeDetail / inventory / favorites / seed 函数。
 const { recipes } = require('./recipes.js');
 const { ingStatus, daysUntil, dateAfter } = require('../utils/format.js');
 
 // 库存本地持久化 key
 const STORE_KEY = 'mock_inventory';
+// 收藏菜谱本地持久化 key
+const FAVORITES_KEY = 'mock_favorites';
 
 // 首次运行写入几条演示食材，便于体验临期/清库存推荐
 function defaultInventory() {
@@ -36,6 +38,19 @@ function genId() {
   return 'ing_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
 }
 
+// —— 收藏菜谱的本地持久化 ——
+function readFavorites() {
+  try {
+    const raw = wx.getStorageSync(FAVORITES_KEY);
+    if (Array.isArray(raw)) return raw;
+  } catch (e) {}
+  return [];
+}
+
+function writeFavorites(list) {
+  try { wx.setStorageSync(FAVORITES_KEY, list); } catch (e) {}
+}
+
 function decorate(item) {
   return Object.assign({}, item, {
     _status: ingStatus(item.expiryDate),
@@ -58,6 +73,27 @@ function scoreRecipe(r, inv) {
     else if (nameMatch(inv.onHand, i.name)) s += 1;
   });
   return s;
+}
+
+// 标注一道菜用到了哪些库存/临期食材
+function annotateStock(recipe, inventory) {
+  if (!Array.isArray(inventory) || !inventory.length) {
+    return { useStockText: '', useExpiringText: '' };
+  }
+  const useStock = [];
+  const useExpiring = [];
+  (recipe.ingredientsNeeded || []).forEach(i => {
+    if (!i || !i.name) return;
+    const hit = inventory.find(inv =>
+      inv && inv.name &&
+      (inv.name === i.name || inv.name.includes(i.name) || i.name.includes(inv.name))
+    );
+    if (hit) {
+      useStock.push(i.name);
+      if (hit.expiring) useExpiring.push(i.name);
+    }
+  });
+  return { useStockText: useStock.join('、'), useExpiringText: useExpiring.join('、') };
 }
 
 // 模拟网络延迟
@@ -168,7 +204,7 @@ const handlers = {
       reason: inv
         ? '（Mock 模式）优先消耗你的库存/临期食材，搭配了一荤一素一汤'
         : '（Mock 模式）为你随机搭配了均衡的一荤一素一汤',
-      menu: menu.map(toSummary)
+      menu: menu.map(r => Object.assign(toSummary(r), annotateStock(r, inventory)))
     };
   },
 
@@ -246,6 +282,48 @@ const handlers = {
       });
       writeStore(list);
       return { code: 0, deducted };
+    }
+
+    return { code: 1, message: '未知 action(Mock): ' + action };
+  },
+
+  // 菜谱收藏：收藏单个菜谱 / 列出 / 取消收藏（本地持久化，按 recipeId 去重）
+  favorites(data = {}) {
+    const action = data.action;
+    let list = readFavorites();
+
+    if (action === 'list') {
+      // 最新收藏的排在前面
+      return { code: 0, favorites: list.slice().reverse() };
+    }
+
+    if (action === 'add') {
+      const r = data.recipe || {};
+      const recipeId = r._id || r.recipeId;
+      if (!recipeId) return { code: 2, message: '缺少菜谱 ID' };
+      if (list.some(x => x.recipeId === recipeId)) {
+        return { code: 0, recipeId, duplicated: true };
+      }
+      list.push({
+        _id: 'fav_' + recipeId,
+        recipeId,
+        name: r.name || '',
+        type: r.type || '',
+        estimatedTime: r.estimatedTime || 0,
+        servings: r.servings || 0,
+        tip: r.tip || '',
+        createdAt: Date.now()
+      });
+      writeFavorites(list);
+      return { code: 0, recipeId };
+    }
+
+    if (action === 'remove') {
+      const recipeId = data.recipeId;
+      if (!recipeId) return { code: 2, message: '缺少 recipeId' };
+      list = list.filter(x => x.recipeId !== recipeId);
+      writeFavorites(list);
+      return { code: 0, recipeId };
     }
 
     return { code: 1, message: '未知 action(Mock): ' + action };

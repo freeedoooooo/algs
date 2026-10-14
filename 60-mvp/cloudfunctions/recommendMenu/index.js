@@ -64,6 +64,27 @@ function scoreRecipe(r, inv) {
   return score;
 }
 
+// 标注一道菜用到了哪些库存/临期食材（供前端展示）
+function annotateStock(recipe, inventory) {
+  if (!Array.isArray(inventory) || !inventory.length) {
+    return { useStockText: '', useExpiringText: '' };
+  }
+  const useStock = [];
+  const useExpiring = [];
+  (recipe.ingredientsNeeded || []).forEach(i => {
+    if (!i || !i.name) return;
+    const hit = inventory.find(inv =>
+      inv && inv.name &&
+      (inv.name === i.name || inv.name.includes(i.name) || i.name.includes(inv.name))
+    );
+    if (hit) {
+      useStock.push(i.name);
+      if (hit.expiring) useExpiring.push(i.name);
+    }
+  });
+  return { useStockText: useStock.join('、'), useExpiringText: useExpiring.join('、') };
+}
+
 // 兜底：清库存优先时取每类评分最高，否则随机
 function fallbackMenu(groups, preferInventory) {
   const pick = arr => {
@@ -179,7 +200,7 @@ exports.main = async (event = {}) => {
       month,
       source,
       reason,
-      menu: menu.map(r => ({
+      menu: menu.map(r => Object.assign({
         _id: r._id,
         name: r.name,
         type: r.type,
@@ -187,7 +208,7 @@ exports.main = async (event = {}) => {
         estimatedTime: r.estimatedTime,
         servings: r.servings,
         tip: r.tip
-      }))
+      }, annotateStock(r, inventory)))
     };
   } catch (err) {
     console.error('[recommendMenu] error', err);

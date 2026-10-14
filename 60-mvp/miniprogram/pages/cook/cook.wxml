@@ -2,7 +2,8 @@
 <view class="cook-page" wx:if="{{recipe}}">
   <view class="cook-head card">
     <view class="cook-name">{{recipe.name}}</view>
-    <view class="cook-sub">按时间轴推进，⏰ 节点可开启倒计时并行统筹</view>
+    <view class="cook-sub" wx:if="{{viewOnly}}">👀 预览模式：可试点倒计时熟悉节奏，到点不震动、完成不扣库存；备齐后再正式开火</view>
+    <view class="cook-sub" wx:else>按时间轴推进，⏰ 节点可开启倒计时并行统筹</view>
     <view class="cook-progress">进度 {{doneCount}}/{{steps.length}}</view>
   </view>
 
@@ -19,7 +20,10 @@
     />
   </view>
 
-  <view class="cook-footer">
+  <view class="cook-footer" wx:if="{{viewOnly}}">
+    <button class="btn-primary" bindtap="onBack">知道了，去备菜</button>
+  </view>
+  <view class="cook-footer" wx:else>
     <button class="btn-ghost" bindtap="onBack">返回</button>
     <button class="btn-primary" bindtap="onAllDone">🎉 全部完成</button>
   </view>

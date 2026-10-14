@@ -9,6 +9,8 @@
 2. 烹饪前备菜 Checklist（建议备齐再开火，不强制阻断）
 3. 多线程时间轴烹饪导航（节点倒计时 + 到点震动/提示音提醒）
 4. 轻量手动库存（录入/编辑/删除、临期与过期分组、做菜后自动扣减）
+5. 库存联动可视化：菜单卡片标注每道菜「用到库存/临期」的食材；备菜清单主料标注「库存/需买」，表头汇总需购数量
+6. 菜单收藏：把推荐的整套菜单保存到「我的菜单」，下次一键复用（双模式：Mock 本地 / 云端同步）
 
 暂不包含（留待 V2）：AI 拍照入库、订阅消息临期推送、家庭共享、偏好忌口设置页。
 
@@ -21,6 +23,7 @@
   今日推荐 → 选菜 → 备菜清单勾选解锁 → 时间轴倒计时与到点提醒。
 - 推荐为「场景 + 时令筛选后组合」，不含大模型（`source` 显示为 `mock`）；开启「清库存优先」时会按库存加权。
 - 库存数据通过 `wx.setStorageSync`（key: `mock_inventory`）本地持久化，首次运行自动写入几条演示食材，重编不丢失。
+- 收藏菜谱同样本地持久化（key: `mock_favorites`），`favorites` 的 list/add/remove 在 Mock 下完整可用。
 
 切换到真实云开发：把 `config.js` 的 `USE_MOCK` 改为 `false`，再按下方「二、三」部署即可。
 该开关是唯一改动点，页面、组件、utils、云函数代码均无需改动。
@@ -41,7 +44,7 @@
 │   ├── config.js                # 全局开关（USE_MOCK 本地离线模式）
 │   ├── mock/                    # 本地 Mock（离线体验用）
 │   │   ├── recipes.js           # 内置种子菜谱副本
-│   │   └── index.js             # 假云函数 login/recommendMenu/getRecipeDetail/inventory
+│   │   └── index.js             # 假云函数 login/recommendMenu/getRecipeDetail/inventory/favorites
 │   ├── utils/
 │   │   ├── request.js           # 云函数调用封装（loading / 错误处理）
 │   │   ├── timer.js             # 多路倒计时管理器
@@ -56,13 +59,15 @@
 │       ├── menu/                # 菜单确认：换一换 + 选菜
 │       ├── prep/                # 备菜清单：建议备齐（不强制阻断）
 │       ├── cook/                # 烹饪导航：时间轴 + 倒计时提醒
-│       └── inventory/           # 我的库存：分组列表 + 新增/编辑/删除
+│       ├── inventory/           # 我的库存：分组列表 + 新增/编辑/删除
+│       └── favorites/           # 我的收藏：收藏菜谱列表 + 点击开做/取消
 └── cloudfunctions/              # 云函数
     ├── login/                   # 静默登录，初始化 users
     ├── seed/                    # 一次性写入种子菜谱到 recipes
     ├── recommendMenu/           # AI 组合推荐 + 清库存优先 + 兜底
     ├── getRecipeDetail/         # 获取菜谱详情
-    └── inventory/               # 库存增删改查 + 做菜扣减（action 分发）
+    ├── inventory/               # 库存增删改查 + 做菜扣减（action 分发）
+    └── favorites/               # 菜谱收藏：收藏/列出/取消（action 分发）
 ```
 
 ## 二、前置准备（阶段 0）
@@ -79,7 +84,7 @@
 2. 配置云环境 ID
    - 编辑 `miniprogram/app.js`，将 `globalData.env` 填为你的云开发环境 ID（留空则用默认环境）。
 
-3. 上传并部署云函数（对 `login`、`seed`、`recommendMenu`、`getRecipeDetail`、`inventory` 逐个操作）
+3. 上传并部署云函数（对 `login`、`seed`、`recommendMenu`、`getRecipeDetail`、`inventory`、`favorites` 逐个操作）
    - 右键云函数目录 → 「上传并部署：云端安装依赖」。
 
 4. 配置 AI 密钥（recommendMenu）
@@ -97,6 +102,7 @@
    - `users`：首次登录时由 `login` 自动创建。
    - `recipes`：由 `seed` 自动创建。
    - `ingredients`：首次调用 `inventory` 时自动创建。
+   - `favorites`：首次调用 `favorites` 时自动创建。
    - 建议在云开发控制台将集合权限设为「仅创建者可读写」或「所有用户可读，仅管理端可写」。
 
 7. 真机预览
@@ -107,12 +113,13 @@
 ```
 index（场景筛选 + 清库存优先开关 + 库存入口 + 今日推荐）
   → recommendMenu 云函数（scene 标签 + 时令筛选 →〔可选〕库存加权 → 通义千问组合 → 兜底）
-  → menu（展示 1荤1素1汤 + 换一换）
-  → 点选某道菜 → prep（getRecipeDetail 拉取清单，建议备齐）
+  → menu（展示 1荤1素1汤 + 每道菜标注用到的库存/临期食材 + 换一换 + ☆收藏单菜）
+  → 点选某道菜 → prep（getRecipeDetail 拉取清单，主料标注库存/需买，可「只看烹饪步骤」预览或备齐后开火）
   → cook（timelineSteps 时间轴，含 timer 的节点可启动倒计时，到点提醒）
   → 全部完成 → inventory(deduct) 按 BOM 自动扣减库存
 
 inventory 页（我的库存）：list 分组展示 → save 新增/编辑 → delete 删除
+favorites（我的收藏）：menu 页点菜卡 ☆ / prep 页「☆ 收藏」→ favorites 页 list 展示 → 点击直接开做 / remove 取消
 ```
 
 ## 五、数据模型（recipes 集合）
@@ -144,6 +151,20 @@ inventory 页（我的库存）：list 分组展示 → save 新增/编辑 → d
 | `expiryDate` | string | 保质期 `YYYY-MM-DD`，空表示无 |
 | `_status` | string | 读取时附加计算：`expired`/`expiring`/`normal`（临期阈值 ≤2 天）|
 | `_daysLeft` | number | 读取时附加计算：距过期天数 |
+
+## 五之三、数据模型（favorites 集合）
+
+| 字段 | 类型 | 说明 |
+| :--- | :--- | :--- |
+| `_id` | string | 收藏记录 ID |
+| `openid` | string | 所属用户（按 openid 隔离）|
+| `recipeId` | string | 收藏的菜谱 ID（去重键）|
+| `name` | string | 菜谱名称（冗余摘要，供列表展示）|
+| `type` | string | 菜谱类型 `meat`/`vegetable`/`soup` |
+| `estimatedTime` | number | 预计耗时（分钟）|
+| `servings` | number | 份量（人份）|
+| `tip` | string | 小贴士 |
+| `createdAt` | date | 收藏时间（排序用）|
 
 ## 六、注意事项
 

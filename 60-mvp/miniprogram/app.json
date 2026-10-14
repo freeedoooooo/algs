@@ -4,7 +4,8 @@
     "pages/menu/menu",
     "pages/prep/prep",
     "pages/cook/cook",
-    "pages/inventory/inventory"
+    "pages/inventory/inventory",
+    "pages/favorites/favorites"
   ],
   "window": {
     "backgroundTextStyle": "light",

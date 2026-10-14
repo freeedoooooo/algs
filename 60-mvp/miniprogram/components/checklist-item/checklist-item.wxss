@@ -31,6 +31,7 @@
 }
 
 .ci-text {
+  flex: 1;
   font-size: 30rpx;
   color: #2B2B2B;
 }
@@ -38,4 +39,30 @@
 .ci-checked .ci-text {
   color: #B0B0B0;
   text-decoration: line-through;
+}
+
+.ci-badge {
+  margin-left: 16rpx;
+  min-width: 68rpx;
+  box-sizing: border-box;
+  text-align: center;
+  font-size: 20rpx;
+  padding: 4rpx 12rpx;
+  border-radius: 10rpx;
+  flex-shrink: 0;
+}
+
+.ci-have {
+  color: #1E88E5;
+  background: #E8F2FE;
+}
+
+.ci-expiring {
+  color: #FB8C00;
+  background: #FFF6E9;
+}
+
+.ci-buy {
+  color: #E53935;
+  background: #FDECEA;
 }

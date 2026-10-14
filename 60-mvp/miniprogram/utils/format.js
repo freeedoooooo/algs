@@ -82,6 +82,17 @@ function ingStatus(dateStr) {
 }
 
 /**
+ * 在库存列表中按名称模糊匹配（text 包含食材名即命中）
+ * @param {string} text 待匹配文本（如备菜项 "番茄 2个"）
+ * @param {Array<{name:string, expiring?:boolean}>} stockList 可用库存（已排除过期）
+ * @returns {{name:string, expiring:boolean}|null}
+ */
+function matchStock(text, stockList) {
+  if (!text || !Array.isArray(stockList)) return null;
+  return stockList.find(s => s && s.name && text.indexOf(s.name) >= 0) || null;
+}
+
+/**
  * 获取当前月份 (1-12)
  */
 function getMonth() {
@@ -122,5 +133,6 @@ module.exports = {
   dateAfter,
   daysUntil,
   ingStatus,
+  matchStock,
   remind
 };

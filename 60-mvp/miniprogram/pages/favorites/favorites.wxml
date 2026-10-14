@@ -1,0 +1,31 @@
+<view class="fav-page">
+  <view class="fav-header">
+    <view class="fav-title">⭐ 我的收藏</view>
+    <view class="fav-sub">常做的菜，点一下直接开做</view>
+  </view>
+
+  <view class="fav-empty" wx:if="{{!loading && !list.length}}">
+    <text class="fav-empty-icon">🍳</text>
+    <text class="fav-empty-text">还没有收藏的菜谱</text>
+    <text class="fav-empty-tip">在推荐菜单里，点每道菜右上角的 ☆ 就能收藏</text>
+  </view>
+
+  <view class="fav-list" wx:else>
+    <view class="fav-card" wx:for="{{list}}" wx:key="_id">
+      <view class="fc-main" bindtap="onOpen" data-id="{{item.recipeId}}">
+        <view class="fc-line1">
+          <text class="fc-type fc-{{item.type}}">{{item.typeText}}</text>
+          <text class="fc-name">{{item.name}}</text>
+        </view>
+        <view class="fc-meta" wx:if="{{item.timeText || item.tip}}">
+          <text class="fc-time" wx:if="{{item.timeText}}">⏱ {{item.timeText}}</text>
+          <text class="fc-tip" wx:if="{{item.tip}}">{{item.tip}}</text>
+        </view>
+      </view>
+      <view class="fc-actions">
+        <text class="fc-open" bindtap="onOpen" data-id="{{item.recipeId}}">开做 ›</text>
+        <text class="fc-del" catchtap="onRemove" data-id="{{item.recipeId}}" data-name="{{item.name}}">取消收藏</text>
+      </view>
+    </view>
+  </view>
+</view>

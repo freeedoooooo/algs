@@ -6,7 +6,7 @@
       <text class="reason-swap" bindtap="onSwap">🔄 换一换</text>
     </view>
     <view class="reason-text" wx:if="{{reason}}">{{reason}}</view>
-    <view class="reason-tip">点选任意一道菜，进入备菜清单与烹饪导航</view>
+    <view class="reason-tip">点菜进入备菜清单；点右上角 ☆ 收藏常做的菜</view>
   </view>
 
   <view class="dish-list">
@@ -15,11 +15,13 @@
       wx:key="_id"
       recipe="{{item}}"
       selectable="{{true}}"
+      favorited="{{favSet[item._id] ? true : false}}"
+      bind:favorite="onToggleFavorite"
       bind:tap="onPickDish"
     />
   </view>
 
   <view class="menu-footer">
-    <button class="btn-ghost" bindtap="onBack">重新选场景</button>
+    <button class="btn-ghost footer-single" bindtap="onBack">重新选场景</button>
   </view>
 </view>

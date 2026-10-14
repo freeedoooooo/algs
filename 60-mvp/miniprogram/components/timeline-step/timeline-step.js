@@ -8,7 +8,9 @@ Component({
     // pending | running | done
     status: { type: String, value: 'pending' },
     // 倒计时展示文本（running 时有效）
-    remainText: { type: String, value: '' }
+    remainText: { type: String, value: '' },
+    // 预览模式：只展示步骤，隐藏倒计时/完成等操作按钮
+    viewOnly: { type: Boolean, value: false }
   },
 
   data: {
