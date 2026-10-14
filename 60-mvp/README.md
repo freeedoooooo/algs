@@ -79,34 +79,34 @@
 ## 三、部署步骤
 
 1. 导入项目
-   - 微信开发者工具 → 导入项目 → 选择 `60-mvp` 目录 → 填入你的 AppID。
+    - 微信开发者工具 → 导入项目 → 选择 `60-mvp` 目录 → 填入你的 AppID。
 
 2. 配置云环境 ID
-   - 编辑 `miniprogram/app.js`，将 `globalData.env` 填为你的云开发环境 ID（留空则用默认环境）。
+    - 编辑 `miniprogram/app.js`，将 `globalData.env` 填为你的云开发环境 ID（留空则用默认环境）。
 
 3. 上传并部署云函数（对 `login`、`seed`、`recommendMenu`、`getRecipeDetail`、`inventory`、`favorites` 逐个操作）
-   - 右键云函数目录 → 「上传并部署：云端安装依赖」。
+    - 右键云函数目录 → 「上传并部署：云端安装依赖」。
 
 4. 配置 AI 密钥（recommendMenu）
-   - 云开发控制台 → 云函数 → `recommendMenu` → 配置 → 环境变量，新增：
-     - `DASHSCOPE_API_KEY` = 你的通义千问 Key（必填，否则自动走随机兜底）
-     - `QWEN_MODEL` = `qwen-turbo`（可选，默认即此值）
-     - `AI_TIMEOUT` = `8000`（可选，单位 ms）
+    - 云开发控制台 → 云函数 → `recommendMenu` → 配置 → 环境变量，新增：
+        - `DASHSCOPE_API_KEY` = 你的通义千问 Key（必填，否则自动走随机兜底）
+        - `QWEN_MODEL` = `qwen-turbo`（可选，默认即此值）
+        - `AI_TIMEOUT` = `8000`（可选，单位 ms）
 
 5. 初始化菜谱库
-   - 云开发控制台 → 云函数 → `seed` → 云端测试，传入 `{}` 执行（幂等，可重复）。
-   - 如需清空重写，传入 `{ "mode": "clear" }`。
-   - 执行后会自动创建 `recipes` 集合并写入 17 道种子菜谱（覆盖快手/简单/周末大菜）。
+    - 云开发控制台 → 云函数 → `seed` → 云端测试，传入 `{}` 执行（幂等，可重复）。
+    - 如需清空重写，传入 `{ "mode": "clear" }`。
+    - 执行后会自动创建 `recipes` 集合并写入 17 道种子菜谱（覆盖快手/简单/周末大菜）。
 
 6. 数据库集合与权限
-   - `users`：首次登录时由 `login` 自动创建。
-   - `recipes`：由 `seed` 自动创建。
-   - `ingredients`：首次调用 `inventory` 时自动创建。
-   - `favorites`：首次调用 `favorites` 时自动创建。
-   - 建议在云开发控制台将集合权限设为「仅创建者可读写」或「所有用户可读，仅管理端可写」。
+    - `users`：首次登录时由 `login` 自动创建。
+    - `recipes`：由 `seed` 自动创建。
+    - `ingredients`：首次调用 `inventory` 时自动创建。
+    - `favorites`：首次调用 `favorites` 时自动创建。
+    - 建议在云开发控制台将集合权限设为「仅创建者可读写」或「所有用户可读，仅管理端可写」。
 
 7. 真机预览
-   - 首页选场景 → 今日推荐 → 选一道菜 → 备菜清单全勾 → 开始烹饪 → 时间轴节点开启倒计时。
+    - 首页选场景 → 今日推荐 → 选一道菜 → 备菜清单全勾 → 开始烹饪 → 时间轴节点开启倒计时。
 
 ## 四、核心流程
 
@@ -124,47 +124,47 @@ favorites（我的收藏）：menu 页点菜卡 ☆ / prep 页「☆ 收藏」�
 
 ## 五、数据模型（recipes 集合）
 
-| 字段 | 类型 | 说明 |
-| :--- | :--- | :--- |
-| `_id` | string | 菜谱 ID（如 `recipe_tomato_egg`）|
-| `name` | string | 菜名 |
-| `type` | string | `meat` 荤 / `vegetable` 素 / `soup` 汤 |
-| `tags` | array | 场景标签 `quick`/`easy`/`feast` |
-| `season` | array | 时令月份，`[]` 表示全年 |
-| `estimatedTime` | number | 预计总时长（分钟）|
-| `servings` | number | 人份 |
-| `ingredientsNeeded` | array | BOM 食材清单 |
-| `checklist` | object | `mainIngredients` / `seasonings` / `tools` 三类 |
-| `timelineSteps` | array | `{ time, action, type, timer? }`，`type` 为 `prep`/`cook`/`wait` |
-| `tip` | string | 小贴士 |
+| 字段                  | 类型     | 说明                                                             |
+|:--------------------|:-------|:---------------------------------------------------------------|
+| `_id`               | string | 菜谱 ID（如 `recipe_tomato_egg`）                                   |
+| `name`              | string | 菜名                                                             |
+| `type`              | string | `meat` 荤 / `vegetable` 素 / `soup` 汤                            |
+| `tags`              | array  | 场景标签 `quick`/`easy`/`feast`                                    |
+| `season`            | array  | 时令月份，`[]` 表示全年                                                 |
+| `estimatedTime`     | number | 预计总时长（分钟）                                                      |
+| `servings`          | number | 人份                                                             |
+| `ingredientsNeeded` | array  | BOM 食材清单                                                       |
+| `checklist`         | object | `mainIngredients` / `seasonings` / `tools` 三类                  |
+| `timelineSteps`     | array  | `{ time, action, type, timer? }`，`type` 为 `prep`/`cook`/`wait` |
+| `tip`               | string | 小贴士                                                            |
 
 ## 五之二、数据模型（ingredients 集合）
 
-| 字段 | 类型 | 说明 |
-| :--- | :--- | :--- |
-| `_id` | string | 库存记录 ID |
-| `openid` | string | 所属用户（按 openid 隔离）|
-| `name` | string | 食材名称（与菜谱 BOM 同名才能自动扣减）|
-| `category` | string | `vegetable`/`meat`/`seafood`/`fruit`/`other` |
-| `quantity` | number | 数量 |
-| `unit` | string | 单位（个/份/g）|
-| `expiryDate` | string | 保质期 `YYYY-MM-DD`，空表示无 |
-| `_status` | string | 读取时附加计算：`expired`/`expiring`/`normal`（临期阈值 ≤2 天）|
-| `_daysLeft` | number | 读取时附加计算：距过期天数 |
+| 字段           | 类型     | 说明                                               |
+|:-------------|:-------|:-------------------------------------------------|
+| `_id`        | string | 库存记录 ID                                          |
+| `openid`     | string | 所属用户（按 openid 隔离）                                |
+| `name`       | string | 食材名称（与菜谱 BOM 同名才能自动扣减）                           |
+| `category`   | string | `vegetable`/`meat`/`seafood`/`fruit`/`other`     |
+| `quantity`   | number | 数量                                               |
+| `unit`       | string | 单位（个/份/g）                                        |
+| `expiryDate` | string | 保质期 `YYYY-MM-DD`，空表示无                            |
+| `_status`    | string | 读取时附加计算：`expired`/`expiring`/`normal`（临期阈值 ≤2 天） |
+| `_daysLeft`  | number | 读取时附加计算：距过期天数                                    |
 
 ## 五之三、数据模型（favorites 集合）
 
-| 字段 | 类型 | 说明 |
-| :--- | :--- | :--- |
-| `_id` | string | 收藏记录 ID |
-| `openid` | string | 所属用户（按 openid 隔离）|
-| `recipeId` | string | 收藏的菜谱 ID（去重键）|
-| `name` | string | 菜谱名称（冗余摘要，供列表展示）|
-| `type` | string | 菜谱类型 `meat`/`vegetable`/`soup` |
-| `estimatedTime` | number | 预计耗时（分钟）|
-| `servings` | number | 份量（人份）|
-| `tip` | string | 小贴士 |
-| `createdAt` | date | 收藏时间（排序用）|
+| 字段              | 类型     | 说明                             |
+|:----------------|:-------|:-------------------------------|
+| `_id`           | string | 收藏记录 ID                        |
+| `openid`        | string | 所属用户（按 openid 隔离）              |
+| `recipeId`      | string | 收藏的菜谱 ID（去重键）                  |
+| `name`          | string | 菜谱名称（冗余摘要，供列表展示）               |
+| `type`          | string | 菜谱类型 `meat`/`vegetable`/`soup` |
+| `estimatedTime` | number | 预计耗时（分钟）                       |
+| `servings`      | number | 份量（人份）                         |
+| `tip`           | string | 小贴士                            |
+| `createdAt`     | date   | 收藏时间（排序用）                      |
 
 ## 六、注意事项
 

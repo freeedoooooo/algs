@@ -142,14 +142,14 @@
 
 ### 5.1 页面清单（V1）
 
-| 页面   | 路径                  | 职责             |
-|:-----|:--------------------|:---------------|
-| 首页   | `pages/index/index` | 场景筛选 + 今日推荐入口  |
-| 菜单确认 | `pages/menu/menu`   | 展示推荐菜单（标注用到的库存/临期食材）、换一换、选菜  |
-| 备菜清单 | `pages/prep/prep`   | 三类清单勾选、主料标注库存/需买并汇总、建议备齐再开火（不强制阻断），提供「只看烹饪步骤」预览入口 |
-| 烹饪导航 | `pages/cook/cook`   | 时间轴、节点倒计时、到点提醒 |
-| 我的库存 | `pages/inventory/inventory` | 食材分组列表、新增/编辑/删除、临期角标 |
-| 我的收藏 | `pages/favorites/favorites` | 收藏菜谱列表、点击直接开做、取消收藏 |
+| 页面   | 路径                          | 职责                                                |
+|:-----|:----------------------------|:--------------------------------------------------|
+| 首页   | `pages/index/index`         | 场景筛选 + 今日推荐入口                                     |
+| 菜单确认 | `pages/menu/menu`           | 展示推荐菜单（标注用到的库存/临期食材）、换一换、选菜                       |
+| 备菜清单 | `pages/prep/prep`           | 三类清单勾选、主料标注库存/需买并汇总、建议备齐再开火（不强制阻断），提供「只看烹饪步骤」预览入口 |
+| 烹饪导航 | `pages/cook/cook`           | 时间轴、节点倒计时、到点提醒                                    |
+| 我的库存 | `pages/inventory/inventory` | 食材分组列表、新增/编辑/删除、临期角标                              |
+| 我的收藏 | `pages/favorites/favorites` | 收藏菜谱列表、点击直接开做、取消收藏                                |
 
 ### 5.2 核心流程
 
@@ -188,7 +188,8 @@ MVP 不采用「每次纯 AI 生成菜谱」，而是：
 1. 按场景标签 `tags` 过滤候选池。
 2. 时令过滤：`season` 命中当前月份或为空（全年）；命中过少则放宽。
 3. 偏好过滤（V2）：剔除命中过敏源/排除食材的菜谱。
-4. 清库存优先（开关开启时）：按菜谱 `ingredientsNeeded` 与现有库存的名称重叠度打分（命中临期 +2、命中普通 +1），按得分降序排序后作为候选；并在 Prompt 中附上现有/临期食材清单。
+4. 清库存优先（开关开启时）：按菜谱 `ingredientsNeeded` 与现有库存的名称重叠度打分（命中临期 +2、命中普通 +1），按得分降序排序后作为候选；并在
+   Prompt 中附上现有/临期食材清单。
 5. 组装 Prompt 调用大模型，要求从候选菜名中各选一道，返回结构化 JSON。
 6. 名称匹配为菜谱；类型缺失时用兜底补齐（清库存模式下兜底取得分最高项）。
 7. 返回结果为每道菜附上 `useStockText`（命中的库存食材名）与 `useExpiringText`（其中临期的），供菜单卡片展示；无论是否开启清库存优先都会标注。
@@ -233,14 +234,14 @@ MVP 不采用「每次纯 AI 生成菜谱」，而是：
 
 ### 7.3 云函数清单（V1）
 
-| 云函数               | 职责                         | 关键入参                        |
-|:------------------|:---------------------------|:----------------------------|
-| `login`           | 静默登录，初始化 `users` 记录        | 无                           |
-| `seed`            | 幂等写入种子菜谱到 `recipes`（自动建集合） | `mode: upsert/clear`        |
-| `recommendMenu`   | AI 组合推荐 + 清库存优先 + 兜底               | `scene, month, preferences, preferInventory, inventory` |
-| `getRecipeDetail` | 获取菜谱详情（清单与时间轴）             | `id` 或 `ids`                |
-| `inventory`       | 库存增删改查 + 做菜扣减（action 分发） | `action: list/save/delete/deduct` |
-| `favorites`       | 菜谱收藏：收藏/列出/取消（action 分发） | `action: list/add/remove` |
+| 云函数               | 职责                         | 关键入参                                                    |
+|:------------------|:---------------------------|:--------------------------------------------------------|
+| `login`           | 静默登录，初始化 `users` 记录        | 无                                                       |
+| `seed`            | 幂等写入种子菜谱到 `recipes`（自动建集合） | `mode: upsert/clear`                                    |
+| `recommendMenu`   | AI 组合推荐 + 清库存优先 + 兜底       | `scene, month, preferences, preferInventory, inventory` |
+| `getRecipeDetail` | 获取菜谱详情（清单与时间轴）             | `id` 或 `ids`                                            |
+| `inventory`       | 库存增删改查 + 做菜扣减（action 分发）   | `action: list/save/delete/deduct`                       |
+| `favorites`       | 菜谱收藏：收藏/列出/取消（action 分发）   | `action: list/add/remove`                               |
 
 ### 7.4 核心数据库集合设计
 
@@ -334,10 +335,12 @@ MVP 不采用「每次纯 AI 生成菜谱」，而是：
   "_id": "auto",
   "openid": "openid_xxx",
   "name": "番茄",
-  "category": "vegetable",   // vegetable/meat/seafood/fruit/other
+  "category": "vegetable",
+  // vegetable/meat/seafood/fruit/other
   "quantity": 3,
   "unit": "个",
-  "expiryDate": "2026-10-16", // 可选，空表示无保质期
+  "expiryDate": "2026-10-16",
+  // 可选，空表示无保质期
   "createdAt": "serverDate",
   "updatedAt": "serverDate"
   // 读取时服务端附加计算字段：_status(expired/expiring/normal)、_daysLeft
@@ -348,13 +351,16 @@ MVP 不采用「每次纯 AI 生成菜谱」，而是：
 {
   "_id": "auto",
   "openid": "openid_xxx",
-  "recipeId": "recipe_xxx",        // 收藏的菜谱 ID（去重键）
-  "name": "番茄炒蛋",              // 以下均为冗余摘要，供收藏列表展示
+  "recipeId": "recipe_xxx",
+  // 收藏的菜谱 ID（去重键）
+  "name": "番茄炒蛋",
+  // 以下均为冗余摘要，供收藏列表展示
   "type": "meat",
   "estimatedTime": 12,
   "servings": 2,
   "tip": "小贴士",
-  "createdAt": "serverDate"        // 排序用
+  "createdAt": "serverDate"
+  // 排序用
 }
 ```
 
