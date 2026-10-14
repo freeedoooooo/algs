@@ -1,4 +1,6 @@
 // app.js
+const { USE_MOCK } = require('./config.js');
+
 App({
   globalData: {
     // 云开发环境 ID，请在开通云开发后填入你自己的 env ID
@@ -9,6 +11,13 @@ App({
   },
 
   onLaunch() {
+    // 本地 Mock 模式：不初始化云能力、不登录，直接使用内置假数据
+    if (USE_MOCK) {
+      this.globalData.openid = 'mock_openid';
+      console.warn('[app] 当前为本地 Mock 模式，未连接云开发。上线前请将 config.js 的 USE_MOCK 改为 false');
+      return;
+    }
+
     if (!wx.cloud) {
       console.error('请使用 2.2.3 或以上的基础库以使用云能力');
       return;

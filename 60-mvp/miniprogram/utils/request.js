@@ -1,5 +1,7 @@
 // utils/request.js
 // 统一封装云函数调用，处理 loading 与错误提示
+const { USE_MOCK } = require('../config.js');
+const mock = require('../mock/index.js');
 
 /**
  * 调用云函数
@@ -15,7 +17,12 @@ function callFunction(name, data = {}, options = {}) {
     wx.showLoading({ title: loadingText, mask: true });
   }
 
-  return wx.cloud.callFunction({ name, data })
+  // Mock 模式：走本地假数据；否则调用真实云函数
+  const task = USE_MOCK
+    ? mock.callFunction(name, data).then(result => ({ result }))
+    : wx.cloud.callFunction({ name, data });
+
+  return task
     .then(res => {
       const result = res && res.result;
       if (result && result.code !== undefined && result.code !== 0) {

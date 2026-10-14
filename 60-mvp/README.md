@@ -11,6 +11,21 @@
 
 暂不包含（留待 V2）：AI 拍照入库、库存扣减、临期预警、家庭共享、订阅消息推送。
 
+## 零、本地 Mock 模式（无需云服务，离线体验）
+
+工程默认开启 **Mock 模式**（`miniprogram/config.js` 中 `USE_MOCK: true`），此时：
+
+- 不调用任何云函数、不连接云开发，全部使用前端内置假数据（`miniprogram/mock/`）。
+- 可在微信开发者工具中用**测试号**直接完整跑通：
+  今日推荐 → 选菜 → 备菜清单勾选解锁 → 时间轴倒计时与到点提醒。
+- 推荐为「场景 + 时令筛选后随机组合」，不含大模型（`source` 显示为 `mock`）。
+
+切换到真实云开发：把 `config.js` 的 `USE_MOCK` 改为 `false`，再按下方「二、三」部署即可。
+该开关是唯一改动点，页面、组件、utils、云函数代码均无需改动。
+
+> 注意：`miniprogram/mock/recipes.js` 是 `cloudfunctions/seed/recipes.js` 的前端副本，
+> 因为 cloudfunctions 目录不在小程序打包范围内。若更新种子菜谱，请同步这两份文件。
+
 ## 一、目录结构
 
 ```
@@ -21,6 +36,10 @@
 │   ├── app.json                 # 页面路由与全局窗口配置
 │   ├── app.wxss                 # 全局样式与设计变量
 │   ├── sitemap.json
+│   ├── config.js                # 全局开关（USE_MOCK 本地离线模式）
+│   ├── mock/                    # 本地 Mock（离线体验用）
+│   │   ├── recipes.js           # 内置种子菜谱副本
+│   │   └── index.js             # 假云函数 login/recommendMenu/getRecipeDetail
 │   ├── utils/
 │   │   ├── request.js           # 云函数调用封装（loading / 错误处理）
 │   │   ├── timer.js             # 多路倒计时管理器
