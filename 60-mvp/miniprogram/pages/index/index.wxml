@@ -1,0 +1,36 @@
+<!-- pages/index/index.wxml -->
+<view class="home">
+  <view class="hero">
+    <view class="hero-title">今天吃点啥？</view>
+    <view class="hero-sub">不用想，照着做，新手也能高效搞定一日三餐</view>
+  </view>
+
+  <view class="section-label">选择场景</view>
+  <view class="scenes">
+    <view
+      class="scene {{activeScene === item.key ? 'scene-active' : ''}}"
+      wx:for="{{scenes}}"
+      wx:key="key"
+      data-key="{{item.key}}"
+      data-desc="{{item.desc}}"
+      bindtap="onSceneTap"
+    >
+      <view class="scene-label">{{item.label}}</view>
+      <view class="scene-desc">{{item.desc}}</view>
+    </view>
+  </view>
+
+  <view class="steps-intro card">
+    <view class="intro-title">🍳 高效烹饪三步走</view>
+    <view class="intro-item"><text class="intro-num">1</text> AI 一键配菜，荤素汤直接给答案</view>
+    <view class="intro-item"><text class="intro-num">2</text> 烹饪前备菜清单，备齐再开火不手忙脚乱</view>
+    <view class="intro-item"><text class="intro-num">3</text> 多线程时间轴，并行统筹缩短总时长</view>
+  </view>
+
+  <view class="footer">
+    <button class="btn-primary recommend-btn" loading="{{loading}}" bindtap="onRecommend">
+      🎲 今日推荐
+    </button>
+    <view class="footer-tip">当前场景：{{activeDesc}}</view>
+  </view>
+</view>

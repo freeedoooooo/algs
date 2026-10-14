@@ -1,0 +1,67 @@
+/* pages/prep/prep.wxss */
+.prep-page {
+  padding: 24rpx 24rpx 160rpx;
+}
+
+.prep-head {
+  margin-bottom: 24rpx;
+}
+
+.prep-name {
+  font-size: 40rpx;
+  font-weight: 700;
+}
+
+.prep-sub {
+  font-size: 26rpx;
+  color: #8A8A8A;
+  margin-top: 8rpx;
+}
+
+.prep-progress {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 20rpx;
+  padding-top: 20rpx;
+  border-top: 2rpx solid #F2F2F2;
+  font-size: 26rpx;
+  font-weight: 600;
+}
+
+.prep-hint {
+  font-size: 24rpx;
+  color: #FB8C00;
+  font-weight: 400;
+}
+
+.prep-ok {
+  color: #43A047;
+}
+
+.group {
+  margin-bottom: 24rpx;
+}
+
+.group-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  margin-bottom: 8rpx;
+}
+
+.prep-footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 20rpx 24rpx calc(20rpx + env(safe-area-inset-bottom));
+  background: #fff;
+  box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.06);
+}
+
+.start-btn {
+  width: 100%;
+  height: 96rpx;
+  line-height: 96rpx;
+  font-size: 34rpx;
+}

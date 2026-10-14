@@ -1,0 +1,7 @@
+<!-- components/checklist-item/checklist-item.wxml -->
+<view class="ci {{checked ? 'ci-checked' : ''}}" bindtap="onToggle">
+  <view class="ci-box">
+    <text wx:if="{{checked}}" class="ci-tick">✓</text>
+  </view>
+  <text class="ci-text">{{text}}</text>
+</view>

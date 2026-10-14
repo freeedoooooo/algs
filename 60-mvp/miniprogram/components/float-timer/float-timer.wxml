@@ -1,0 +1,13 @@
+<!-- components/float-timer/float-timer.wxml -->
+<view class="ft-wrap" wx:if="{{items.length}}">
+  <view
+    class="ft-item {{item.urgent ? 'ft-urgent' : ''}}"
+    wx:for="{{items}}"
+    wx:key="key"
+    data-key="{{item.key}}"
+    bindtap="onTapItem"
+  >
+    <text class="ft-label">{{item.label}}</text>
+    <text class="ft-remain">{{item.remainText}}</text>
+  </view>
+</view>

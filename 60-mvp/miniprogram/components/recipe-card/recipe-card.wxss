@@ -1,0 +1,63 @@
+/* components/recipe-card/recipe-card.wxss */
+.recipe-card {
+  background: #fff;
+  border-radius: 20rpx;
+  padding: 28rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+}
+
+.rc-head {
+  display: flex;
+  align-items: center;
+}
+
+.rc-type {
+  width: 44rpx;
+  height: 44rpx;
+  line-height: 44rpx;
+  text-align: center;
+  border-radius: 12rpx;
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #fff;
+  margin-right: 16rpx;
+  flex-shrink: 0;
+}
+
+.rc-type.meat { background: #EF5350; }
+.rc-type.vegetable { background: #66BB6A; }
+.rc-type.soup { background: #42A5F5; }
+.rc-type.staple { background: #FFA726; }
+
+.rc-name {
+  font-size: 34rpx;
+  font-weight: 600;
+  color: #2B2B2B;
+}
+
+.rc-meta {
+  display: flex;
+  align-items: center;
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: #8A8A8A;
+}
+
+.rc-time { margin-right: 24rpx; }
+
+.rc-tip {
+  margin-top: 14rpx;
+  font-size: 24rpx;
+  color: #FB8C00;
+  background: #FFF6E9;
+  border-radius: 12rpx;
+  padding: 12rpx 16rpx;
+}
+
+.rc-action {
+  margin-top: 16rpx;
+  font-size: 24rpx;
+  color: #FF7043;
+  text-align: right;
+}

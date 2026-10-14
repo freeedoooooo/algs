@@ -1,0 +1,10 @@
+{
+  "name": "recommendMenu",
+  "version": "1.0.0",
+  "description": "AI 一键推荐菜单（通义千问组合 + 兜底）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3",
+    "axios": "^1.6.0"
+  }
+}

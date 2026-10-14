@@ -1,0 +1,6 @@
+{
+  "usingComponents": {
+    "checklist-item": "/components/checklist-item/checklist-item"
+  },
+  "navigationBarTitleText": "备菜清单"
+}

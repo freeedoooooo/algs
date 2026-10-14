@@ -1,0 +1,28 @@
+<!-- pages/cook/cook.wxml -->
+<view class="cook-page" wx:if="{{recipe}}">
+  <view class="cook-head card">
+    <view class="cook-name">{{recipe.name}}</view>
+    <view class="cook-sub">按时间轴推进，⏰ 节点可开启倒计时并行统筹</view>
+    <view class="cook-progress">进度 {{doneCount}}/{{steps.length}}</view>
+  </view>
+
+  <view class="timeline">
+    <timeline-step
+      wx:for="{{steps}}"
+      wx:key="index"
+      index="{{index}}"
+      step="{{item}}"
+      status="{{item._status}}"
+      remainText="{{item._remainText}}"
+      bind:start="onStartTimer"
+      bind:done="onStepDone"
+    />
+  </view>
+
+  <view class="cook-footer">
+    <button class="btn-ghost" bindtap="onBack">返回</button>
+    <button class="btn-primary" bindtap="onAllDone">🎉 全部完成</button>
+  </view>
+
+  <float-timer items="{{floatItems}}" bind:tapitem="onTapFloat" />
+</view>

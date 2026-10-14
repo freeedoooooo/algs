@@ -1,0 +1,112 @@
+/* components/timeline-step/timeline-step.wxss */
+.ts {
+  display: flex;
+}
+
+.ts-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 56rpx;
+  flex-shrink: 0;
+}
+
+.ts-dot {
+  width: 48rpx;
+  height: 48rpx;
+  line-height: 48rpx;
+  text-align: center;
+  border-radius: 50%;
+  background: #E0E0E0;
+  color: #fff;
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
+.ts-running .ts-dot { background: #FF7043; }
+.ts-done .ts-dot { background: #43A047; }
+
+.ts-line {
+  flex: 1;
+  width: 4rpx;
+  background: #E8E8E8;
+  margin: 6rpx 0;
+}
+
+.ts-body {
+  flex: 1;
+  padding: 0 0 32rpx 20rpx;
+}
+
+.ts-top {
+  display: flex;
+  align-items: center;
+}
+
+.ts-time {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #FF7043;
+  margin-right: 16rpx;
+}
+
+.ts-badge {
+  font-size: 20rpx;
+  color: #fff;
+  border-radius: 8rpx;
+  padding: 2rpx 12rpx;
+  margin-right: 12rpx;
+}
+
+.badge-prep { background: #66BB6A; }
+.badge-cook { background: #FF7043; }
+.badge-wait { background: #42A5F5; }
+
+.ts-timer-tag {
+  font-size: 22rpx;
+  color: #FB8C00;
+}
+
+.ts-action {
+  font-size: 30rpx;
+  color: #2B2B2B;
+  margin-top: 10rpx;
+  line-height: 1.5;
+}
+
+.ts-done .ts-action {
+  color: #B0B0B0;
+}
+
+.ts-ops {
+  display: flex;
+  align-items: center;
+  margin-top: 16rpx;
+}
+
+.ts-countdown {
+  font-size: 40rpx;
+  font-weight: 700;
+  color: #F4511E;
+  font-family: monospace;
+  margin-right: 24rpx;
+}
+
+.ts-btn {
+  font-size: 24rpx;
+  color: #FF7043;
+  border: 2rpx solid #FF7043;
+  border-radius: 32rpx;
+  padding: 8rpx 28rpx;
+  margin-right: 16rpx;
+}
+
+.ts-btn-done {
+  color: #43A047;
+  border-color: #43A047;
+}
+
+.ts-done-text {
+  font-size: 24rpx;
+  color: #43A047;
+}

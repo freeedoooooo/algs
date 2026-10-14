@@ -1,0 +1,23 @@
+<!-- components/timeline-step/timeline-step.wxml -->
+<view class="ts ts-{{status}}">
+  <view class="ts-rail">
+    <view class="ts-dot">{{status === 'done' ? '✓' : index + 1}}</view>
+    <view class="ts-line"></view>
+  </view>
+  <view class="ts-body">
+    <view class="ts-top">
+      <text class="ts-time">{{step.time}}</text>
+      <text class="ts-badge badge-{{step.type}}">{{typeLabel}}</text>
+      <text class="ts-timer-tag" wx:if="{{step.timer && status !== 'done'}}">⏰ {{step.timer}}分钟</text>
+    </view>
+    <view class="ts-action">{{step.action}}</view>
+    <view class="ts-ops">
+      <block wx:if="{{step.timer}}">
+        <view wx:if="{{status === 'running'}}" class="ts-countdown">{{remainText}}</view>
+        <view wx:if="{{status === 'pending'}}" class="ts-btn" bindtap="onStart">开始计时</view>
+      </block>
+      <view wx:if="{{status !== 'done'}}" class="ts-btn ts-btn-done" bindtap="onDone">完成</view>
+      <view wx:if="{{status === 'done'}}" class="ts-done-text">已完成</view>
+    </view>
+  </view>
+</view>

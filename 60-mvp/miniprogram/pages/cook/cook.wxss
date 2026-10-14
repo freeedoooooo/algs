@@ -1,0 +1,54 @@
+/* pages/cook/cook.wxss */
+.cook-page {
+  padding: 24rpx 24rpx 200rpx;
+}
+
+.cook-head {
+  margin-bottom: 32rpx;
+}
+
+.cook-name {
+  font-size: 40rpx;
+  font-weight: 700;
+}
+
+.cook-sub {
+  font-size: 24rpx;
+  color: #8A8A8A;
+  margin-top: 8rpx;
+}
+
+.cook-progress {
+  margin-top: 16rpx;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #FF7043;
+}
+
+.timeline {
+  padding-left: 8rpx;
+}
+
+.cook-footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  gap: 20rpx;
+  padding: 20rpx 24rpx calc(20rpx + env(safe-area-inset-bottom));
+  background: #fff;
+  box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.06);
+}
+
+.cook-footer .btn-ghost {
+  flex: 1;
+  height: 88rpx;
+  line-height: 84rpx;
+}
+
+.cook-footer .btn-primary {
+  flex: 2;
+  height: 88rpx;
+  line-height: 88rpx;
+}

@@ -1,0 +1,35 @@
+<!-- pages/prep/prep.wxml -->
+<view class="prep-page" wx:if="{{recipe}}">
+  <view class="prep-head card">
+    <view class="prep-name">{{recipe.name}}</view>
+    <view class="prep-sub">⏱ 约 {{recipe.estimatedTime}} 分钟 · {{recipe.servings || 2}} 人份</view>
+    <view class="prep-progress">
+      <text>备齐进度 {{checkedCount}}/{{total}}</text>
+      <text class="prep-hint" wx:if="{{!allChecked}}">全部打勾后解锁开始烹饪</text>
+      <text class="prep-hint prep-ok" wx:else>✓ 已备齐，可以开火啦</text>
+    </view>
+  </view>
+
+  <view class="group card" wx:for="{{groups}}" wx:key="key" wx:for-item="group">
+    <view class="group-title">{{group.title}}</view>
+    <checklist-item
+      wx:for="{{group.items}}"
+      wx:key="id"
+      wx:for-item="it"
+      text="{{it.text}}"
+      itemId="{{it.id}}"
+      checked="{{it.checked}}"
+      bind:change="onItemChange"
+    />
+  </view>
+
+  <view class="prep-footer">
+    <button
+      class="btn-primary start-btn"
+      disabled="{{!allChecked}}"
+      bindtap="onStartCook"
+    >
+      🔥 开始烹饪
+    </button>
+  </view>
+</view>

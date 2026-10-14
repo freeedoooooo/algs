@@ -1,0 +1,18 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/menu/menu",
+    "pages/prep/prep",
+    "pages/cook/cook"
+  ],
+  "window": {
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#FF7043",
+    "navigationBarTitleText": "备菜不慌",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#F7F7F7"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents"
+}

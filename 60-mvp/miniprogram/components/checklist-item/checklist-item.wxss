@@ -1,0 +1,41 @@
+/* components/checklist-item/checklist-item.wxss */
+.ci {
+  display: flex;
+  align-items: center;
+  padding: 20rpx 8rpx;
+  border-bottom: 2rpx solid #F2F2F2;
+}
+
+.ci-box {
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 50%;
+  border: 3rpx solid #D0D0D0;
+  margin-right: 20rpx;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.ci-checked .ci-box {
+  background: #43A047;
+  border-color: #43A047;
+}
+
+.ci-tick {
+  color: #fff;
+  font-size: 26rpx;
+  font-weight: 700;
+}
+
+.ci-text {
+  font-size: 30rpx;
+  color: #2B2B2B;
+}
+
+.ci-checked .ci-text {
+  color: #B0B0B0;
+  text-decoration: line-through;
+}

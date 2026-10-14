@@ -1,0 +1,57 @@
+/* pages/menu/menu.wxss */
+.menu-page {
+  padding: 24rpx 24rpx 60rpx;
+}
+
+.reason-card {
+  margin-bottom: 24rpx;
+}
+
+.reason-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.reason-badge {
+  font-size: 24rpx;
+  color: #fff;
+  background: #FF7043;
+  border-radius: 12rpx;
+  padding: 4rpx 16rpx;
+}
+
+.reason-swap {
+  font-size: 26rpx;
+  color: #FF7043;
+  font-weight: 600;
+}
+
+.reason-text {
+  font-size: 30rpx;
+  color: #2B2B2B;
+  margin-top: 16rpx;
+  line-height: 1.5;
+}
+
+.reason-tip {
+  font-size: 24rpx;
+  color: #8A8A8A;
+  margin-top: 12rpx;
+}
+
+.dish-list {
+  margin-top: 8rpx;
+}
+
+.menu-footer {
+  margin-top: 32rpx;
+  display: flex;
+  justify-content: center;
+}
+
+.menu-footer .btn-ghost {
+  width: 60%;
+  height: 84rpx;
+  line-height: 84rpx;
+}

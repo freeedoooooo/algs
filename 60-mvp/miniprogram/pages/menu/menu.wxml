@@ -1,0 +1,25 @@
+<!-- pages/menu/menu.wxml -->
+<view class="menu-page">
+  <view class="reason-card card">
+    <view class="reason-head">
+      <text class="reason-badge">{{source === 'ai' ? 'AI 搭配' : '智能搭配'}}</text>
+      <text class="reason-swap" bindtap="onSwap">🔄 换一换</text>
+    </view>
+    <view class="reason-text" wx:if="{{reason}}">{{reason}}</view>
+    <view class="reason-tip">点选任意一道菜，进入备菜清单与烹饪导航</view>
+  </view>
+
+  <view class="dish-list">
+    <recipe-card
+      wx:for="{{items}}"
+      wx:key="_id"
+      recipe="{{item}}"
+      selectable="{{true}}"
+      bind:tap="onPickDish"
+    />
+  </view>
+
+  <view class="menu-footer">
+    <button class="btn-ghost" bindtap="onBack">重新选场景</button>
+  </view>
+</view>

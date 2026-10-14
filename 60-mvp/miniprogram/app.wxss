@@ -1,0 +1,98 @@
+/* app.wxss 全局样式与设计变量 */
+page {
+  --brand: #FF7043;
+  --brand-dark: #F4511E;
+  --brand-light: #FFE0D6;
+  --text-main: #2B2B2B;
+  --text-sub: #8A8A8A;
+  --bg: #F7F7F7;
+  --card: #FFFFFF;
+  --line: #EEEEEE;
+  --success: #43A047;
+  --warn: #FB8C00;
+
+  background: var(--bg);
+  color: var(--text-main);
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, sans-serif;
+  font-size: 28rpx;
+  line-height: 1.6;
+}
+
+view, text, button, scroll-view {
+  box-sizing: border-box;
+}
+
+.container {
+  padding: 24rpx;
+}
+
+.card {
+  background: var(--card);
+  border-radius: 20rpx;
+  padding: 28rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+}
+
+.row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.title-lg {
+  font-size: 40rpx;
+  font-weight: 700;
+}
+
+.title-md {
+  font-size: 32rpx;
+  font-weight: 600;
+}
+
+.text-sub {
+  color: var(--text-sub);
+  font-size: 24rpx;
+}
+
+.btn-primary {
+  background: var(--brand);
+  color: #fff;
+  border-radius: 48rpx;
+  font-size: 32rpx;
+  font-weight: 600;
+  border: none;
+}
+
+.btn-primary[disabled] {
+  background: #D9D9D9 !important;
+  color: #fff !important;
+}
+
+.btn-ghost {
+  background: #fff;
+  color: var(--brand);
+  border: 2rpx solid var(--brand);
+  border-radius: 48rpx;
+  font-size: 28rpx;
+}
+
+.tag {
+  display: inline-block;
+  padding: 4rpx 16rpx;
+  border-radius: 20rpx;
+  font-size: 22rpx;
+  background: var(--brand-light);
+  color: var(--brand-dark);
+  margin-right: 12rpx;
+}
+
+.divider {
+  height: 2rpx;
+  background: var(--line);
+  margin: 20rpx 0;
+}

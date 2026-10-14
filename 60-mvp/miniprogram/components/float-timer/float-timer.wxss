@@ -1,0 +1,46 @@
+/* components/float-timer/float-timer.wxss */
+.ft-wrap {
+  position: fixed;
+  left: 24rpx;
+  right: 24rpx;
+  bottom: 40rpx;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  z-index: 100;
+}
+
+.ft-item {
+  flex: 1;
+  min-width: 200rpx;
+  background: rgba(43, 43, 43, 0.92);
+  border-radius: 20rpx;
+  padding: 16rpx 24rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.2);
+}
+
+.ft-urgent {
+  background: rgba(244, 81, 30, 0.95);
+  animation: ft-blink 1s infinite;
+}
+
+@keyframes ft-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.ft-label {
+  font-size: 22rpx;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.ft-remain {
+  font-size: 40rpx;
+  font-weight: 700;
+  color: #fff;
+  font-family: monospace;
+  margin-top: 4rpx;
+}

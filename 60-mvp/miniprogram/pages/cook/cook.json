@@ -1,0 +1,7 @@
+{
+  "usingComponents": {
+    "timeline-step": "/components/timeline-step/timeline-step",
+    "float-timer": "/components/float-timer/float-timer"
+  },
+  "navigationBarTitleText": "烹饪导航"
+}

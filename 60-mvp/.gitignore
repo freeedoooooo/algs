@@ -1,0 +1,11 @@
+# 云函数依赖（部署时云端安装，无需提交）
+cloudfunctions/**/node_modules/
+
+# 小程序 npm 构建产物
+miniprogram/miniprogram_npm/
+
+# 开发者工具私有配置
+project.private.config.json
+
+# 系统文件
+.DS_Store
