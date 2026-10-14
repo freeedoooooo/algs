@@ -11,7 +11,7 @@
       <text class="ts-timer-tag" wx:if="{{step.timer && status !== 'done'}}">⏰ {{step.timer}}分钟</text>
     </view>
     <view class="ts-action">{{step.action}}</view>
-    <view class="ts-ops">
+    <view class="ts-ops" wx:if="{{!viewOnly}}">
       <block wx:if="{{step.timer}}">
         <view wx:if="{{status === 'running'}}" class="ts-countdown">{{remainText}}</view>
         <view wx:if="{{status === 'pending'}}" class="ts-btn" bindtap="onStart">开始计时</view>

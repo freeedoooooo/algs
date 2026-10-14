@@ -4,8 +4,8 @@
   "compileType": "miniprogram",
   "libVersion": "3.5.5",
   "appid": "wx1619c8a21a37209a",
-  "projectname": "beicai-buhuang",
-  "description": "备菜不慌 - AI驱动的家庭高效烹饪助手 MVP",
+  "projectname": "chidianhaode",
+  "description": "吃点好的 - AI驱动的家庭高效烹饪助手 MVP",
   "setting": {
     "urlCheck": true,
     "es6": true,
