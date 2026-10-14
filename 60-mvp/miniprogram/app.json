@@ -3,7 +3,8 @@
     "pages/index/index",
     "pages/menu/menu",
     "pages/prep/prep",
-    "pages/cook/cook"
+    "pages/cook/cook",
+    "pages/inventory/inventory"
   ],
   "window": {
     "backgroundTextStyle": "light",

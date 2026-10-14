@@ -23,6 +23,64 @@ const STEP_TYPE_LABEL = {
   wait: '等'
 };
 
+// 库存食材分类
+const ING_CATEGORIES = [
+  { key: 'vegetable', label: '🥬 蔬菜' },
+  { key: 'meat', label: '🍖 肉蛋' },
+  { key: 'seafood', label: '🦐 水产' },
+  { key: 'fruit', label: '🍎 水果' },
+  { key: 'other', label: '🧺 其他' }
+];
+
+const CATEGORY_LABEL = ING_CATEGORIES.reduce((m, c) => {
+  m[c.key] = c.label;
+  return m;
+}, {});
+
+// 库存状态展示元数据
+const STATUS_META = {
+  expired: { label: '已过期', color: '#E53935' },
+  expiring: { label: '临期', color: '#FB8C00' },
+  normal: { label: '新鲜', color: '#43A047' }
+};
+
+const EXPIRING_DAYS = 2; // 临期阈值，与云函数保持一致
+
+function pad(n) {
+  return n < 10 ? '0' + n : '' + n;
+}
+
+// 今天日期字符串 YYYY-MM-DD
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// 距今 n 天后的日期字符串（n 可为负）
+function dateAfter(n) {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// 距过期天数：正=还剩几天，负=已过期几天，null=无保质期
+function daysUntil(dateStr) {
+  if (!dateStr) return null;
+  const t = new Date(todayStr() + 'T00:00:00').getTime();
+  const e = new Date(dateStr + 'T00:00:00').getTime();
+  if (isNaN(e)) return null;
+  return Math.round((e - t) / 86400000);
+}
+
+// 根据保质期计算状态
+function ingStatus(dateStr) {
+  const d = daysUntil(dateStr);
+  if (d === null) return 'normal';
+  if (d < 0) return 'expired';
+  if (d <= EXPIRING_DAYS) return 'expiring';
+  return 'normal';
+}
+
 /**
  * 获取当前月份 (1-12)
  */
@@ -55,6 +113,14 @@ module.exports = {
   SCENES,
   TYPE_LABEL,
   STEP_TYPE_LABEL,
+  ING_CATEGORIES,
+  CATEGORY_LABEL,
+  STATUS_META,
+  EXPIRING_DAYS,
   getMonth,
+  todayStr,
+  dateAfter,
+  daysUntil,
+  ingStatus,
   remind
 };

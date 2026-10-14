@@ -44,11 +44,9 @@
 .cook-footer .btn-ghost {
   flex: 1;
   height: 88rpx;
-  line-height: 84rpx;
 }
 
 .cook-footer .btn-primary {
   flex: 2;
   height: 88rpx;
-  line-height: 88rpx;
 }

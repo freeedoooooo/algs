@@ -1,0 +1,9 @@
+{
+  "name": "inventory",
+  "version": "1.0.0",
+  "description": "轻量库存管理：录入/编辑/删除食材，做菜后按 BOM 自动扣减",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

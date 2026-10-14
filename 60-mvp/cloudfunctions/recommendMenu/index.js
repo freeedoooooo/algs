@@ -35,12 +35,45 @@ function applyPreferences(list, preferences = {}) {
   });
 }
 
-// 兜底：从各类型随机取一道
-function fallbackMenu(groups) {
+// 库存索引：现有食材名集合 + 临期食材名集合
+function buildInventoryIndex(inventory = []) {
+  const onHand = [];
+  const expiring = [];
+  inventory.forEach(it => {
+    if (!it || !it.name) return;
+    onHand.push(it.name);
+    if (it.expiring) expiring.push(it.name);
+  });
+  return { onHand, expiring };
+}
+
+// 名称模糊匹配（完全相等或互相包含）
+function nameMatch(names, ingName) {
+  if (!ingName) return false;
+  return names.some(k => k === ingName || k.includes(ingName) || ingName.includes(k));
+}
+
+// 给菜谱按「能消耗多少现有/临期食材」打分
+function scoreRecipe(r, inv) {
+  if (!inv) return 0;
+  let score = 0;
+  (r.ingredientsNeeded || []).forEach(i => {
+    if (nameMatch(inv.expiring, i.name)) score += 2;       // 临期权重更高
+    else if (nameMatch(inv.onHand, i.name)) score += 1;
+  });
+  return score;
+}
+
+// 兜底：清库存优先时取每类评分最高，否则随机
+function fallbackMenu(groups, preferInventory) {
+  const pick = arr => {
+    if (!arr.length) return null;
+    return preferInventory ? arr[0] : pickRandom(arr);
+  };
   const menu = [];
-  const meat = pickRandom(groups.meat);
-  const veg = pickRandom(groups.vegetable);
-  const soup = pickRandom(groups.soup);
+  const meat = pick(groups.meat);
+  const veg = pick(groups.vegetable);
+  const soup = pick(groups.soup);
   if (meat) menu.push(meat);
   if (veg) menu.push(veg);
   if (soup) menu.push(soup);
@@ -73,6 +106,17 @@ exports.main = async (event = {}) => {
 
     const groups = groupByType(pool);
 
+    // 3.5 清库存优先：按「能消耗现有/临期食材」给候选打分并降序排序
+    const preferInventory = !!event.preferInventory;
+    const inventory = Array.isArray(event.inventory) ? event.inventory : [];
+    const inv = preferInventory && inventory.length ? buildInventoryIndex(inventory) : null;
+    if (inv) {
+      const byScore = (a, b) => scoreRecipe(b, inv) - scoreRecipe(a, inv);
+      groups.meat.sort(byScore);
+      groups.vegetable.sort(byScore);
+      groups.soup.sort(byScore);
+    }
+
     // 4. AI 组合推荐
     let menu = [];
     let reason = '';
@@ -84,12 +128,17 @@ exports.main = async (event = {}) => {
       soup: groups.soup.map(r => r.name)
     };
 
+    const inventoryHint = inv
+      ? `\n用户冰箱现有食材（标注※者为临期，应优先消耗）：${inventory.map(i => (i.expiring ? '※' : '') + i.name).join('、')}。请尽量搭配能消耗这些食材（尤其临期）的菜。`
+      : '';
+
     const aiResult = await chatJSON(
       '你是一个家庭营养搭餐助手。只能从用户提供的候选菜名中选择，禁止编造。返回严格的 JSON。',
       `当前月份${month}月，场景「${scene}」。请从以下候选中各选一道组成一荤一素一汤的合理搭配：\n` +
         `荤菜候选：${catalog.meat.join('、') || '无'}\n` +
         `素菜候选：${catalog.vegetable.join('、') || '无'}\n` +
         `汤候选：${catalog.soup.join('、') || '无'}\n` +
+        inventoryHint +
         `返回格式：{"meat":"菜名","vegetable":"菜名","soup":"菜名","reason":"一句话搭配理由"}`
     );
 
@@ -117,9 +166,11 @@ exports.main = async (event = {}) => {
 
     // 5. 兜底
     if (!menu.length) {
-      menu = fallbackMenu(groups);
-      reason = '为你随机搭配了均衡的一餐';
+      menu = fallbackMenu(groups, !!inv);
+      reason = inv ? '优先消耗你的库存/临期食材，搭配了均衡的一餐' : '为你随机搭配了均衡的一餐';
       source = 'fallback';
+    } else if (inv) {
+      reason = (reason ? reason + '；' : '') + '已优先搭配可消耗库存/临期食材的菜';
     }
 
     return {

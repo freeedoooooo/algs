@@ -58,6 +58,79 @@
   margin-top: 8rpx;
 }
 
+.inv-entry {
+  margin-top: 32rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.inv-entry-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.inv-entry-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #2B2B2B;
+}
+
+.inv-entry-sub {
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  color: #8A8A8A;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+.inv-badge {
+  padding: 2rpx 14rpx;
+  border-radius: 18rpx;
+  font-size: 20rpx;
+  color: #fff;
+}
+
+.inv-badge-warn {
+  background: #FB8C00;
+}
+
+.inv-badge-danger {
+  background: #E53935;
+}
+
+.inv-entry-arrow {
+  font-size: 48rpx;
+  color: #CCC;
+  margin-left: 16rpx;
+}
+
+.prefer-row {
+  margin-top: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.prefer-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.prefer-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #2B2B2B;
+}
+
+.prefer-desc {
+  font-size: 22rpx;
+  color: #8A8A8A;
+  margin-top: 6rpx;
+}
+
 .steps-intro {
   margin-top: 32rpx;
 }
@@ -97,7 +170,6 @@
 .recommend-btn {
   width: 100%;
   height: 96rpx;
-  line-height: 96rpx;
   font-size: 34rpx;
 }
 

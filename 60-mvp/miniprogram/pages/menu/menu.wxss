@@ -53,5 +53,4 @@
 .menu-footer .btn-ghost {
   width: 60%;
   height: 84rpx;
-  line-height: 84rpx;
 }

@@ -1,0 +1,89 @@
+<!-- pages/inventory/inventory.wxml -->
+<view class="inv-page">
+  <view class="inv-head card">
+    <view class="inv-title">🧊 我的库存</view>
+    <view class="inv-summary">
+      <text class="sum-item">共 {{summary.total}} 种</text>
+      <text class="badge badge-warn" wx:if="{{summary.expiring}}">临期 {{summary.expiring}}</text>
+      <text class="badge badge-danger" wx:if="{{summary.expired}}">过期 {{summary.expired}}</text>
+    </view>
+    <view class="inv-tip">开启首页「清库存优先」后，临期食材会被优先消耗</view>
+  </view>
+
+  <block wx:if="{{sections.length}}">
+    <view class="inv-section" wx:for="{{sections}}" wx:key="status" wx:for-item="sec">
+      <view class="sec-title" style="color:{{sec.color}}">{{sec.title}} · {{sec.items.length}}</view>
+      <view
+        class="ing-row card"
+        wx:for="{{sec.items}}"
+        wx:key="_id"
+        wx:for-item="ing"
+        data-item="{{ing}}"
+        bindtap="onEditItem"
+      >
+        <view class="ing-main">
+          <view class="ing-name">{{ing.name}}</view>
+          <view class="ing-meta">{{ing.categoryLabel}} · {{ing.expiryText}}</view>
+        </view>
+        <view class="ing-right">
+          <view class="ing-qty">{{ing.quantity}}{{ing.unit}}</view>
+          <view class="ing-status" style="color:{{sec.color}}">{{ing.statusText}}</view>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <view class="inv-empty card" wx:else>
+    <view class="empty-emoji">🧺</view>
+    <view class="empty-text">还没有库存，点右下角「＋」添加食材</view>
+  </view>
+
+  <view class="inv-fab" bindtap="onAdd">＋</view>
+
+  <!-- 表单弹层 -->
+  <view class="mask" wx:if="{{formVisible}}" bindtap="onCloseForm"></view>
+  <view class="sheet" wx:if="{{formVisible}}">
+    <view class="sheet-head">
+      <text class="sheet-title">{{editing ? '编辑食材' : '新增食材'}}</text>
+      <text class="sheet-close" bindtap="onCloseForm">✕</text>
+    </view>
+
+    <view class="field">
+      <text class="field-label">名称</text>
+      <input class="field-input" placeholder="如：番茄" value="{{form.name}}" data-field="name" bindinput="onFormInput" />
+    </view>
+
+    <view class="field">
+      <text class="field-label">分类</text>
+      <picker mode="selector" range="{{categoryLabels}}" value="{{form.categoryIndex}}" bindchange="onCategoryChange">
+        <view class="field-picker">{{categoryLabels[form.categoryIndex]}}</view>
+      </picker>
+    </view>
+
+    <view class="field field-row">
+      <view class="field-col">
+        <text class="field-label">数量</text>
+        <input class="field-input" type="digit" placeholder="1" value="{{form.quantity}}" data-field="quantity" bindinput="onFormInput" />
+      </view>
+      <view class="field-col">
+        <text class="field-label">单位</text>
+        <input class="field-input" placeholder="个 / 份 / g" value="{{form.unit}}" data-field="unit" bindinput="onFormInput" />
+      </view>
+    </view>
+
+    <view class="field field-row">
+      <view class="field-col">
+        <text class="field-label">保质期</text>
+        <picker mode="date" value="{{form.expiryDate}}" bindchange="onDateChange">
+          <view class="field-picker">{{form.expiryDate || '选择日期（可不填）'}}</view>
+        </picker>
+      </view>
+      <view class="field-clear" wx:if="{{form.expiryDate}}" bindtap="onClearDate">清除</view>
+    </view>
+
+    <view class="sheet-actions">
+      <button class="btn-ghost sheet-del" wx:if="{{editing}}" bindtap="onDelete">删除</button>
+      <button class="btn-primary sheet-save" bindtap="onSave">保存</button>
+    </view>
+  </view>
+</view>

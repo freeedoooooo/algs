@@ -2,6 +2,7 @@
 const app = getApp();
 const { createTimerManager, formatRemain } = require('../../utils/timer.js');
 const { remind } = require('../../utils/format.js');
+const { callFunction } = require('../../utils/request.js');
 
 Page({
   data: {
@@ -21,6 +22,7 @@ Page({
     }
 
     this.timerMgr = createTimerManager();
+    this.deducted = false; // 防止重复扣减库存
 
     const steps = recipe.timelineSteps.map(s =>
       Object.assign({}, s, { _status: 'pending', _remainText: '' })
@@ -96,6 +98,7 @@ Page({
 
     if (allDone) {
       wx.showToast({ title: '🎉 全部完成，开饭！', icon: 'none', duration: 2500 });
+      this.deductInventory();
     }
   },
 
@@ -105,6 +108,25 @@ Page({
     const steps = this.data.steps.map(s => Object.assign({}, s, { _status: 'done', _remainText: '' }));
     this.setData({ steps, doneCount: steps.length, allDone: true, floatItems: [] });
     wx.showToast({ title: '🎉 全部完成，开饭！', icon: 'none', duration: 2500 });
+    this.deductInventory();
+  },
+
+  // 完成烹饪后按菜谱 BOM 自动扣减库存（静默、仅一次）
+  deductInventory() {
+    if (this.deducted) return;
+    const recipe = this.data.recipe;
+    if (!recipe || !recipe._id) return;
+    this.deducted = true;
+    callFunction('inventory', { action: 'deduct', recipeId: recipe._id }, { loading: false, showError: false })
+      .then(res => {
+        const n = (res && res.deducted && res.deducted.length) || 0;
+        if (n > 0) {
+          setTimeout(() => {
+            wx.showToast({ title: `已扣减 ${n} 种库存食材`, icon: 'none', duration: 2000 });
+          }, 1200);
+        }
+      })
+      .catch(() => { this.deducted = false; });
   },
 
   // 点击悬浮倒计时，滚动定位（此处简单提示）

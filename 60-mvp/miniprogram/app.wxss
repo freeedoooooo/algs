@@ -81,6 +81,21 @@ view, text, button, scroll-view {
   font-size: 28rpx;
 }
 
+/* 统一按钮文字水平+垂直居中（覆盖小程序 button 默认 line-height 导致的偏移） */
+.btn-primary,
+.btn-ghost {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  box-sizing: border-box;
+}
+
+.btn-primary::after,
+.btn-ghost::after {
+  border: none;
+}
+
 .tag {
   display: inline-block;
   padding: 4rpx 16rpx;

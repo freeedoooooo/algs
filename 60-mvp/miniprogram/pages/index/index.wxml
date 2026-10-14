@@ -20,6 +20,27 @@
     </view>
   </view>
 
+  <view class="inv-entry card" bindtap="onGoInventory">
+    <view class="inv-entry-left">
+      <view class="inv-entry-title">🧊 我的库存</view>
+      <view class="inv-entry-sub">
+        <text wx:if="{{invSummary.total}}">共 {{invSummary.total}} 种食材</text>
+        <text wx:else>点击录入冰箱食材</text>
+        <text class="inv-badge inv-badge-warn" wx:if="{{invSummary.expiring}}">临期 {{invSummary.expiring}}</text>
+        <text class="inv-badge inv-badge-danger" wx:if="{{invSummary.expired}}">过期 {{invSummary.expired}}</text>
+      </view>
+    </view>
+    <view class="inv-entry-arrow">›</view>
+  </view>
+
+  <view class="prefer-row card">
+    <view class="prefer-text">
+      <view class="prefer-title">清库存优先</view>
+      <view class="prefer-desc">推荐时优先消耗现有 / 临期食材</view>
+    </view>
+    <switch checked="{{preferInventory}}" color="#FF7043" bindchange="onTogglePrefer" />
+  </view>
+
   <view class="steps-intro card">
     <view class="intro-title">🍳 高效烹饪三步走</view>
     <view class="intro-item"><text class="intro-num">1</text> AI 一键配菜，荤素汤直接给答案</view>

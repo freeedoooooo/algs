@@ -82,13 +82,27 @@ Page({
     });
   },
 
-  // 全部备齐，进入烹饪导航
+  // 进入烹饪导航：未备齐也允许查看步骤，仅做二次确认提醒
   onStartCook() {
-    if (!this.data.allChecked) {
-      wx.showToast({ title: '还有未备齐的项', icon: 'none' });
+    const go = () => {
+      app.globalData.currentRecipe = this.data.recipe;
+      wx.navigateTo({ url: '/pages/cook/cook' });
+    };
+
+    if (this.data.allChecked) {
+      go();
       return;
     }
-    app.globalData.currentRecipe = this.data.recipe;
-    wx.navigateTo({ url: '/pages/cook/cook' });
+
+    const remain = this.data.total - this.data.checkedCount;
+    wx.showModal({
+      title: '还没备齐哦',
+      content: `还有 ${remain} 项未备齐，确定现在就进入烹饪步骤吗？`,
+      confirmText: '仍要开始',
+      cancelText: '继续备菜',
+      success: (res) => {
+        if (res.confirm) go();
+      }
+    });
   }
 });

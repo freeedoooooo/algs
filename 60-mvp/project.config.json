@@ -3,7 +3,7 @@
   "cloudfunctionRoot": "cloudfunctions/",
   "compileType": "miniprogram",
   "libVersion": "3.5.5",
-  "appid": "touristappid",
+  "appid": "wx1619c8a21a37209a",
   "projectname": "beicai-buhuang",
   "description": "备菜不慌 - AI驱动的家庭高效烹饪助手 MVP",
   "setting": {
@@ -25,7 +25,17 @@
       "ignore": [],
       "disablePlugins": [],
       "outputPath": ""
-    }
+    },
+    "compileWorklet": false,
+    "uglifyFileName": false,
+    "packNpmManually": false,
+    "packNpmRelationList": [],
+    "minifyWXSS": true,
+    "minifyWXML": true,
+    "localPlugins": false,
+    "disableUseStrict": false,
+    "useCompilerPlugins": false,
+    "condition": false
   },
   "condition": {
     "miniprogram": {
@@ -38,5 +48,11 @@
         }
       ]
     }
-  }
+  },
+  "simulatorPluginLibVersion": {},
+  "packOptions": {
+    "ignore": [],
+    "include": []
+  },
+  "editorSetting": {}
 }
