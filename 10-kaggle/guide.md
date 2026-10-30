@@ -35,9 +35,12 @@
 - 🏠 **[House Prices - Advanced Regression Techniques](https://www.kaggle.com/competitions/house-prices-advanced-regression-techniques)** (回归问题，特征工程演练场)
 
 #### 2. “三步模仿法”实战
-- **Step 1 (拆解)**：在竞赛的 "Code" 标签下，按 "Most Votes" 排序，找一篇高赞 Notebook。不要直接抄，逐行阅读，理解他为什么这么处理缺失值，为什么这么编码类别特征。
+- **Step 1 (拆解)**：在竞赛的 “Code” 标签下，按 “Most Votes” 排序，找一篇高赞 Notebook。不要直接抄，逐行阅读，理解他为什么这么处理缺失值，为什么这么编码类别特征。
 - **Step 2 (复刻与微调)**：用 Vibe Coding 帮你快速生成 Baseline 代码，然后**手动**修改特征工程部分（例如：把年龄分箱、提取姓名中的称呼），提交看分数变化。
 - **Step 3 (进阶)**：学习 Kaggle Learn 的 👉 **[Feature Engineering](https://www.kaggle.com/learn/feature-engineering)** 和 👉 **[Intermediate Machine Learning](https://www.kaggle.com/learn/intermediate-machine-learning)** (处理缺失值、分类变量、XGBoost)。
+
+#### 3. 课程配套 Bonus Notebook
+-  **[Feature Engineering for House Prices](https://www.kaggle.com/code/ryanholbrook/feature-engineering-for-house-prices)** (Ryan Holbrook 编写，Kaggle Feature Engineering 课程的收尾实战。把 PCA、Target Encoding、K-Means 簇距离等知识点在 House Prices 数据集上串起来。**建议学完特征工程课程后再看**。)
 
 🏆 **阶段里程碑**：在 Titanic 和 House Prices 中成功提交预测结果，并进入排行榜前 50%，产出属于自己的第一篇完整 Notebook。
 
