@@ -53,9 +53,9 @@ engine = PPStructureV3(
     use_seal_recognition=False,      # 关掉印章识别
     use_region_detection=False,      # 关掉区域检测
     use_table_recognition=True,      # 只保留表格识别
-    # 文本检测/识别锁到本地已缓存的 v5，避免又去下 v6
-    text_detection_model_name='PP-OCRv5_server_det',
-    text_recognition_model_name='PP-OCRv5_server_rec',
+    # 文本检测/识别用移动端模型：CPU 上比 server 快一个数量级（表格 OCR 文字量不大，精度够用）
+    text_detection_model_name='PP-OCRv4_mobile_det',
+    text_recognition_model_name='PP-OCRv4_mobile_rec',
 )
 t1 = time.perf_counter()
 print(f'>> 流水线加载耗时：{t1 - t0:.2f}s')
@@ -70,6 +70,9 @@ print(f'>> 推理耗时：{t2 - t1:.2f}s')
 os.makedirs('output', exist_ok=True)
 for i, res in enumerate(result):
     data = res.json if hasattr(res, 'json') else res
+    # 3.x 的 res.json 是 {'res': {...}} 嵌套结构，真正的字段在里面
+    if isinstance(data, dict) and isinstance(data.get('res'), dict):
+        data = data['res']
     blocks = data.get('parsing_res_list', []) if isinstance(data, dict) else []
     print(f'>> 第 {i + 1} 个输入，识别到 {len(blocks)} 个内容块：')
     for b in blocks:
