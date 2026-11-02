@@ -91,7 +91,7 @@
 
 **为什么要学**：**能直接抽文字的 PDF 根本不用 OCR**。先判断，能省一大半事，这是工程思维（你的强项）。
 
-**怎么学 / 动手**：装库 `pip install pdfplumber pymupdf`，跑这段判断逻辑（已备好为 `c_pdf_text_layer.py`，可直接 `python c_pdf_text_layer.py your.pdf` 运行）：
+**怎么学 / 动手**：装库 `pip install pdfplumber pymupdf`，跑这段判断逻辑（已备好为 `c_pdf_text_layer.py`，`python c_pdf_text_layer.py` 默认跑 `input/test3.pdf`，也可传路径 `python c_pdf_text_layer.py input/别的.pdf`）：
 ```python
 import pdfplumber
 
@@ -108,11 +108,12 @@ print("预览：", preview)
 - **有文本层** → 直接 `extract_text()` 拿结果，本周任务对它已完成。
 - **无文本层（扫描件）** → 用 PyMuPDF 把每页转成图片，再喂给模块 B 的 PaddleOCR：
   ```python
-  import fitz  # PyMuPDF
-  doc = fitz.open("scan.pdf")
+  import pymupdf                       # PyMuPDF：新导入名（`import fitz` 已弃用）
+  doc = pymupdf.open("scan.pdf")
   for i, page in enumerate(doc):
       pix = page.get_pixmap(dpi=200)      # dpi 越高越清晰但越慢
       pix.save(f"output/page_{i}.png")           # 存成图片，再走 PaddleOCR
+  doc.close()
   ```
 
 **产出**：一个能判断"该不该 OCR"的函数，并把一个扫描 PDF 转成图片。
@@ -125,16 +126,20 @@ print("预览：", preview)
 
 **怎么学 / 动手**：
 ```python
-from paddleocr import PPStructure
+from paddleocr import PPStructureV3          # 3.x 已移除旧的 PPStructure，改用 PPStructureV3
 
-engine = PPStructure(table=True, ocr=True, lang='ch')
-result = engine('input/table.png')          # 一张含表格的图片
-for item in result:
-    print(item['type'])                # table / text
-    if item['type'] == 'table':
-        print(item['res']['html'])     # 表格的 HTML 结构，可直接存 .html 用浏览器打开
+engine = PPStructureV3(
+    use_formula_recognition=False, use_chart_recognition=False,
+    use_seal_recognition=False, use_region_detection=False,
+    use_table_recognition=True,              # 只保留表格识别
+)
+result = engine.predict('input/test2.jpg')   # 3.x 用 predict()，返回 list[结果对象]
+res = result[0]
+res.save_to_html('output/table_out.html')    # 表格会还原成 <table>
+for b in res.json['res']['parsing_res_list']:
+    print(b['block_label'], str(b['block_content'])[:50])   # header / text / table ...
 ```
-> PP-StructureV3 是更新版本，用法以官方仓库"表格识别"章节为准：https://github.com/PaddlePaddle/PaddleOCR 。本周**跑通一个表格→HTML**即可，不追求完美。
+> 表格识别是**多模型流水线**（版面检测 + 表格分类 + 结构识别 + 单元格检测），首次运行要下模型；脚本里已切到百度云 BOS 源，避免卡 HuggingFace。本周**跑通一个表格→HTML**即可，不追求完美。
 
 **产出**：把一张表格图片转成 HTML，用浏览器打开看到还原的表格。（代码已备好为 `d_table_ocr.py`，`python d_table_ocr.py` 直接跑，输出 `table_out.html`。）
 

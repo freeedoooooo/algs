@@ -11,13 +11,17 @@ import sys
 import os
 import json
 import pdfplumber
-import fitz
+import pymupdf                     # PyMuPDF 新导入名（`import fitz` 已弃用）
 from paddleocr import PaddleOCR
 
-# PaddleOCR 3.x：显式用本地已缓存的 v5 模型（免联网下载 v6）
+# 默认输入：不带参数直接跑这张
+DEFAULT_PDF = os.path.join('input', 'test3.pdf')
+
+# PaddleOCR 3.x：显式指定模型（免联网下载 v6）
+# 用移动端模型：server 大模型在 CPU 上极慢（实测单张 104s vs mobile 3.8s）
 ocr = PaddleOCR(
-    text_detection_model_name='PP-OCRv5_server_det',
-    text_recognition_model_name='PP-OCRv5_server_rec',
+    text_detection_model_name='PP-OCRv4_mobile_det',
+    text_recognition_model_name='PP-OCRv4_mobile_rec',
     use_textline_orientation=True,   # 替代已废弃的 use_angle_cls
     lang='ch',
 )
@@ -33,12 +37,15 @@ def ocr_image(path):
 def pdf_pages_to_images(pdf_path, dpi=200, out_dir="output"):
     """把 PDF 每页转成图片，返回图片路径列表。产物统一放 output/。"""
     os.makedirs(out_dir, exist_ok=True)
-    doc = fitz.open(pdf_path)
+    doc = pymupdf.open(pdf_path)
     paths = []
-    for i, page in enumerate(doc):
-        out = os.path.join(out_dir, f"_tmp_page_{i}.png")
-        page.get_pixmap(dpi=dpi).save(out)
-        paths.append(out)
+    try:
+        for i, page in enumerate(doc):
+            out = os.path.join(out_dir, f"_tmp_page_{i}.png")
+            page.get_pixmap(dpi=dpi).save(out)
+            paths.append(out)
+    finally:
+        doc.close()
     return paths
 
 
@@ -53,8 +60,8 @@ def run(pdf_path):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("用法：python weekend_pipeline.py input.pdf")
-        sys.exit(1)
-    text = run(sys.argv[1])
+    pdf_path = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_PDF
+    if not os.path.exists(pdf_path):
+        sys.exit(f"找不到 PDF：{os.path.abspath(pdf_path)}（默认找 input/test3.pdf）")
+    text = run(pdf_path)
     print(text)
