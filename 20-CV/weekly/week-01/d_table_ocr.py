@@ -31,7 +31,7 @@ os.environ.setdefault('PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK', 'True')
 
 from paddleocr import PPStructureV3  # noqa: E402
 
-OUT_HTML = os.path.join('output', 'table_out.html')
+OUT_HTML = os.path.join('output', 'table_out_d.html')
 
 # 命令行可选传图片路径
 if len(sys.argv) > 1:
