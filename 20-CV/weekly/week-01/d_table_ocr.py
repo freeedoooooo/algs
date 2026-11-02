@@ -1,32 +1,83 @@
 """
-第1周 · 模块D：表格识别 PP-Structure（可直接运行）
+第1周 · 模块D：表格识别 PP-StructureV3（可直接运行）
 
 普通 OCR 只给"一行行文字"，表格需要结构识别（还原行列关系），输出 HTML。
 
-用法：
-    把含表格的图片命名为 table.png 放到 input/ 目录，然后：
-    python d_table_ocr.py
-    跑完会生成 output/table_out.html，用浏览器打开看还原效果。
+用法（在 week-01 目录下）：
+    python d_table_ocr.py                      # 默认 input/table.png
+    python d_table_ocr.py input/test2.jpg      # 也可指定任意含表格的图片
+
+跑完会生成 output/table_out.html，用浏览器打开看还原效果。
+
+版本说明（paddleocr 3.7 / paddlex 3.x）：
+    旧的 PPStructure 已在 3.x 移除，改用 PPStructureV3。
+    - 输出用 .predict()，结果是 list[PPStructureV3Result]（dict 结构）
+    - 用 result.save_to_html(路径) 直接导出表格 HTML
+
+关于首次运行的下载：
+    表格识别是"多模型流水线"：版面检测 + 表格分类 + 有线/无线表格结构识别 + 单元格检测。
+    其中大部分模型你本地没缓存，首次运行会自动下载（一次性，之后复用）。
+    这里强制走百度云 BOS 模型源 + 跳过连通性检查，避免像 PP-OCRv6 那样卡在 HuggingFace。
 """
-from paddleocr import PPStructure
 
-engine = PPStructure(table=True, ocr=True, lang='ch')
+import os
+import sys
+import time
 
-IMAGE = 'input/table.png'
-result = engine(IMAGE)
+# ⚠️ 必须在 import paddleocr 之前设置：模型走百度云源、跳过连通性检查（国内不卡 HF）
+os.environ.setdefault('PADDLE_PDX_MODEL_SOURCE', 'BOS')
+os.environ.setdefault('PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK', 'True')
 
-html_parts = []
-for item in result:
-    print('区域类型：', item['type'])          # table / text
-    if item['type'] == 'table':
-        html = item['res']['html']
-        html_parts.append(html)
-        print(html[:200], '...')
+from paddleocr import PPStructureV3  # noqa: E402
 
-# 存成 HTML，用浏览器打开看表格
-with open('output/table_out.html', 'w', encoding='utf-8') as f:
-    f.write("\n".join(html_parts))
-print("\n已保存 output/table_out.html，用浏览器打开查看")
+OUT_HTML = os.path.join('output', 'table_out.html')
 
-# 注：PP-StructureV3 是更新版本，用法以官方仓库"表格识别"章节为准：
-#     https://github.com/PaddlePaddle/PaddleOCR
+# 命令行可选传图片路径
+if len(sys.argv) > 1:
+    IMAGE = sys.argv[1]
+else:
+    IMAGE = os.path.join('input', 'table.png')
+    if not os.path.exists(IMAGE) and os.path.exists(os.path.join('input', 'test2.jpg')):
+        IMAGE = os.path.join('input', 'test2.jpg')
+        print('>> 未找到 input/table.png，先用 input/test2.jpg 演示')
+
+if not os.path.exists(IMAGE):
+    sys.exit(f'找不到图片：{os.path.abspath(IMAGE)}\n请把含表格的图片放到 week-01/input/table.png')
+
+# ---------- 1) 初始化（加载流水线里的多个模型） ----------
+print('>> 初始化 PPStructureV3（表格识别流水线），首次加载/下载模型可能较慢…')
+t0 = time.perf_counter()
+engine = PPStructureV3(
+    use_formula_recognition=False,   # 关掉公式识别（本示例不需要，少下载几个模型）
+    use_chart_recognition=False,     # 关掉图表识别
+    use_seal_recognition=False,      # 关掉印章识别
+    use_region_detection=False,      # 关掉区域检测
+    use_table_recognition=True,      # 只保留表格识别
+    # 文本检测/识别锁到本地已缓存的 v5，避免又去下 v6
+    text_detection_model_name='PP-OCRv5_server_det',
+    text_recognition_model_name='PP-OCRv5_server_rec',
+)
+t1 = time.perf_counter()
+print(f'>> 流水线加载耗时：{t1 - t0:.2f}s')
+
+# ---------- 2) 推理 ----------
+print(f'>> 开始识别：{IMAGE}')
+result = engine.predict(IMAGE)
+t2 = time.perf_counter()
+print(f'>> 推理耗时：{t2 - t1:.2f}s')
+
+# ---------- 3) 打印各内容块 + 导出 HTML ----------
+os.makedirs('output', exist_ok=True)
+for i, res in enumerate(result):
+    data = res.json if hasattr(res, 'json') else res
+    blocks = data.get('parsing_res_list', []) if isinstance(data, dict) else []
+    print(f'>> 第 {i + 1} 个输入，识别到 {len(blocks)} 个内容块：')
+    for b in blocks:
+        label = b.get('block_label', '?')
+        content = str(b.get('block_content', '')).replace('\n', ' ')
+        print(f'   [{label}] {content[:60]}')
+    # 直接导出 HTML（表格会还原成 <table>）
+    res.save_to_html(OUT_HTML)
+
+print(f'\n>> 已保存 {OUT_HTML}，用浏览器打开查看表格还原效果')
+print(f'>> 总耗时：{t2 - t0:.2f}s（加载 {t1 - t0:.2f}s + 推理 {t2 - t1:.2f}s）')
