@@ -56,7 +56,7 @@ def pdf_to_images(pdf_path, dpi=DPI, out_dir=OUT_DIR):
     try:
         for i, page in enumerate(doc):
             pix = page.get_pixmap(dpi=dpi)  # dpi 越高越清晰但越慢；200 够 OCR 用
-            out = os.path.join(out_dir, f'page_{i}.png')
+            out = os.path.join(out_dir, f'c_page_{i}.png')
             pix.save(out)
             out_paths.append(out)
             print(f'已保存 {out}')
@@ -101,7 +101,7 @@ def main():
         # 产物落盘，符合"产物放 output/"的约定
         os.makedirs(OUT_DIR, exist_ok=True)
         stem = os.path.splitext(os.path.basename(pdf_path))[0]
-        out_txt = os.path.join(OUT_DIR, f'{stem}_text.txt')
+        out_txt = os.path.join(OUT_DIR, f'c_{stem}_text.txt')
         with open(out_txt, 'w', encoding='utf-8') as f:
             f.write(text)
 
