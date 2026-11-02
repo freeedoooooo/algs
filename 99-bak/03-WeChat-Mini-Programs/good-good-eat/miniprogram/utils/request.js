@@ -1,7 +1,7 @@
 // utils/request.js
 // 统一封装云函数调用，处理 loading 与错误提示
 const { USE_MOCK } = require('../config.js');
-const mock = require('../mock/index.js');
+const mock = require('../mock');
 
 /**
  * 调用云函数
