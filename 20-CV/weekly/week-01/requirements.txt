@@ -1,0 +1,7 @@
+# 第1周依赖（P0：环境 + PaddleOCR）
+# 安装：pip install -r requirements.txt
+paddlepaddle        # CPU 版；有 GPU 后续换 paddlepaddle-gpu
+paddleocr
+pdfplumber
+pymupdf
+matplotlib

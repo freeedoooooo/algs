@@ -1,0 +1,5 @@
+# 第3周依赖（P1-A：numpy 手写线性/softmax 回归）
+numpy
+matplotlib
+torch          # 仅用 torchvision 下载 MNIST，模型仍手写
+torchvision

@@ -1,0 +1,5 @@
+# 第4周依赖（P1-A 里程碑：numpy 手写神经网络）
+numpy
+matplotlib
+torch          # 仅用 torchvision 下载 MNIST，模型仍手写
+torchvision

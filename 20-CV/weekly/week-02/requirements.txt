@@ -1,0 +1,7 @@
+# 第2周依赖（P0 收尾：真实图片实战 + PyTorch 预备）
+# 安装：pip install -r requirements.txt
+paddlepaddle
+paddleocr
+matplotlib
+# 周末为 P1 预备 PyTorch（CPU 版即可，GPU 版第3周按需再配）：
+# pip install torch torchvision
