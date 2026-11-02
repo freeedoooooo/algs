@@ -1,0 +1,157 @@
+#user  nobody;
+worker_processes  1;
+
+#error_log  logs/error.log;
+#error_log  logs/error.log  notice;
+#error_log  logs/error.log  info;
+
+#pid        logs/nginx.pid;
+
+
+events {
+    worker_connections  1024;
+}
+
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+
+    #access_log  logs/access.log  main;
+
+    sendfile        on;
+    #tcp_nopush     on;
+
+    #keepalive_timeout  0;
+    keepalive_timeout  65;
+    proxy_read_timeout 60s;
+
+    # 开启 gzip 压缩
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss;
+    gzip_min_length 1024;
+    gzip_comp_level 6;
+    gzip_vary on;
+
+
+    # ==========================================
+    # 新增：OCR 负载均衡上游配置
+    # ==========================================
+    upstream ocr_backend {
+        # 建议加上健康检查参数，避免请求打到挂掉的节点
+        server myhost:8088 max_fails=5 fail_timeout=30s;
+        server myhost:8089 max_fails=5 fail_timeout=30s;
+    }
+
+    # 指定 Docker 内置 DNS，缓存 10 秒
+    resolver 127.0.0.11 valid=10s ipv6=off;
+
+    server {
+        listen       80;
+        server_name  localhost;
+
+        #charset koi8-r;
+
+        #access_log  logs/host.access.log  main;
+
+        location / {
+            root   html;
+            index  index.html index.htm;
+        }
+
+        error_page   500 502 503 504  /50x.html;
+        location = /50x.html {
+            root   html;
+        }
+
+    }
+
+    # c1
+    server {
+        listen 8090;
+        index index.html index.htm;
+
+        # 重定向到 report 服务
+        location = / {
+            return 301 /app-report/;
+        }
+
+        location / {
+            root /opt/app/c1-client;
+        }
+
+
+        # ✅ 统一抽取 Gateway 代理配置（使用变量触发动态 DNS）
+        # 所有 /api/* 和 /api-oauth/* 请求都走这里
+        location ~ ^/(api-oauth|api)/ {
+            client_max_body_size 200m;
+
+            # 🔑 关键：用变量赋值，强制每次请求重新解析 DNS
+            set $gateway_upstream http://platform-gateway:20000;
+            proxy_pass $gateway_upstream;
+
+            # 标准代理头
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
+            # 连接重试（Gateway 重启时自动重试）
+            proxy_next_upstream error timeout http_502 http_503 http_504;
+            proxy_next_upstream_tries 2;
+            proxy_next_upstream_timeout 10s;
+        }
+
+
+        # ==========================================
+        # 新增：OCR 接口代理入口 (无限制版)
+        # 适配 Java 微服务调用：http://192.168.10.141/api/ocr
+        # ==========================================
+        location /api/ocr {
+            # 1. 路径重写逻辑
+            # 无论请求是 /api/ocr 还是 /api/ocr/predict，都去掉 /api/ocr 前缀传给后端
+            # 例如：/api/ocr/predict -> /predict
+            #       /api/ocr        -> / (根路径，视后端具体实现而定，通常后端会有默认路由)
+            rewrite ^/api/ocr(/.*)?$ $1 break;
+
+            # 2. 转发到负载均衡池
+            proxy_pass http://ocr_backend;
+
+            # 3. 传递真实 IP 和主机头
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+            # 针对大文件优化的建议配置
+            client_max_body_size 200M;  # 0 表示不限制上传文件大小 (默认通常是 1M)
+            proxy_connect_timeout 30s;  # 连接后端超时
+            proxy_send_timeout 60s;     # 发送数据给后端超时
+            proxy_read_timeout 60s;     # 等待后端响应超时 (最关键)
+
+            # 5. 缓冲设置 (可选优化)
+            # 如果图片极大，关闭缓冲可以让数据流式传输，减少内存占用
+            proxy_buffering off;
+            proxy_request_buffering off;
+        }
+
+        # 认证中心登录页
+        location /sso/ {
+            client_max_body_size 200m;
+            proxy_pass http://myhost:9090/sso/;
+        }
+
+        error_page 504 /custom_504.html;
+
+        location = /custom_504.html {
+            internal;
+            default_type text/plain;
+            return 504 '抱歉，您的请求未能及时得到响应。请稍后刷新查看执行结果！';
+        }
+
+        location @router {
+            rewrite ^.*$ /index.html last;        
+        }
+
+    }
+
+}

@@ -1,0 +1,100 @@
+# c1-b-govern — 数据治理
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: c1-b-govern
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: c1-b-govern
+    tier: business
+spec:
+  replicas: {{ .Values.services.c1_b_govern.replicas }}
+  selector:
+    matchLabels:
+      app: c1-b-govern
+  template:
+    metadata:
+      labels:
+        app: c1-b-govern
+        tier: business
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/api/dg/actuator/prometheus"
+    spec:
+      nodeSelector:
+        node-name: {{ .Values.nodeName }}
+      containers:
+        - name: c1-b-govern
+          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1_b_govern.image }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - containerPort: 30005
+              protocol: TCP
+          env:
+            - name: TZ
+              value: "Asia/Shanghai"
+          envFrom:
+            - configMapRef:
+                name: c1-configmap-common
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "1Gi"
+          volumeMounts:
+            - name: app-logs
+              mountPath: /opt/app/logs
+            - name: fonts
+              mountPath: /usr/share/fonts
+              readOnly: true
+          startupProbe:
+            httpGet:
+              path: {{ .Values.services.c1_b_govern.healthPath }}
+              port: 30005
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.services.c1_b_govern.healthPath }}
+              port: 30005
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.services.c1_b_govern.healthPath }}
+              port: 30005
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: app-logs
+          emptyDir: {}
+        - name: fonts
+          hostPath:
+            path: /usr/share/fonts
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: c1-b-govern
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: c1-b-govern
+spec:
+  type: {{ .Values.services.c1_b_govern.serviceType }}
+  ports:
+    - name: http
+      port: 30005
+      targetPort: 30005
+      protocol: TCP
+      {{- if eq .Values.services.c1_b_govern.serviceType "NodePort" }}
+      nodePort: {{ .Values.services.c1_b_govern.nodePort }}
+      {{- end }}
+  selector:
+    app: c1-b-govern

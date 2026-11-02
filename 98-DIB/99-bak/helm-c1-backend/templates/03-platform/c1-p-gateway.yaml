@@ -1,0 +1,101 @@
+# c1-p-gateway — API 网关
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: c1-p-gateway
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: c1-p-gateway
+    tier: platform
+spec:
+  replicas: {{ .Values.services.c1_p_gateway.replicas }}
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: c1-p-gateway
+  template:
+    metadata:
+      labels:
+        app: c1-p-gateway
+        tier: platform
+      annotations:
+        prometheus.io/scrape: "true"
+    spec:
+      nodeSelector:
+        node-name: {{ .Values.nodeName }}
+      containers:
+        - name: c1-p-gateway
+          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1_p_gateway.image }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - containerPort: 20000
+              protocol: TCP
+          env:
+            - name: TZ
+              value: "Asia/Shanghai"
+          envFrom:
+            - configMapRef:
+                name: c1-configmap-common
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+          volumeMounts:
+            - name: app-logs
+              mountPath: /opt/app/logs
+            - name: fonts
+              mountPath: /usr/share/fonts
+              readOnly: true
+          startupProbe:
+            httpGet:
+              path: {{ .Values.services.c1_p_gateway.healthPath }}
+              port: 20000
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.services.c1_p_gateway.healthPath }}
+              port: 20000
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.services.c1_p_gateway.healthPath }}
+              port: 20000
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: app-logs
+          emptyDir: {}
+        - name: fonts
+          hostPath:
+            path: /usr/share/fonts
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: c1-p-gateway
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: c1-p-gateway
+spec:
+  type: {{ .Values.services.c1_p_gateway.serviceType }}
+  ports:
+    - name: http
+      port: 20000
+      targetPort: 20000
+      protocol: TCP
+      {{- if eq .Values.services.c1_p_gateway.serviceType "NodePort" }}
+      nodePort: {{ .Values.services.c1_p_gateway.nodePort }}
+      {{- end }}
+  selector:
+    app: c1-p-gateway

@@ -1,0 +1,85 @@
+# ============================================================
+# 第二层：微前端容器（遍历 .Values.frontends 批量生成）
+# 职责：纯静态文件服务 + SPA 路由回退 + /healthz 健康检查
+# 所有容器共用同一份镜像内 nginx.conf，仅镜像名/应用名不同
+# Service 名 = frontends 的 key，与网关 nginx.conf 中 proxy_pass 主机名一致
+# serviceType 统一 ClusterIP：仅供第一层网关内部访问，不对外暴露
+# ============================================================
+{{- range $name, $cfg := .Values.frontends }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Values.namespace }}
+  labels:
+    app: {{ $name }}
+    tier: frontend
+spec:
+  replicas: {{ $cfg.replicas }}
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app: {{ $name }}
+        tier: frontend
+    spec:
+      nodeSelector:
+        node-name: {{ $.Values.nodeName }}
+      containers:
+        - name: {{ $name }}
+          image: {{ $.Values.imageRegistry }}/{{ $cfg.image }}:{{ $.Values.image.tag }}
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          ports:
+            - containerPort: {{ $cfg.port }}
+              name: http
+              protocol: TCP
+          env:
+            - name: TZ
+              value: "Asia/Shanghai"
+          resources:
+            {{- if $cfg.resources }}
+{{ toYaml $cfg.resources | indent 12 }}
+            {{- else }}
+{{ toYaml $.Values.frontendResources | indent 12 }}
+            {{- end }}
+          # 健康检查：访问容器内置 /healthz，不依赖任何静态文件
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ $cfg.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ $cfg.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Values.namespace }}
+  labels:
+    app: {{ $name }}
+    tier: frontend
+spec:
+  type: {{ default "ClusterIP" $cfg.serviceType }}
+  ports:
+    - name: http
+      port: {{ $cfg.port }}
+      targetPort: {{ $cfg.port }}
+      protocol: TCP
+  selector:
+    app: {{ $name }}
+---
+{{- end }}

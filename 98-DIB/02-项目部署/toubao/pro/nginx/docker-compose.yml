@@ -1,0 +1,26 @@
+networks:
+  c1-network:
+    name: c1-network
+    driver: bridge
+
+services:
+  ########## nginx ##########
+  nginx:
+    image: nginx:1.17.8
+    container_name: nginx
+    networks:
+      - c1-network
+    ports:
+      - "80:80"
+      - "8090:8090"
+    volumes:
+      - /opt/app/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - /opt/app/c1-client:/opt/app/c1-client
+      - /opt/app/bi-client:/opt/app/bi-client
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "nginx", "-t" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

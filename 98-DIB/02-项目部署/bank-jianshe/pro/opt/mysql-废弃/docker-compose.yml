@@ -1,0 +1,31 @@
+version: '3.8'
+services:
+  mysql8:
+    image: mysql:8
+    container_name: mysql8
+    environment:
+      MYSQL_ROOT_PASSWORD: Dib@12345*
+      MYSQL_DATABASE: test
+    ports:
+      - "3306:3306"
+    volumes:
+      - /opt/mysql/data:/var/lib/mysql:z
+      - /opt/mysql/conf:/etc/mysql/conf.d:z
+      - /opt/mysql/log:/var/log/mysql:z
+    networks:
+      - c1-network
+    command: >
+      mysqld --lower_case_table_names=1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pDib@12345*"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s    # MySQL 启动时间较长，适当延长初始等待期
+
+networks:
+  c1-network:
+    external: true
+    name: c1-network
+    driver: bridge

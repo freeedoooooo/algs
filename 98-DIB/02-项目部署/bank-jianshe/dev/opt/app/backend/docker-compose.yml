@@ -1,0 +1,171 @@
+networks:
+  c1-network:
+    external: false
+    name: c1-network
+    driver: bridge
+
+services:
+  ########## 以下为 platform 各微服务 ##########
+  platform-auth-server:
+    image: hub.dibtime.com/public/openjdk17:opencv-liberoffice_arm64
+    container_name: platform-auth-server
+    working_dir: /opt/app
+    networks:
+      - c1-network
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./jar/platform-auth-server.jar:/opt/app/app.jar:ro
+      - /opt/app/backend/logs/platform-auth-server:/opt/app/logs
+      - /usr/share/fonts:/usr/share/fonts
+    env_file:
+      - .env
+    environment:
+      JAVA_OPTS: "-Xms512m -Xmx2048m -Dfile.encoding=UTF-8"
+    entrypoint: [ "sh", "-c" ]
+    command: [ "exec java $${JAVA_OPTS} -jar /opt/app/app.jar" ]
+    # 添加 extra_hosts 配置
+    extra_hosts:
+      - "myhost:host-gateway"  # Linux 系统访问宿主机
+
+  platform-gateway:
+    image: hub.dibtime.com/public/openjdk17:opencv-liberoffice_arm64
+    container_name: platform-gateway
+    working_dir: /opt/app
+    networks:
+      - c1-network
+    restart: unless-stopped
+    ports:
+      - "20000:20000"
+    volumes:
+      - ./jar/platform-gateway.jar:/opt/app/app.jar:ro
+      - /opt/app/backend/logs/platform-gateway:/opt/app/logs
+      - /usr/share/fonts:/usr/share/fonts
+    environment:
+      JAVA_OPTS: -Xms512m -Xmx2048m -Dfile.encoding=UTF-8
+    env_file:
+      - .env
+    entrypoint: [ "sh", "-c" ]
+    command: [ "exec java $${JAVA_OPTS} -jar /opt/app/app.jar" ]
+    # 添加 extra_hosts 配置
+    extra_hosts:
+      - "myhost:host-gateway"  # Linux 系统访问宿主机
+
+  platform-auth-resource:
+    image: hub.dibtime.com/public/openjdk17:opencv-liberoffice_arm64
+    container_name: platform-auth-resource
+    working_dir: /opt/app
+    networks:
+      - c1-network
+    restart: unless-stopped
+    ports:
+      - "20001:20001"
+    volumes:
+      - ./jar/platform-auth-resource.jar:/opt/app/app.jar:ro
+      - /opt/app/backend/logs/platform-auth-resource:/opt/app/logs
+      - /usr/share/fonts:/usr/share/fonts
+    environment:
+      JAVA_OPTS: -Xms512m -Xmx2048m -Dfile.encoding=UTF-8
+    env_file:
+      - .env
+    entrypoint: [ "sh", "-c" ]
+    command: [ "exec java $${JAVA_OPTS} -jar /opt/app/app.jar" ]
+    # 添加 extra_hosts 配置
+    extra_hosts:
+      - "myhost:host-gateway"  # Linux 系统访问宿主机
+
+  platform-mdm:
+    image: hub.dibtime.com/public/openjdk17:opencv-liberoffice_arm64
+    container_name: platform-mdm
+    working_dir: /opt/app
+    networks:
+      - c1-network
+    restart: unless-stopped
+    ports:
+      - "20002:20002"
+    volumes:
+      - ./jar/platform-mdm.jar:/opt/app/app.jar:ro
+      - /opt/app/backend/logs/platform-mdm:/opt/app/logs
+      - /usr/share/fonts:/usr/share/fonts
+    environment:
+      JAVA_OPTS: -Xms512m -Xmx2048m -Dfile.encoding=UTF-8
+    env_file:
+      - .env
+    entrypoint: [ "sh", "-c" ]
+    command: [ "exec java $${JAVA_OPTS} -jar /opt/app/app.jar" ]
+    # 添加 extra_hosts 配置
+    extra_hosts:
+      - "myhost:host-gateway"  # Linux 系统访问宿主机
+
+  ########## 以下为 c1 各业务微服务 ##########
+  c1-extract:
+    image: hub.dibtime.com/public/openjdk17:opencv-liberoffice_arm64
+    container_name: c1-extract
+    working_dir: /opt/app
+    networks:
+      - c1-network
+    restart: unless-stopped
+    ports:
+      - "30001:30001"
+    volumes:
+      - ./jar/c1-extract.jar:/opt/app/app.jar:ro
+      - /opt/app/backend/logs/c1-extract:/opt/app/logs
+      - /opt/app/backend/tmpdata/c1-extract:/tmp
+      - /usr/share/fonts:/usr/share/fonts
+    environment:
+      JAVA_OPTS: -Xms512m -Xmx2048m -Dfile.encoding=UTF-8
+    env_file:
+      - .env
+    entrypoint: [ "sh", "-c" ]
+    command: [ "exec java $${JAVA_OPTS} -jar /opt/app/app.jar" ]
+    # 添加 extra_hosts 配置
+    extra_hosts:
+      - "myhost:host-gateway"  # Linux 系统访问宿主机
+
+  c1-report:
+    image: hub.dibtime.com/public/openjdk17:opencv-liberoffice_arm64
+    container_name: c1-report
+    working_dir: /opt/app
+    networks:
+      - c1-network
+    restart: unless-stopped
+    ports:
+      - "30002:30002"
+    volumes:
+      - ./jar/c1-report.jar:/opt/app/app.jar:ro
+      - /opt/app/backend/logs/c1-report:/opt/app/logs
+      - /opt/app/backend/tmpdata/c1-report:/tmp
+      - /usr/share/fonts:/usr/share/fonts
+    environment:
+      JAVA_OPTS: -Xms512m -Xmx2048m -Dfile.encoding=UTF-8
+    env_file:
+      - .env
+    entrypoint: [ "sh", "-c" ]
+    command: [ "exec java $${JAVA_OPTS} -jar /opt/app/app.jar" ]
+    # 添加 extra_hosts 配置
+    extra_hosts:
+      - "myhost:host-gateway"  # Linux 系统访问宿主机
+
+  c1-data:
+    image: hub.dibtime.com/public/openjdk17:opencv-liberoffice_arm64
+    container_name: c1-data
+    working_dir: /opt/app
+    networks:
+      - c1-network
+    restart: unless-stopped
+    ports:
+      - "30003:30003"
+    volumes:
+      - ./jar/c1-data.jar:/opt/app/app.jar:ro
+      - /opt/app/backend/logs/c1-data:/opt/app/logs
+      - /usr/share/fonts:/usr/share/fonts
+    environment:
+      JAVA_OPTS: -Xms512m -Xmx2048m -Dfile.encoding=UTF-8
+    env_file:
+      - .env
+    entrypoint: [ "sh", "-c" ]
+    command: [ "exec java $${JAVA_OPTS} -jar /opt/app/app.jar" ]
+    # 添加 extra_hosts 配置
+    extra_hosts:
+      - "myhost:host-gateway"  # Linux 系统访问宿主机

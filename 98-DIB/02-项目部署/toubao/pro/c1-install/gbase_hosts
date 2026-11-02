@@ -1,0 +1,9 @@
+db_group        group   -       -
+gbase1          onsoctcp        10.6.208.164      9088    g=db_group
+gbase2          onsoctcp        10.6.208.167      9088    g=db_group
+cm_read         group   -       -
+oltp_read1      onsoctcp        10.6.208.164      9200    g=cm_read
+oltp_read2      onsoctcp        10.6.208.167      9200    g=cm_read
+cm_update       group   -       -
+oltp_update1    onsoctcp        10.6.208.164      9300    g=cm_update
+oltp_update2    onsoctcp        10.6.208.167      9300    g=cm_update

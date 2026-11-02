@@ -1,0 +1,104 @@
+# c1-b-report — 报告生成
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: c1-b-report
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: c1-b-report
+    tier: business
+spec:
+  replicas: {{ .Values.services.c1_b_report.replicas }}
+  selector:
+    matchLabels:
+      app: c1-b-report
+  template:
+    metadata:
+      labels:
+        app: c1-b-report
+        tier: business
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/api/report/actuator/prometheus"
+    spec:
+      nodeSelector:
+        node-name: {{ .Values.nodeName }}
+      containers:
+        - name: c1-b-report
+          image: {{ .Values.imageRegistry }}/{{ .Values.services.c1_b_report.image }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - containerPort: 30002
+              protocol: TCP
+          env:
+            - name: TZ
+              value: "Asia/Shanghai"
+          envFrom:
+            - configMapRef:
+                name: c1-configmap-common
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "1536Mi"
+            limits:
+              cpu: "2000m"
+              memory: "3Gi"
+          volumeMounts:
+            - name: app-logs
+              mountPath: /opt/app/logs
+            - name: app-tmp
+              mountPath: /opt/app/tmp
+            - name: fonts
+              mountPath: /usr/share/fonts
+              readOnly: true
+          startupProbe:
+            httpGet:
+              path: {{ .Values.services.c1_b_report.healthPath }}
+              port: 30002
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.services.c1_b_report.healthPath }}
+              port: 30002
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.services.c1_b_report.healthPath }}
+              port: 30002
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: app-logs
+          emptyDir: {}
+        - name: app-tmp
+          emptyDir: {}
+        - name: fonts
+          hostPath:
+            path: /usr/share/fonts
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: c1-b-report
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: c1-b-report
+spec:
+  type: {{ .Values.services.c1_b_report.serviceType }}
+  ports:
+    - name: http
+      port: 30002
+      targetPort: 30002
+      protocol: TCP
+      {{- if eq .Values.services.c1_b_report.serviceType "NodePort" }}
+      nodePort: {{ .Values.services.c1_b_report.nodePort }}
+      {{- end }}
+  selector:
+    app: c1-b-report

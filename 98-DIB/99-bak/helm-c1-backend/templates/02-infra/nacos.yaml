@@ -1,0 +1,148 @@
+# Nacos v2.3.2 注册中心（Standalone 模式）
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: c1-nacos-data-pvc
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: c1-nacos
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.nacos.storage }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: c1-nacos
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: c1-nacos
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: c1-nacos
+  template:
+    metadata:
+      labels:
+        app: c1-nacos
+    spec:
+      nodeSelector:
+        node-name: {{ .Values.nodeName }}
+      containers:
+        - name: c1-nacos
+          image: {{ .Values.nacos.image }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8848
+              name: http
+              protocol: TCP
+            - containerPort: 9848
+              name: grpc
+              protocol: TCP
+          env:
+            - name: MODE
+              value: "standalone"
+            # ---------- 外挂 MySQL：替代内嵌 Derby ----------
+            - name: SPRING_DATASOURCE_PLATFORM
+              value: "mysql"
+            - name: MYSQL_SERVICE_HOST
+              value: {{ .Values.nacos.mysql.host | quote }}
+            - name: MYSQL_SERVICE_PORT
+              value: {{ .Values.nacos.mysql.port | quote }}
+            - name: MYSQL_SERVICE_DB_NAME
+              value: {{ .Values.nacos.mysql.database | quote }}
+            - name: MYSQL_SERVICE_USER
+              value: {{ .Values.nacos.mysql.username | quote }}
+            - name: MYSQL_SERVICE_PASSWORD
+              value: {{ .Values.nacos.mysql.password | quote }}
+            - name: MYSQL_SERVICE_DB_PARAM
+              value: {{ .Values.nacos.mysql.params | quote }}
+            # ---------- 鉴权 ----------
+            - name: NACOS_AUTH_ENABLE
+              value: "true"
+            - name: NACOS_AUTH_IDENTITY_KEY
+              value: "admin"
+            - name: NACOS_AUTH_IDENTITY_VALUE
+              value: "admin"
+            - name: NACOS_AUTH_TOKEN
+              value: "VGhpc0lzTXlDdXN0b21TZWNyZXRLZXkwMTIzNDU2Nzg="
+            # ---------- 时区 ----------
+            - name: TZ
+              value: "Asia/Shanghai"
+            # ---------- JVM 内存（容器 limits 2Gi，堆设 1g 留余量） ----------
+            - name: JVM_OPT
+              value: "-Xms1g -Xmx1g -Xmn256m"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "1Gi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+          volumeMounts:
+            - name: nacos-data
+              mountPath: /home/nacos/data
+            - name: nacos-logs
+              mountPath: /home/nacos/logs
+          startupProbe:
+            httpGet:
+              path: /nacos/actuator/health
+              port: 8848
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: /nacos/actuator/health
+              port: 8848
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /nacos/actuator/health
+              port: 8848
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: nacos-data
+          persistentVolumeClaim:
+            claimName: c1-nacos-data-pvc
+        - name: nacos-logs
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: c1-nacos
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: c1-nacos
+spec:
+  type: {{ .Values.nacos.serviceType }}
+  ports:
+    - name: http
+      port: 8848
+      targetPort: 8848
+      protocol: TCP
+      {{- if eq .Values.nacos.serviceType "NodePort" }}
+      nodePort: {{ .Values.nacos.nodePortHttp }}
+      {{- end }}
+    - name: grpc
+      port: 9848
+      targetPort: 9848
+      protocol: TCP
+      {{- if eq .Values.nacos.serviceType "NodePort" }}
+      nodePort: {{ .Values.nacos.nodePortGrpc }}
+      {{- end }}
+  selector:
+    app: c1-nacos

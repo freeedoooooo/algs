@@ -1,0 +1,230 @@
+#user  nobody;
+worker_processes  1;
+
+#error_log  logs/error.log;
+#error_log  logs/error.log  notice;
+#error_log  logs/error.log  info;
+
+#pid        logs/nginx.pid;
+
+
+events {
+    worker_connections  1024;
+}
+
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+
+    #access_log  logs/access.log  main;
+
+    sendfile        on;
+    #tcp_nopush     on;
+
+    #keepalive_timeout  0;
+    keepalive_timeout  65;
+    proxy_read_timeout 60s;
+
+    # 开启 gzip 压缩
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss;
+    gzip_min_length 1024;
+    gzip_comp_level 6;
+    gzip_vary on;
+
+    # OCR 负载均衡上游配置，保留自 nginx.conf-v20260624。
+    upstream ocr_backend {
+        server myhost:8088 max_fails=5 fail_timeout=30s;
+        server myhost:8089 max_fails=5 fail_timeout=30s;
+    }
+
+    # Docker DNS 解析器，变量形式 proxy_pass 需要依赖它刷新网关 DNS。
+    resolver 127.0.0.11 valid=10s ipv6=off;
+
+    server {
+        listen       80;
+        server_name  localhost;
+
+        # 保留历史路由版行为：80 端口访问 SSO 时跳转到应用端口。
+        location ^~ /sso/ {
+            return 302 http://$host:8090$request_uri;
+        }
+
+        location / {
+            root   html;
+            index  index.html index.htm;
+        }
+
+        error_page   500 502 503 504  /50x.html;
+        location = /50x.html {
+            root   html;
+        }
+    }
+
+    # c1 前端与后端网关
+    server {
+        listen 8090;
+        root /opt/app/c1-client;
+        index index.html index.htm;
+
+        client_max_body_size 200m;
+
+        # 后端代理通用请求头。
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Port $server_port;
+
+        # ============ 静态资源：强缓存/协商缓存 ============
+
+        # app-system 对外路径实际由 app-system-v2 产物承载。
+        # 必须放在通用 app-* 静态资源规则之前。
+        location ~* ^/(?:[^/]+/)*app-system(?<asset_path>/assets/.*\.(js|css))$ {
+            try_files /app-system-v2$asset_path /app-system$asset_path =404;
+            expires 1y;
+            add_header Cache-Control "public, max-age=31536000, immutable";
+            add_header Vary "Accept-Encoding";
+            access_log off;
+        }
+
+        location ~* ^/(?:[^/]+/)*app-system(?<entry_path>/js/.*\.js)$ {
+            try_files /app-system-v2$entry_path /app-system$entry_path =404;
+            expires 1y;
+            add_header Cache-Control "public, max-age=31536000, immutable";
+            add_header Vary "Accept-Encoding";
+            access_log off;
+        }
+
+        location ~* ^/(?:[^/]+/)*(?<app_name>app-[^/]+)(?<asset_path>/assets/.*\.(js|css))$ {
+            try_files /$app_name$asset_path =404;
+            expires 1y;
+            add_header Cache-Control "public, max-age=31536000, immutable";
+            add_header Vary "Accept-Encoding";
+            access_log off;
+        }
+
+        location ~* ^/(?:[^/]+/)*(?<app_name>app-[^/]+)(?<entry_path>/js/.*\.js)$ {
+            try_files /$app_name$entry_path =404;
+            expires 1y;
+            add_header Cache-Control "public, max-age=31536000, immutable";
+            add_header Vary "Accept-Encoding";
+            access_log off;
+        }
+
+        # app-nav UMD 资源没有内容 hash，使用协商缓存。
+        location ~* ^/(?:[^/]+/)*app-nav/(?<nav_asset>index\.umd\.js|style\.css)$ {
+            try_files /app-nav/$nav_asset =404;
+            add_header Cache-Control "public, max-age=3600, must-revalidate";
+            etag on;
+        }
+
+        location ~* ^/(?:[^/]+/)*app-system(?<static_path>/.*\.(woff2?|ttf|eot|otf|png|jpe?g|gif|ico|webp|svg))$ {
+            try_files /app-system-v2$static_path /app-system$static_path =404;
+            expires 30d;
+            add_header Cache-Control "public, max-age=2592000";
+            access_log off;
+        }
+
+        location ~* ^/(?:[^/]+/)*(?<app_name>app-[^/]+)(?<static_path>/.*\.(woff2?|ttf|eot|otf|png|jpe?g|gif|ico|webp|svg))$ {
+            try_files /$app_name$static_path =404;
+            expires 30d;
+            add_header Cache-Control "public, max-age=2592000";
+            access_log off;
+        }
+
+        location ~* \.(woff2?|ttf|eot|otf|png|jpe?g|gif|ico|webp|svg)$ {
+            expires 30d;
+            add_header Cache-Control "public, max-age=2592000";
+            access_log off;
+        }
+
+        # ============ 应用路由：History 模式回退 ============
+
+        location /bi/ {
+            alias /opt/app/bi-client/;
+            try_files $uri $uri/ /index.html;
+        }
+
+        location = / {
+            return 301 /app-report/;
+        }
+
+        location ~ ^/(?<prefix>(?:[^/]+/)*)app-system-v2(?<app_path>/.*)?$ {
+            return 301 /${prefix}app-system$app_path;
+        }
+
+        location ~ ^/(?:[^/]+/)*app-(?<spa_name>report|data)(?<app_path>/.*)?$ {
+            try_files /app-$spa_name$app_path /app-$spa_name$app_path/ /app-$spa_name/index.html;
+            add_header Cache-Control "no-cache, no-store, must-revalidate";
+        }
+
+        location ~ ^/(?:[^/]+/)*app-system(?<app_path>/.*)?$ {
+            try_files /app-system-v2$app_path /app-system-v2$app_path/ /app-system-v2/index.html /app-system$app_path /app-system$app_path/ /app-system/index.html;
+            add_header Cache-Control "no-cache, no-store, must-revalidate";
+        }
+
+        # ============ 后端代理路由 ============
+
+        # OCR 必须使用 ^~，确保优先于下面的通用 /api 正则代理。
+        location ^~ /api-ocr {
+            rewrite ^/api-ocr/?(.*)$ /$1 break;
+            proxy_pass http://ocr_backend;
+
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
+            client_max_body_size 200M;
+            proxy_connect_timeout 30s;
+            proxy_send_timeout 60s;
+            proxy_read_timeout 60s;
+            proxy_buffering off;
+            proxy_request_buffering off;
+        }
+
+        # 认证中心，保留 bank-dev 原始目标主机。
+        location ^~ /sso/ {
+            client_max_body_size 200m;
+            proxy_pass http://myhost:9090/sso/;
+        }
+
+        # 通用网关代理，保持 nginx.conf-v20260624 的宽泛匹配能力。
+        # 变量形式 proxy_pass 会使用上方 resolver 刷新 Docker DNS。
+        location ~ ^/(api-oauth|api)/ {
+            client_max_body_size 200m;
+
+            set $gateway_upstream http://platform-gateway:20000;
+            proxy_pass $gateway_upstream;
+
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
+            proxy_next_upstream error timeout http_502 http_503 http_504;
+            proxy_next_upstream_tries 2;
+            proxy_next_upstream_timeout 10s;
+        }
+
+        location ~ ^/bi/(?<bi_api>de2api|websocket)/ {
+            rewrite ^/bi/(de2api|websocket)/(.*)$ /$1/$2 break;
+            proxy_pass http://10.0.5.70:8100;
+        }
+
+        error_page 504 /custom_504.html;
+
+        location = /custom_504.html {
+            internal;
+            default_type text/plain;
+            return 504 '抱歉，您的请求未能及时得到响应。请稍后刷新查看执行结果！';
+        }
+
+        location @router {
+            rewrite ^.*$ /index.html last;
+        }
+    }
+}

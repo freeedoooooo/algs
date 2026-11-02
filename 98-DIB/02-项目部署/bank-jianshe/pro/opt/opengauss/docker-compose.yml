@@ -1,0 +1,21 @@
+services:
+  opengauss:
+    image: opengauss:6.0.3
+    container_name: opengauss
+    networks:
+      - c1-network
+    environment:
+      #- GS_USERNAME=gaussdb  #指定用户名，默认为gaussdb
+      - GS_PASSWORD=Dib@123456
+    volumes:
+      - /opt/opengauss/data:/var/lib/opengauss
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "5432:5432"
+    privileged: true
+    restart: unless-stopped
+
+networks:
+  c1-network:
+    name: c1-network
+    driver: bridge

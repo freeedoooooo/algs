@@ -1,0 +1,4 @@
+-- 新增vl提取模型
+INSERT INTO com_ai_client (id,app, api_platform_code, api_platform_name, api_url, api_type, model_name, qpm, api_timeout, max_tokens, max_input_tokens, temperature, response_format, enable_thinking, enable_search, remark, order_num, enable_flag, del_flag, add_user_id, add_user_name, add_time, update_user_id, update_user_name, update_time)
+VALUES (22,'all', 'ALI', '阿里百炼', 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', 'image', 'qwen3.5-27b', 0, 300000, 10000, 10000, 0.7, '{"type": "text"}', 0, 0, NULL, 1, 1, 0, 'admin', 'admin', '2025-11-24 09:52:16', NULL, NULL, '2026-07-20 09:36:16');
+

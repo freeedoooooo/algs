@@ -1,0 +1,527 @@
+# 07-helm — Helm 部署方案
+
+本目录是 DIB 微服务的 **Helm Chart**，将 `01-install` 到 `06-scripts` 的所有部署配置整合为一套模板 + 变量的方案。
+
+> **前置条件**：K3s 集群已安装（`01-install`），`helm` 命令已安装。
+
+---
+
+## 前置知识：为什么需要 Helm
+
+如果你已经用过 `02-config` 到 `06-scripts` 的 kubectl 方案，你会发现两个问题：
+
+**问题一：多环境配置麻烦**
+
+```
+kubectl 方案：4 个环境 = 4 份几乎相同的 YAML
+  configmap-dev.yaml      ← 90% 内容相同，只有几个值不同
+  configmap-test.yaml
+  configmap-uat.yaml
+  configmap-prod.yaml
+  改一个镜像地址，要改 4 个文件
+```
+
+**问题二：没有版本管理**
+
+```
+kubectl 方案：升级和回滚全靠人记
+  kubectl set image deployment/gateway gateway=...:v3.0.0   # 升级
+  # 出问题了想回滚？得记得原来的镜像版本是什么
+  kubectl set image deployment/gateway gateway=...:v2.0.0   # 手动回滚
+```
+
+**Helm 的解决方案**：
+
+```
+Helm 方案：模板只有一份，不同环境只改 values 文件
+  templates/gateway.yaml    ← 模板（所有环境共用）
+  values-dev.yaml           ← 开发环境的差异配置
+  values-test.yaml          ← 测试环境的差异配置
+  values-prod.yaml          ← 生产环境的差异配置
+```
+
+---
+
+## 目录结构
+
+```
+07-helm/
+├── Chart.yaml                      # Chart 元信息（名称、版本）
+├── values.yaml                     # 默认配置（所有参数的完整定义）
+├── values-dev.yaml                 # 开发环境覆盖配置
+├── values-test.yaml                # 测试环境覆盖配置
+├── values-prod.yaml                # 生产环境覆盖配置
+└── templates/                      # YAML 模板文件（按层级分组）
+    ├── 01-base/                    # 基础配置（部署前必须存在）
+    │   ├── namespace.yaml          #   命名空间
+    │   ├── configmap.yaml          #   公共配置（环境变量）
+    │   └── image-pull-secret.yaml  #   镜像仓库认证
+    ├── 02-infra/                   # 基础设施层
+    │   ├── nacos.yaml              #   Nacos 注册中心
+    │   └── redis.yaml              #   Redis 缓存
+    ├── 03-platform/                # 平台服务层
+    │   ├── c1-p-oauth.yaml         #   OAuth2 认证中心
+    │   ├── c1-p-gateway.yaml       #   API 网关
+    │   ├── c1-p-rbac.yaml          #   权限资源管理
+    │   └── c1-p-mdm.yaml           #   主数据管理
+    └── 04-business/                # 业务服务层
+        ├── c1-b-extract.yaml       #   资料提取
+        ├── c1-b-report.yaml        #   报告生成
+        ├── c1-b-data.yaml          #   数据资源
+        ├── c1-b-rule.yaml          #   规则引擎
+        └── c1-b-govern.yaml        #   数据治理
+```
+
+**对比 kubectl 方案的目录**：
+
+```
+kubectl 方案（01~06）：               Helm 方案（07）：
+├── 02-config/                       ├── values.yaml          ← 所有配置集中在这里
+│   ├── namespace.yaml               │
+│   ├── configmap.yaml               ├── templates/           ← 所有模板集中在这里
+│   └── image-pull-secret.yaml       │   ├── namespace.yaml
+├── 03-infra/                        │   ├── configmap.yaml
+│   ├── nacos.yaml                   │   ├── nacos.yaml
+│   └── redis.yaml                   │   └── ...
+├── 04-platform/                     │
+│   └── all-services.yaml            └── values-prod.yaml     ← 生产环境只改这个文件
+├── 05-business/
+│   └── all-services.yaml
+└── 06-scripts/
+    ├── deploy-all.sh
+    └── verify.sh
+```
+
+kubectl 方案有 6 个目录、10+ 个文件；Helm 方案只有 1 个目录、模板 + values。
+
+---
+
+## 核心原理：模板 + 变量
+
+### 模板文件里有什么
+
+模板文件不是写死的 YAML，里面有 `{{ }}` 占位符：
+
+```yaml
+# templates/configmap.yaml（模板）
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dib-common-config
+  namespace: {{ .Values.namespace }}       # ← 占位符
+data:
+  {{- range $key, $value := .Values.config }}
+  {{ $key }}: {{ $value | quote }}         # ← 占位符
+  {{- end }}
+```
+
+### values 文件提供变量值
+
+```yaml
+# values.yaml（默认配置）
+
+namespace: c1-ns-test
+
+config:
+  C1_ENV: "idc-test-c1"
+  DB_URL: "jdbc:mysql://10.0.6.161:3306/..."
+  REDIS_HOST: "redis.c1-ns-test.svc.cluster.local"
+  ...
+```
+
+### Helm 渲染过程
+
+```
+helm install 时，Helm 做的事：
+
+步骤 1：读取 values.yaml（默认值）
+         + values-prod.yaml（覆盖值）
+         → 合并为最终配置
+
+步骤 2：遍历 templates/ 目录下的每个文件
+         把 {{ .Values.xxx }} 替换为实际值
+
+步骤 3：生成最终的 YAML
+         提交给 K8s API Server
+
+模板：namespace: {{ .Values.namespace }}
+values：namespace: c1-idc-prod
+结果：namespace: c1-idc-prod
+```
+
+---
+
+## 快速开始
+
+### ⚠️ 必读：所有 helm 命令都要带 `--namespace`（简写 `-n`）
+
+Helm 的 Release 记录**按 namespace 隔离存储**（存在目标 namespace 的 Secret 里），因此：
+
+- `helm install` 不带 `-n` → Release 被装进 `default` namespace；
+- 之后 `helm upgrade / rollback / uninstall / history / list` 不带同一个 `-n` → 会去 `default` 找，报 **`Error: release: not found`**。
+
+**从 install 到后续所有运维命令，必须始终带同一个 `-n`**，并与 values 里的 `namespace` 字段保持一致：
+
+| 环境 | values 文件 | Release 名 | namespace（`-n`） |
+|------|------------|-----------|------------------|
+| dev  | values.yaml          | c1-dev  | `c1-ns-dev`      |
+| test | values-test.yaml     | c1-test | `c1-ns-test`     |
+| bank | values-pro-bank.yaml | c1-bank | `c1-ns-pro-bank` |
+| sh   | values-pro-sh.yaml   | c1-sh   | `c1-ns-pro-sh`   |
+
+> 说明：
+> - 首次安装到尚不存在的 namespace 时加 `--create-namespace`（本 Chart 模板不含 Namespace 资源，需由 Helm 自动创建或预先手动创建）。
+> - `helm list -A` 可一次查看**所有** namespace 的 Release。
+> - `helm template` 是本地渲染、不连集群，**不需要** `-n`（namespace 由 values 的 `namespace` 字段决定）。
+
+### 安装 Helm
+
+```bash
+# kubectl 机器上安装 helm
+curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-4 | bash
+
+# 验证
+helm version
+```
+
+### 部署（首次安装）
+
+```bash
+# 进入 Chart 目录
+cd 07-helm
+
+# 部署到测试环境（使用 values-test.yaml 覆盖默认配置）
+helm install c1-test . --values values-test.yaml --namespace c1-ns-test --create-namespace --server-side=false
+
+# 部署到生产环境（bank）
+helm install c1-bank . --values values-pro-bank.yaml --namespace c1-ns-pro-bank --create-namespace --server-side=false
+```
+
+**命令拆解**：
+
+| 部分 | 含义 |
+|------|------|
+| `helm install` | 安装一个新应用 |
+| `c1-test` | 给这次安装起的名字（Release 名称） |
+| `.` | Chart 位置：当前目录 |
+| `--values values-test.yaml` | 用这个文件覆盖 values.yaml 中的默认值 |
+| `--namespace c1-ns-test` | Release 存储的命名空间（简写 `-n`），install 及后续所有命令都必须带 |
+| `--create-namespace` | namespace 不存在时自动创建（仅首次安装需要） |
+| `--server-side=false` | 关闭 Helm v4 默认的 Server-Side Apply，避免与 Jenkins `kubectl set image` 争抢 `image` 字段（详见下方警告） |
+
+> ⚠️ **升级/安装必带 `--server-side=false`**：Helm v4 默认用 Server-Side Apply，会声明拥有清单里所有字段（含 `image`）。但本项目镜像由 **Jenkins 用 `kubectl set image` 更新**（field manager = `kubectl-set`），两者会在 `.image` 上冲突，导致 `helm upgrade` 直接失败（`Apply failed with 1 conflict`）。加 `--server-side=false` 回到客户端三方合并：只 patch chart 中变化的字段，`image.tag` 未变时不碰镜像，Jenkins 部署的版本得以保留。**切勿用 `--force-conflicts` 强行覆盖**——那会把所有服务镜像重置为 `values.yaml` 里的 `image.tag`，造成版本回退。
+
+### 验证部署
+
+```bash
+# 查看 Release 状态（必须带 -n，否则只列 default 里的）
+helm list -n c1-ns-test
+# 或一次查看所有 namespace 的 Release
+helm list -A
+
+# 查看渲染后的 YAML（helm template 是纯本地渲染、不连集群，可不带 -n）
+helm template c1-test . --values values-test.yaml
+
+# 查看 K8s 资源
+kubectl -n c1-ns-test get pods
+```
+
+---
+
+## 升级与回滚
+
+### 升级
+
+```bash
+# 场景 1：修改了 values-test.yaml 中的配置
+# 比如把某服务的 replicas 从 2 改为 3
+helm upgrade c1-test . --values values-test.yaml -n c1-ns-test --server-side=false
+
+# 场景 2：升级镜像版本
+# 修改 values-test.yaml 中的 image.tag
+# ⚠ 镜像通常由 Jenkins 用 kubectl set image 管理，--server-side=false 可避免冲突且不覆盖 Jenkins 版本
+helm upgrade c1-test . --values values-test.yaml -n c1-ns-test --server-side=false
+```
+
+### 回滚
+
+```bash
+# 查看历史版本
+helm history c1-test -n c1-ns-test
+
+# 回滚到上一版本
+helm rollback c1-test -n c1-ns-test
+
+# 回滚到指定版本
+helm rollback c1-test 1 -n c1-ns-test
+```
+
+### 卸载
+
+```bash
+# 删除整个 Release（所有资源都会被删除）
+helm uninstall c1-test -n c1-ns-test
+```
+
+---
+
+## 多环境部署
+
+### 一套模板，多个 values
+
+```
+                    ┌─────────────────────┐
+                    │   templates/        │
+                    │   （模板只有一份）    │
+                    └──────────┬──────────┘
+                               │
+              ┌────────────────┼────────────────┐
+              ▼                ▼                ▼
+     ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+     │ values-dev   │  │ values-test  │  │ values-prod  │
+     │ tag: latest  │  │ tag: v2.0.0  │  │ tag: v2.0.0  │
+     │ replicas: 1  │  │ replicas: 1  │  │ replicas: 2  │
+     │ DB: 开发库    │  │ DB: 测试库    │  │ DB: 生产库    │
+     └──────┬───────┘  └──────┬───────┘  └──────┬───────┘
+            │                 │                 │
+            ▼                 ▼                 ▼
+     helm install       helm install       helm install
+     c1-dev             c1-test            c1-prod
+```
+
+### 部署 4 个环境
+
+```bash
+# 每个环境一条命令（各自带对应 namespace）
+helm install c1-dev  . --values values.yaml          --namespace c1-ns-dev      --create-namespace --server-side=false
+helm install c1-test . --values values-test.yaml     --namespace c1-ns-test     --create-namespace --server-side=false
+helm install c1-bank . --values values-pro-bank.yaml --namespace c1-ns-pro-bank --create-namespace --server-side=false
+helm install c1-sh   . --values values-pro-sh.yaml   --namespace c1-ns-pro-sh   --create-namespace --server-side=false
+```
+
+### 各环境独立管理
+
+```bash
+# 查看各环境状态
+helm list -A                          # 列出所有 namespace 的 Release
+helm history c1-dev  -n c1-ns-dev      # 查看开发环境历史
+helm history c1-bank -n c1-ns-pro-bank # 查看 bank 环境历史
+
+# 单独升级某个环境
+helm upgrade c1-dev . --values values.yaml -n c1-ns-dev --server-side=false
+
+# 单独回滚某个环境
+helm rollback c1-bank 1 -n c1-ns-pro-bank
+```
+
+---
+
+## values.yaml 参数说明
+
+### 全局参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `namespace` | K8s 命名空间 | `c1-ns-test` |
+| `imageRegistry` | 镜像仓库地址 | `10.0.6.183:8088` |
+| `image.tag` | 默认镜像版本 | `latest` |
+| `imagePullPolicy` | 镜像拉取策略 | `Always` |
+
+### 镜像仓库认证
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `registry.server` | 仓库地址 | `10.0.6.183:8088` |
+| `registry.username` | 用户名 | `admin` |
+| `registry.password` | 密码 | `admin123` |
+
+### 微服务参数（每个服务相同结构）
+
+```yaml
+services:
+  c1-p-gateway:                     # 服务名
+    tier: platform                  # 层级：platform / business
+    image: "c1/p-gateway"           # 镜像名（不含 registry 和 tag）
+    port: 20000                   # 容器端口
+    serviceType: NodePort         # Service 类型：ClusterIP / NodePort
+    nodePort: 30000               # NodePort 端口（仅 NodePort 类型有效）
+    healthPath: /actuator/health  # 健康检查路径
+    replicas: 1                   # 副本数
+    tag: v2.0.0                   # 可选：覆盖全局 image.tag
+    resources:                    # 资源限制
+      requests:
+        cpu: "250m"
+        memory: "512Mi"
+      limits:
+        cpu: "1000m"
+        memory: "2Gi"
+```
+
+---
+
+## 与 kubectl 方案的对比
+
+| 操作 | kubectl 方案（01~06） | Helm 方案（07） |
+|------|---------------------|----------------|
+| 部署 | `bash 06-scripts/deploy-all.sh` | `helm install dib . --values values.yaml -n c1-ns-test --create-namespace` |
+| 改配置 | 改 YAML → `kubectl apply` | 改 values → `helm upgrade dib -n c1-ns-test` |
+| 换环境 | 手动改多个 YAML | 换 values 文件 |
+| 回滚 | 手动记住旧版本，逐个还原 | `helm rollback dib 1 -n c1-ns-test` |
+| 查看历史 | 没有 | `helm history dib -n c1-ns-test` |
+| 新增服务 | 改 YAML + 改脚本 | 在 values.yaml 加一段服务配置 |
+
+---
+
+## 常见问题
+
+#### Q1: 已有 kubectl 方案，为什么还要 Helm？
+
+**Q：** 01~06 的 kubectl 方案已经能正常部署，为什么还要搞 Helm？
+
+**A：** 两种方案解决不同的问题：
+
+| 场景 | kubectl 方案 | Helm 方案 |
+|------|------------|----------|
+| 首次部署，1-2 个环境 | ✓ 够用 | 可以但没必要 |
+| 4 个环境，配置差异大 | 维护成本高 | ✓ 一套模板搞定 |
+| 需要版本管理和回滚 | 没有 | ✓ 自动记录 |
+| 交付给客户部署 | 给客户一堆 YAML | ✓ 给客户 Chart + values |
+
+**建议**：当前如果只有 1 个环境，继续用 kubectl 方案即可。等环境数量增加或需要版本管理时，再迁移到 Helm。两套方案可以并存，不影响。
+
+---
+
+#### Q2: Helm 和 kubectl 方案能同时用吗？
+
+**Q：** 如果先用 kubectl 部署了，后来想用 Helm，需要先把 kubectl 部署的资源删掉吗？
+
+**A：** 需要。因为 Helm 会认为"没有用 Helm 部署过的资源 = 不存在"，升级时会重新创建，可能导致冲突。
+
+```bash
+# 正确做法：先清理 kubectl 部署的资源
+kubectl delete namespace c1-ns-test
+
+# 然后用 Helm 重新部署（带 -n，首次加 --create-namespace）
+helm install c1-test . --values values-test.yaml --namespace c1-ns-test --create-namespace --server-side=false
+```
+
+---
+
+#### Q3: values 文件只写差异部分，Helm 怎么知道其他参数？
+
+**Q：** `values-prod.yaml` 里只写了 `namespace`、`image.tag` 等几个参数，其他参数（如 `nacos.image`、`redis.storage`）没写，不会丢失吗？
+
+**A：** 不会。Helm 的 values 合并逻辑是**覆盖，不是替换**：
+
+```
+合并过程：
+
+values.yaml（默认值）          values-prod.yaml（覆盖值）
+┌────────────────────┐         ┌────────────────────┐
+│ namespace: c1-ns-test│       │ namespace: c1-idc-prod│
+│ image.tag: latest    │  +    │ image.tag: v2.0.0    │
+│ nacos.image: ...     │       │ (没有 nacos 配置)     │
+│ redis.storage: 2Gi   │       │ (没有 redis 配置)     │
+└────────────────────┘         └────────────────────┘
+              │
+              ▼
+         最终合并结果
+┌────────────────────┐
+│ namespace: c1-idc-prod│  ← 被覆盖
+│ image.tag: v2.0.0    │  ← 被覆盖
+│ nacos.image: ...     │  ← 保持默认
+│ redis.storage: 2Gi   │  ← 保持默认
+└────────────────────┘
+```
+
+所以 values-prod.yaml **只需要写和默认值不同的参数**，其余自动用 values.yaml 中的默认值。
+
+---
+
+#### Q4: 怎么预览 Helm 会生成什么 YAML？
+
+**Q：** 部署前想看看 Helm 最终会生成什么样的 YAML，怎么操作？
+
+**A：** 用 `helm template` 命令，只渲染不部署：
+
+```bash
+# 渲染并输出到终端
+helm template c1-test . --values values-test.yaml
+
+# 渲染并保存到文件
+helm template c1-test . --values values-test.yaml > rendered.yaml
+
+# 只渲染某个模板文件
+helm template c1-test . --values values-test.yaml -s templates/configmap.yaml
+```
+
+`helm template` 不会连接 K8s 集群，纯本地渲染，适合检查模板语法和变量替换是否正确。因为是本地渲染，**不需要带 `-n`**——渲染出的 namespace 由 values 里的 `namespace` 字段决定。
+
+---
+
+#### Q5: 新增一个微服务，Helm 怎么操作？
+
+**Q：** 如果 DIB 新增了一个微服务 `service-new`，用 Helm 怎么部署？
+
+**A：** 只需要在 `values.yaml` 的 `services` 下加一段配置，模板会自动生成对应的 Deployment 和 Service：
+
+```yaml
+# 在 values.yaml 的 services 下新增：
+
+  c1-b-new:
+    tier: business
+    image: "c1/b-new"
+    port: 30006
+    serviceType: ClusterIP
+    healthPath: /api/new/actuator/health
+    replicas: 1
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "512Mi"
+      limits:
+        cpu: "1000m"
+        memory: "2Gi"
+```
+
+```bash
+# 升级部署（Helm 会自动创建新资源，不影响现有服务）
+helm upgrade c1-test . --values values-test.yaml --server-side=false
+```
+
+不需要改任何模板文件 — 因为每个服务都有独立的模板文件，新增服务只需添加对应的模板文件和 values 配置。
+
+---
+
+#### Q6: 镜像仓库密码怎么安全管理？
+
+**Q：** `values.yaml` 里有镜像仓库密码，提交到 Git 仓库不安全怎么办？
+
+**A：** 三种方案，安全性递增：
+
+**方案一：values 文件不提交密码（推荐）**
+
+```bash
+# values-pro-bank.yaml 中不写 registry 密码
+# 部署时通过 --set 传入
+helm install c1-bank . \
+  --namespace c1-ns-pro-bank \
+  --values values-pro-bank.yaml \
+  --set registry.username=actual_user \
+  --set registry.password=actual_password
+```
+
+**方案二：用外部 values 文件**
+
+```bash
+# values-pro-bank-secrets.yaml 不提交到 Git（加入 .gitignore）
+helm install c1-bank . \
+  --namespace c1-ns-pro-bank \
+  --values values-pro-bank.yaml \
+  --values values-pro-bank-secrets.yaml
+```
+
+**方案三：使用 K8s Secret 管理**
+
+将密码存入 K8s Secret，模板中引用 Secret 而非 values。适合生产环境。
