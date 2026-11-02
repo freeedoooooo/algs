@@ -49,13 +49,13 @@
    - 手写体（**只观察效果，不深究**——这是兔子洞，本计划不攻手写）
 2. 用上周的脚本批量跑，把每张的**识别结果和原图对应存好**。
 
-**批量跑参考代码**：
+**批量跑参考代码**（已备好 `a_batch_ocr.py`，`python a_batch_ocr.py` 直接批量跑 `input/` 下的图，无需自己写循环）：
 ```python
 import os
 from paddleocr import PaddleOCR
 
 ocr = PaddleOCR(use_angle_cls=True, lang='ch')
-src_dir = "test_images"          # 放你收集的图片
+src_dir = "input"          # 放你收集的图片（input/ 目录）
 for name in os.listdir(src_dir):
     if not name.lower().endswith(('.png', '.jpg', '.jpeg')):
         continue
@@ -115,6 +115,8 @@ ocr = PaddleOCR(use_angle_cls=True, lang='ch',
                 det_db_box_thresh=0.5)
 result = ocr.ocr('bad_cases/06_漏检/xxx.png', cls=True)
 ```
+（已备好 `c_try_params.py`，把 `IMG` 改成你的漏检样本路径即可对比参数效果。）
+
 > 参数名/默认值可能随版本变化，以官方文档为准：https://github.com/PaddlePaddle/PaddleOCR
 
 **产出**：把 notes.md 里 1-2 个 bad case 通过调参数"救"回来一点，记录"调了什么、结果怎么变"。

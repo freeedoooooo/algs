@@ -67,19 +67,19 @@
    pip install paddlepaddle        # CPU 版；有 GPU 后续再换 paddlepaddle-gpu
    pip install paddleocr
    ```
-2. 跑通第一张图（新建 `week1_ocr.py`）：
+2. 跑通第一张图（直接运行目录里已备好的 `b_ocr_image.py`，本周脚手架，无需自建）：
    ```python
    from paddleocr import PaddleOCR
 
    # lang='ch' 中英混合；use_angle_cls=True 自动摆正倾斜文字
    ocr = PaddleOCR(use_angle_cls=True, lang='ch')
-   result = ocr.ocr('test.png', cls=True)
+   result = ocr.ocr('input/test.png', cls=True)
 
    for line in result[0]:
        box, (text, conf) = line      # box=四点坐标, text=识别文字, conf=置信度
        print(f'{text}  置信度={conf:.2f}')
    ```
-3. 找一张含中文的截图/照片当 `test.png`，运行，看到文字被读出来即成功。
+3. 找一张含中文的截图/照片，放到 `input/` 目录命名 `test.png`，运行，看到文字被读出来即成功。
 
 > ⚠️ **版本提示**：PaddleOCR 3.x 把 `.ocr()` 改成了 `.predict()`，返回结构也略有不同。若上面代码报错，去官方仓库看当前版本的 Quickstart：https://github.com/PaddlePaddle/PaddleOCR （README 顶部有最新用法）。**以官方 README 为准。**
 
@@ -91,7 +91,7 @@
 
 **为什么要学**：**能直接抽文字的 PDF 根本不用 OCR**。先判断，能省一大半事，这是工程思维（你的强项）。
 
-**怎么学 / 动手**：装库 `pip install pdfplumber pymupdf`，跑这段判断逻辑：
+**怎么学 / 动手**：装库 `pip install pdfplumber pymupdf`，跑这段判断逻辑（已备好为 `c_pdf_text_layer.py`，可直接 `python c_pdf_text_layer.py your.pdf` 运行）：
 ```python
 import pdfplumber
 
@@ -112,7 +112,7 @@ print("预览：", preview)
   doc = fitz.open("scan.pdf")
   for i, page in enumerate(doc):
       pix = page.get_pixmap(dpi=200)      # dpi 越高越清晰但越慢
-      pix.save(f"page_{i}.png")           # 存成图片，再走 PaddleOCR
+      pix.save(f"output/page_{i}.png")           # 存成图片，再走 PaddleOCR
   ```
 
 **产出**：一个能判断"该不该 OCR"的函数，并把一个扫描 PDF 转成图片。
@@ -128,7 +128,7 @@ print("预览：", preview)
 from paddleocr import PPStructure
 
 engine = PPStructure(table=True, ocr=True, lang='ch')
-result = engine('table.png')          # 一张含表格的图片
+result = engine('input/table.png')          # 一张含表格的图片
 for item in result:
     print(item['type'])                # table / text
     if item['type'] == 'table':
@@ -136,7 +136,7 @@ for item in result:
 ```
 > PP-StructureV3 是更新版本，用法以官方仓库"表格识别"章节为准：https://github.com/PaddlePaddle/PaddleOCR 。本周**跑通一个表格→HTML**即可，不追求完美。
 
-**产出**：把一张表格图片转成 HTML，用浏览器打开看到还原的表格。
+**产出**：把一张表格图片转成 HTML，用浏览器打开看到还原的表格。（代码已备好为 `d_table_ocr.py`，`python d_table_ocr.py` 直接跑，输出 `table_out.html`。）
 
 ---
 
@@ -152,7 +152,7 @@ for item in result:
 
 ### 周末 · 串成 pipeline + bad case 库雏形（4-6h）
 
-1. **串脚本**：把模块 B/C/D 合起来——`输入一个 PDF → 判断有无文本层 → 有则抽字/无则转图 OCR → 表格走 PP-Structure → 输出一个结构化 txt/json`。这是你**第一个能拿出手的小工具**。
+1. **串脚本**：把模块 B/C/D 合起来——`输入一个 PDF → 判断有无文本层 → 有则抽字/无则转图 OCR → 表格走 PP-Structure → 输出一个结构化 txt/json`。这是你**第一个能拿出手的小工具**。（脚手架 `weekend_pipeline.py` 已留 TODO，照注释补全即可。）输入统一放 `input/`，产物统一放 `output/`，目录已建好。
 2. **bad case 库雏形**：建一个文件夹 `bad_cases/`，把你跑的过程中**识别错、识别不全、模糊/倾斜/反光**的样本图存进去，附一个 `notes.md` 记"这张为什么失败"。**这是第 2 周和 P4 的宝贵素材，现在就开始攒。**
 
 ---

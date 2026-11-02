@@ -2,8 +2,8 @@
 第2周 · 模块A：批量跑真实图片（可直接运行）
 
 用法：
-    把收集的图片放进 test_images/ 目录，然后：
-    python batch_ocr.py
+    把收集的图片放进 input/ 目录，然后：
+    python a_batch_ocr.py
 
 目标：故意覆盖多种场景（清晰/模糊/倾斜/反光/密集小字），
       建立"什么场景效果好、什么效果差"的直觉。
@@ -13,7 +13,7 @@ from paddleocr import PaddleOCR
 
 ocr = PaddleOCR(use_angle_cls=True, lang='ch')
 
-SRC_DIR = "test_images"
+SRC_DIR = "input"
 for name in sorted(os.listdir(SRC_DIR)):
     if not name.lower().endswith(('.png', '.jpg', '.jpeg')):
         continue

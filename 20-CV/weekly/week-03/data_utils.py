@@ -46,9 +46,11 @@ def one_hot(y, num_cls=10):
     return oh
 
 
-def plot_curves(losses, accs=None, save='curve.png'):
-    """画 loss（和 accuracy）曲线并存图。"""
+def plot_curves(losses, accs=None, save='output/curve.png'):
+    """画 loss（和 accuracy）曲线并存图。产物统一放 output/。"""
+    import os
     import matplotlib.pyplot as plt
+    os.makedirs(os.path.dirname(save) or '.', exist_ok=True)
     fig, ax1 = plt.subplots(figsize=(8, 4))
     ax1.plot(losses, label='loss', color='tab:red')
     ax1.set_xlabel('epoch'); ax1.set_ylabel('loss', color='tab:red')

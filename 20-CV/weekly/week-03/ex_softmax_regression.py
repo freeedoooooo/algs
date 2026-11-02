@@ -67,4 +67,4 @@ if __name__ == '__main__':
     # 建议先取 5000 张小数据跑通，再上全量
     losses, accs, W, b = train(X_train[:5000], y_train[:5000], W, b, lr)
     print('测试集准确率：', evaluate(X_test, y_test, W, b))
-    plot_curves(losses, accs, save='softmax_curve.png')
+    plot_curves(losses, accs, save='output/softmax_curve.png')

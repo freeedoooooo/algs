@@ -4,8 +4,9 @@
 核心思想（工程思维）：能直接抽字的 PDF 根本不用 OCR。先判断，省一大半事。
 
 用法：
-    python pdf_extract.py your.pdf
+    python c_pdf_text_layer.py your.pdf
 """
+import os
 import sys
 import pdfplumber
 import fitz  # PyMuPDF
@@ -24,19 +25,20 @@ def extract_text(pdf_path):
         return "\n".join((p.extract_text() or "") for p in pdf.pages)
 
 
-def pdf_to_images(pdf_path, dpi=200, out_prefix="page"):
-    """扫描件：每页转成图片，再走 PaddleOCR（见 ocr_image.py）。"""
+def pdf_to_images(pdf_path, dpi=200, out_dir="output"):
+    """扫描件：每页转成图片，再走 PaddleOCR（见 b_ocr_image.py）。产物统一放 output/。"""
+    os.makedirs(out_dir, exist_ok=True)
     doc = fitz.open(pdf_path)
     for i, page in enumerate(doc):
         pix = page.get_pixmap(dpi=dpi)      # dpi 越高越清晰但越慢
-        out = f"{out_prefix}_{i}.png"
+        out = os.path.join(out_dir, f"page_{i}.png")
         pix.save(out)
         print(f"已保存 {out}")
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("用法：python pdf_extract.py your.pdf")
+        print("用法：python c_pdf_text_layer.py your.pdf")
         sys.exit(1)
 
     path = sys.argv[1]
@@ -48,4 +50,4 @@ if __name__ == "__main__":
     else:
         print("⚠️ 扫描件/图片型，需要 OCR → 正在转图片")
         pdf_to_images(path)
-        print("转好了，对每张 page_*.png 跑 ocr_image.py 即可")
+        print("转好了，对 output/ 下每张 page_*.png 跑 b_ocr_image.py 即可")

@@ -195,7 +195,7 @@ def train(X, y, epochs=5, batch_size=128, lr=0.1):
 - 训练 `5-10` 个 epoch 一般能到 95%+
 - 用 `X_test/y_test` 评估测试集准确率（**别只看训练集，那是过拟合陷阱**）
 
-**2. 画曲线**：loss 下降 + accuracy 上升两条曲线（matplotlib）。
+**2. 画曲线**：loss 下降 + accuracy 上升两条曲线（matplotlib）。（存到 `output/`）
 
 **3. 逐行讲解反向传播**：对着 `backward()`，把每一行"在算什么"写成注释或讲给自己听。**这是 P1-A 的验收核心——能讲清才算真懂。**
 

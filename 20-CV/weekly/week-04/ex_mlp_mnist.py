@@ -28,8 +28,10 @@ def load_mnist(data_root='./data'):
 def one_hot(y, num_cls=10):
     oh = np.zeros((len(y), num_cls)); oh[np.arange(len(y)), y] = 1; return oh
 
-def plot_curves(losses, accs, save='mlp_curve.png'):
+def plot_curves(losses, accs, save='output/mlp_curve.png'):
+    import os
     import matplotlib.pyplot as plt
+    os.makedirs(os.path.dirname(save) or '.', exist_ok=True)
     fig, a1 = plt.subplots(figsize=(8, 4))
     a1.plot(losses, color='tab:red', label='loss'); a1.set_xlabel('epoch')
     a1.set_ylabel('loss', color='tab:red')
