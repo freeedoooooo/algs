@@ -1,0 +1,5 @@
+# 第5周依赖（P1-B 上：PyTorch 入门）
+torch
+torchvision
+numpy
+matplotlib

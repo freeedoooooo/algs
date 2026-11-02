@@ -1,0 +1,5 @@
+# 第6周依赖（P1-B 下：完整训练 pipeline + 里程碑）
+torch
+torchvision
+numpy
+matplotlib

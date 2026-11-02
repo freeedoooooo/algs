@@ -1,0 +1,6 @@
+# 第7周依赖（P1-C 上：CNN 原理 · numpy 手写卷积）
+numpy
+matplotlib
+torch
+torchvision   # 仅用于取一张样例图做可视化
+scipy         # 脚手架 b_conv_viz.py 用它跑边缘核做对比演示
