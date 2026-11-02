@@ -14,13 +14,20 @@ import pdfplumber
 import fitz
 from paddleocr import PaddleOCR
 
-ocr = PaddleOCR(use_angle_cls=True, lang='ch')
+# PaddleOCR 3.x：显式用本地已缓存的 v5 模型（免联网下载 v6）
+ocr = PaddleOCR(
+    text_detection_model_name='PP-OCRv5_server_det',
+    text_recognition_model_name='PP-OCRv5_server_rec',
+    use_textline_orientation=True,   # 替代已废弃的 use_angle_cls
+    lang='ch',
+)
 
 
 def ocr_image(path):
     """对单张图片跑 OCR，返回识别到的文字列表。"""
-    result = ocr.ocr(path, cls=True)
-    return [line[1][0] for line in (result[0] or [])]
+    # 3.x 用 predict()，返回 list[OCRResult]（dict 结构）
+    result = ocr.predict(path)
+    return [t for res in result for t in res['rec_texts']]
 
 
 def pdf_pages_to_images(pdf_path, dpi=200, out_dir="output"):
