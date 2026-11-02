@@ -21,6 +21,7 @@
 """
 
 import os
+import re
 import sys
 import time
 
@@ -66,6 +67,49 @@ result = engine.predict(IMAGE)
 t2 = time.perf_counter()
 print(f'>> 推理耗时：{t2 - t1:.2f}s')
 
+def ensure_readable_html(path):
+    """
+    给 paddlex 导出的 HTML 片段补上编码声明。
+
+    坑点（你遇到的"日志正常但浏览器乱码"）：
+        save_to_html 写文件时确实是 utf-8（字节没错），
+        但内容只是 `<html><body><table>...` 这种片段，没有 <meta charset>。
+        浏览器在中文 Windows 上默认按 GBK 解码 → 中文乱码。
+        补上 `<meta charset="utf-8">` 后浏览器才知道该用 utf-8 读。
+    """
+    with open(path, encoding='utf-8') as f:
+        frag = f.read()
+
+    # 已经有 charset 声明就不用管了
+    if re.search(r'<meta[^>]+charset', frag, flags=re.I):
+        return False
+
+    # 去掉片段自带的 <html>/<body> 外层标签，避免嵌套成 <html><html>
+    inner = re.sub(r'^\s*<html[^>]*>|</html>\s*$', '', frag, flags=re.I)
+    inner = re.sub(r'^\s*<body[^>]*>|</body>\s*$', '', inner, flags=re.I)
+
+    doc = (
+        '<!DOCTYPE html>\n'
+        '<html lang="zh-CN">\n'
+        '<head>\n'
+        '  <meta charset="utf-8">\n'
+        '  <title>表格识别结果</title>\n'
+        '  <style>\n'
+        '    body { font-family: "Microsoft YaHei", sans-serif; margin: 24px; }\n'
+        '    table { border-collapse: collapse; width: 100%; }\n'
+        '    td, th { border: 1px solid #999; padding: 6px 10px; }\n'
+        '  </style>\n'
+        '</head>\n'
+        '<body>\n'
+        f'{inner}\n'
+        '</body>\n'
+        '</html>\n'
+    )
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(doc)
+    return True
+
+
 # ---------- 3) 打印各内容块 + 导出 HTML ----------
 os.makedirs('output', exist_ok=True)
 for i, res in enumerate(result):
@@ -81,6 +125,9 @@ for i, res in enumerate(result):
         print(f'   [{label}] {content[:60]}')
     # 直接导出 HTML（表格会还原成 <table>）
     res.save_to_html(OUT_HTML)
+    # 补编码声明，否则浏览器按 GBK 解码会显示乱码
+    if ensure_readable_html(OUT_HTML):
+        print('>> 已为 HTML 补充 <meta charset="utf-8"> 与表格样式')
 
 print(f'\n>> 已保存 {OUT_HTML}，用浏览器打开查看表格还原效果')
 print(f'>> 总耗时：{t2 - t0:.2f}s（加载 {t1 - t0:.2f}s + 推理 {t2 - t1:.2f}s）')

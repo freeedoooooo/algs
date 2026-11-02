@@ -24,7 +24,7 @@ import pdfplumber
 import pymupdf  # PyMuPDF 新导入名（不再用已弃用的 fitz）
 
 # 默认 PDF：不带参数直接跑这张
-DEFAULT_PDF = os.path.join('input', 'test3.pdf')
+DEFAULT_PDF = os.path.join('input', 'test3_image.pdf')
 
 # 文本层判定阈值：前几页抽到的字符数超过它，就认为"有文本层"
 MIN_CHARS = 50
