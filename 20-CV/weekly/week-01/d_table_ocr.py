@@ -4,8 +4,10 @@
 普通 OCR 只给"一行行文字"，表格需要结构识别（还原行列关系），输出 HTML。
 
 用法（在 week-01 目录下）：
-    python d_table_ocr.py                      # 默认 input/table.png
-    python d_table_ocr.py input/test2.jpg      # 也可指定任意含表格的图片
+    python d_table_ocr.py                      # 用配置区 INPUT_IMAGE 指定的图片
+    python d_table_ocr.py input/你的表格.png     # 命令行临时指定（优先级高于 INPUT_IMAGE）
+
+调试要改的路径都在文件顶部的【配置区】，不用往下翻代码。
 
 跑完会生成 output/table_out.html，用浏览器打开看还原效果。
 
@@ -20,6 +22,11 @@
     这里强制走百度云 BOS 模型源 + 跳过连通性检查，避免像 PP-OCRv6 那样卡在 HuggingFace。
 """
 
+# =========================== 配置区：调试只改这里 ===========================
+INPUT_IMAGE = 'input/test2.jpg'             # 输入图片（含表格的图）
+OUT_HTML = 'output/table_out_d.html'        # 表格还原结果，浏览器打开看效果
+# ==========================================================================
+
 import os
 import re
 import sys
@@ -31,19 +38,20 @@ os.environ.setdefault('PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK', 'True')
 
 from paddleocr import PPStructureV3  # noqa: E402
 
-OUT_HTML = os.path.join('output', 'table_out_d.html')
-
-# 命令行可选传图片路径
+# 输入：命令行指定 > 配置区 INPUT_IMAGE（文件不存在时自动退回 input/test2.jpg）
 if len(sys.argv) > 1:
     IMAGE = sys.argv[1]
 else:
-    IMAGE = os.path.join('input', 'table.png')
-    if not os.path.exists(IMAGE) and os.path.exists(os.path.join('input', 'test2.jpg')):
-        IMAGE = os.path.join('input', 'test2.jpg')
-        print('>> 未找到 input/table.png，先用 input/test2.jpg 演示')
+    IMAGE = INPUT_IMAGE
+    if not os.path.exists(IMAGE) and os.path.exists('input/test2.jpg'):
+        IMAGE = 'input/test2.jpg'
+        print(f'>> 配置区的 {INPUT_IMAGE} 不存在，先用 input/test2.jpg 演示')
 
 if not os.path.exists(IMAGE):
-    sys.exit(f'找不到图片：{os.path.abspath(IMAGE)}\n请把含表格的图片放到 week-01/input/table.png')
+    sys.exit(
+        f'找不到图片：{os.path.abspath(IMAGE)}\n'
+        f'改文件顶部的 INPUT_IMAGE，或用命令行指定：python d_table_ocr.py 你的图片.png'
+    )
 
 # ---------- 1) 初始化（加载流水线里的多个模型） ----------
 print('>> 初始化 PPStructureV3（表格识别流水线），首次加载/下载模型可能较慢…')

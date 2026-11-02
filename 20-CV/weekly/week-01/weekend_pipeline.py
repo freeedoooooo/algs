@@ -5,17 +5,25 @@
 （这属于"用工具"范畴，不是深度学习核心，所以给骨架让你专注串联逻辑。）
 
 用法：
-    python weekend_pipeline.py input.pdf
+    python weekend_pipeline.py                  # 用配置区 INPUT_PDF 指定的文件
+    python weekend_pipeline.py input/你的.pdf     # 命令行临时指定（优先级高于 INPUT_PDF）
+
+调试要改的路径都在文件顶部的【配置区】，不用往下翻代码。
 """
+
+# =========================== 配置区：调试只改这里 ===========================
+INPUT_PDF = 'input/test3.pdf'                   # 输入 PDF
+OUT_DIR = 'output'                              # 产物目录（转出的中间图、最终结果）
+OUT_JSON = 'output/output.json'                 # TODO 2 要写的结构化结果
+DPI = 200                                       # 转图清晰度
+# ==========================================================================
+
 import sys
 import os
 import json
 import pdfplumber
 import pymupdf                     # PyMuPDF 新导入名（`import fitz` 已弃用）
 from paddleocr import PaddleOCR
-
-# 默认输入：不带参数直接跑这张
-DEFAULT_PDF = os.path.join('input', 'test3.pdf')
 
 # PaddleOCR 3.x：显式指定模型（免联网下载 v6）
 # 用移动端模型：server 大模型在 CPU 上极慢（实测单张 104s vs mobile 3.8s）
@@ -34,7 +42,7 @@ def ocr_image(path):
     return [t for res in result for t in res['rec_texts']]
 
 
-def pdf_pages_to_images(pdf_path, dpi=200, out_dir="output"):
+def pdf_pages_to_images(pdf_path, dpi=DPI, out_dir=OUT_DIR):
     """把 PDF 每页转成图片，返回图片路径列表。产物统一放 output/。"""
     os.makedirs(out_dir, exist_ok=True)
     doc = pymupdf.open(pdf_path)
@@ -55,13 +63,13 @@ def run(pdf_path):
     #         无 → 转图片（pdf_pages_to_images），逐页 ocr_image，汇总文字
     raise NotImplementedError("把 c_pdf_text_layer.py 和 b_ocr_image.py 的逻辑串起来")
 
-    # TODO 2: 把结果存成 json（{"source": pdf_path, "text": ...}）写到 output/output.json
+    # TODO 2: 把结果存成 json（{"source": pdf_path, "text": ...}）写到 OUT_JSON
     # TODO 3: （进阶）遇到表格区域时调用 d_table_ocr.py 的逻辑
 
 
 if __name__ == "__main__":
-    pdf_path = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_PDF
+    pdf_path = sys.argv[1] if len(sys.argv) > 1 else INPUT_PDF
     if not os.path.exists(pdf_path):
-        sys.exit(f"找不到 PDF：{os.path.abspath(pdf_path)}（默认找 input/test3.pdf）")
+        sys.exit(f"找不到 PDF：{os.path.abspath(pdf_path)}\n改文件顶部的 INPUT_PDF，或用命令行指定路径")
     text = run(pdf_path)
     print(text)

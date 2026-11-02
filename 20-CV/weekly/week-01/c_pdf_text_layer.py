@@ -4,8 +4,10 @@
 核心思想（工程思维）：能直接抽字的 PDF 根本不用 OCR。先判断，省一大半事。
 
 用法（在 week-01 目录下）：
-    python c_pdf_text_layer.py                    # 默认 input/test3.pdf
-    python c_pdf_text_layer.py input/别的.pdf      # 也可指定任意 PDF
+    python c_pdf_text_layer.py                    # 用配置区 INPUT_PDF 指定的文件
+    python c_pdf_text_layer.py input/你的.pdf      # 命令行临时指定（优先级高于 INPUT_PDF）
+
+调试要改的路径都在文件顶部的【配置区】，不用往下翻代码。
 
 两个库的分工：
     pdfplumber → 判断/抽取 PDF 的【文本层】（有字就直接读，又快又准）
@@ -16,19 +18,20 @@
     老写法在新版本会报 DeprecationWarning，未来会被移除。
 """
 
+# =========================== 配置区：调试只改这里 ===========================
+INPUT_PDF = 'input/test3_image.pdf'         # 输入 PDF
+OUT_DIR = 'output'                          # 产物目录（抽取的文本 / 转出的图片都放这里）
+DPI = 200                                   # 转图清晰度：越高越清晰但越慢，OCR 用 200 够
+MIN_CHARS = 50                              # 前几页抽到的字符数超过它 → 判定为"有文本层"
+SAMPLE_PAGES = 3                            # 只检查前几页，避免大 PDF 判断太慢
+# ==========================================================================
+
 import os
 import sys
 import time
 
 import pdfplumber
 import pymupdf  # PyMuPDF 新导入名（不再用已弃用的 fitz）
-
-# 默认 PDF：不带参数直接跑这张
-DEFAULT_PDF = os.path.join('input', 'test3_image.pdf')
-
-# 文本层判定阈值：前几页抽到的字符数超过它，就认为"有文本层"
-MIN_CHARS = 50
-SAMPLE_PAGES = 3
 
 
 def has_text_layer(pdf_path, sample_pages=SAMPLE_PAGES):
@@ -45,7 +48,7 @@ def extract_text(pdf_path):
         return '\n'.join((p.extract_text() or '') for p in pdf.pages)
 
 
-def pdf_to_images(pdf_path, dpi=200, out_dir='output'):
+def pdf_to_images(pdf_path, dpi=DPI, out_dir=OUT_DIR):
     """扫描件：每页转成图片，再走 PaddleOCR（见 b_ocr_image.py）。产物统一放 output/。"""
     os.makedirs(out_dir, exist_ok=True)
     out_paths = []
@@ -63,8 +66,8 @@ def pdf_to_images(pdf_path, dpi=200, out_dir='output'):
 
 
 def main():
-    # ---- 0) 取路径：命令行优先，否则用默认 ----
-    pdf_path = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_PDF
+    # ---- 0) 取路径：命令行指定 > 配置区 INPUT_PDF ----
+    pdf_path = sys.argv[1] if len(sys.argv) > 1 else INPUT_PDF
 
     if not os.path.exists(pdf_path):
         print(f'找不到 PDF：{os.path.abspath(pdf_path)}')
@@ -75,7 +78,7 @@ def main():
             for f in pdfs:
                 print(f'   python c_pdf_text_layer.py input/{f}')
         else:
-            print('请把 PDF 放到 week-01/input/ 下（当前默认找 input/test3.pdf）。')
+            print('请把 PDF 放到 week-01/input/ 下，或改文件顶部的 INPUT_PDF。')
         sys.exit(1)
 
     print(f'>> 目标文件：{pdf_path}')
@@ -96,9 +99,9 @@ def main():
         t2 = time.perf_counter()
 
         # 产物落盘，符合"产物放 output/"的约定
-        os.makedirs('output', exist_ok=True)
+        os.makedirs(OUT_DIR, exist_ok=True)
         stem = os.path.splitext(os.path.basename(pdf_path))[0]
-        out_txt = os.path.join('output', f'{stem}_text.txt')
+        out_txt = os.path.join(OUT_DIR, f'{stem}_text.txt')
         with open(out_txt, 'w', encoding='utf-8') as f:
             f.write(text)
 
@@ -113,7 +116,7 @@ def main():
         t2 = time.perf_counter()
         print(f'>> 转图耗时：{t2 - t1:.2f}s；共生成 {len(imgs)} 张')
         print(f'>> 总耗时：{t2 - t0:.2f}s')
-        print('>> 下一步：对 output/ 下每张 page_*.png 跑 b_ocr_image.py，例如')
+        print(f'>> 下一步：对 {OUT_DIR}/ 下每张 page_*.png 跑 b_ocr_image.py，例如')
         print(f'   python b_ocr_image.py {imgs[0]}' if imgs else '   （没有页面可转）')
 
 
