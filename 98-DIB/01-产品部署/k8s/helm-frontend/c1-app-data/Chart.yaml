@@ -1,0 +1,6 @@
+apiVersion: v2
+name: c1-app-data
+description: c1 微前端「数据应用」容器化部署 Chart（第二层：纯静态服务）
+type: application
+version: 1.0.0
+appVersion: "1.0.0"

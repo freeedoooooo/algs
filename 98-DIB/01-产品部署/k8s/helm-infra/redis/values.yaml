@@ -1,0 +1,21 @@
+# ============================================================
+# c1-redis Helm Chart — 基础配置（142 / dev 环境）
+# ============================================================
+# 用法: helm upgrade --install c1-redis . -n c1-ns-dev --server-side=false
+# 前置: 需先部署 helm-infra/config（提供 c1-configmap-common，含 C1_REDIS_PASSWORD）
+# 环境差异（namespace/nodeName/nodePort）由 values-<env>.yaml 覆盖
+# ============================================================
+
+namespace: c1-ns-dev
+nodeName: worker-5.142
+
+image: "redis:7.0"
+imagePullPolicy: IfNotPresent
+
+storage: 2Gi
+maxmemory: "2g"
+serviceType: NodePort
+nodePort: 30079
+
+# 密码来源的公共 ConfigMap（由 helm-infra/config 部署）
+configMapName: c1-configmap-common

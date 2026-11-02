@@ -1,0 +1,42 @@
+# ============================================================
+# c1-app-system Helm Chart — test 环境（70 机器 / worker-5.70）
+# ============================================================
+# 说明: 完整独立配置，不依赖 values.yaml 默认值
+# 用法: helm install c1-app-system . --values values-test.yaml -n c1-ns-test --server-side=false
+# ============================================================
+
+# ---------- 全局配置 ----------
+namespace: c1-ns-test
+
+# 镜像仓库地址
+imageRegistry: "10.0.6.183:8088"
+
+# 镜像版本 —— 部署前请填写实际 tag
+image:
+  repository: "c1/c1-app-system"
+  # fixme 改为 idc-test_latest
+  tag: idc-dev_latest
+
+# 镜像拉取策略
+imagePullPolicy: Always
+
+# 节点调度
+nodeName: worker-5.70
+
+# 副本数
+replicas: 1
+
+# 容器/Service 端口
+port: 80
+
+# Service 类型
+serviceType: ClusterIP
+
+# 资源配额
+resources:
+  requests:
+    cpu: "20m"
+    memory: "32Mi"
+  limits:
+    cpu: "200m"
+    memory: "128Mi"

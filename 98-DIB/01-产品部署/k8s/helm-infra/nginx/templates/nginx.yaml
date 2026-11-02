@@ -1,0 +1,100 @@
+# Nginx 前端网关（第一层入口）
+# 由 helm-c1-backend/templates/02-infra/nginx.yaml 拆分而来
+# 资源名 = .Chart.Name = c1-nginx（Ingress 后端 serviceName 即此名）
+# 注意: ConfigMap c1-configmap-nginx 由本 chart 的 templates/configmap.yaml 渲染（内容来自根目录 nginx.conf）
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Chart.Name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Chart.Name }}
+    tier: frontend
+spec:
+  replicas: {{ .Values.replicas }}
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: {{ .Chart.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Chart.Name }}
+        tier: frontend
+      annotations:
+        # nginx.conf 内容变化 → checksum 变化 → helm upgrade 自动滚动重启（subPath 挂载不热更的解法）
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      nodeSelector:
+        node-name: {{ .Values.nodeName }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ .Values.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.port }}
+              name: http
+              protocol: TCP
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "1000m"
+              memory: "256Mi"
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.port }}
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+              readOnly: true
+            - name: c1-client
+              mountPath: /opt/app/frontend/c1-client
+            - name: bi-client
+              mountPath: /opt/app/frontend/bi-client
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: {{ .Values.configMapName }}
+        - name: c1-client
+          hostPath:
+            path: /opt/app/frontend/c1-client
+            type: DirectoryOrCreate
+        - name: bi-client
+          hostPath:
+            path: /opt/app/frontend/bi-client
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Chart.Name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Chart.Name }}
+spec:
+  type: {{ .Values.serviceType }}
+  ports:
+    - name: http
+      port: {{ .Values.port }}
+      targetPort: {{ .Values.port }}
+      protocol: TCP
+      {{- if eq .Values.serviceType "NodePort" }}
+      nodePort: {{ .Values.nodePort }}
+      {{- end }}
+  selector:
+    app: {{ .Chart.Name }}

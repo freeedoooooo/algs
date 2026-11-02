@@ -1,0 +1,10 @@
+# c1-dataease — test 环境（70 / c1-ns-test）
+# 仅覆盖环境差异项，其余继承 values.yaml
+# 用法: helm upgrade --install c1-dataease . --values values-test.yaml -n c1-ns-test --server-side=false
+namespace: c1-ns-test
+nodeName: worker-5.70
+
+dataease:
+  nodePort: 30190
+  # fixme 按 test 网关实际域名调整（分享链接/导出 Origin 校验用）
+  originList: "http://c1-test.dibdata.cn"

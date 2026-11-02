@@ -1,0 +1,34 @@
+# 各环境 Ingress —— 每个环境一个，创建在其自己的 namespace 下
+# 后端 Service 必须与 Ingress 同 namespace，故按 environments[].namespace 分别生成
+{{- range .Values.environments }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: c1-ingress-{{ .name }}
+  namespace: {{ .namespace }}
+  labels:
+    app.kubernetes.io/name: traefik
+    app.kubernetes.io/instance: c1-ingress
+    c1-env: {{ .name }}
+  # 说明: 上传大文件由后端 c1-nginx 的 client_max_body_size 控制，Traefik 默认不限制请求体大小
+spec:
+  ingressClassName: {{ $.Values.ingressClass.name }}
+  {{- if .tlsSecret }}
+  tls:
+    - hosts:
+        - {{ .host }}
+      secretName: {{ .tlsSecret }}
+  {{- end }}
+  rules:
+    - host: {{ .host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .serviceName }}
+                port:
+                  number: {{ .servicePort }}
+{{- end }}

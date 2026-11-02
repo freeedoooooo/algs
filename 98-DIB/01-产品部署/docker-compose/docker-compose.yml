@@ -18,7 +18,7 @@ services:
     env_file:
       - .env
     volumes:
-      - /opt/app/backend/platform-auth-server/logs:/opt/app/logs
+      - /opt/app/backend/logs/platform-auth-server:/opt/app/logs
       - /usr/share/fonts:/usr/share/fonts
     restart: on-failure:5
 
@@ -35,7 +35,7 @@ services:
     env_file:
       - .env
     volumes:
-      - /opt/app/backend/platform-gateway/logs:/opt/app/logs
+      - /opt/app/backend/logs/platform-gateway:/opt/app/logs
       - /usr/share/fonts:/usr/share/fonts
     restart: on-failure:5
 
@@ -52,7 +52,7 @@ services:
     env_file:
       - .env
     volumes:
-      - /opt/app/backend/platform-auth-resource/logs:/opt/app/logs
+      - /opt/app/backend/logs/platform-auth-resource:/opt/app/logs
       - /usr/share/fonts:/usr/share/fonts
     restart: on-failure:5
     healthcheck:
@@ -75,7 +75,7 @@ services:
     env_file:
       - .env
     volumes:
-      - /opt/app/backend/platform-mdm/logs:/opt/app/logs
+      - /opt/app/backend/logs/platform-mdm:/opt/app/logs
       - /usr/share/fonts:/usr/share/fonts
     restart: on-failure:5
     healthcheck:
@@ -101,7 +101,7 @@ services:
     env_file:
       - .env
     volumes:
-      - /opt/app/backend/c1-extract/logs:/opt/app/logs
+      - /opt/app/backend/logs/c1-extract:/opt/app/logs
       - /usr/share/fonts:/usr/share/fonts
     restart: on-failure:5
     healthcheck:
@@ -124,7 +124,7 @@ services:
     env_file:
       - .env
     volumes:
-      - /opt/app/backend/c1-report/logs:/opt/app/logs
+      - /opt/app/backend/logs/c1-report:/opt/app/logs
       - /usr/share/fonts:/usr/share/fonts
     restart: on-failure:5
     healthcheck:
@@ -147,7 +147,7 @@ services:
     env_file:
       - .env
     volumes:
-      - /opt/app/backend/c1-data/logs:/opt/app/logs
+      - /opt/app/backend/logs/c1-data:/opt/app/logs
       - /usr/share/fonts:/usr/share/fonts
     restart: on-failure:5
     healthcheck:
@@ -170,7 +170,7 @@ services:
     env_file:
       - .env
     volumes:
-      - /opt/app/backend/c1-rule/logs:/opt/app/logs
+      - /opt/app/backend/logs/c1-rule:/opt/app/logs
       - /usr/share/fonts:/usr/share/fonts
     restart: on-failure:5
     healthcheck:
@@ -193,7 +193,7 @@ services:
     env_file:
       - .env
     volumes:
-      - /opt/app/backend/c1-dg/logs:/opt/app/logs
+      - /opt/app/backend/logs/c1-dg:/opt/app/logs
       - /usr/share/fonts:/usr/share/fonts
     restart: on-failure:5
     healthcheck:

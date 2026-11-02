@@ -1,0 +1,82 @@
+# ============================================================
+# c1-dataease Helm Chart — 基础配置（142 / dev 环境）
+# ============================================================
+# 说明: DataEase v2.10.9 官方服务端（Spring Boot app.jar，自带 UI/API/
+#   websocket，容器原生监听 8100）+ 专属 MySQL 8.4，两个服务独立容器、
+#   独立 PVC（等价官方 docker-compose 的 dataease + mysql 两个 service）。
+#   Service 名固定 c1-dataease:8100 —— 网关 nginx.conf 的
+#   proxy_pass http://c1-dataease:8100 无需任何改动。
+# 关系: 取代 c1-app-bi chart 的 dataeaseExternal（selector-less Service
+#   + Endpoints 指向 compose 主机）方案，两者互斥，见该 chart values 注释。
+# 前置: 官方离线包镜像需先 load/tag/push 到内网 Harbor，见 README.md。
+# 用法: helm upgrade --install c1-dataease . -n c1-ns-dev --server-side=false
+# ============================================================
+
+namespace: c1-ns-dev
+
+# 节点调度（dataease 与 mysql 固定同节点：PVC 是 local-path 单节点读写，
+# 且两者走集群内 Service 通信，同节点延迟最低）
+nodeName: worker-5.142
+
+# ---------- 专属 MySQL 8.4（DataEase 独立环境，不与 c1 业务库共用） ----------
+mysql:
+  # 官方离线包内 registry.cn-qingdao.aliyuncs.com/dataease/mysql:8.4.0
+  # docker load 后按下面地址 tag/push 到 Harbor（README.md 第 1 步）
+  image: "10.0.6.183:8088/c1/dataease-mysql:8.4.0"
+  imagePullPolicy: IfNotPresent
+  storage: 20Gi
+  # 与现网 compose（70/142 主机）保持一致，便于 mysqldump 直接互导
+  rootPassword: "Password123@mysql"
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "1Gi"
+    limits:
+      cpu: "1000m"
+      memory: "2Gi"
+
+# ---------- DataEase v2 服务端 ----------
+dataease:
+  # 官方离线包内 registry.cn-qingdao.aliyuncs.com/dataease/dataease:v2.10.9
+  image: "10.0.6.183:8088/c1/dataease:v2.10.9"
+  imagePullPolicy: IfNotPresent
+  # 副本数（导数据时临时缩到 0：helm upgrade --set dataease.replicas=0 --reuse-values）
+  replicas: 1
+  # 持久化 PVC（static-resource/geo/appearance/exportData/plugin/font/i18n
+  # 共用一个 PVC 按 subPath 挂载；logs/cache 是可再生物走 emptyDir）
+  storage: 20Gi
+  # 容器原生监听端口（镜像 ENV RUNNING_PORT=8100），不要改
+  port: 8100
+  # NodePort 供管理员浏览器直连 DataEase 自带 UI（配置仪表板/数据源），
+  # 用户侧 BI 界面走网关 /bi/ -> c1-app-bi（魔改前端），不经此端口
+  serviceType: NodePort
+  nodePort: 30090
+  # 连接专属 MySQL（集群内 Service 名，templates/mysql.yaml 创建）
+  db:
+    host: c1-dataease-mysql
+    port: 3306
+    name: dataease
+    username: root
+    password: "Password123@mysql"
+  # ---------- 以下均为官方 install.conf 默认值（envsubst 落盘行为等价） ----------
+  # 分享链接/导出的合法 Origin，跨环境改网关域名
+  originList: "http://c1-dev.dibdata.cn"
+  loginTimeout: 960
+  exportViewsLimit: 100000
+  exportDatasetLimit: 100000
+  # 容器 /etc/hosts 追加 —— 对应原 compose 部署的
+  # extra_hosts: "www.bidata.com:<c1服务IP>"（数据源/API 配置里用了该域名时才需要）
+  hostAliases: []
+  #  - ip: 10.0.5.142
+  #    hostnames:
+  #      - www.bidata.com
+  # 覆盖镜像默认 JAVA_OPTIONS（原值基础上追加堆百分比；run-java.sh 按容器
+  # limit 自动算堆时默认 25%，这里显式 70%）
+  javaOptions: "-Dfile.encoding=utf-8 -Dloader.path=/opt/apps -Dspring.config.additional-location=/opt/apps/config/ -XX:MaxRAMPercentage=70.0"
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "2000m"
+      memory: "4Gi"

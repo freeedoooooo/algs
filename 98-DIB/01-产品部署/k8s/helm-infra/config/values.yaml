@@ -1,0 +1,50 @@
+# ============================================================
+# c1-config Helm Chart — 基础配置（142 / dev 环境）
+# ============================================================
+# 说明: 本文件为 chart 默认值，同时代表 dev(142/worker-5.142) 环境配置
+# 用法: helm upgrade --install c1-config . -n c1-ns-dev --server-side=false
+# 环境: 142=dev(本文件) / 70=test / 101=bank / 239=sh
+#       其余环境用 --values values-<env>.yaml 覆盖 config 块
+# ============================================================
+
+namespace: c1-ns-dev
+
+# ---------- 公共配置（渲染进 c1-configmap-common） ----------
+# NAMESPACE 占位符会在模板中替换为上面的 namespace
+config:
+  # ---------- 环境标识 ----------
+  C1_ENV: "idc-dev"
+
+  # ---------- Nacos 注册中心 ----------
+  C1_NACOS_SERVER_ADDR: "http://c1-nacos.NAMESPACE.svc.cluster.local:8848"
+  C1_NACOS_NAMESPACE: "c1"
+  C1_NACOS_USERNAME: "c1"
+  C1_NACOS_PASSWORD: "c1@2025"
+
+  # ---------- Redis 缓存 ----------
+  C1_REDIS_HOST: "c1-redis.NAMESPACE.svc.cluster.local"
+  C1_REDIS_PORT: "6379"
+  C1_REDIS_DATABASE: "0"
+  C1_REDIS_PASSWORD: "dibredis"
+
+  # ---------- 数据库（MySQL） ----------
+  C1_DB_URL: "jdbc:mysql://10.0.6.161:3306/c1_dev?characterEncoding=utf8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true&useSSL=false&zeroDateTimeBehavior=convertToNull"
+  C1_DB_DRIVER: "com.mysql.cj.jdbc.Driver"
+  C1_DB_USERNAME: "root"
+  C1_DB_PASSWORD: "Dib12345*"
+
+  # ---------- MinIO 对象存储 ----------
+  C1_MINIO_ENDPOINT: "http://10.0.6.163:9000"
+  C1_MINIO_ACCESS_KEY: "minioadmin"
+  C1_MINIO_SECRET_KEY: "minioadmin"
+  C1_MINIO_BUCKET_NAME: "c1-bucket"
+
+  # ---------- OCR 服务 ----------
+  C1_OCR_SERVER: "http://192.168.10.91:8089/"
+
+  # ---------- OAuth 认证（对外入口 = 环境域名，经 Ingress → c1-nginx:80） ----------
+  C1_OAUTH_CLIENT_HOST: "http://c1-dev.dibdata.cn"
+  C1_OAUTH_SERVER_HOST: "http://c1-dev.dibdata.cn/sso"
+  C1_OAUTH_SERVER_HOST_INNER: "http://c1-p-oauth.NAMESPACE.svc.cluster.local:9090/sso"
+  C1_OAUTH_CLIENT_CREDENTIALS: "123456"
+  C1_OAUTH_REDIRECT_URI: "http://c1-dev.dibdata.cn/api/oauth/callback,http://c1-dev.dibdata.cn/api-oauth/callback"

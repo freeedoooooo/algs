@@ -1,0 +1,12 @@
+# c1-nacos — pro-sh 环境（239 / c1-ns-pro-sh）
+# 仅覆盖环境差异项，其余继承 values.yaml
+# 用法: helm upgrade --install c1-nacos . --values values-pro-sh.yaml -n c1-ns-pro-sh --server-side=false
+namespace: c1-ns-pro-sh
+nodeName: worker-5.239
+
+nodePortHttp: 30348
+nodePortGrpc: 30349
+
+mysql:
+  host: "10.0.5.60"
+  database: "nacos_sh"

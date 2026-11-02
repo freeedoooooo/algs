@@ -1,0 +1,17 @@
+# ============================================================
+# 微前端/微服务公共 ConfigMap（第二层前置依赖）
+# 由 helm-c1-backend/templates/01-base/configmap.yaml 拆分而来
+# 所有后端服务通过 envFrom 注入，redis 读取其中的 C1_REDIS_PASSWORD
+# 部署顺序：本 chart 必须【最先】安装，再装 nacos/redis 与各后端服务
+# ============================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: c1-configmap-common
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: c1-config
+data:
+  {{- range $key, $value := .Values.config }}
+  {{ $key }}: {{ $value | replace "NAMESPACE" $.Values.namespace | quote }}
+  {{- end }}

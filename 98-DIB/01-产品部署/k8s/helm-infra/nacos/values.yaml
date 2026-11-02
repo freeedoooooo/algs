@@ -1,0 +1,27 @@
+# ============================================================
+# c1-nacos Helm Chart — 基础配置（142 / dev 环境）
+# ============================================================
+# 说明: 本文件为 chart 默认值，同时代表 dev(142/worker-5.142) 环境
+# 用法: helm upgrade --install c1-nacos . -n c1-ns-dev --server-side=false
+# 环境差异（namespace/nodeName/nodePort/mysql）由 values-<env>.yaml 覆盖
+# ============================================================
+
+namespace: c1-ns-dev
+nodeName: worker-5.142
+
+image: "nacos/nacos-server:v2.3.2"
+imagePullPolicy: IfNotPresent
+
+storage: 1Gi
+serviceType: NodePort
+nodePortHttp: 30048
+nodePortGrpc: 30049
+
+# 外挂 MySQL 配置（替代内嵌 Derby）
+mysql:
+  host: "10.0.6.161"
+  port: "3306"
+  database: "nacos_dev"
+  username: "root"
+  password: "Dib12345*"
+  params: "characterEncoding=utf8&connectTimeout=1000&socketTimeout=3000&autoReconnect=true&useUnicode=true&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true"

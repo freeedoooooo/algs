@@ -1,0 +1,5 @@
+# c1-nginx — test 环境（70 / c1-ns-test）
+# 仅覆盖环境差异项，其余继承 values.yaml
+# 用法: helm upgrade --install c1-nginx . --values values-test.yaml -n c1-ns-test --server-side=false
+namespace: c1-ns-test
+nodeName: worker-5.70

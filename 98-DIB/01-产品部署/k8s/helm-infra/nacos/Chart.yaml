@@ -1,0 +1,6 @@
+apiVersion: v2
+name: c1-nacos
+description: c1 基础设施 —— Nacos v2.3.2 注册中心（Standalone，外挂 MySQL）
+type: application
+version: 1.0.0
+appVersion: "v2.3.2"

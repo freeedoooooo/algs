@@ -1,0 +1,6 @@
+apiVersion: v2
+name: c1-b-extract
+description: c1 业务服务 —— 资料提取（高内存服务）
+type: application
+version: 1.0.0
+appVersion: "4.0.0"

@@ -1,0 +1,18 @@
+# ============================================================
+# 第一层入口网关 Nginx 配置的 ConfigMap（c1-configmap-nginx）
+# 内容来自本 chart 根目录的 nginx.conf（.Files.Get 逐字读取，不做模板渲染）
+# 由 nginx Deployment 挂载到 /etc/nginx/nginx.conf（见 templates/nginx.yaml）
+# 单一消费者（仅本 nginx chart），故内聚于此、随 chart 一起版本化与部署
+# 修改配置流程：改 nginx.conf → helm upgrade → kubectl rollout restart deployment/c1-nginx
+# （subPath 挂载的 ConfigMap 不热更新，缺 restart 则 Pod 一直用旧 conf）
+# ============================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.configMapName }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Chart.Name }}
+data:
+  nginx.conf: |
+{{ .Files.Get "nginx.conf" | indent 4 }}

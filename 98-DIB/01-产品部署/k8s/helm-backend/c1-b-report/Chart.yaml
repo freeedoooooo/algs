@@ -1,0 +1,6 @@
+apiVersion: v2
+name: c1-b-report
+description: c1 业务服务 —— 报告生成
+type: application
+version: 1.0.0
+appVersion: "4.0.0"

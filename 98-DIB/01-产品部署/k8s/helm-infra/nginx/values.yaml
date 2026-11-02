@@ -1,0 +1,22 @@
+# ============================================================
+# c1-nginx Helm Chart — 基础配置（142 / dev 环境）
+# ============================================================
+# 用法: helm upgrade --install c1-nginx . -n c1-ns-dev --server-side=false
+# 说明: nginx.conf 由本 chart 根目录的同名文件提供，经 templates/configmap.yaml
+#       渲染为 ConfigMap c1-configmap-nginx，无需再手动创建
+# 说明: 走 Ingress 域名方案后，nginx 主入口监听 80，Service 为 ClusterIP（各环境同用 80）
+# 环境差异（namespace/nodeName）由 values-<env>.yaml 覆盖
+# ============================================================
+
+namespace: c1-ns-dev
+nodeName: worker-5.142
+
+image: "10.0.6.183:8088/c1/nginx:1.17.8"
+imagePullPolicy: IfNotPresent
+
+replicas: 1
+port: 80
+serviceType: ClusterIP
+
+# nginx.conf 渲染成的 ConfigMap 名（由本 chart 的 templates/configmap.yaml 渲染）
+configMapName: c1-configmap-nginx

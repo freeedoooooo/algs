@@ -1,0 +1,6 @@
+apiVersion: v2
+name: c1-b-rule
+description: c1 业务服务 —— 规则引擎
+type: application
+version: 1.0.0
+appVersion: "4.0.0"

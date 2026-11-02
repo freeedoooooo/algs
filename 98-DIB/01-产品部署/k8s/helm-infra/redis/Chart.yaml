@@ -1,0 +1,6 @@
+apiVersion: v2
+name: c1-redis
+description: c1 基础设施 —— Redis 7.0 缓存服务（密码取自公共 ConfigMap）
+type: application
+version: 1.0.0
+appVersion: "7.0"

@@ -1,0 +1,40 @@
+# ============================================================
+# c1-config — pro-sh 环境（239 / c1-ns-pro-sh）
+# ============================================================
+# 用法: helm upgrade --install c1-config . --values values-pro-sh.yaml -n c1-ns-pro-sh --server-side=false
+# profile: idc-pro-sh —— 已改造为 ${C1_*} 占位符，下方 config 值全部生效
+#   sh 与 bank 同一 MySQL 实例，仅 schema=dib_report_sh
+# ============================================================
+
+namespace: c1-ns-pro-sh
+
+config:
+  C1_ENV: "idc-pro-sh"
+
+  C1_NACOS_SERVER_ADDR: "http://c1-nacos.NAMESPACE.svc.cluster.local:8848"
+  C1_NACOS_NAMESPACE: "pro-sh"
+  C1_NACOS_USERNAME: "c1"
+  C1_NACOS_PASSWORD: "c1@2025"
+
+  C1_REDIS_HOST: "c1-redis.NAMESPACE.svc.cluster.local"
+  C1_REDIS_PORT: "6379"
+  C1_REDIS_DATABASE: "0"
+  C1_REDIS_PASSWORD: "dibredis"
+
+  C1_DB_URL: "jdbc:mysql://10.0.5.60:3306/dib_report_sh?characterEncoding=utf8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true&useSSL=false&zeroDateTimeBehavior=convertToNull"
+  C1_DB_DRIVER: "com.mysql.cj.jdbc.Driver"
+  C1_DB_USERNAME: "root"
+  C1_DB_PASSWORD: "Dib12345*"
+
+  C1_MINIO_ENDPOINT: "http://10.0.5.178:9000"
+  C1_MINIO_ACCESS_KEY: "agent"
+  C1_MINIO_SECRET_KEY: "2xgHH8sgY@6g"
+  C1_MINIO_BUCKET_NAME: "c1-sh"
+
+  C1_OCR_SERVER: "http://192.168.10.91:8089/"
+
+  C1_OAUTH_CLIENT_HOST: "http://c1-sh.dibdata.cn"
+  C1_OAUTH_SERVER_HOST: "http://c1-sh.dibdata.cn/sso"
+  C1_OAUTH_SERVER_HOST_INNER: "http://c1-p-oauth.NAMESPACE.svc.cluster.local:9090/sso"
+  C1_OAUTH_CLIENT_CREDENTIALS: "123456"
+  C1_OAUTH_REDIRECT_URI: "http://c1-sh.dibdata.cn/api/oauth/callback,http://c1-sh.dibdata.cn/api-oauth/callback"

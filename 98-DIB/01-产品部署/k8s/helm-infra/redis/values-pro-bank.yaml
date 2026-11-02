@@ -1,0 +1,6 @@
+# c1-redis — pro-bank 环境（101 / c1-ns-pro-bank）
+# 仅覆盖环境差异项，其余继承 values.yaml
+# 用法: helm upgrade --install c1-redis . --values values-pro-bank.yaml -n c1-ns-pro-bank --server-side=false
+namespace: c1-ns-pro-bank
+nodeName: worker-5.101
+nodePort: 30279

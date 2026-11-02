@@ -1,0 +1,50 @@
+# ============================================================
+# 外部 DataEase 服务端注册（selector-less Service + 手工 Endpoints）
+#
+# 背景：DataEase 后台程序（官方 dataease:v2.10.9，docker-compose 部署在
+# 后端主机 /opt/dataease2.0，监听 8100）不容器化迁入 k8s——它是带 MySQL
+# 的有状态全家桶，迁移风险高收益低。这里用「空选择器 Service + Endpoints」
+# 把它注册进集群 DNS，网关 conf 即可写 http://c1-dataease:8100，
+# 取代硬编码 IP（跨环境差异收敛到 values 的 dataeaseExternal.ip）。
+#
+# ⚠️ 约束：
+#   1. Endpoints 名必须与 Service 同名同 namespace（k8s 强制配对）；
+#   2. 网关 Pod 必须与本 Service 同 namespace（conf 里用的是短名解析）；
+#   3. 网关 (re)start 前本对象必须已存在——nginx 启动时解析 upstream
+#      主机名，解析失败 nginx 起不来。部署顺序：先本 chart，后网关 restart。
+# 开关：enabled=false 时不渲染（服务端已由 helm-infra/c1-dataease chart
+#   容器化接管，Service 重名互斥，详见其 README.md 的切换顺序）。
+# ============================================================
+{{- if and .Values.dataeaseExternal .Values.dataeaseExternal.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: c1-dataease
+  namespace: {{ $.Values.namespace }}
+  labels:
+    app: c1-dataease
+    tier: backend-external
+spec:
+  type: ClusterIP
+  # 无 selector：不挂任何 Pod，仅提供稳定的 DNS 名 + ClusterIP
+  ports:
+    - name: http
+      port: {{ $.Values.dataeaseExternal.port }}
+      targetPort: {{ $.Values.dataeaseExternal.port }}
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: c1-dataease
+  namespace: {{ $.Values.namespace }}
+  labels:
+    app: c1-dataease
+    tier: backend-external
+subsets:
+  - addresses:
+      - ip: {{ $.Values.dataeaseExternal.ip }}
+    ports:
+      - port: {{ $.Values.dataeaseExternal.port }}
+        name: http
+{{- end }}

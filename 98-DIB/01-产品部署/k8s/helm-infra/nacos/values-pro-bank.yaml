@@ -1,0 +1,12 @@
+# c1-nacos — pro-bank 环境（101 / c1-ns-pro-bank）
+# 仅覆盖环境差异项，其余继承 values.yaml
+# 用法: helm upgrade --install c1-nacos . --values values-pro-bank.yaml -n c1-ns-pro-bank --server-side=false
+namespace: c1-ns-pro-bank
+nodeName: worker-5.101
+
+nodePortHttp: 30248
+nodePortGrpc: 30249
+
+mysql:
+  host: "10.0.5.60"
+  database: "nacos_bank"

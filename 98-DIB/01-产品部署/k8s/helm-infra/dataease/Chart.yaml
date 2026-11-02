@@ -1,0 +1,6 @@
+apiVersion: v2
+name: c1-dataease
+description: DataEase v2.10.9 服务端容器化部署 Chart（官方 dataease 镜像 + 专属 MySQL 8.4 独立环境，取代 c1-app-bi chart 的外部 Endpoints 注册方案）
+type: application
+version: 1.0.0
+appVersion: "v2.10.9"

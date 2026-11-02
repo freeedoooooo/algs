@@ -1,0 +1,6 @@
+apiVersion: v2
+name: c1-p-rbac
+description: c1 平台服务 —— 权限资源管理
+type: application
+version: 1.0.0
+appVersion: "4.0.0"

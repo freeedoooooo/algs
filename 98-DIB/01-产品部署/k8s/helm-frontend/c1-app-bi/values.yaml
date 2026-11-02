@@ -1,0 +1,61 @@
+# ============================================================
+# c1-app-bi Helm Chart — 基础配置（142 / dev 环境）
+# ============================================================
+# 说明: 微前端双层 Nginx 架构中的「第二层」单应用容器（BI 前端 = 魔改
+#   dib-app-bi 构建产物）+ 外部 DataEase 服务端注册
+#   职责: 纯静态文件服务 + SPA 路由回退 + /healthz 健康检查
+#   Service 名 = Chart.Name = c1-app-bi，需与网关 nginx.conf 中
+#   proxy_pass http://c1-app-bi/ 的主机名保持一致
+# 镜像: dib-app-bi 仓库 docker/jenkinsfile.k8s 构建（产物根层级必须含
+#   index.html + embedded-token-helper.html，部署契约铁律 2）
+# 用法: helm install c1-app-bi . -n c1-ns-dev --server-side=false
+# ============================================================
+
+# ---------- 全局配置 ----------
+namespace: c1-ns-dev
+
+# 镜像仓库地址
+imageRegistry: "10.0.6.183:8088"
+
+# 镜像（repository 相对仓库前缀）
+image:
+  repository: "c1/c1-app-bi"
+  tag: idc-dev_latest
+
+# 镜像拉取策略
+imagePullPolicy: Always
+
+# 节点调度
+nodeName: worker-5.142
+
+# 副本数
+replicas: 1
+
+# 容器/Service 端口
+port: 80
+
+# Service 类型：ClusterIP 仅供第一层网关内部访问，不对外暴露
+serviceType: ClusterIP
+
+# 资源配额
+resources:
+  requests:
+    cpu: "20m"
+    memory: "32Mi"
+  limits:
+    cpu: "200m"
+    memory: "128Mi"
+
+# ---------- DataEase 服务端接入方式（与 helm-infra/c1-dataease chart 互斥） ----------
+# 方式一（enabled=true，原方案）：官方 DataEase（v2.10.9）以 docker-compose 跑在
+#   后端主机（/opt/dataease2.0，8100），用 selector-less Service+Endpoints 注册进
+#   集群 DNS（templates/dataease-external.yaml），跨环境只改这里的 IP。
+# 方式二（enabled=false，当前采用）：DataEase 服务端已容器化迁入 k8s，由
+#   helm-infra/c1-dataease chart 提供带 selector 的同名 Service c1-dataease:8100。
+#   ⚠️ 切换顺序：先置 false 并 helm upgrade（删除本 chart 渲染的 Service/Endpoints），
+#   再安装/升级 c1-dataease chart，最后重启网关（nginx 启动时解析 upstream）。
+dataeaseExternal:
+  enabled: false
+  # fixme dev 环境实际 DataEase 主机 IP 待确认，暂沿用 test 地址（与原 conf 行为一致）
+  ip: 10.0.5.70
+  port: 8100

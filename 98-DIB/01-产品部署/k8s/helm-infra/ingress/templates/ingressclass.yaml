@@ -1,0 +1,14 @@
+# IngressClass —— 让 Traefik 认领带 ingressClassName: traefik 的 Ingress
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  name: {{ .Values.ingressClass.name }}
+  labels:
+    app.kubernetes.io/name: traefik
+    app.kubernetes.io/instance: c1-ingress
+  {{- if .Values.ingressClass.isDefault }}
+  annotations:
+    ingressclass.kubernetes.io/is-default-class: "true"
+  {{- end }}
+spec:
+  controller: {{ .Values.ingressClass.controller }}

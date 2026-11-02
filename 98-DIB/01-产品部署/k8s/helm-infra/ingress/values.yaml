@@ -1,0 +1,104 @@
+# ============================================================
+# C1 多环境共享 Ingress —— 基础配置
+# ============================================================
+# 作用: 部署一个共享 Traefik Ingress Controller，按【域名(host)】把外部
+#       流量转发到各环境自己的 c1-nginx，从而彻底取消 NodePort 端口分段。
+# 用法: helm install c1-ingress . -n c1-ns-ingress --create-namespace
+# 说明: 本 Chart 只负责 Ingress 层（Traefik Controller + 各环境 Ingress），不改动 helm-c1。
+#       启用后 helm-c1 侧需配合：服务改 ClusterIP、OAuth 对外地址改为环境域名。
+# ============================================================
+
+# ---------- Traefik Controller ----------
+traefik:
+  # 镜像需先推入私仓（离线环境）
+  image: "10.0.6.183:8088/library/traefik:v3.1"
+  imagePullPolicy: IfNotPresent
+
+  # Traefik 自身部署的 namespace
+  namespace: c1-ns-ingress
+
+  replicas: 1
+
+  # 入口节点（用 node-name 标签固定，与项目基础设施统一调度到 master-6.183）
+  # hostNetwork 模式下：4 个域名的 DNS A 记录都指向该节点 IP（master-6.183 = 10.0.6.183）
+  nodeName: master-6.183
+  # 是否用 nodeSelector 把 Traefik 钉在 nodeName 上
+  useNodeSelector: true
+
+  # 容忍 master 污点（调度到 master-6.183 必需，否则 Pod 一直 Pending）
+  # 与 Loki/Grafana/Prometheus 约定一致：同时容忍 master 与 control-plane
+  tolerations:
+    - key: node-role.kubernetes.io/master
+      operator: Exists
+      effect: NoSchedule
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+
+  # 暴露方式
+  exposure:
+    # hostNetwork: 容器直接用宿主机 80/443，URL 干净(http://域名)，需入口节点 80/443/9000 空闲
+    # nodePort:    Service 暴露 30080/30443，URL 带端口(http://域名:30080)，不占用宿主机 80
+    mode: hostNetwork
+    webPort: 80            # http 入口端口
+    websecurePort: 443     # https 入口端口
+    traefikPort: 9000      # Traefik 内部/ping 端口
+    webNodePort: 30080     # mode=nodePort 时的 http NodePort
+    websecureNodePort: 30443  # mode=nodePort 时的 https NodePort
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+  # 追加的 Traefik 启动参数（可选）
+  extraArgs: []
+
+  # 镜像拉取 secret（可选）
+  imagePullSecrets: []
+
+# ---------- IngressClass ----------
+ingressClass:
+  name: traefik
+  controller: traefik.io/ingress-controller
+  # 是否设为集群默认 IngressClass
+  isDefault: false
+
+# ============================================================
+# 各环境路由（host → 该环境 namespace 下的 c1-nginx）
+# ============================================================
+# 字段说明:
+#   name        - 环境标识（仅用于命名 Ingress 资源）
+#   host        - 对外域名（部署前替换为真实内网域名，DNS A 记录指向入口节点 IP）
+#   namespace   - 该环境所在 namespace（Ingress 会创建在此，后端 Service 须同 namespace）
+#   serviceName - 后端 Service 名（默认 c1-nginx，即前端网关）
+#   servicePort - 后端 Service 端口（nginx 容器端口，各环境统一为 80）
+#   tlsSecret   - 可选：https 证书 secret 名（须存在于该 namespace）
+# ============================================================
+environments:
+  - name: dev
+    host: c1-dev.dibdata.cn
+    namespace: c1-ns-dev
+    serviceName: c1-nginx
+    servicePort: 80
+
+  - name: test
+    host: c1-test.dibdata.cn
+    namespace: c1-ns-test
+    serviceName: c1-nginx
+    servicePort: 80
+
+  - name: bank
+    host: c1-bank.dibdata.cn
+    namespace: c1-ns-pro-bank
+    serviceName: c1-nginx
+    servicePort: 80
+
+  - name: sh
+    host: c1-sh.dibdata.cn
+    namespace: c1-ns-pro-sh
+    serviceName: c1-nginx
+    servicePort: 80

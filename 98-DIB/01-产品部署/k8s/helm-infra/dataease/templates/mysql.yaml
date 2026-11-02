@@ -1,0 +1,162 @@
+# ============================================================
+# DataEase 专属 MySQL 8.4（独立环境）
+# 等价官方 docker-compose-mysql.yml：
+#   - my.cnf   -> ConfigMap 挂 /etc/mysql/conf.d/my.cnf（官方 templates/my.cnf 原文）
+#   - init.sql -> ConfigMap 挂 /docker-entrypoint-initdb.d/（首次空数据目录时建库）
+#   - 数据目录 -> PVC 挂 /var/lib/mysql
+# 注意: init.sql 只在 PVC 首次初始化（空目录）时执行；建表由 DataEase
+#   应用首次启动时自动完成，无需手工导入。
+# ============================================================
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Chart.Name }}-mysql-data-pvc
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Chart.Name }}-mysql
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.mysql.storage }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Chart.Name }}-mysql-cnf
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Chart.Name }}-mysql
+data:
+  # 官方离线包 templates/my.cnf 原文（勿随意调整 innodb/事务参数，
+  # DataEase 对 READ-COMMITTED 隔离级别有依赖）
+  my.cnf: |
+    [mysqld]
+    datadir=/var/lib/mysql
+
+    default-storage-engine=INNODB
+    character_set_server=utf8
+    #lower_case_table_names=1
+    table_open_cache=128
+    max_connections=2000
+    max_connect_errors=6000
+    innodb_file_per_table=1
+    innodb_buffer_pool_size=1G
+    max_allowed_packet=64M
+    transaction_isolation=READ-COMMITTED
+    innodb_flush_method=O_DIRECT
+    innodb_lock_wait_timeout=1800
+    innodb_flush_log_at_trx_commit=0
+    sync_binlog=0
+    binlog_expire_logs_seconds=432000
+
+    sql_mode=STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+
+    skip-name-resolve
+
+    [mysql]
+    default-character-set=utf8
+
+    [mysql.server]
+    default-character-set=utf8
+  # 官方离线包 bin/mysql/init.sql 原文
+  init.sql: |
+    CREATE DATABASE `dataease` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Chart.Name }}-mysql
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Chart.Name }}-mysql
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ .Chart.Name }}-mysql
+  template:
+    metadata:
+      labels:
+        app: {{ .Chart.Name }}-mysql
+    spec:
+      nodeSelector:
+        node-name: {{ .Values.nodeName }}
+      containers:
+        - name: mysql
+          image: {{ .Values.mysql.image }}
+          imagePullPolicy: {{ .Values.mysql.imagePullPolicy }}
+          ports:
+            - containerPort: 3306
+              name: mysql
+              protocol: TCP
+          env:
+            - name: TZ
+              value: "Asia/Shanghai"
+            - name: MYSQL_ROOT_PASSWORD
+              value: {{ .Values.mysql.rootPassword | quote }}
+          resources:
+{{ toYaml .Values.mysql.resources | indent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+            - name: conf
+              mountPath: /etc/mysql/conf.d
+              readOnly: true
+            # 官方镜像入口脚本只对「空数据目录」执行此目录下的 .sql（首次建库）
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+          # 官方 healthcheck 同款（mysqladmin ping）
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - mysqladmin ping -h 127.0.0.1 -uroot -p"$MYSQL_ROOT_PASSWORD" --protocol=tcp
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30
+          livenessProbe:
+            tcpSocket:
+              port: 3306
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 10
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Chart.Name }}-mysql-data-pvc
+        - name: conf
+          configMap:
+            name: {{ .Chart.Name }}-mysql-cnf
+            items:
+              - key: my.cnf
+                path: my.cnf
+        - name: init
+          configMap:
+            name: {{ .Chart.Name }}-mysql-cnf
+            items:
+              - key: init.sql
+                path: init.sql
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Chart.Name }}-mysql
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Chart.Name }}-mysql
+spec:
+  type: ClusterIP
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: 3306
+      protocol: TCP
+  selector:
+    app: {{ .Chart.Name }}-mysql

@@ -1,0 +1,199 @@
+# ============================================================
+# DataEase v2 服务端（官方镜像 = Spring Boot app.jar，自带 UI + API + websocket）
+# 对应官方 docker-compose.yml 的 dataease 服务：
+#   - application.yml -> ConfigMap 实值渲染（等价 install.sh 的 envsubst 产物，
+#     官方镜像不含 nginx，前后端同端口 8100）
+#   - /opt/dataease2.0/data 各子目录 -> 单 PVC 按 subPath 挂载
+#     （不能整目录挂 /opt/dataease2.0，会遮蔽镜像内 ADD 的 drivers/map；
+#     子目录清单与官方 compose volumes 一致，map 留在镜像内）
+#   - logs / cache -> emptyDir（可再生物，不占 PVC）
+# 容器原生监听 8100（镜像 ENV RUNNING_PORT=8100）；Service 端口固定 8100，
+# 网关 nginx.conf 的 http://c1-dataease:8100 零改动。
+# ============================================================
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Chart.Name }}-data-pvc
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Chart.Name }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.dataease.storage }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Chart.Name }}-application
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Chart.Name }}
+data:
+  # 官方 templates/application.yml 模板 + install.conf 默认值 envsubst 后的产物；
+  # DE_CONTEXT_PATH 官方默认为空（根路径），故省略 server.servlet.context-path。
+  # apisix/selenium/sync-task 为企业版组件，社区版不部署、配置保留原文不生效。
+  application.yml: |
+    server:
+      tomcat:
+        connection-timeout: 70000
+    spring:
+      servlet:
+        multipart:
+          max-file-size: 500MB
+          max-request-size: 500MB
+      datasource:
+        url: jdbc:mysql://{{ .Values.dataease.db.host }}:{{ .Values.dataease.db.port }}/{{ .Values.dataease.db.name }}?autoReconnect=false&useUnicode=true&characterEncoding=UTF-8&characterSetResults=UTF-8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true
+        username: {{ .Values.dataease.db.username }}
+        password: {{ .Values.dataease.db.password }}
+    dataease:
+      apisix-api:
+        domain: http://apisix:9180
+        key: DE_APISIX_KEY
+      export:
+        views:
+          limit: {{ .Values.dataease.exportViewsLimit }}
+        dataset:
+          limit: {{ .Values.dataease.exportDatasetLimit }}
+      origin-list: {{ .Values.dataease.originList | quote }}
+      login_timeout: {{ .Values.dataease.loginTimeout }}
+      selenium-server: http://de-selenium:4444/wd/hub
+      dataease-servers: dataease
+    task:
+      executor:
+        address: http://sync-task-actuator:9001
+        log:
+          path: /opt/dataease2.0/logs/sync-task/task-handler-log
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Chart.Name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Chart.Name }}
+    tier: backend
+spec:
+  replicas: {{ .Values.dataease.replicas }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ .Chart.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Chart.Name }}
+        tier: backend
+    spec:
+      nodeSelector:
+        node-name: {{ .Values.nodeName }}
+      {{- with .Values.dataease.hostAliases }}
+      # 等价原 compose 的 extra_hosts（如 www.bidata.com 域名解析）
+      hostAliases:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # 等 MySQL 就绪再起主进程（等价官方 depends_on: condition: service_healthy；
+      # 复用 mysql 镜像自带 mysqladmin，不额外引入 busybox 镜像）
+      initContainers:
+        - name: wait-for-mysql
+          image: {{ .Values.mysql.image }}
+          command:
+            - sh
+            - -c
+            - |
+              echo "等待 MySQL 就绪 {{ .Values.dataease.db.host }}:{{ .Values.dataease.db.port }} ..."
+              i=0
+              until mysqladmin ping -h {{ .Values.dataease.db.host }} -P {{ .Values.dataease.db.port }} -uroot -p"{{ .Values.dataease.db.password }}" --protocol=tcp --silent; do
+                i=$((i+1))
+                if [ $i -ge 120 ]; then echo "等待 MySQL 超时(6min)，退出"; exit 1; fi
+                sleep 3
+              done
+              echo "MySQL 已就绪"
+      containers:
+        - name: dataease
+          image: {{ .Values.dataease.image }}
+          imagePullPolicy: {{ .Values.dataease.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.dataease.port }}
+              name: http
+              protocol: TCP
+          env:
+            - name: TZ
+              value: "Asia/Shanghai"
+            # 覆盖镜像 ENV JAVA_OPTIONS（原值 + 堆百分比），经 run-java.sh 生效
+            - name: JAVA_OPTIONS
+              value: {{ .Values.dataease.javaOptions | quote }}
+          resources:
+{{ toYaml .Values.dataease.resources | indent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /opt/apps/config
+              readOnly: true
+            - name: logs
+              mountPath: /opt/dataease2.0/logs
+            - name: cache
+              mountPath: /opt/dataease2.0/cache
+            {{- range $dir := list "static-resource" "geo" "appearance" "exportData" "plugin" "font" "i18n" }}
+            - name: data
+              mountPath: /opt/dataease2.0/data/{{ $dir }}
+              subPath: {{ $dir }}
+            {{- end }}
+          # 官方镜像 HEALTHCHECK 同款：nc -zv 127.0.0.1 8100。
+          # 首次启动需建表（约几分钟），startupProbe 放宽到 ~10 分钟
+          startupProbe:
+            tcpSocket:
+              port: {{ .Values.dataease.port }}
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 60
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.dataease.port }}
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.dataease.port }}
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: config
+          configMap:
+            name: {{ .Chart.Name }}-application
+        - name: logs
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Chart.Name }}-data-pvc
+---
+# Service 名固定 c1-dataease：网关 nginx.conf 的 upstream 依赖（同 namespace 短名解析）。
+# ⚠️ 与 c1-app-bi chart 的 dataeaseExternal（selector-less Service）互斥：
+#   先在 c1-app-bi values 里置 dataeaseExternal.enabled=false 并 helm upgrade 删旧 Service，
+#   再安装本 chart，否则重名冲突。
+apiVersion: v1
+kind: Service
+metadata:
+  name: c1-dataease
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Chart.Name }}
+    tier: backend
+spec:
+  type: {{ .Values.dataease.serviceType }}
+  ports:
+    - name: http
+      port: {{ .Values.dataease.port }}
+      targetPort: {{ .Values.dataease.port }}
+      {{- if eq .Values.dataease.serviceType "NodePort" }}
+      nodePort: {{ .Values.dataease.nodePort }}
+      {{- end }}
+  selector:
+    app: {{ .Chart.Name }}

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: c1-config
+description: c1 公共配置 ConfigMap（c1-configmap-common），被全部后端服务与 redis 共享依赖
+type: application
+version: 1.0.0
+appVersion: "4.0.0"

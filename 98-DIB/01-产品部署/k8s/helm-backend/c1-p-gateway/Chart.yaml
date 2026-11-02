@@ -1,0 +1,6 @@
+apiVersion: v2
+name: c1-p-gateway
+description: c1 平台服务 —— API 网关
+type: application
+version: 1.0.0
+appVersion: "4.0.0"

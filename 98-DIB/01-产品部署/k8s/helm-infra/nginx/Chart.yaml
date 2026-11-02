@@ -1,0 +1,6 @@
+apiVersion: v2
+name: c1-nginx
+description: c1 基础设施 —— 前端网关 Nginx（第一层入口，托管前端 + 反代 /api、/sso）
+type: application
+version: 1.0.0
+appVersion: "1.17.8"

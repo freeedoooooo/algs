@@ -1,0 +1,42 @@
+# ============================================================
+# c1-p-gateway Helm Chart — 基础配置（142 / dev 环境）
+# ============================================================
+# 用法: helm upgrade --install c1-p-gateway . -n c1-ns-dev --server-side=false
+# 前置: 需先部署 helm-infra/config（提供 c1-configmap-common）
+# 环境差异（namespace/nodeName/image.tag）由 values-<env>.yaml 覆盖
+# ============================================================
+
+namespace: c1-ns-dev
+nodeName: worker-5.142
+
+imageRegistry: "10.0.6.183:8088"
+image:
+  repository: "c1/c1-p-gateway"
+  tag: idc-dev_latest
+imagePullPolicy: Always
+
+tier: platform
+port: 20000
+serviceType: ClusterIP
+healthPath: /actuator/health
+replicas: 1
+
+prometheus:
+  scrape: true
+  # 网关无独立 metrics 路径，仅开启 scrape
+  path: ""
+
+resources:
+  requests:
+    cpu: "100m"
+    memory: "512Mi"
+  limits:
+    cpu: "500m"
+    memory: "1Gi"
+
+# 额外挂载（本服务无）
+extraVolumeMounts: []
+extraVolumes: []
+
+# 公共 ConfigMap（由 helm-infra/config 部署）
+configMapName: c1-configmap-common

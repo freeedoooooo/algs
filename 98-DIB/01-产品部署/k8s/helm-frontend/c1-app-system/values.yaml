@@ -1,0 +1,44 @@
+# ============================================================
+# c1-app-system Helm Chart — 基础配置（142 / dev 环境）
+# ============================================================
+# 说明: 微前端双层 Nginx 架构中的「第二层」单应用容器
+#   职责: 纯静态文件服务 + SPA 路由回退 + /healthz 健康检查
+#   Service 名 = Chart.Name = c1-app-system；网关 nginx.conf 中
+#   路由前缀为 /app-system-v2/ → proxy_pass http://c1-app-system/
+# 用法: helm install c1-app-system . -n c1-ns-dev --server-side=false
+# ============================================================
+
+# ---------- 全局配置 ----------
+namespace: c1-ns-dev
+
+# 镜像仓库地址
+imageRegistry: "10.0.6.183:8088"
+
+# 镜像（repository 相对仓库前缀）
+image:
+  repository: "c1/c1-app-system"
+  tag: idc-dev_latest
+
+# 镜像拉取策略
+imagePullPolicy: Always
+
+# 节点调度
+nodeName: worker-5.142
+
+# 副本数
+replicas: 1
+
+# 容器/Service 端口
+port: 80
+
+# Service 类型：ClusterIP 仅供第一层网关内部访问，不对外暴露
+serviceType: ClusterIP
+
+# 资源配额
+resources:
+  requests:
+    cpu: "20m"
+    memory: "32Mi"
+  limits:
+    cpu: "200m"
+    memory: "128Mi"
