@@ -1,12 +1,38 @@
 """
 第1周 · 周末任务：把 PDF/图片 → 结构化文本 串成一个小 pipeline。
 
+【这份脚本在做什么】
+输入一个 PDF，自动判断它能不能直接读出文字，然后走两条不同的路：
+    1) 能直接读（叫「有文本层」）→ 用 pdfplumber 把字抽出来，又快又准；
+    2) 不能读（扫描件，页面其实是一张图）→ 先把每页渲染成 PNG，
+       再用 PaddleOCR 逐页识别；
+    3) 顺带把表格单独抽出来（两条分支用的方法不一样）；
+    4) 最后把结果写成一个 JSON 文件 + 一个纯文本文件。
+
+【Python 初学者阅读提示】
+- `#` 开头的行是注释，程序不会执行，纯粹写给人看。
+- `def 名字(参数):` 是「定义函数」。冒号下面**缩进**的代码属于这个函数，
+  缩进结束就表示函数结束。Python 用缩进代替其他语言的大括号 {}。
+- 重点：`def` 只是「登记」这个函数，定义时函数体**并不会执行**；
+  要等到后面有人写 `名字(...)` 去调用它，才会真正一行行跑。
+- 函数里的 `return` 表示「把结果交回给调用它的地方」，同时结束函数。
+- 用引号包起来的是字符串(str)，直接写的数字是整数(int)，
+  True / False 是布尔值(bool)，`None` 表示「什么都没有」。
+
+【代码从上到下的执行顺序（重要）】
+    1. 执行配置区的赋值语句
+    2. import 各工具箱 + 设置环境变量
+    3. 定义下面一堆函数（只是登记，不执行函数体）
+    4. 执行到文件最底下的 `if __name__ == '__main__':` → 调用 main()
+    5. main() 调用 run()，run() 再按顺序调用上面那些小函数
+所以想读懂流程，建议**从文件最底下往上看**，而不是从第一行往下读。
+
 三个 TODO 已补全：
     TODO 1 判断有无文本层 → 有则 pdfplumber 直接抽字，无则转图逐页 OCR
     TODO 2 结果写成 output/output.json（另存一份纯文本方便看全文）
     TODO 3 进阶表格识别：文本层用 pdfplumber，扫描件用 PP-StructureV3
 
-run(pdf_path) 返回一个 dict（mode / text / pages / elapsed / tables ...），
+run(pdf_path) 返回一个 dict（字典，含 mode / text / pages / elapsed / tables 等键），
 同时把结果落盘。main() 只负责取路径、打印摘要和预览。
 
 用法：
@@ -17,62 +43,109 @@ run(pdf_path) 返回一个 dict（mode / text / pages / elapsed / tables ...）�
 """
 
 # =========================== 配置区：调试只改这里 ===========================
-INPUT_PDF = 'input/test3_image.pdf'                   # 输入 PDF
+# 下面这些全大写的名字叫「常量」。Python 语法上并没有强制不能改，
+# 全大写只是程序员之间的约定：这些是配置项，想调整就直接改这一行。
+# 等号左边是变量名，右边是值；`变量 = 值` 叫「赋值语句」。
+INPUT_PDF = 'input/test3.pdf'                   # 输入 PDF（字符串，相对当前工作目录的路径）
 OUT_DIR = 'output'                              # 产物目录（转出的中间图、最终结果）
 OUT_JSON = 'output/output.json'                 # 结构化结果（含模式、页数、耗时、表格）
-OUT_TXT = 'output/pipeline_result.txt'          # 纯文本结果，方便直接打开看全文
-DPI = 200                                       # 转图清晰度
+OUT_TXT = 'output/pipeline_result.txt'          # 纯文本结果，方便直接打开看全文；改成 None 就不写
+DPI = 200                                       # 转图清晰度（整数）。越高越清晰，但越慢、图越大
 MIN_CHARS = 50                                  # 前几页抽到超过这么多字 → 判定「有文本层」
 SAMPLE_PAGES = 3                                # 只检查前几页，避免大 PDF 判断太慢
-ENABLE_TABLE = True                             # 表格识别开关（OCR 分支每页约 +20s，嫌慢改 False）
+ENABLE_TABLE = True                             # 表格识别开关（布尔值）。OCR 分支每页约 +20s，嫌慢改 False
 # ==========================================================================
 
-import sys
-import os
-import json
-import re
-import time
 
-# 必须在任何 paddleocr / paddlex import 之前设置（见 d_table_ocr.py 的说明）
+# ---------- 导入（import）：把别人写好的工具箱拿进来用 ----------
+# 前 5 个是 Python 自带的「标准库」，装好 Python 就有，不用额外 pip install。
+import sys      # 读命令行参数：sys.argv 是一个列表(list)
+import os       # 操作系统相关：拼路径、建文件夹、读写环境变量
+import json     # 把 Python 字典写成 .json 文件（或反过来读）
+import re       # 正则表达式：按规则查找/替换字符串。这里用来检查 HTML 里有没有 charset
+import time     # 计时：perf_counter() 返回一个高精度时间点，两个时间点相减就是耗时秒数
+
+# os.environ 是「当前进程的环境变量表」，行为像一个字典(dict)。
+# setdefault(键, 值) 的意思是：这个键不存在才写入；已经存在就保持原值不动。
+#   这样写是为了不覆盖你在终端里自己 set 过的配置；
+#   如果写成 os.environ[键] = 值，就会强制覆盖。
+# 注意 'True' 带了引号，是**字符串**不是布尔值 True —— 环境变量只能是字符串，
+#   paddlex 读出来后会自己解析；写成不带引号的 True 会报 TypeError。
+#
+# 两行各自的作用：
+#   PADDLE_PDX_MODEL_SOURCE=BOS  → 模型下载源选 BOS（百度对象存储，国内较快），
+#                                  另一个常见值是 HuggingFace（国内常卡住）。
+#   ...DISABLE_MODEL_SOURCE_CHECK='True' → 跳过 paddlex 启动时对各模型源的
+#                                  连通性探测，避免网络不通时干等超时。
+#
+# 为什么必须放在任何 paddleocr / paddlex 的 import 之前：
+#   那些库在「被导入的那一刻」就读走环境变量，存成模块级常量（相当于拍了张快照），
+#   之后再改 os.environ 已经影响不到那个常量了。
+#   注意：这不是「锁死只走 BOS」，下载大文件断开时 paddlex 仍可能自动回退 HuggingFace；
+#   另外模型已在本地缓存命中时根本不下载，这两行也就用不上。
 os.environ.setdefault('PADDLE_PDX_MODEL_SOURCE', 'BOS')
 os.environ.setdefault('PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK', 'True')
 
-import pdfplumber
-import pymupdf                     # PyMuPDF 新导入名（`import fitz` 已弃用）
+# 下面 2 个是「第三方库」，需要先 pip install 才能 import。
+import pdfplumber  # 读 PDF 的文本层、按线条/对齐抽表格
+import pymupdf     # PyMuPDF：把 PDF 页面渲染成图片；也能读 MediaBox / CropBox
+                   # 说明：`import fitz` 是旧名字，1.24+ 起已弃用，现在官方推荐 `import pymupdf`。
 
-# 两个重量级模型都改成懒加载：走文本层分支时完全不碰 paddle，启动秒开
+# 变量名以下划线开头，是约定：「这是模块内部用的，外部不要直接碰」。
+# 先设成 None（Python 里表示「空 / 还没有」），等真正需要时再装模型。
+# 这叫「懒加载」：程序启动时不加载耗时几秒的模型，只有走到 OCR 分支才加载，
+# 而且同一次运行里只加载一次（下面两个 get_ 开头的函数负责这件事）。
+# 这两个变量定义在函数外面，叫「全局变量」，所有函数都能读到。
 _ocr = None
 _table_engine = None
 
 
 def get_ocr():
-    """首次调用时才加载 PaddleOCR，之后同进程复用。"""
+    """
+    取得 OCR 引擎：第一次调用时才创建，之后直接返回已经创建好的那个。
+
+    返回：一个 PaddleOCR「对象」。对象 = 数据 + 可以调用的方法（这里是 .predict()）。
+    """
+    # global 声明：下面要给「函数外面」的 _ocr 赋值。
+    # 少了这一行，Python 会认为 _ocr 是函数内部的局部变量，
+    # 赋值就影响不到外面那个全局变量（读可以，写不行）。
     global _ocr
-    if _ocr is None:
+
+    if _ocr is None:   # 只有还没创建过，才执行下面这段
+        # import 也可以写在函数里：执行到这一行才真正导入。
+        # 好处：走「有文本层」这条分支时，整个 paddle 都不会被加载，启动更快。
         from paddleocr import PaddleOCR
-        t0 = time.perf_counter()
+
+        t0 = time.perf_counter()   # 记下开始时间点
+        # 括号里是「关键字参数」：参数名=值。顺序可以任意，比位置参数更好读。
         _ocr = PaddleOCR(
+            # 检测模型：找出「字在图的哪个位置」
             text_detection_model_name='PP-OCRv4_mobile_det',
+            # 识别模型：把框出来的字读成文本。mobile = 移动端小模型，CPU 上比 server 快约 27 倍
             text_recognition_model_name='PP-OCRv4_mobile_rec',
-            use_textline_orientation=True,   # 替代已废弃的 use_angle_cls
-            lang='ch',
+            use_textline_orientation=True,   # 是否判断文字方向；3.x 用它替代已废弃的 use_angle_cls
+            lang='ch',                       # 中英混合
         )
+        # f'...' 叫 f-string：字符串里 {表达式} 会被替换成计算出来的值。
+        # {xxx:.2f} 里的 :.2f 表示「按浮点数显示，保留 2 位小数」。
         print(f'>> OCR 模型加载耗时 {time.perf_counter() - t0:.2f}s')
     return _ocr
 
 
 def get_table_engine():
-    """首次调用时才加载 PP-StructureV3（表格识别流水线）。"""
+    """取得 PP-StructureV3 表格识别流水线，同样只在第一次调用时创建。"""
     global _table_engine
     if _table_engine is None:
         from paddleocr import PPStructureV3
         t0 = time.perf_counter()
         _table_engine = PPStructureV3(
-            use_formula_recognition=False,   # 关掉不需要的子模型，少下载、少耗时
-            use_chart_recognition=False,
-            use_seal_recognition=False,
-            use_region_detection=False,
-            use_table_recognition=True,
+            # PP-StructureV3 是一条「多模型流水线」，下面 4 个 False 表示关掉用不到的子模型，
+            # 少下载几个模型、也少花时间；只保留表格识别。
+            use_formula_recognition=False,   # 公式识别
+            use_chart_recognition=False,     # 图表识别
+            use_seal_recognition=False,      # 印章识别
+            use_region_detection=False,      # 区域检测
+            use_table_recognition=True,      # 表格识别（唯一要开的）
             text_detection_model_name='PP-OCRv4_mobile_det',
             text_recognition_model_name='PP-OCRv4_mobile_rec',
         )
@@ -81,46 +154,94 @@ def get_table_engine():
 
 
 def ocr_image(path):
-    """对单张图片跑 OCR，返回识别到的文字列表。"""
-    # 3.x 用 predict()，返回 list[OCRResult]（dict 结构）
+    """
+    对单张图片跑 OCR，返回识别到的文字列表（list[str]，即「由字符串组成的列表」）。
+
+    PaddleOCR 3.x 用 .predict()，返回的是一个列表：每张输入图对应一个结果对象。
+    结果对象的用法类似字典，用 ['rec_texts'] 取出识别出的每一行文字。
+    """
+    # 这一行等价于：engine = get_ocr() 然后 result = engine.predict(path)
+    # Python 允许把「取对象」和「调用方法」连着写，中间用点号连接。
     result = get_ocr().predict(path)
+
+    # 下面这一行是「列表推导式」，把两层 for 循环压缩成一行。展开写就是：
+    #     texts = []
+    #     for res in result:              # 外层：每张图一个结果对象
+    #         for t in res['rec_texts']:  # 内层：这张图识别出的每一行文字
+    #             texts.append(t)
+    #     return texts
+    # 初学时看不懂推导式很正常，按上面的展开版去理解即可，两者完全等价。
     return [t for res in result for t in res['rec_texts']]
 
 
 def pdf_pages_to_images(pdf_path, dpi=DPI, out_dir=OUT_DIR):
-    """把 PDF 每页转成图片，返回图片路径列表。产物统一放 output/。"""
-    os.makedirs(out_dir, exist_ok=True)
-    doc = pymupdf.open(pdf_path)
-    paths = []
+    """
+    把 PDF 每一页转成 PNG 图片，返回「图片路径组成的列表」。
+
+    参数写成 `名字=值` 叫「默认参数」：调用时不传，就自动用配置区的 DPI / OUT_DIR；
+    也可以临时指定，例如 pdf_pages_to_images('a.pdf', dpi=150)。
+    """
+    os.makedirs(out_dir, exist_ok=True)  # 建文件夹；exist_ok=True 表示「已存在也别报错」
+    doc = pymupdf.open(pdf_path)         # 打开 PDF，得到一个可以逐页遍历的文档对象
+    paths = []                           # 创建一个空列表，用来收集生成的文件路径
     try:
+        # enumerate(可迭代对象) 同时给出「序号」和「元素」，
+        # 比写 for i in range(len(doc)) 更简洁，是 Python 惯用写法。
         for i, page in enumerate(doc):
+            # f"_tmp_page_{i}.png" 是 f-string，{i} 会被替换成 0、1、2……
+            # os.path.join 负责用当前系统的分隔符拼路径
+            # （Windows 是反斜杠，不要自己手写字符串拼接）。
             out = os.path.join(out_dir, f"_tmp_page_{i}.png")
+            # get_pixmap() 把这一页渲染成位图，.save() 存成 PNG。
             page.get_pixmap(dpi=dpi).save(out)
-            paths.append(out)
+            paths.append(out)   # list.append(x)：往列表末尾添加一个元素
     finally:
+        # finally 里的代码「无论中间有没有报错」都一定会执行，
+        # 用来释放文件句柄这类资源，是处理文件的标准写法。
         doc.close()
     return paths
 
 
 # ---------------------------------------------------------------- TODO 1 --
 def has_text_layer(pdf_path):
-    """前 SAMPLE_PAGES 页能抽到足够文字 = 有文本层。返回 (bool, 总页数)。"""
+    """
+    判断 PDF 有没有文本层，返回 (是否有, 总页数)。
+
+    一次 return 返回两个值，叫「元组」(tuple)；调用处写 `ok, pages = ...`
+    就能把两个值分别装进两个变量，这叫「元组解包」，下面 run() 里就是这么用的。
+    """
+    # with 是「上下文管理器」：缩进块结束后自动关闭 PDF，即使中间出错也会关，
+    # 所以这里不需要（也不能）再手动写 pdf.close()。
     with pdfplumber.open(pdf_path) as pdf:
-        pages = len(pdf.pages)
+        pages = len(pdf.pages)   # len() 求长度；pdf.pages 是所有页组成的列表
+        # 拆解这一行（从内往外看）：
+        #   pdf.pages[:SAMPLE_PAGES]  → 切片，只取前 3 页，避免几百页的 PDF 判断太慢
+        #   p.extract_text() or ''   → 抽不到字时 extract_text() 返回 None，
+        #                              `or ''` 表示「如果是空值就换成空字符串」，
+        #                              否则后面拼接时会报错
+        #   for p in ...             → 生成器表达式，逐页产生一段文本
+        #   ''.join(...)             → 用空字符串把这些文本首尾相连，拼成一个大字符串
         sample = ''.join((p.extract_text() or '') for p in pdf.pages[:SAMPLE_PAGES])
+    # .strip() 去掉首尾空白字符；再数一数字数是否超过阈值。
+    # `>` 比较的结果本身就是 True / False，可以直接返回，不必写 if。
     return len(sample.strip()) > MIN_CHARS, pages
 
 
 def extract_text_layer(pdf_path):
-    """有文本层：逐页抽取全文。读的是全部内容流，不受 CropBox 限制。"""
+    """有文本层：逐页抽取全文，用换行符拼成一整篇文本。"""
     with pdfplumber.open(pdf_path) as pdf:
+        # '\n' 是转义字符，代表换行（反斜杠 + n 这两个字符合起来表示「换行」）。
+        # 这里读的是「全部内容流」，不受 CropBox 显示裁剪的影响 ——
+        # 所以可能抽到打开 PDF 时肉眼看不见的字（test3.pdf 就是这种）。
         return '\n'.join((p.extract_text() or '') for p in pdf.pages)
 
 
 def cropbox_is_limited(pdf_path):
-    """CropBox 是否比 MediaBox 小（学习记录 6.3 的「裁剪陷阱」）。"""
+    """检查 CropBox 是否比 MediaBox 小（学习记录 6.3 记录的「裁剪陷阱」）。"""
     doc = pymupdf.open(pdf_path)
     try:
+        # any(...) 里面是「生成器表达式」：逐页判断，只要有一页不相等就返回 True。
+        # 等价于自己写 for 循环 + 一个标志变量，但这种写法更短。
         return any(page.cropbox != page.mediabox for page in doc)
     finally:
         doc.close()
@@ -128,28 +249,53 @@ def cropbox_is_limited(pdf_path):
 
 # ---------------------------------------------------------------- TODO 3 --
 def extract_tables_text_layer(pdf_path):
-    """有文本层时直接用 pdfplumber 抽表格，快且不需要模型。"""
+    """有文本层时直接用 pdfplumber 抽表格：快，且完全不需要加载模型。"""
     found = []
     with pdfplumber.open(pdf_path) as pdf:
         for i, page in enumerate(pdf.pages):
             try:
+                # extract_tables() 返回「表格的列表」，每个表格又是「行的列表」，
+                # 每行还是「单元格的列表」，所以是嵌套了三层的列表结构。
+                # 后面 `or []` 保证拿不到结果时至少是个空列表，可以安全地 for 遍历。
                 tables = page.extract_tables() or []
             except Exception as e:
+                # try / except：try 块里出错不会让整个程序崩溃，而是跳到这里处理。
+                # Exception 是绝大多数常见异常的父类；`as e` 把错误对象存进变量 e。
                 print(f'>> 第 {i + 1} 页表格抽取失败，已跳过：{e}')
-                continue
+                continue   # 跳过本页剩下的代码，直接进入下一轮 for 循环
             for table in tables:
+                # {'键': 值} 是字典(dict)，以后用 `记录['page']` 按键取值。
+                # 这里组装一条表格记录，再 append 进总列表。
                 found.append({'page': i, 'source': 'pdfplumber', 'rows': table})
     return found
 
 
 def ensure_readable_html(path):
-    """给 paddlex save_to_html 的片段补 <meta charset="utf-8">，否则中文乱码。"""
-    with open(path, encoding='utf-8') as f:
+    """
+    给 paddlex save_to_html() 导出的 HTML 片段补上 <meta charset="utf-8">。
+
+    坑点：paddlex 写文件用的确实是 utf-8（字节没错），但导出的只是
+    `<html><body><table>...` 这种片段，没有 charset 声明；
+    中文 Windows 的浏览器会按 GBK 去解码，于是中文全是乱码。
+    """
+    with open(path, encoding='utf-8') as f:  # encoding 明确按 utf-8 读，中文才不会乱
         frag = f.read()
+
+    # re.search(正则, 字符串) 找不到时返回 None（在 if 里相当于 False）。
+    # flags=re.I 表示忽略大小写。已有 charset 就直接结束，不做任何改动。
     if re.search(r'<meta[^>]+charset', frag, flags=re.I):
-        return
+        return   # 单独一个 return 表示「返回 None 并结束函数」
+
+    # 正则字符串前的 r 表示「原始字符串」：反斜杠按字面保留，不再当转义符处理。
+    # 写正则表达式时几乎都会加 r，否则 \s 这类序列会先被 Python 当转义字符解释（新版本还会告警）。
+    # re.sub(规则, 替换成什么, 原字符串)：把片段自带的 html/body 外层标签去掉，
+    # 避免下面补骨架时出现 <html><html> 的嵌套。
     inner = re.sub(r'^\s*<html[^>]*>|</html>\s*$', '', frag, flags=re.I)
     inner = re.sub(r'^\s*<body[^>]*>|</body>\s*$', '', inner, flags=re.I)
+
+    # 括号里是「字符串字面量隐式拼接」：相邻的几个字符串会自动连成一个，
+    # 这样可以把一整段 HTML 按行写清楚，不用每行末尾都写 + 号。
+    # 中间那个 `+ inner` 才是真的字符串相加，把原表格内容插进骨架里。
     doc = (
         '<!DOCTYPE html>\n<html lang="zh-CN">\n<head>\n'
         '  <meta charset="utf-8">\n  <title>表格识别结果</title>\n'
@@ -158,6 +304,7 @@ def ensure_readable_html(path):
         'td,th{border:1px solid #999;padding:6px 10px}</style>\n'
         '</head>\n<body>\n' + inner + '\n</body>\n</html>\n'
     )
+    # 'w' 是写模式：文件不存在就创建，已存在会整个覆盖。
     with open(path, 'w', encoding='utf-8') as f:
         f.write(doc)
 
@@ -167,28 +314,37 @@ def table_ocr_page(image_path, page_index):
     对一页图跑 PP-StructureV3，挑出表格内容块并导出 HTML。
 
     注意：不能直接 `import d_table_ocr` —— 那个文件是脚本式写法，
-    输入检查和推理都在模块顶层，import 会立刻把整份表格识别跑一遍。
+    输入检查和推理都写在模块顶层，import 会立刻把整份表格识别跑一遍。
+    （这也正是本文件把所有可执行代码都放进函数、并用 __main__ 守卫的原因。）
     所以这里复用它的参数和 3.x API，在本文件内重新实现一遍。
     """
     result = get_table_engine().predict(image_path)
     blocks = []
     for res in result:
+        # hasattr(对象, '属性名') 判断有没有这个属性：有就取 .json，没有就直接用 res。
+        # `A if 条件 else B` 叫三元表达式，条件成立取 A，否则取 B。
+        # 这是为了兼容不同版本返回结构而做的兜底。
         data = res.json if hasattr(res, 'json') else res
-        # 3.x 的 res.json 是 {'res': {...}} 嵌套结构，真正字段在里面
+        # isinstance(x, dict) 判断 x 是不是字典，避免对非字典调用 .get() 而报错。
+        # 3.x 的 res.json 是 {'res': {...}} 这种嵌套结构，真正字段藏在里面一层。
         if isinstance(data, dict) and isinstance(data.get('res'), dict):
             data = data['res']
         if isinstance(data, dict):
+            # .get('键', 默认值)：键不存在时返回默认值，不会抛 KeyError。
             for b in data.get('parsing_res_list', []):
                 blocks.append({
                     'label': b.get('block_label', '?'),
-                    'content': str(b.get('block_content', '')),
+                    'content': str(b.get('block_content', '')),  # str() 转成字符串
                 })
+    # 带 if 的列表推导式：只保留 label 里含 'table' 的块。
+    # .lower() 先统一转小写，这样 'Table' / 'TABLE' 也能匹配上。
     tables = [b for b in blocks if 'table' in b['label'].lower()]
     html_path = None
+    # 在 if 判断里，非空列表、非空字符串都视为 True，空列表 / None 视为 False。
     if tables and result:
         html_path = os.path.join(OUT_DIR, f'pipeline_table_p{page_index}.html')
-        result[0].save_to_html(html_path)
-        ensure_readable_html(html_path)
+        result[0].save_to_html(html_path)   # [0] 表示取列表的第一个元素
+        ensure_readable_html(html_path)     # 补 charset，修中文乱码
     return {
         'page': page_index,
         'source': 'PPStructureV3',
@@ -200,29 +356,39 @@ def table_ocr_page(image_path, page_index):
 
 # ---------------------------------------------------------------- TODO 2 --
 def save_result(result):
-    """结构化结果写 OUT_JSON，纯文本另存一份方便直接看。"""
+    """把结果字典写成 OUT_JSON，另存一份纯文本方便直接看。"""
     os.makedirs(OUT_DIR, exist_ok=True)
     with open(OUT_JSON, 'w', encoding='utf-8') as f:
+        # json.dump(对象, 文件对象) = 把 Python 字典「序列化」成 JSON 文本写进文件。
+        #   ensure_ascii=False → 中文原样写入，而不是变成 \u4e2d\u6587 这种转义；
+        #   indent=2          → 每层缩进 2 个空格，方便人直接阅读。
         json.dump(result, f, ensure_ascii=False, indent=2)
-    if OUT_TXT:
+    if OUT_TXT:   # 配置区把 OUT_TXT 改成 None，这段就会被跳过
         with open(OUT_TXT, 'w', encoding='utf-8') as f:
-            f.write(result['text'])
+            f.write(result['text'])   # 用键从字典里取出值
     return OUT_JSON
 
 
 def run(pdf_path):
-    """PDF → 结构化 dict；同时把结果落盘到 OUT_JSON / OUT_TXT。"""
-    t0 = time.perf_counter()
-    limited = cropbox_is_limited(pdf_path)
-    ok, pages = has_text_layer(pdf_path)
+    """
+    PDF → 结构化字典；同时把结果落盘到 OUT_JSON / OUT_TXT。
+
+    这是整条流水线的「串联」部分：上面那些函数都是零件，由这里按流程依次调用。
+    返回的是一个 dict（字典），调用方可以取 result['text']、result['mode'] 等。
+    """
+    t0 = time.perf_counter()                  # 总耗时起点
+    limited = cropbox_is_limited(pdf_path)    # 是否命中 CropBox 裁剪陷阱
+    ok, pages = has_text_layer(pdf_path)      # 元组解包：一次拿到 (是否有文本层, 总页数)
     tables = []
 
     if ok:
         # TODO 1：有文本层 → 直接抽字，不碰 OCR（又快又准）
         print('>> 有文本层 → 直接抽字（跳过 OCR）')
         text = extract_text_layer(pdf_path)
+        # 一行给两个变量赋值，也是元组解包（等价于分两行写）。
         mode, scope = 'text_layer', 'all_content_stream'
         if limited:
+            # 字符串可以分成两行写，Python 会自动拼接（相邻字面量拼接）。
             print('>> 注意：该 PDF 有 CropBox 裁剪，抽到的是全部内容流，'
                   '可能包含打开时看不到的文字')
         # TODO 3：文本层分支用 pdfplumber 抽表格，不需要模型
@@ -235,9 +401,11 @@ def run(pdf_path):
         images = pdf_pages_to_images(pdf_path)
         chunks = []
         for i, img in enumerate(images):
-            t1 = time.perf_counter()
+            t1 = time.perf_counter()          # 单页耗时起点
             lines = ocr_image(img)
-            chunks.append(f'--- 第 {i + 1} 页 ---')
+            chunks.append(f'--- 第 {i + 1} 页 ---')  # 加一个分页标记，方便看结果
+            # extend 把另一个列表的元素「逐个」加进来；
+            # append 则是把整个列表当成「一个」元素塞进去 —— 初学者很容易混。
             chunks.extend(lines)
             print(f'>> 第 {i + 1}/{len(images)} 页 OCR 完成：{len(lines)} 行，'
                   f'{time.perf_counter() - t1:.2f}s')
@@ -245,20 +413,23 @@ def run(pdf_path):
             if ENABLE_TABLE:
                 info = table_ocr_page(img, i)
                 tables.append(info)
+                # 这里又是一个三元表达式：有 HTML 就追加路径提示，没有就追加空字符串。
+                # 外层 f-string 用单引号，里面取字典键用双引号，两种引号不冲突。
                 print(f'   表格识别：{info["table_count"]} 个表格块'
                       + (f'，HTML → {info["html"]}' if info['html'] else ''))
-        text = '\n'.join(chunks)
+        text = '\n'.join(chunks)              # 把所有行用换行符连成一整篇文本
         mode, scope = 'ocr', 'visible_cropbox'
 
+    # {'键': 值, ...} 定义字典；缩进只是为了让结构好看，不影响含义。
     result = {
         'source': pdf_path,
-        'mode': mode,
+        'mode': mode,                        # 'text_layer' 或 'ocr'
         'text': text,
         'chars': len(text),
         'pages': pages,
-        'text_scope': scope,
+        'text_scope': scope,                 # 读的是全部内容流，还是仅可见区
         'cropbox_limited': limited,
-        'elapsed': round(time.perf_counter() - t0, 2),
+        'elapsed': round(time.perf_counter() - t0, 2),  # round(x, 2) 保留 2 位小数
         'tables': tables,
     }
 
@@ -270,15 +441,32 @@ def run(pdf_path):
 
 
 def main():
+    # sys.argv 是命令行参数组成的列表：argv[0] 是脚本名本身，argv[1] 才是第一个参数。
+    # `A if 条件 else B` 是三元表达式：没带参数就用配置区的 INPUT_PDF。
     pdf_path = sys.argv[1] if len(sys.argv) > 1 else INPUT_PDF
-    if not os.path.exists(pdf_path):
+    if not os.path.exists(pdf_path):   # not 表示取反；文件不存在就退出
+        # sys.exit(字符串) 会打印这句话，并以非零退出码结束程序。
+        # 这里的 \n 是字符串里的换行转义，让提示分成两行显示。
         sys.exit(f"找不到 PDF：{os.path.abspath(pdf_path)}\n改文件顶部的 INPUT_PDF，或用命令行指定路径")
     result = run(pdf_path)
     print('>> 前 300 字预览：')
+    # [:300] 是切片，取前 300 个字符；`or '(空)'` 处理文本为空的情况。
     print(result['text'][:300] or '(空)')
     if OUT_TXT:
         print(f'>> 全文见 {OUT_TXT}')
 
 
+# ---------------------------------------------------------------------------
+# 程序入口（你之前专门问过这一句）：
+#
+# 每个 .py 文件被「运行」或被「导入」时，Python 都会给它一个内置变量 __name__：
+#     直接运行：python weekend_pipeline.py  → __name__ 的值是 '__main__'
+#     被别的文件 import 进来             → __name__ 的值是模块名 'weekend_pipeline'
+#
+# 所以 `if __name__ == '__main__':` 的意思是「只有直接运行本文件时才调用 main()」。
+# 好处：别的文件可以安全地 import 本文件的函数复用，不会顺带把整条流水线跑一遍。
+# 对比一下 d_table_ocr.py：它的可执行代码写在模块顶层，一 import 就会立刻开始识别，
+# 所以本文件的 table_ocr_page() 才不能直接 import 它。
+# ---------------------------------------------------------------------------
 if __name__ == '__main__':
     main()
