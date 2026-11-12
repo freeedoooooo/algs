@@ -42,17 +42,55 @@
 > 本机 miniforge 环境名是 `paddle`，跑任何脚本前先 `conda activate paddle`
 > （依赖是第1周锁定的 paddleocr 3.7.0，别在别的环境里跑）。
 
+#### 素材：已备好，不用自己找
+
+`input/` 里已放好 **22 张**样本，由 `make_samples.py` 一次性生成：
+
+| 编号 | 内容 | 归类 |
+|---|---|---|
+| `01` | 清晰印刷体底稿（对照组） | 对照组 |
+| `02~03`、`11`、`17` | 轻度模糊 / 降采样 / 噪声 / 重度模糊 | 01_模糊低质 |
+| `04~05`、`13` | 倾斜 8° / 梯形透视 / 倒置 180° | 02_倾斜透视 |
+| `06~08`、`18~20` | 反光、阴影、低对比，以及三种重度版本 | 03_反光光照 |
+| `09`、`12` | 双栏 16px 密集小字、行楷手写 | 04_密集小字 |
+| `10`、`14` | 亮字暗底、模糊+倾斜+阴影混合退化 | 06_漏检 |
+| `15~16` | 第1周的两张真实图（终端截图 / 清晰文档） | 真实对照组 |
+| `21~22` | 第1周 `test3_image.pdf` 渲染出的真实扫描页 | 真实复杂文档 |
+
+设计要点：**01~14 共用同一份干净底稿，每张只施加一种退化**，所以结果差异能归因到单一因素；
+`input/samples_manifest.json` 记着每类的退化参数与「标准答案文字」，报告会自动算出
+「命中 / 未命中」行。想换成自己拍的照片，直接丢进 `input/` 再跑一遍即可；
+重新生成全套样本用 `python make_samples.py`（只覆盖同名文件，不删你自己的图）。
+
+> ⚠️ 合成图是教学用的对照实验，不等于真实分布。第 1 周那两张真实图和两张扫描页
+> 就是用来补这一课的：真实文档的噪点、印章、版式复杂度是画不出来的。
+
 **怎么学 / 动手**：
-1. 攒一批图片，**故意覆盖多种场景**：
+1. 确认 `input/` 覆盖了多种场景（已备好，也可换成自己拍的照片，注意脱敏）：
    - 清晰的印刷体（对照组，应该效果好）
    - 模糊 / 低分辨率
    - 倾斜 / 透视变形（拍照角度歪）
    - 反光 / 光照不均 / 阴影
    - 密集小字 / 复杂版面 / 多栏
    - 手写体（**只观察效果，不深究**——这是兔子洞，本计划不攻手写）
-2. 用 `a_batch_ocr.py` 批量跑，把每张的**识别结果和原图对应存好**。脚本会自动写
-   `output/batch_ocr_results.json`（含行数、平均置信度、每行坐标、耗时）和
-   `output/batch_ocr_summary.txt`（纯文本全文），不用只盯着屏幕。
+2. 用 `a_batch_ocr.py` 批量跑，把每张的**识别结果和原图对应存好**。
+3. **打开 `output/vis/index.html`** —— 这是本周最该花时间看的地方：
+   - 左边原图上叠着识别框，右边是逐行文字 + 置信度条；
+   - 鼠标移到右侧任意一行，左图对应的框会高亮；
+   - 橙红框 = 置信度 < 0.8 的可疑行；
+   - **原图上有字、却没被框住的地方，就是漏检**；
+   - 顶部可一键「只看有问题的图」，折叠区能对照标准答案看哪几行没认出来；
+   - `output/vis/*_boxes.png` 是单张带框图，可直接贴进 `bad_cases/notes.md`；
+   - 只重画报告、不重跑 OCR：`python vis_ocr_result.py`。
+
+**脚本产物**：
+
+| 文件 | 内容 |
+|---|---|
+| `output/batch_ocr_results.json` | 每张图：行数、平均置信度、每行文字/分数/四点坐标、耗时 |
+| `output/batch_ocr_summary.txt` | 纯文本全文汇总 |
+| `output/vis/index.html` | ★ 可视化对照报告，浏览器直接打开，不用起服务 |
+| `output/vis/*_boxes.png` | 原图 + 识别框，单张可贴笔记 |
 
 **批量跑参考代码**（`python a_batch_ocr.py` 直接跑 `input/` 下的图；也可
 `python a_batch_ocr.py ../week-01/input` 临时换目录。脚手架已按本机
@@ -65,6 +103,9 @@ ocr = PaddleOCR(
     text_recognition_model_name='PP-OCRv4_mobile_rec',
     use_textline_orientation=True,   # 3.x 名称，替代已废弃的 use_angle_cls
     # 不传 lang：显式指定模型名时 lang 会被忽略并报警告
+    # ↓ 关闭文档预处理，保证 rec_polys 是「原图像素坐标」，画框才对得齐
+    use_doc_orientation_classify=False,
+    use_doc_unwarping=False,
 )
 
 results = ocr.predict(path)          # 3.x 用 predict()
@@ -77,7 +118,13 @@ for res in results:
 > 都是 **2.x** 写法，在 3.7.0 上会报错或报警告。取数一律走
 > `rec_texts` / `rec_scores` / `rec_polys`。
 
-**产出**：≥10 张图片的识别结果，心里有数"哪些好、哪些差"。
+**产出**：≥10 张图片的识别结果 + 一份可视化对照报告，心里有数"哪些好、哪些差"。
+
+> ⚠️ **识别框坐标的坑（本机 3.7.0 实测）**：默认开启的「整页方向分类 + UVDoc 去扭曲」
+> 会先把图矫正一遍，返回的 `rec_polys` 是矫正后图像的坐标，直接画回原图会整体错位
+> （实测标题框 y=27~66，而标题墨迹实际在 y=66~98）。关闭这两项后框与墨迹完全吻合。
+> 代价是某些图识别质量会下降：`15_real_terminal.jpg` 从 6 行 / 0.90 变成 4 行 / 0.17。
+> 顶部配置区 `USE_DOC_PREPROCESS` 可切换；只取文字、不需要坐标时可以试 True。
 
 ---
 
@@ -125,6 +172,8 @@ ocr = PaddleOCR(
     text_detection_model_name='PP-OCRv4_mobile_det',
     text_recognition_model_name='PP-OCRv4_mobile_rec',
     use_textline_orientation=True,   # 显式模型名时不要再传 lang，会被忽略并报警告
+    use_doc_orientation_classify=False,   # 与 a_batch_ocr.py 保持一致，见下方坐标坑
+    use_doc_unwarping=False,
 )
 img = 'bad_cases/06_漏检/xxx.png'
 

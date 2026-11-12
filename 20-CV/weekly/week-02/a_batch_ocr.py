@@ -15,6 +15,9 @@
 产物（都在 output/ 下）：
     batch_ocr_results.json   每张图一条记录：文件名 / 行数 / 置信度 / 坐标 / 耗时
     batch_ocr_summary.txt    纯文本汇总，方便直接打开看全文
+    vis/index.html           ★ 可视化对照报告：原图 + 识别框 + 逐行文字，浏览器打开即可
+    vis/*_boxes.png          ★ 每张原图的带框版本，可直接贴进 bad case 笔记
+可视化由 vis_ocr_result.py 生成，跑完本脚本会自动调用；不想要可把 MAKE_VIS 改 False。
 
 【与第1周的关系】
 第1周的 b_ocr_image.py 一次只跑一张图；这里复用同样的 3.x API，
@@ -38,6 +41,14 @@ REC_MODEL = 'PP-OCRv4_mobile_rec'                # 识别模型（读出来）
 #           这里沿用第1周已缓存的 mobile 模型，免下载、跑得快。
 LOW_SCORE = 0.8                                 # 低于此置信度算「可疑行」，用于挑 bad case
 IMAGE_EXTS = ('.png', '.jpg', '.jpeg', '.bmp')   # 只处理这些后缀，不区分大小写
+# 文档预处理开关（整页方向分类 + UVDoc 去扭曲）：
+#   False（推荐）：坐标就是原图像素坐标，可视化报告里的框才套得准；少加载 2 个模型。
+#   True         ：对弯曲/歪斜的真实拍照文档可能识别更好，但 rec_polys 会基于
+#                  矫正后的图像，画回原图时框会整体错位。想试时改成 True 再跑一次。
+USE_DOC_PREPROCESS = False
+MAKE_VIS = True                                  # 跑完自动生成可视化对照报告（建议保持 True）
+VIS_DIR = 'output/vis'                           # 可视化产物目录
+MANIFEST_NAME = 'samples_manifest.json'          # 说明书文件名，脚本会在图片目录里找它
 # ==========================================================================
 
 import os       # 拼路径、列目录、建文件夹
@@ -77,8 +88,19 @@ def build_ocr():
         text_detection_model_name=DET_MODEL,
         text_recognition_model_name=REC_MODEL,
         use_textline_orientation=True,   # 3.x 名称，替代已废弃的 use_angle_cls
-        # 这里不传 lang：显式指定模型名时 lang / ocr_version 会被忽略并报警告，
+        # 不传 lang：显式指定模型名时 lang / ocr_version 会被忽略并报警告，
         # 语言能力已由所选模型决定（PP-OCRv4_mobile_rec 本身就是中英模型）。
+        #
+        # ↓ 由顶部 USE_DOC_PREPROCESS 控制，默认 False（关闭）。
+        # 默认开启的「整页方向分类 + UVDoc 去扭曲」会先把图片矫正一遍，
+        # 返回的 rec_polys 是矫正后图像的坐标，直接画回原图时框会整体偏移
+        # （实测标题框 y=27~66，而标题墨迹实际在 y=66~98）。
+        # 关闭后坐标就是原图像素坐标：标题框 [[74,67],[461,98]] 与墨迹
+        # y66~98 / x71~462 完全吻合，可视化报告才准确；顺带少加载 2 个模型。
+        # 识别出来的「文字内容」不受影响，受影响的只有坐标。
+        # 以后若真要处理弯曲/拍照歪斜的文档可以再打开，但那时需自行做坐标反变换。
+        use_doc_orientation_classify=USE_DOC_PREPROCESS,
+        use_doc_unwarping=USE_DOC_PREPROCESS,
     )
     print(f'>> 模型加载耗时：{time.perf_counter() - t0:.2f}s')
     return ocr
@@ -189,8 +211,28 @@ def main():
             )
 
     save_results(records, OUT_JSON, OUT_TXT)
-    print(f'>> 全部完成，总耗时 {time.perf_counter() - t_all:.2f}s（含模型加载）')
-    print('>> 下一步：把低置信度 / 漏检的图按类型放进 bad_cases/ 子目录，')
+    # 先记下「纯识别」耗时，再画图；否则报告生成时间会混进这个数字里。
+    elapsed_all = time.perf_counter() - t_all
+
+    # ---- 自动生成可视化对照报告 ----
+    # 放在 try 里：画图属于附加功能，万一某张图的坐标格式异常，也不能让已经
+    # 落盘的 JSON / TXT 白跑。函数内 import 是懒加载（第1周 weekend_pipeline 用过）。
+    if MAKE_VIS:
+        try:
+            from vis_ocr_result import build_report
+            report = build_report(
+                records,
+                image_dir=src_dir,                                  # 原图要和跑 OCR 时同一个目录
+                vis_dir=VIS_DIR,
+                manifest_path=os.path.join(src_dir, MANIFEST_NAME),
+                result_json=OUT_JSON or '',
+            )
+            print(f'>> 可视化对照报告（用浏览器打开）：{report}')
+        except Exception as e:
+            print(f'>> 可视化生成失败（识别结果不受影响）：{e}')
+
+    print(f'>> 全部完成，总耗时 {elapsed_all:.2f}s（含模型加载）')
+    print('>> 下一步：打开 output/vis/index.html，把有问题的图按类型放进 bad_cases/ 子目录，')
     print('           并在 bad_cases/notes.md 记一行「现象 + 我的猜测」。')
 
 

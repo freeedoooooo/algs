@@ -72,6 +72,10 @@ def main():
         text_recognition_model_name=REC_MODEL,
         use_textline_orientation=True,   # 替代已废弃的 use_angle_cls
         # 不传 lang：显式指定模型名时 lang 会被忽略并报警告。
+        # 与 a_batch_ocr.py 保持一致：关闭文档预处理，避免坐标基于矫正后的图。
+        # 本脚本只比文字，不看坐标，但两边参数一致才能横向对比结果。
+        use_doc_orientation_classify=False,
+        use_doc_unwarping=False,
     )
     print(f'>> 模型加载耗时：{time.perf_counter() - t0:.2f}s')
 
