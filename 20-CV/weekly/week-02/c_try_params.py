@@ -105,8 +105,13 @@ def main():
     print(f'调低阈值   ：{len(texts_b)} 行，平均置信度 {avg_b:.2f}，{elapsed_b:.2f}s')
     print(f'B 新增行   ：{len(only_b)} 行，A 独有行：{len(only_a)} 行')
     if not only_b and not only_a:
-        print('提示：两组结果完全一致。这张图可能太清晰、本来就没有漏检，')
-        print('      换成 bad_cases/ 里真正漏检的样本再看差异（这是正常现象，不是脚本没生效）。')
+        print('提示：两组结果完全一致。常见原因有两类，别急着下结论：')
+        print('      ① 这张图本来就没有漏检（例如清晰对照组）；')
+        print('      ② 漏检处的文字像素已被破坏（过曝洗白、糊成色块），')
+        print('         调低检测阈值也救不回来，因为信息已经不存在了。')
+        print('      判断方法：打开 output/vis/index.html，看原图上')
+        print('      「有字却没有框」的位置 —— 有，就是第 ② 种。')
+        print('      两种情况都不是脚本没生效。')
     print('\nB 组新认出的前 10 行：')
     for t in only_b[:10]:
         print(f'  + {t}')

@@ -24,6 +24,13 @@ batch_ocr_results.json 里只有文字和坐标，读起来不直观：
 HTML 是纯文本产物，可以反复打开、Ctrl+F 搜文字、Ctrl+S 保存、发给别人，
 不依赖任何 GUI 库，也不需要起本地服务。注意文件头必须写 <meta charset="utf-8">，
 否则中文会乱码（第1周 d_table_ocr.py 踩过这个坑）。
+
+【图片路径为什么是 vis/img/】
+报告会把原图复制一份到 output/vis/img/，HTML 用 img/xxx.png 引用。
+一开始用的是 ../../input/xxx.png，本地双击能显示，但通过静态服务 / 预览面板打开时
+目录会被重映射，跳出目录的路径一律 404，整页只剩空框。
+放进同级子目录后，file:// 双击、静态服务、整个 vis/ 目录拷走，三种方式都能显示。
+代价只是多一份图片副本（可再生产物，随时能重画）。
 """
 
 # =========================== 配置区：调试只改这里 ===========================
@@ -31,6 +38,7 @@ RESULT_JSON = 'output/batch_ocr_results.json'   # 批量识别的结果
 IMAGE_DIR = 'input'                             # 原图目录（必须与跑 OCR 时一致）
 MANIFEST = 'input/samples_manifest.json'        # 样本说明书，不存在就跳过标准答案
 VIS_DIR = 'output/vis'                          # 可视化产物目录
+IMG_SUBDIR = 'img'                              # 原图副本放在 vis/img/，让报告自包含
 LOW_SCORE = 0.8                                 # 低于此值标为「可疑」，与 a_batch_ocr.py 保持一致
 COLOR_OK = (34, 150, 90)                        # 正常行的框：绿
 COLOR_LOW = (222, 92, 40)                       # 可疑行的框：橙红
@@ -40,7 +48,8 @@ import os
 import sys
 import json
 import html
-from urllib.parse import quote            # 把路径转成 URL 安全的写法
+import shutil
+from urllib.parse import quote            # 把文件名转成 URL 安全的写法
 
 from PIL import Image, ImageDraw
 
@@ -79,16 +88,20 @@ def normalize_box(box):
     return points if len(points) >= 3 else None     # 至少要 3 点才能画多边形
 
 
-def image_rel_src(image_path, vis_dir):
+def prepare_image(image_path, vis_dir):
     """
-    算出从 HTML 文件（在 vis_dir 里）看向原图的相对路径。
+    把原图复制一份到 vis/img/，返回 HTML 里可用的相对路径（如 img/01_clear.png）。
 
-    例如 vis_dir=output/vis、原图=input/01_clear.png，结果是 ../../input/01_clear.png。
-    用相对路径的好处：整个 week-02 目录拷到别处，报告里的图依然能显示。
-    Windows 的 \\ 必须换成 /，否则浏览器不认；quote 负责处理空格与中文。
+    为什么不用 ../../input/xxx.png：本地双击能显示，但静态服务 / 预览面板会把
+    HTML 映射到一个新目录，任何跳出该目录的相对路径都会 404，报告就只剩空框。
+    把图片放在报告的同级子目录里，三种打开方式（file://、静态服务、整目录拷走）都能显示。
+    quote 负责处理文件名里的空格与中文；复制用原始文件名，不做重命名。
     """
-    rel = os.path.relpath(os.path.abspath(image_path), os.path.abspath(vis_dir))
-    return quote(rel.replace(os.sep, '/'), safe='/')
+    img_dir = os.path.join(vis_dir, IMG_SUBDIR)
+    os.makedirs(img_dir, exist_ok=True)
+    name = os.path.basename(image_path)
+    shutil.copy2(image_path, os.path.join(img_dir, name))
+    return f'{IMG_SUBDIR}/{quote(name, safe="")}'
 
 
 def esc(text):
@@ -255,7 +268,7 @@ def build_card(rec, card_no, image_dir, vis_dir, manifest_map):
     if os.path.isfile(image_path):
         png_name = f'{stem}_boxes.png'
         w, h = draw_boxes_png(image_path, rec, os.path.join(vis_dir, png_name))
-        src = image_rel_src(image_path, vis_dir)
+        src = prepare_image(image_path, vis_dir)
         polys = []
         for i, box in enumerate(rec.get('boxes') or []):
             pts = normalize_box(box)

@@ -91,6 +91,7 @@
 | `output/batch_ocr_summary.txt` | 纯文本全文汇总 |
 | `output/vis/index.html` | ★ 可视化对照报告，浏览器直接打开，不用起服务 |
 | `output/vis/*_boxes.png` | 原图 + 识别框，单张可贴笔记 |
+| `output/vis/img/` | 原图副本，专门给 HTML 引用；移动报告时要把整个 `vis/` 一起带走 |
 
 **批量跑参考代码**（`python a_batch_ocr.py` 直接跑 `input/` 下的图；也可
 `python a_batch_ocr.py ../week-01/input` 临时换目录。脚手架已按本机
@@ -263,7 +264,9 @@ texts = sensitive_res[0]['rec_texts']     # 3.x 取数方式
 ## 常见坑 & 卡住怎么办
 
 - **照抄旧教程报 `use_angle_cls` / `.ocr()` 的错**：那是 2.x 写法。本机 paddleocr 3.7.0 用 `use_textline_orientation` + `.predict()`，取 `rec_texts` / `rec_scores` / `rec_polys`。本周两个脚手架已按 3.x 校准，报错时先对照它们。
-- **找不到合适的复杂图片**：网上搜"场景文字识别数据集样本图"，或直接拍生活里的招牌/票据/说明书（注意脱敏）。
+- **找不到合适的复杂图片**：`input/` 已备好 22 张（`python make_samples.py` 可重新生成）。想补充真实照片就拍生活里的招牌/票据/说明书（注意脱敏），或网上搜"场景文字识别数据集样本图"。
+- **报告里的识别框没套住文字**：多半是 `USE_DOC_PREPROCESS` 被改成了 True。见模块 A 末尾的「识别框坐标的坑」。文字内容没错、只是框错位，就查这一项。
+- **报告打开是乱码 / 图片不显示**：`index.html` 已带 `<meta charset="utf-8">`；原图副本在 `output/vis/img/`，所以要把**整个 `vis/` 目录**一起移动，别只单独拷走 HTML（早期版本用 `../../input/` 跳出目录，静态服务下会 404，已修）。
 - **调阈值两组结果一模一样 / 反而更差**：正常。清晰印刷体本来就没有漏检，看不出差异；换 `bad_cases/06_漏检/` 里的样本再试。本周只是"感受旋钮存在"，真正会调是 P4。别卡这。
 - **报警告 `lang and ocr_version will be ignored`**：显式指定模型名时 `lang` 会被忽略（语言能力由所选模型决定）。照脚手架删掉 `lang` 即可，不影响识别结果。
 - **3B1B 第 4 集公式看不懂**：**完全没关系**，这集就是劝退向的直觉铺垫，第 3 周会 just-in-time 补数学。跳过继续。

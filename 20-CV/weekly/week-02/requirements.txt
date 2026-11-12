@@ -12,3 +12,9 @@ paddleocr==3.7.0
 matplotlib==3.10.9
 # 周末为 P1 预备 PyTorch（CPU 版即可，GPU 版第3周按需再配）：
 # python -m pip install torch torchvision
+#
+# make_samples.py / vis_ocr_result.py 还会用到 Pillow、numpy、opencv-python。
+# 它们已作为 paddleocr / paddlex 的传递依赖装在 paddle 环境（实测
+# pillow 12.3.0 / numpy 2.2.6 / opencv 4.10.0），故此处不重复锁版本，
+# 避免与 paddle 系列的依赖约束冲突。换环境若报 ModuleNotFoundError，再单独：
+# python -m pip install pillow numpy opencv-python

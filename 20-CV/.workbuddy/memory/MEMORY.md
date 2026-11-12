@@ -11,3 +11,10 @@
 - 脚本默认输入/输出路径统一放在文件顶部【配置区】，方便调试时一眼找到。
 - 产物统一写 `output/`，输入统一放 `input/`。
 - 用户偏好自己手动执行安装/运行命令；助手只在需要验证时跑轻量检查，不代替用户做环境操作。
+
+## PaddleOCR 3.7.0 坐标基准（2026-11-12 实测，涉及画识别框时必须遵守）
+- 默认 `use_doc_preprocessor=True`（整页方向分类 + UVDoc 去扭曲）会让 `rec_polys` / `dt_polys` 基于**矫正后图像**，直接画回原图整体错位。
+- 凡要把框叠到原图上，构造时加 `use_doc_orientation_classify=False, use_doc_unwarping=False`；week-02 已做成配置区开关 `USE_DOC_PREPROCESS`（默认 False）。
+- 只取文字、不需要坐标时可保留默认：实测 UVDoc 会让亮字暗底终端截图识别更好（6 行/0.90 vs 关闭后 4 行/0.17），属质量与坐标的权衡。
+- week-01 的 `b_ocr_image.py` / `weekend_pipeline.py` 仍是默认构造，其坐标不可直接用于画框。
+- 用户不接受只看 JSON 的结果呈现；OCR 结果一律配「带框 PNG + 离线 HTML 对照报告」。
