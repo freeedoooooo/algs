@@ -16,5 +16,5 @@
 - 默认 `use_doc_preprocessor=True`（整页方向分类 + UVDoc 去扭曲）会让 `rec_polys` / `dt_polys` 基于**矫正后图像**，直接画回原图整体错位。
 - 凡要把框叠到原图上，构造时加 `use_doc_orientation_classify=False, use_doc_unwarping=False`；week-02 已做成配置区开关 `USE_DOC_PREPROCESS`（默认 False）。
 - 只取文字、不需要坐标时可保留默认：实测 UVDoc 会让亮字暗底终端截图识别更好（6 行/0.90 vs 关闭后 4 行/0.17），属质量与坐标的权衡。
-- week-01 的 `b_ocr_image.py` / `weekend_pipeline.py` 仍是默认构造，其坐标不可直接用于画框。
+- week-02 已做成配置区开关 `USE_DOC_PREPROCESS`（默认 False）。week-01（2026-11-12 优化后）：`b_ocr_image.py` 要画框，同样默认关闭并产出带框 PNG + 自包含 HTML；`weekend_pipeline.py` 只取文字不画框，**刻意保留默认开启**，两者不要统一。
 - 用户不接受只看 JSON 的结果呈现；OCR 结果一律配「带框 PNG + 离线 HTML 对照报告」。

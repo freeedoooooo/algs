@@ -15,8 +15,8 @@
 - ✅ `d_table_ocr.py`：test2.jpg → 4 个内容块 + 表格 HTML（乱码已修）
 - ✅ `weekend_pipeline.py`：三个 TODO 补全；默认 `test3.pdf` 跑通 →
   `mode=text_layer`、1 页、2054 字符、0.53s，输出 `output/output.json` + `pipeline_result.txt`
-- ⬜ `test3_image.pdf`（5 页扫描件）的 OCR 分支还没在 pipeline 里实跑
-- ⬜ `b`、`d` 还没改成 `main()` + 主程序守卫
+- ✅ `weekend_pipeline.py` 的 OCR 分支首次实跑通过：`test3_image.pdf` 5 页 → 197 行 / 1750 字符 / 35.48s（关闭表格开关），中间页图 5/5 自动清理
+- ✅ `b`、`d` 已改成 `main()` + 主程序守卫（2026-11-12 优化）；`import` 三个模块仅 0.38s，不再加载模型
 - ⬜ 3B1B 第 1 集：笔记里没记录，需自评
 
 ## bad case 观察（同步记到 ../week-02/bad_cases/notes.md）
@@ -60,6 +60,12 @@
   2.x 的 `.ocr(cls=True)` 示例、默认 PDF 与产物文件名也都同步成本机实际值。
 - **流水线收尾**：`weekend_pipeline.py` 的 OCR 分支跑完会自动删掉中间页图
   （配置区 `KEEP_TEMP_IMAGES` 可关），`cropbox_is_limited()` 遇到损坏 PDF 不再让主流程崩掉。
+  另修了 `pdf_pages_to_images(pdf_path, dpi=DPI, out_dir=OUT_DIR)` 的**默认参数快照**问题：
+  Python 在定义函数时就把默认值算好固定了，之后改 OUT_DIR 不生效；改成 `None` 再在函数体内读配置。
+- **验证**：四个脚本 `py_compile` 通过；`import` 三模块 0.38s 不加载模型；
+  b 产出 21 行 + 带框图（目视确认框精确套字）+ 自包含 HTML（charset / base64 / 21 行表格齐备）；
+  c 两条分支正常（扫描件转 5 张图 0.72s；文本层 2054 字符 0.34s，逐页字符数 `[2054]`）；
+  d 4 个内容块 + HTML 无嵌套无乱码；weekend 文本层 0.48s / 2054 字符，OCR 分支首次跑通。
 
 ## 疑问（留着后面阶段解答）
 - 为什么亮字暗底会几乎全军覆没？检测阶段到底在看什么特征？（week-02 反色实验 / P4）
