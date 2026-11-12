@@ -7,6 +7,7 @@
 - 助手侧可用 `git diff` 命令做核对，但不要为此生成可视化组件。
 
 ## 其他既有约定
+- 本机 miniforge 环境名：`paddle`（`conda activate paddle`），路径 `D:\miniforge3\envs\paddle`，Python 3.10.9；需要实跑验证时用该环境的 `python.exe`。
 - 脚本默认输入/输出路径统一放在文件顶部【配置区】，方便调试时一眼找到。
 - 产物统一写 `output/`，输入统一放 `input/`。
 - 用户偏好自己手动执行安装/运行命令；助手只在需要验证时跑轻量检查，不代替用户做环境操作。

@@ -1,0 +1,32 @@
+模型：PP-OCRv4_mobile_det + PP-OCRv4_mobile_rec
+图片数：2
+
+=== test1.jpg | 6 行 | 平均置信度 0.90 | 3.1s ===
+manuaLLy	0.84
+nectorymanually:	0.91
+C:\Users\Administrator\.paddlexofficial_models\pp-0cRv4_servep_seaL_det	0.89
+pectorymanualLy:	0.91
+:c:\Users\Administrator.paddLexofficial_modelsPp-ocRv4_server_rec	0.91
+ectory manually:C:Users\Administrator.paddlex\official_models\slANet_plus	0.92
+
+=== test2.jpg | 20 行 | 平均置信度 0.99 | 4.22s ===
+招商银行	0.97
+CHINA MIERCHANTS BANK	0.95
+用户所属公司：XXX科技有限公司	0.99
+打印时间：2022/11/29	1.00
+15:47	1.00
+记录数：1160	1.00
+交易日期	0.94
+借	1.00
+贷	1.00
+余额摘要	1.00
+收(付)方名称	1.00
+收(付)方账号	1.00
+交易类型	1.00
+021-11-29	1.00
+上海保洁月费-	0.97
+0, 000.00	0.95
+00, 000, 000. 56	0.99
+代发款项	1.00
+程	1.00
+5:42:05	1.00

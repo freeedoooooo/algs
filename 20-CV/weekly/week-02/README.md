@@ -39,6 +39,9 @@
 
 ### 模块 A · 真实图片压测（Day 1）
 
+> 本机 miniforge 环境名是 `paddle`，跑任何脚本前先 `conda activate paddle`
+> （依赖是第1周锁定的 paddleocr 3.7.0，别在别的环境里跑）。
+
 **怎么学 / 动手**：
 1. 攒一批图片，**故意覆盖多种场景**：
    - 清晰的印刷体（对照组，应该效果好）
@@ -47,24 +50,32 @@
    - 反光 / 光照不均 / 阴影
    - 密集小字 / 复杂版面 / 多栏
    - 手写体（**只观察效果，不深究**——这是兔子洞，本计划不攻手写）
-2. 用上周的脚本批量跑，把每张的**识别结果和原图对应存好**。
+2. 用 `a_batch_ocr.py` 批量跑，把每张的**识别结果和原图对应存好**。脚本会自动写
+   `output/batch_ocr_results.json`（含行数、平均置信度、每行坐标、耗时）和
+   `output/batch_ocr_summary.txt`（纯文本全文），不用只盯着屏幕。
 
-**批量跑参考代码**（已备好 `a_batch_ocr.py`，`python a_batch_ocr.py` 直接批量跑 `input/` 下的图，无需自己写循环）：
+**批量跑参考代码**（`python a_batch_ocr.py` 直接跑 `input/` 下的图；也可
+`python a_batch_ocr.py ../week-01/input` 临时换目录。脚手架已按本机
+**paddleocr 3.7.0** 校准，下面是它内部的核心写法）：
 ```python
-import os
 from paddleocr import PaddleOCR
 
-ocr = PaddleOCR(use_angle_cls=True, lang='ch')
-src_dir = "input"          # 放你收集的图片（input/ 目录）
-for name in os.listdir(src_dir):
-    if not name.lower().endswith(('.png', '.jpg', '.jpeg')):
-        continue
-    path = os.path.join(src_dir, name)
-    result = ocr.ocr(path, cls=True)
-    texts = [line[1][0] for line in (result[0] or [])]   # 取出所有识别文字
-    print(f'\n=== {name} ===')
-    print("\n".join(texts))
+ocr = PaddleOCR(
+    text_detection_model_name='PP-OCRv4_mobile_det',   # 第1周已缓存，免下载
+    text_recognition_model_name='PP-OCRv4_mobile_rec',
+    use_textline_orientation=True,   # 3.x 名称，替代已废弃的 use_angle_cls
+    # 不传 lang：显式指定模型名时 lang 会被忽略并报警告
+)
+
+results = ocr.predict(path)          # 3.x 用 predict()
+for res in results:
+    texts  = res['rec_texts']        # 每行文字
+    scores = res['rec_scores']       # 对应置信度
+    boxes  = res['rec_polys']        # 每行文字的四点坐标
 ```
+> ⚠️ 旧教程里的 `use_angle_cls`、`ocr.ocr(path, cls=True)`、`result[0][1][0]` 解包
+> 都是 **2.x** 写法，在 3.7.0 上会报错或报警告。取数一律走
+> `rec_texts` / `rec_scores` / `rec_polys`。
 
 **产出**：≥10 张图片的识别结果，心里有数"哪些好、哪些差"。
 
@@ -102,22 +113,35 @@ bad_cases/
 
 **概念清单**：PaddleOCR 不是只能一键跑，有几个能"救场"的参数。本周**只需知道有这些旋钮**，深入调优是 P4 的事。
 
-**动手试**：
-- `use_angle_cls=True`：自动摆正 180° 旋转的文字（倾斜样本试试开/关的差别）
-- `lang`：`ch`（中英）/ `en` / 其他；选错语言识别率会掉
-- `det_db_thresh` / `det_db_box_thresh`：检测二值化阈值，**漏检时调低、误检时调高**（现在只需感受"调它能改变结果"，原理 P4 讲 DBNet 时深入）
-- `use_gpu`：有 GPU 时加速
+**动手试**（以下均为 3.7.0 的参数名，旧教程写的 2.x 名称已标注）：
+- `use_textline_orientation`：文本行方向分类（2.x 叫 `use_angle_cls`），倾斜/倒置样本试试开/关
+- `lang`：`ch`（中英）/ `en` / 其他；选错语言识别率会掉（**仅在不显式指定模型名时生效**；本周脚手架指定了模型名，故不传 `lang`）
+- `text_det_thresh` / `text_det_box_thresh`：检测阈值，默认 **0.3 / 0.6**；**漏检时调低、误检时调高**（2.x 叫 `det_db_thresh` / `det_db_box_thresh`；原理 P4 讲 DBNet 时深入）
+- `text_det_limit_side_len`：检测时图像边长限制，大图 / 密集小字漏检时可调大，代价是变慢
 
 ```python
-# 感受阈值对漏检的影响（同一张漏检图，调低检测阈值再试）
-ocr = PaddleOCR(use_angle_cls=True, lang='ch',
-                det_db_thresh=0.2,        # 默认约 0.3，调低更"敏感"
-                det_db_box_thresh=0.5)
-result = ocr.ocr('bad_cases/06_漏检/xxx.png', cls=True)
+# 3.x：阈值可在 predict() 时「按次覆盖」，一个引擎就能对比两组参数
+ocr = PaddleOCR(
+    text_detection_model_name='PP-OCRv4_mobile_det',
+    text_recognition_model_name='PP-OCRv4_mobile_rec',
+    use_textline_orientation=True,   # 显式模型名时不要再传 lang，会被忽略并报警告
+)
+img = 'bad_cases/06_漏检/xxx.png'
+
+default_res   = ocr.predict(img)          # 默认 0.3 / 0.6
+sensitive_res = ocr.predict(              # 调低 → 更敏感
+    img,
+    text_det_thresh=0.2,
+    text_det_box_thresh=0.4,
+)
+texts = sensitive_res[0]['rec_texts']     # 3.x 取数方式
 ```
-（已备好 `c_try_params.py`，把 `IMG` 改成你的漏检样本路径即可对比参数效果。）
+（已备好 `c_try_params.py`：把顶部配置区的 `IMG` 改成你的漏检样本，或用命令行
+`python c_try_params.py 图片路径`；脚本会打印 B 组「新增 / 丢掉」的行，
+并把完整对比存到 `output/param_compare.txt`。）
 
 > 参数名/默认值可能随版本变化，以官方文档为准：https://github.com/PaddlePaddle/PaddleOCR
+> 本机可用 `python -c "import inspect; from paddleocr import PaddleOCR; print(inspect.signature(PaddleOCR.predict))"` 直接查当前版本支持哪些参数。
 
 **产出**：把 notes.md 里 1-2 个 bad case 通过调参数"救"回来一点，记录"调了什么、结果怎么变"。
 
@@ -150,8 +174,8 @@ result = ocr.ocr('bad_cases/06_漏检/xxx.png', cls=True)
 2. 看 3B1B 第 4 集。
 3. **为 P1 铺路**：装好 PyTorch（CPU 版即可，GPU 版第 3 周再按需配）：
    ```bash
-   # CPU 版（先能跑就行）
-   pip install torch torchvision
+   # CPU 版（先能跑就行）。统一用 python -m pip，保证装进当前 conda 解释器
+   python -m pip install torch torchvision
    ```
    ```python
    import torch
@@ -189,10 +213,12 @@ result = ocr.ocr('bad_cases/06_漏检/xxx.png', cls=True)
 
 ## 常见坑 & 卡住怎么办
 
+- **照抄旧教程报 `use_angle_cls` / `.ocr()` 的错**：那是 2.x 写法。本机 paddleocr 3.7.0 用 `use_textline_orientation` + `.predict()`，取 `rec_texts` / `rec_scores` / `rec_polys`。本周两个脚手架已按 3.x 校准，报错时先对照它们。
 - **找不到合适的复杂图片**：网上搜"场景文字识别数据集样本图"，或直接拍生活里的招牌/票据/说明书（注意脱敏）。
-- **调阈值没效果/更差**：正常，本周只是"感受旋钮存在"，真正会调是 P4。别卡这。
+- **调阈值两组结果一模一样 / 反而更差**：正常。清晰印刷体本来就没有漏检，看不出差异；换 `bad_cases/06_漏检/` 里的样本再试。本周只是"感受旋钮存在"，真正会调是 P4。别卡这。
+- **报警告 `lang and ocr_version will be ignored`**：显式指定模型名时 `lang` 会被忽略（语言能力由所选模型决定）。照脚手架删掉 `lang` 即可，不影响识别结果。
 - **3B1B 第 4 集公式看不懂**：**完全没关系**，这集就是劝退向的直觉铺垫，第 3 周会 just-in-time 补数学。跳过继续。
-- **PyTorch 装不上**：CPU 版一般 `pip install torch torchvision` 即可；报错就去 https://pytorch.org/get-started/locally/ 选对应命令。GPU 版留到第 3 周需要时再配。
+- **PyTorch 装不上**：CPU 版一般 `python -m pip install torch torchvision` 即可；报错就去 https://pytorch.org/get-started/locally/ 选对应命令。GPU 版留到第 3 周需要时再配。
 
 ---
 

@@ -1,7 +1,14 @@
 # 第2周依赖（P0 收尾：真实图片实战 + PyTorch 预备）
-# 安装：pip install -r requirements.txt
-paddlepaddle
-paddleocr
-matplotlib
+# 安装：python -m pip install -r requirements.txt
+#
+# 已锁定版本，与第1周实测可用的组合保持一致，防止 pip 顺手升级 paddle 系列。
+# 版本强相关，三者不要单独升级：
+#   paddlepaddle 3.2.0  ←→  paddlex 3.7.2  ←→  paddleocr 3.7.0
+# - 本机 Python 3.10，matplotlib 3.11.x 要求 Python>=3.11，故锁 3.10.9。
+# - 若以后换 GPU 版：把 paddlepaddle 换成同版本 paddlepaddle-gpu（二者互斥，只留一个）。
+paddlepaddle==3.2.0
+paddlex==3.7.2
+paddleocr==3.7.0
+matplotlib==3.10.9
 # 周末为 P1 预备 PyTorch（CPU 版即可，GPU 版第3周按需再配）：
-# pip install torch torchvision
+# python -m pip install torch torchvision

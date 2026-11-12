@@ -23,8 +23,8 @@
 
 | 周 | 阶段 | 主题 | 本周里程碑 | 状态 |
 |---|---|---|---|---|
-| [第 1 周](week-01/) | P0 | 环境搭建 + PaddleOCR 跑通 | 检测+识别 demo 跑通，PDF 文本层会判断 | ⬜ |
-| [第 2 周](week-02/) | P0 | 真实图片实战 + bad case 库 | bad case 素材库建好，达成 L1 | ⬜ |
+| [第 1 周](week-01/) | P0 | 环境搭建 + PaddleOCR 跑通 | 检测+识别 demo 跑通，PDF 文本层会判断 | ✅ |
+| [第 2 周](week-02/) | P0 | 真实图片实战 + bad case 库 | bad case 素材库建好，达成 L1 | 🔄 进行中 |
 | [第 3 周](week-03/) | P1-A | 神经网络直觉 + 数学补齐 + 线性回归 | 看懂前向/反向/梯度下降，numpy 跑通线性回归 | ⬜ |
 | [第 4 周](week-04/) | P1-A | softmax + 手写神经网络 | **纯 numpy 手写 2 层网络训练 MNIST** | ⬜ |
 | [第 5 周](week-05/) | P1-B | PyTorch 入门：张量/autograd/nn.Module/DataLoader | 用 PyTorch 跑通 MLP 训练循环，能对照第4周讲清每个组件 | ⬜ |
