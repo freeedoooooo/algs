@@ -35,7 +35,8 @@
 run(pdf_path) 返回一个 dict（字典，含 mode / text / pages / elapsed / tables 等键），
 同时把结果落盘。main() 只负责取路径、打印摘要和预览。
 
-用法：
+用法（在 week-01 目录下）：
+    conda activate paddle
     python weekend_pipeline.py                  # 用配置区 INPUT_PDF 指定的文件
     python weekend_pipeline.py input/你的.pdf     # 命令行临时指定（优先级高于 INPUT_PDF）
 
@@ -54,6 +55,7 @@ DPI = 200                                       # 转图清晰度（整数）。
 MIN_CHARS = 50                                  # 前几页抽到超过这么多字 → 判定「有文本层」
 SAMPLE_PAGES = 3                                # 只检查前几页，避免大 PDF 判断太慢
 ENABLE_TABLE = True                             # 表格识别开关（布尔值）。OCR 分支每页约 +20s，嫌慢改 False
+KEEP_TEMP_IMAGES = False                        # 是否保留 OCR 分支生成的中间页图；False = 跑完自动删
 # ==========================================================================
 
 
@@ -124,7 +126,10 @@ def get_ocr():
             # 识别模型：把框出来的字读成文本。mobile = 移动端小模型，CPU 上比 server 快约 27 倍
             text_recognition_model_name='PP-OCRv4_mobile_rec',
             use_textline_orientation=True,   # 是否判断文字方向；3.x 用它替代已废弃的 use_angle_cls
-            lang='ch',                       # 中英混合
+            # 不传 lang：显式指定模型名时 lang / ocr_version 会被忽略并打印警告。
+            # 这里【刻意保留】默认的整页方向分类 + UVDoc 去扭曲：本流水线只取文字、
+            # 不画识别框，坐标错位不影响它；实测 UVDoc 对亮字暗底的图反而识别更准。
+            # 对比 b_ocr_image.py：那边要画框，所以必须关掉这两项（见它的配置区）。
         )
         # f'...' 叫 f-string：字符串里 {表达式} 会被替换成计算出来的值。
         # {xxx:.2f} 里的 :.2f 表示「按浮点数显示，保留 2 位小数」。
@@ -174,13 +179,23 @@ def ocr_image(path):
     return [t for res in result for t in res['rec_texts']]
 
 
-def pdf_pages_to_images(pdf_path, dpi=DPI, out_dir=OUT_DIR):
+def pdf_pages_to_images(pdf_path, dpi=None, out_dir=None):
     """
     把 PDF 每一页转成 PNG 图片，返回「图片路径组成的列表」。
 
-    参数写成 `名字=值` 叫「默认参数」：调用时不传，就自动用配置区的 DPI / OUT_DIR；
+    参数写成 `名字=值` 叫「默认参数」：调用时不传就用默认值；
     也可以临时指定，例如 pdf_pages_to_images('a.pdf', dpi=150)。
+    这里不传时，函数体会去读配置区的 DPI / OUT_DIR。
+
+    这里特意把默认值写成 None、进函数再读配置区，而不是直接写 `dpi=DPI, out_dir=OUT_DIR`：
+    Python 的**默认参数值在函数定义那一刻就被算好并固定了**，之后就算改了配置区的
+    OUT_DIR（或在别的文件里 import 后改），也不会生效。写成 None 才是「运行时读配置」。
+
+    这些 PNG 只是「中间产物」：识别完就没用了。run() 会在收尾时调用
+    cleanup_temp_images() 把它们删掉（除非配置区 KEEP_TEMP_IMAGES=True）。
     """
+    dpi = DPI if dpi is None else dpi
+    out_dir = OUT_DIR if out_dir is None else out_dir
     os.makedirs(out_dir, exist_ok=True)  # 建文件夹；exist_ok=True 表示「已存在也别报错」
     doc = pymupdf.open(pdf_path)         # 打开 PDF，得到一个可以逐页遍历的文档对象
     paths = []                           # 创建一个空列表，用来收集生成的文件路径
@@ -200,6 +215,28 @@ def pdf_pages_to_images(pdf_path, dpi=DPI, out_dir=OUT_DIR):
         # 用来释放文件句柄这类资源，是处理文件的标准写法。
         doc.close()
     return paths
+
+
+def cleanup_temp_images(paths):
+    """
+    删除本次 OCR 分支生成的中间页图。
+
+    只删传进来的这些路径（都是本函数刚刚生成的），不会碰 output/ 里其它文件，
+    所以不会误删 c_pdf_text_layer.py 生成的 c_page_*.png 或你的手工产物。
+    以前这些 _tmp_page_*.png 会一直堆在 output/ 里，还被 git 跟踪成二进制 diff。
+    """
+    if KEEP_TEMP_IMAGES:   # 想留着逐页核对就把它改成 True
+        print(f'>> 按配置保留 {len(paths)} 张中间页图')
+        return
+    removed = 0
+    for path in paths:
+        try:
+            os.remove(path)          # os.remove 删单个文件
+            removed += 1
+        except OSError:
+            pass                     # 已经不在了 / 被占用，都不影响主流程
+    print(f'>> 已清理 {removed}/{len(paths)} 张中间页图'
+          f'（想保留就把配置区 KEEP_TEMP_IMAGES 改成 True）')
 
 
 # ---------------------------------------------------------------- TODO 1 --
@@ -238,7 +275,13 @@ def extract_text_layer(pdf_path):
 
 def cropbox_is_limited(pdf_path):
     """检查 CropBox 是否比 MediaBox 小（学习记录 6.3 记录的「裁剪陷阱」）。"""
-    doc = pymupdf.open(pdf_path)
+    # 有些 PDF 加密或损坏时打不开。这个标记只是「额外提示」，不该让整条流水线崩掉，
+    # 所以失败时返回 False 继续跑主流程（try/except 与下面 open 后的 try/finally 是两件事）。
+    try:
+        doc = pymupdf.open(pdf_path)
+    except Exception as e:
+        print(f'>> CropBox 检查失败，按「未裁剪」继续：{e}')
+        return False
     try:
         # any(...) 里面是「生成器表达式」：逐页判断，只要有一页不相等就返回 True。
         # 等价于自己写 for 循环 + 一个标志变量，但这种写法更短。
@@ -313,10 +356,9 @@ def table_ocr_page(image_path, page_index):
     """
     对一页图跑 PP-StructureV3，挑出表格内容块并导出 HTML。
 
-    注意：不能直接 `import d_table_ocr` —— 那个文件是脚本式写法，
-    输入检查和推理都写在模块顶层，import 会立刻把整份表格识别跑一遍。
-    （这也正是本文件把所有可执行代码都放进函数、并用 __main__ 守卫的原因。）
-    所以这里复用它的参数和 3.x API，在本文件内重新实现一遍。
+    现在 `d_table_ocr.py` 也改成了 main() + __main__ 守卫，可以被安全 import；
+    这里仍在本地重写一份，好处是本文件单独读就能看懂整条流水线，
+    不必跳到另一个文件查参数（两边参数保持一致即可）。
     """
     result = get_table_engine().predict(image_path)
     blocks = []
@@ -400,23 +442,28 @@ def run(pdf_path):
         print('>> 无文本层（扫描件）→ 转图后逐页 OCR')
         images = pdf_pages_to_images(pdf_path)
         chunks = []
-        for i, img in enumerate(images):
-            t1 = time.perf_counter()          # 单页耗时起点
-            lines = ocr_image(img)
-            chunks.append(f'--- 第 {i + 1} 页 ---')  # 加一个分页标记，方便看结果
-            # extend 把另一个列表的元素「逐个」加进来；
-            # append 则是把整个列表当成「一个」元素塞进去 —— 初学者很容易混。
-            chunks.extend(lines)
-            print(f'>> 第 {i + 1}/{len(images)} 页 OCR 完成：{len(lines)} 行，'
-                  f'{time.perf_counter() - t1:.2f}s')
-            # TODO 3：扫描件分支用 PP-StructureV3 还原表格结构
-            if ENABLE_TABLE:
-                info = table_ocr_page(img, i)
-                tables.append(info)
-                # 这里又是一个三元表达式：有 HTML 就追加路径提示，没有就追加空字符串。
-                # 外层 f-string 用单引号，里面取字典键用双引号，两种引号不冲突。
-                print(f'   表格识别：{info["table_count"]} 个表格块'
-                      + (f'，HTML → {info["html"]}' if info['html'] else ''))
+        # try/finally：无论中间哪一页出错，finally 里的清理都一定会执行，
+        # 不会把一堆 _tmp_page_*.png 留在 output/ 里。
+        try:
+            for i, img in enumerate(images):
+                t1 = time.perf_counter()          # 单页耗时起点
+                lines = ocr_image(img)
+                chunks.append(f'--- 第 {i + 1} 页 ---')  # 加一个分页标记，方便看结果
+                # extend 把另一个列表的元素「逐个」加进来；
+                # append 则是把整个列表当成「一个」元素塞进去 —— 初学者很容易混。
+                chunks.extend(lines)
+                print(f'>> 第 {i + 1}/{len(images)} 页 OCR 完成：{len(lines)} 行，'
+                      f'{time.perf_counter() - t1:.2f}s')
+                # TODO 3：扫描件分支用 PP-StructureV3 还原表格结构
+                if ENABLE_TABLE:
+                    info = table_ocr_page(img, i)
+                    tables.append(info)
+                    # 这里又是一个三元表达式：有 HTML 就追加路径提示，没有就追加空字符串。
+                    # 外层 f-string 用单引号，里面取字典键用双引号，两种引号不冲突。
+                    print(f'   表格识别：{info["table_count"]} 个表格块'
+                          + (f'，HTML → {info["html"]}' if info['html'] else ''))
+        finally:
+            cleanup_temp_images(images)
         text = '\n'.join(chunks)              # 把所有行用换行符连成一整篇文本
         mode, scope = 'ocr', 'visible_cropbox'
 
@@ -465,8 +512,8 @@ def main():
 #
 # 所以 `if __name__ == '__main__':` 的意思是「只有直接运行本文件时才调用 main()」。
 # 好处：别的文件可以安全地 import 本文件的函数复用，不会顺带把整条流水线跑一遍。
-# 对比一下 d_table_ocr.py：它的可执行代码写在模块顶层，一 import 就会立刻开始识别，
-# 所以本文件的 table_ocr_page() 才不能直接 import 它。
+# week-01 的 b_ocr_image.py / d_table_ocr.py 现在也都加了这个守卫，
+# 所以以后想复用 `from d_table_ocr import ensure_readable_html` 之类是安全的。
 # ---------------------------------------------------------------------------
 if __name__ == '__main__':
     main()

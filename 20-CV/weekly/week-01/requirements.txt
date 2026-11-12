@@ -6,6 +6,8 @@
 #   三者版本强相关，随意升级任意一个都可能不兼容，故全部锁死。
 #   - pymupdf 锁 1.28.2（1.x 末版）；2.0 是刚发布的新大版本，暂不使用。
 #   - matplotlib 锁 3.10.9：本环境是 Python 3.10，matplotlib 3.11.x 要求 Python>=3.11 装不上。
+#   - pillow 是 paddleocr 的传递依赖（装 paddleocr 时会带上），b_ocr_image.py 画识别框要用；
+#     这里显式锁版本，避免以后换环境时漏装。
 #   - 若以后换 GPU 版：把 paddlepaddle 换成同版本 paddlepaddle-gpu（二者互斥，只留一个）。
 paddlepaddle==3.2.0
 paddlex==3.7.2
@@ -13,3 +15,4 @@ paddleocr==3.7.0
 pdfplumber==0.11.10
 pymupdf==1.28.2
 matplotlib==3.10.9
+pillow==12.3.0

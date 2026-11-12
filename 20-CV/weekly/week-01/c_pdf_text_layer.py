@@ -4,6 +4,7 @@
 核心思想（工程思维）：能直接抽字的 PDF 根本不用 OCR。先判断，省一大半事。
 
 用法（在 week-01 目录下）：
+    conda activate paddle
     python c_pdf_text_layer.py                    # 用配置区 INPUT_PDF 指定的文件
     python c_pdf_text_layer.py input/你的.pdf      # 命令行临时指定（优先级高于 INPUT_PDF）
 
@@ -35,7 +36,12 @@ import pymupdf  # PyMuPDF 新导入名（不再用已弃用的 fitz）
 
 
 def has_text_layer(pdf_path, sample_pages=SAMPLE_PAGES):
-    """前几页能抽到足够文字 = 有文本层，不用 OCR。返回 (bool, 预览文本)。"""
+    """
+    前几页能抽到足够文字 = 有文本层，不用 OCR。
+
+    返回三个值（元组）：(是否有文本层, 前 200 字预览, 总页数)。
+    调用处写 ok, preview, page_count = has_text_layer(...) 分别接住。
+    """
     with pdfplumber.open(pdf_path) as pdf:
         page_count = len(pdf.pages)
         text = ''.join((p.extract_text() or '') for p in pdf.pages[:sample_pages])
@@ -43,9 +49,16 @@ def has_text_layer(pdf_path, sample_pages=SAMPLE_PAGES):
 
 
 def extract_text(pdf_path):
-    """有文本层：直接抽全文（逐页拼接）。"""
+    """
+    有文本层：直接抽全文（逐页拼接）。
+
+    顺便返回每页的字符数列表，让「为什么判成有/无文本层」看得见：
+    如果某几页是 0、另一些页很多字，就是混合型 PDF（部分页有文本层、
+    部分是扫描图），整份文件给一个结论会漏字。
+    """
     with pdfplumber.open(pdf_path) as pdf:
-        return '\n'.join((p.extract_text() or '') for p in pdf.pages)
+        parts = [(p.extract_text() or '') for p in pdf.pages]
+    return '\n'.join(parts), [len(s.strip()) for s in parts]
 
 
 def pdf_to_images(pdf_path, dpi=DPI, out_dir=OUT_DIR):
@@ -95,8 +108,16 @@ def main():
     # ---- 2) 分流 ----
     if ok:
         print('>> 有文本层 → 直接抽字即可（不用 OCR，又快又准）')
-        text = extract_text(pdf_path)
+        text, per_page = extract_text(pdf_path)
         t2 = time.perf_counter()
+
+        # 打印每页字符数：一眼看出判断依据，也能发现「部分页是扫描图」的混合型 PDF
+        head = per_page[:8]
+        tail = ' …' if len(per_page) > 8 else ''
+        print(f'>> 逐页字符数：{head}{tail}（共 {len(per_page)} 页，阈值 {MIN_CHARS}）')
+        if per_page and min(per_page) < MIN_CHARS // 10 < max(per_page):
+            print('>> 注意：各页字数差异很大，可能是混合型 PDF（有的页是扫描图）。'
+                  '本脚本按整份文件只给一个结论，这些页的文字会被漏掉。')
 
         # 产物落盘，符合"产物放 output/"的约定
         os.makedirs(OUT_DIR, exist_ok=True)
@@ -108,7 +129,8 @@ def main():
         print(f'>> 抽取耗时：{t2 - t1:.2f}s；共 {len(text)} 个字符')
         print(f'>> 全文已保存：{out_txt}')
         print('>> 前 200 字预览：')
-        print(preview if preview.strip() else '(空)')
+        # 预览里的换行会刷屏并打乱日志，先压成空格
+        print(' '.join(preview.split()) if preview.strip() else '(空)')
         print(f'>> 总耗时：{t2 - t0:.2f}s')
     else:
         print('>> 扫描件/图片型（无文本层）→ 需要 OCR，正在转图片…')
@@ -116,7 +138,7 @@ def main():
         t2 = time.perf_counter()
         print(f'>> 转图耗时：{t2 - t1:.2f}s；共生成 {len(imgs)} 张')
         print(f'>> 总耗时：{t2 - t0:.2f}s')
-        print(f'>> 下一步：对 {OUT_DIR}/ 下每张 page_*.png 跑 b_ocr_image.py，例如')
+        print(f'>> 下一步：对 {OUT_DIR}/ 下每张 c_page_*.png 跑 b_ocr_image.py，例如')
         print(f'   python b_ocr_image.py {imgs[0]}' if imgs else '   （没有页面可转）')
 
 

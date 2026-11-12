@@ -6,11 +6,12 @@
 > （含：本机环境与版本锁定、paddle/paddlex/paddleocr 三层架构、性能对比、
 > 3.x API 的 4 个坑、PDF 的 MediaBox/CropBox 专题、bad case 素材）
 > 📌 2026-11-09 补：`weekend_pipeline.py` 三个 TODO 已完成，并补了面向初学者的详细注释。
+> 📌 2026-11-12 补：四个脚本做了一轮工程优化，见文末「2026-11-12 优化记录」。
 
 ## 我跑通了什么
 - ✅ 环境：miniforge 环境名 `paddle`（`conda activate paddle`），Python 3.10.9，`requirements.txt` 全锁版本
-- ✅ `b_ocr_image.py`：test2.jpg 识别 20 行，置信度 0.88~1.00（换 mobile 模型后 5.8~12.4s）
-- ✅ `c_pdf_text_layer.py`：test3.pdf 0.34s 抽出 2054 字符；转图分支可用
+- ✅ `b_ocr_image.py`：test2.jpg 识别 20 行，置信度 0.88~1.00（换 mobile 模型后 5.8~12.4s）；2026-11-12 起额外产出带框 PNG + 离线 HTML 对照报告
+- ✅ `c_pdf_text_layer.py`：test3.pdf 0.34s 抽出 2054 字符；转图分支可用；新增逐页字符数概览
 - ✅ `d_table_ocr.py`：test2.jpg → 4 个内容块 + 表格 HTML（乱码已修）
 - ✅ `weekend_pipeline.py`：三个 TODO 补全；默认 `test3.pdf` 跑通 →
   `mode=text_layer`、1 页、2054 字符、0.53s，输出 `output/output.json` + `pipeline_result.txt`
@@ -36,6 +37,29 @@
 - 检测（det）回答「字在哪」→ `rec_polys` 四点框；识别（rec）回答「是什么字」→ `rec_texts` + `rec_scores`。两步是两个独立模型，串起来才是一行结果，所以「漏检」和「认错」是两类不同的失败。
 - 表格不是普通 OCR 能做的：还要版面检测 + 表格分类 + 结构识别 + 单元格检测，所以走 `PPStructureV3` 多模型产线，慢得多。
 - OCR 是「像素 → 文字」的有损重建；PDF 有文本层时直接抽字又快又准，所以工程上先分流再决定要不要动用模型。
+
+## 2026-11-12 优化记录（四个脚本）
+
+- **可复用性**：`b_ocr_image.py`、`d_table_ocr.py` 原来是「脚本式写法」，所有代码在模块顶层，
+  一 `import` 就会立刻跑一遍识别。现在都收进 `main()` + `if __name__ == '__main__':` 守卫，
+  并把 `paddleocr` 的 import 挪进构造函数里做懒加载 —— 被 import 时不再加载几秒的模型。
+- **消除警告**：显式指定 `*_model_name` 时 3.7.0 会忽略 `lang` 并打印警告，
+  三个用到 PaddleOCR 的脚本都删掉了 `lang='ch'`。
+- **统一模型源**：`b` 补上了 `PADDLE_PDX_MODEL_SOURCE=BOS` 等两行环境变量
+  （必须在 import 前设置），换模型时不会再卡 HuggingFace。
+- **坐标基准（重要）**：`b` 默认关闭 `use_doc_orientation_classify` / `use_doc_unwarping`，
+  因为要把 `rec_polys` 画回原图；`weekend_pipeline.py` **保留默认开启**，
+  它只取文字不画框，UVDoc 对亮字暗底的图识别更好。这是两种场景的不同取舍，别统一。
+- **结果呈现**：`b` 原先取了 `boxes` 却从未使用（死代码）。现在用它生成
+  `output/b_ocr_boxes.png` + 自包含的 `output/b_ocr_report.html`（图片 base64 内嵌，
+  单独拷走 HTML 也能显示）；低置信度行标橙红。
+- **真 bug**：`d` 用 `os.makedirs('output')` 写死目录，把 `OUT_HTML` 改到别处会报错；
+  多结果时 `save_to_html` 还会互相覆盖；静默把缺失输入换成 `test2.jpg` 也容易误导。三处都已修。
+- **文档一致性**：`c` 的 `has_text_layer()` 实际返回 3 个值，docstring 却写 2 个；
+  新增逐页字符数概览，能看出混合型 PDF。README 里 `conda activate ocr`、
+  2.x 的 `.ocr(cls=True)` 示例、默认 PDF 与产物文件名也都同步成本机实际值。
+- **流水线收尾**：`weekend_pipeline.py` 的 OCR 分支跑完会自动删掉中间页图
+  （配置区 `KEEP_TEMP_IMAGES` 可关），`cropbox_is_limited()` 遇到损坏 PDF 不再让主流程崩掉。
 
 ## 疑问（留着后面阶段解答）
 - 为什么亮字暗底会几乎全军覆没？检测阶段到底在看什么特征？（week-02 反色实验 / P4）

@@ -42,18 +42,18 @@
 **概念清单**：conda/venv 虚拟环境的作用（隔离依赖）、Python 版本、GPU 与 CUDA 的关系（本周只需知道"有没有 GPU"）。
 
 **怎么学 / 动手**：
-1. 装 Miniconda（比 Anaconda 轻）：官网 https://docs.conda.io/en/latest/miniconda.html
-2. 建环境：
+1. 装 Miniforge（比 Anaconda 轻，自带 conda）：官网 https://docs.conda.io/en/latest/miniconda.html
+2. 建环境（**本机环境名就是 `paddle`，已装好，直接激活即可**）：
    ```bash
-   conda create -n ocr python=3.10 -y
-   conda activate ocr
-   python --version   # 确认
+   conda create -n paddle python=3.10 -y   # 已经建过就跳过这行
+   conda activate paddle
+   python --version   # 3.10.9
    ```
 3. **算力二选一**：
    - **有本地 NVIDIA 显卡**：本周先只用 CPU 也能跑 PaddleOCR，GPU 留到 P1 装 PyTorch 时再配。
    - **没有显卡**：注册云算力——AutoDL（https://www.autodl.com ，国内快、按小时租 GPU）或 Google Colab（https://colab.research.google.com ，免费 T4）。本周 CPU 足够，云 GPU 主要为 P1 之后准备。
 
-**产出**：`conda activate ocr` 能进环境，`python` 能跑。
+**产出**：`conda activate paddle` 能进环境，`python` 能跑。
 
 ---
 
@@ -62,28 +62,37 @@
 **概念清单**：OCR = 文字检测（找文字在哪）+ 文字识别（把文字读出来）；PaddleOCR 是百度开源的工业级 OCR，开箱即用。本周**当黑盒 API 用即可**，原理留到 P4。
 
 **怎么学 / 动手**：
-1. 安装：
+1. 安装（**用锁好版本的 `requirements.txt`**，别直接 `pip install paddleocr`——不带版本会顺手升级，破坏本机已验证的 `paddlepaddle 3.2.0 / paddlex 3.7.2 / paddleocr 3.7.0` 配套）：
    ```bash
-   pip install paddlepaddle        # CPU 版；有 GPU 后续再换 paddlepaddle-gpu
-   pip install paddleocr
+   conda activate paddle
+   python -m pip install -r requirements.txt
    ```
 2. 跑通第一张图（直接运行目录里已备好的 `b_ocr_image.py`，本周脚手架，无需自建）：
+   ```bash
+   python b_ocr_image.py                      # 默认识别 input/test2.jpg
+   python b_ocr_image.py input/你的图片.png     # 临时换一张图
+   ```
+   脚本里的核心写法（已按本机 3.7.0 实跑校正）：
    ```python
    from paddleocr import PaddleOCR
 
-   # lang='ch' 中英混合；use_angle_cls=True 自动摆正倾斜文字
-   ocr = PaddleOCR(use_angle_cls=True, lang='ch')
-   result = ocr.ocr('input/test.png', cls=True)
-
-   for line in result[0]:
-       box, (text, conf) = line      # box=四点坐标, text=识别文字, conf=置信度
-       print(f'{text}  置信度={conf:.2f}')
+   ocr = PaddleOCR(
+       text_detection_model_name='PP-OCRv4_mobile_det',   # 本地已缓存，免下载
+       text_recognition_model_name='PP-OCRv4_mobile_rec',
+       use_textline_orientation=True,   # 3.x 名称，替代已废弃的 use_angle_cls
+       # 显式指定模型名时不要传 lang，否则 3.7.0 会打印「will be ignored」警告
+       use_doc_orientation_classify=False,   # 关掉文档预处理，识别框坐标才对齐原图
+       use_doc_unwarping=False,
+   )
+   for res in ocr.predict('input/test2.jpg'):   # 3.x 用 predict()
+       for text, conf in zip(res['rec_texts'], res['rec_scores']):
+           print(f'{text}  置信度={conf:.2f}')
    ```
-3. 找一张含中文的截图/照片，放到 `input/` 目录命名 `test.png`，运行，看到文字被读出来即成功。
+3. 找一张含中文的截图/照片放进 `input/`，改脚本顶部的 `INPUT_IMAGE` 或用命令行传路径，看到文字被读出来即成功。
 
-> ⚠️ **版本提示**：PaddleOCR 3.x 把 `.ocr()` 改成了 `.predict()`，返回结构也略有不同。若上面代码报错，去官方仓库看当前版本的 Quickstart：https://github.com/PaddlePaddle/PaddleOCR （README 顶部有最新用法）。**以官方 README 为准。**
+> ⚠️ **版本提示**：3.x 把 `.ocr(cls=True)` 改成 `.predict()`，结果从「三层嵌套列表」变成 dict 风格的 `rec_texts / rec_scores / rec_polys`；`use_angle_cls`、`PPStructure`、`import fitz` 也都换了名字。另外**默认开启的 UVDoc 去扭曲会让坐标基于矫正后图像**，要把识别框画回原图必须关掉上面那两项。换版本仍以官方 Quickstart 为准：https://github.com/PaddlePaddle/PaddleOCR
 
-**产出**：命令行打印出图片里的文字 + 置信度。
+**产出**：`output/b_ocr_result.txt`（文字 + 置信度）、`output/b_ocr_boxes.png`（原图叠加识别框）、`output/b_ocr_report.html`（左图右文字的离线对照报告，浏览器直接打开）。**原图有字却没框的地方就是漏检**，比只看文本直观得多；不想要可视化就把配置区 `MAKE_VIS` 改成 `False`。
 
 ---
 
@@ -91,7 +100,7 @@
 
 **为什么要学**：**能直接抽文字的 PDF 根本不用 OCR**。先判断，能省一大半事，这是工程思维（你的强项）。
 
-**怎么学 / 动手**：装库 `pip install pdfplumber pymupdf`，跑这段判断逻辑（已备好为 `c_pdf_text_layer.py`，`python c_pdf_text_layer.py` 默认跑 `input/test3.pdf`，也可传路径 `python c_pdf_text_layer.py input/别的.pdf`）：
+**怎么学 / 动手**：装库 `python -m pip install pdfplumber pymupdf`，跑这段判断逻辑（已备好为 `c_pdf_text_layer.py`）。配置区 `INPUT_PDF` 默认是 `input/test3_image.pdf`（扫描件，会走"转图"分支）；**想看"直接抽字"有多快，把它改成 `input/test3.pdf`**，或用命令行临时指定：`python c_pdf_text_layer.py input/test3.pdf`。
 ```python
 import pdfplumber
 
@@ -116,7 +125,7 @@ print("预览：", preview)
   doc.close()
   ```
 
-**产出**：一个能判断"该不该 OCR"的函数，并把一个扫描 PDF 转成图片。
+**产出**：一个能判断"该不该 OCR"的函数，并把一个扫描 PDF 转成图片。脚本还会打印**逐页字符数**，让判断依据看得见；若各页字数差异极大，会提示这可能是「部分页有文本层、部分页是扫描图」的混合型 PDF（整份文件只给一个结论会漏字，这个坑留到以后逐页分流解决）。
 
 ---
 
@@ -135,13 +144,13 @@ engine = PPStructureV3(
 )
 result = engine.predict('input/test2.jpg')   # 3.x 用 predict()，返回 list[结果对象]
 res = result[0]
-res.save_to_html('output/table_out.html')    # 表格会还原成 <table>
+res.save_to_html('output/d_table_out.html')  # 表格会还原成 <table>
 for b in res.json['res']['parsing_res_list']:
     print(b['block_label'], str(b['block_content'])[:50])   # header / text / table ...
 ```
 > 表格识别是**多模型流水线**（版面检测 + 表格分类 + 结构识别 + 单元格检测），首次运行要下模型；脚本里已切到百度云 BOS 源，避免卡 HuggingFace。本周**跑通一个表格→HTML**即可，不追求完美。
 
-**产出**：把一张表格图片转成 HTML，用浏览器打开看到还原的表格。（代码已备好为 `d_table_ocr.py`，`python d_table_ocr.py` 直接跑，输出 `table_out.html`。）
+**产出**：把一张表格图片转成 HTML，用浏览器打开看到还原的表格。（代码已备好为 `d_table_ocr.py`，`python d_table_ocr.py` 直接跑，输出配置区 `OUT_HTML` 指定的 `output/d_table_out.html`。脚本会自动补 `<meta charset="utf-8">`，中文不会乱码。）
 
 ---
 
@@ -157,7 +166,7 @@ for b in res.json['res']['parsing_res_list']:
 
 ### 周末 · 串成 pipeline + bad case 库雏形（4-6h）
 
-1. **串脚本**：把模块 B/C/D 合起来——`输入一个 PDF → 判断有无文本层 → 有则抽字/无则转图 OCR → 表格走 PP-Structure → 输出一个结构化 txt/json`。这是你**第一个能拿出手的小工具**。（脚手架 `weekend_pipeline.py` 已留 TODO，照注释补全即可。）输入统一放 `input/`，产物统一放 `output/`，目录已建好。
+1. **串脚本**：把模块 B/C/D 合起来——`输入一个 PDF → 判断有无文本层 → 有则抽字/无则转图 OCR → 表格走 PP-Structure → 输出一个结构化 txt/json`。这是你**第一个能拿出手的小工具**。（`weekend_pipeline.py` 三个 TODO 已补全，并补了面向初学者的逐行注释；直接 `python weekend_pipeline.py` 即可跑，OCR 分支的中间页图用完会自动清理，想留着核对就把配置区 `KEEP_TEMP_IMAGES` 改成 `True`。）输入统一放 `input/`，产物统一放 `output/`，目录已建好。
 2. **bad case 库雏形**：建一个文件夹 `bad_cases/`，把你跑的过程中**识别错、识别不全、模糊/倾斜/反光**的样本图存进去，附一个 `notes.md` 记"这张为什么失败"。**这是第 2 周和 P4 的宝贵素材，现在就开始攒。**
 
 ---
@@ -166,7 +175,7 @@ for b in res.json['res']['parsing_res_list']:
 
 | 用途 | 链接 |
 |---|---|
-| Miniconda 安装 | https://docs.conda.io/en/latest/miniconda.html |
+| Miniforge 安装 | https://docs.conda.io/en/latest/miniconda.html |
 | PaddleOCR 仓库（含 Quickstart） | https://github.com/PaddlePaddle/PaddleOCR |
 | pdfplumber | https://github.com/jsvine/pdfplumber |
 | PyMuPDF 文档 | https://pymupdf.readthedocs.io/ |
@@ -178,7 +187,7 @@ for b in res.json['res']['parsing_res_list']:
 
 ## 验收清单（周末打勾）
 
-- [ ] `conda activate ocr` 能进环境
+- [ ] `conda activate paddle` 能进环境
 - [ ] PaddleOCR 对一张中文图片输出正确文字 + 置信度
 - [ ] 能判断一个 PDF 有没有文本层，并对扫描件转图
 - [ ] 一张表格图片 → HTML，浏览器打开看到还原表格
@@ -191,8 +200,11 @@ for b in res.json['res']['parsing_res_list']:
 ## 常见坑 & 卡住怎么办
 
 - **装 PaddleOCR 报错/依赖冲突**：确认用的是干净的 conda 环境（Python 3.10 较稳）；还报错就贴报错信息问 AI，或去仓库 Issues 搜。**卡超 2h 先用 CPU 版跑通再说。**
-- **`.ocr()` 方法不存在**：你装的是 3.x，改用 `.predict()`，以官方 README 为准。
-- **首次运行自动下载模型很慢/失败**：多试一次，或看仓库文档手动指定模型路径。
+- **`.ocr()` 方法不存在**：你装的是 3.x，改用 `.predict()`；`use_angle_cls` → `use_textline_orientation`、`PPStructure` → `PPStructureV3`、`import fitz` → `import pymupdf`。
+- **首次运行自动下载模型很慢/失败**：默认 PP-OCRv6 会从 HuggingFace 拉，国内常卡住。脚本已显式指定本地缓存的 `PP-OCRv4_mobile_*`，并在 import 前设好 `PADDLE_PDX_MODEL_SOURCE=BOS`；换模型时记得这两行不能删。
+- **识别框没套住文字（整体错位）**：3.7.0 默认做整页方向分类 + UVDoc 去扭曲，`rec_polys` 是**矫正后图像**的坐标。要画回原图必须构造时加 `use_doc_orientation_classify=False, use_doc_unwarping=False`；只取文字、不画框时可以保留默认（部分图反而更准）。
+- **日志里出现 `lang / ocr_version will be ignored` 警告**：显式指定 `*_model_name` 时不要再传 `lang`，语言能力由所选识别模型决定。
+- **HTML 打开中文乱码**：paddlex `save_to_html()` 写的是 UTF-8 但没有 `<meta charset>`，浏览器按 GBK 解码。脚本里的 `ensure_readable_html()` 会补完整 HTML 骨架，别删。
 - **PDF 抽字是乱码/空**：说明是扫描件（无文本层），走模块 C 的转图 OCR 分支。
 - **没有 GPU 焦虑**：本周 CPU 完全够用，GPU 是 P1 装 PyTorch 时才必需，届时用云算力也行。
 
