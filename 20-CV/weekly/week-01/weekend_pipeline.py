@@ -62,13 +62,15 @@ prepare_temp_dir() 清掉旧页图，避免新旧两套编号混在一个目录�
 【历史】三个 TODO 已补全（11-09）：
     TODO 1 判断有无文本层 → 有则 pdfplumber 直接抽字，无则转图逐页 OCR
     TODO 2 结果写成 JSON（另存一份纯文本方便看全文）
-    TODO 3 进阶表格识别：文本层用 pdfplumber，扫描件用 PP-StructureV3
+    TODO 3 进阶表格识别：文本层用 pdfplumber（含策略回退），扫描件用 PP-StructureV3
 11-13 改进：改成批量扫描 input/、每个 case 独立输出目录、支持图片和 CSV/TXT；
       再把全仓输出统一为「output/<脚本名>/<输入名>/」两层隔离，中间页图单独一层。
 11-13 再改：OCR 临时页图跑完保留供核对，重跑该 case 时先清空旧图再生成新图，
       避免新旧页图混在一起（去掉了「跑完自动删」和 KEEP_TEMP_IMAGES 开关）。
 11-13 再改：全仓页码统一从 1 起（原先日志 1 起、JSON/文件名 0 起，容易误读），
       页图、表格 HTML、page 字段、日志全部对齐；重跑前清掉旧编号的表格 HTML。
+11-13 再改：文本层表格改成「诊断线型 → 配置区 TABLE_STRATEGIES 策略回退 →
+      清洗 + 填充率打分 → 全失败时明确提示」，修掉 test3.pdf 静默抽到 0 张表。
 
 run(输入路径) 返回一个 dict（字典，含 mode / text / pages / elapsed / tables 等键），
 同时把结果落盘；run_batch() 负责把它们串起来并写汇总表。
@@ -119,6 +121,28 @@ MIN_CHARS = 50                                  # 前几页抽到超过这么多
 SAMPLE_PAGES = 3                                # 只检查前几页，避免大 PDF 判断太慢
 ENABLE_TABLE = True                             # 表格识别开关（布尔值）。OCR 分支每页约 +20s，
                                                 # 批量跑全部 case 会比较久，只想快速看文字就改 False
+
+# ↓ TODO 3 进阶：有文本层 PDF 的表格策略（按元组顺序逐个尝试，抽到就停）
+#   None     = pdfplumber 默认策略，依赖完整网格线
+#   'lines'  = lattice 型：靠横竖矢量线切行列
+#   'text'   = stream 型：靠文字对齐猜列（只有横线 / 完全无线时用）
+#   本仓 input/test3.pdf 有 208 条横线、0 条竖线，默认和 lines 都抽不到表，
+#   必须回退到 text —— 这就是「有文本层 ≠ 抽得到表格」的典型例子。
+#   不想做回退就把元组改成 (None,)，行为退回旧版。
+TABLE_STRATEGIES = (None, 'lines', 'text')
+TABLE_MIN_FILL_RATIO = 0.20                     # 非空单元格占比低于它 → 打「低置信度」提示
+
+# ↓ 坐标级兜底（L2）：给「固定版式」的 PDF 人工标定列边界，优先级高于上面三个策略。
+#   键 = 输入文件名，值 = 每列左边缘的 x 坐标（pt），最后再加一条表格右边界。
+#   test3.pdf 这组是实测标定的，能把 8 列表头完整拆开：
+#   ['交易日期','借','贷','余额','摘要','收(付)方名称','收(付)方账号','交易类型']。
+#   自动聚类（按 words 的 x0 出现频率）在这份文件上会把页眉混进来，反而更差，
+#   所以固定版式用「人工模板 + 坐标」最稳，这也是生产里的常见做法。
+#   【换文件请删掉或改掉这一项】坐标和版式绑定，别的 PDF 用了会拆错列。
+#   不需要就把字典清空：TABLE_COLUMN_LINES = {}
+TABLE_COLUMN_LINES = {
+    'test3.pdf': [17, 112, 175, 265, 326, 393, 463, 532, 578],
+}
 # ==========================================================================
 
 
@@ -413,26 +437,140 @@ def cropbox_is_limited(pdf_path):
 
 
 # ---------------------------------------------------------------- TODO 3 --
+def build_table_settings(strategy, column_lines=None):
+    """
+    把策略名翻译成 pdfplumber 认识的 table_settings 字典。
+
+    pdfplumber 默认按「网格线」找表格：竖线负责切列，横线负责切行。
+    可现实里很多表格（银行流水、对账单）只画横线、不画竖线，
+    列是靠文字左对齐/右对齐排出来的 —— 这时必须改成 'text' 策略，
+    让它按字符的 x 坐标聚类去猜列边界。
+    返回空字典 {} 表示「什么都不传，用 pdfplumber 自己的默认值」。
+    """
+    if strategy == 'explicit' and column_lines:
+        # 人工给定竖线：pdfplumber 不再自己找线，行仍按文字聚类切。
+        return {'vertical_strategy': 'explicit',
+                'explicit_vertical_lines': column_lines,
+                'horizontal_strategy': 'text'}
+    if strategy == 'lines':
+        return {'vertical_strategy': 'lines', 'horizontal_strategy': 'lines'}
+    if strategy == 'text':
+        return {'vertical_strategy': 'text', 'horizontal_strategy': 'text'}
+    return {}      # None / 其它值 → 默认策略
+
+
+def clean_table(table):
+    """
+    清洗一张表：丢全空行、丢全空列、把长短不一的行补齐，再算一个「填充率」。
+
+    填充率 = 非空单元格数 / 总单元格数。text 策略常抽出一堆空行空列，
+    填充率偏低就说明这份结果大概率列错位了，值得人工核对（不阻断流程）。
+
+    返回 (清洗后的 rows, 质量信息 dict)，这叫「一次 return 返回两个值」。
+    【注意】质量信息里**绝对不能有 'table_count' 这个键**：
+      count_tables() 靠它区分「文本层的一张表」和「OCR 的一页检查记录」，
+      加错了会把汇总表的表格数算错。
+    """
+    rows = []
+    for row in table or []:
+        # 单元格可能是 None（空），统一转成字符串并去掉首尾空白
+        rows.append([('' if c is None else str(c)).strip() for c in row])
+    rows = [r for r in rows if any(c for c in r)]      # 丢全空行
+    if not rows:
+        return [], {}
+    width = max(len(r) for r in rows)
+    # 补齐短行，保证后面能用 r[j] 按列号安全取值
+    rows = [r + [''] * (width - len(r)) for r in rows]
+    # 只保留「至少有一个非空值」的列，丢掉全空列
+    keep = [j for j in range(width) if any(r[j] for r in rows)]
+    rows = [[r[j] for j in keep] for r in rows]
+    total = len(rows) * len(rows[0]) if rows[0] else 0
+    filled = sum(1 for r in rows for c in r if c)
+    ratio = round(filled / total, 3) if total else 0.0
+    info = {
+        'n_rows': len(rows),
+        'n_cols': len(rows[0]) if rows else 0,
+        'fill_ratio': ratio,
+        'low_confidence': ratio < TABLE_MIN_FILL_RATIO,
+    }
+    return rows, info
+
+
+def table_strategies_for(pdf_path):
+    """
+    决定这次用哪些策略、按什么顺序试。
+
+    命中 TABLE_COLUMN_LINES 模板时，把 'explicit' 插到最前面（人工坐标最可靠）；
+    没命中就按配置区 TABLE_STRATEGIES 原样回退。
+    os.path.basename() 只取文件名，这样 input/test3.pdf 和 test3.pdf 都能匹配上。
+    返回 (策略元组, 列边界列表或 None)，又是一次「返回两个值」。
+    """
+    lines = TABLE_COLUMN_LINES.get(os.path.basename(pdf_path))
+    if lines:
+        return ('explicit',) + tuple(TABLE_STRATEGIES), lines
+    return tuple(TABLE_STRATEGIES), None
+
+
 def extract_tables_text_layer(pdf_path):
-    """有文本层时直接用 pdfplumber 抽表格：快，且完全不需要加载模型。"""
+    """
+    有文本层时直接用 pdfplumber 抽表格：快，且完全不需要加载模型。
+
+    11-13 改进（原来只调一次默认 extract_tables，抽不到就静默返回 0）：
+      1) 先诊断页面线型（横线 / 竖线各几条），日志里能看出该走 lattice 还是 stream；
+      2) 命中 TABLE_COLUMN_LINES 模板时优先用人工坐标（explicit），
+         否则按 TABLE_STRATEGIES 逐个回退，第一个抽到表的策略就采用；
+      3) 抽到的表统一清洗，并记下策略名、行列数、填充率；
+      4) 所有策略都失败时**明确打印排查建议**，不再静默跳过。
+    返回结构仍是「一条记录 = 一张表」，和 CSV 分支一致，count_tables() 不用改。
+    """
+    strategies, column_lines = table_strategies_for(pdf_path)
+    if column_lines:
+        print(f'>> 命中列边界模板（{len(column_lines)} 条竖线）→ explicit 策略优先')
     found = []
     with pdfplumber.open(pdf_path) as pdf:
-        # 全仓统一：页码从 1 起（和 PDF 阅读器一致），不再用 0 起的索引。
-        for i, page in enumerate(pdf.pages, 1):
+        for page_no, page in enumerate(pdf.pages, 1):   # 页码 1 起，全仓统一
+            # page.edges 是 pdfplumber 从 lines / rects / curves 派生出来的所有边。
+            # 竖边满足 x0 ≈ x1；用它判断「有没有竖线可以切列」。
             try:
-                # extract_tables() 返回「表格的列表」，每个表格又是「行的列表」，
-                # 每行还是「单元格的列表」，所以是嵌套了三层的列表结构。
-                # 后面 `or []` 保证拿不到结果时至少是个空列表，可以安全地 for 遍历。
-                tables = page.extract_tables() or []
-            except Exception as e:
-                # try / except：try 块里出错不会让整个程序崩溃，而是跳到这里处理。
-                # Exception 是绝大多数常见异常的父类；`as e` 把错误对象存进变量 e。
-                print(f'>> 第 {i} 页表格抽取失败，已跳过：{e}')
-                continue   # 跳过本页剩下的代码，直接进入下一轮 for 循环
-            for table in tables:
-                # {'键': 值} 是字典(dict)，以后用 `记录['page']` 按键取值。
-                # 这里组装一条表格记录，再 append 进总列表。
-                found.append({'page': i, 'source': 'pdfplumber', 'rows': table})
+                edges = page.edges
+                vertical = sum(1 for e in edges if abs(e['x0'] - e['x1']) < 1)
+                horizontal = len(edges) - vertical
+                hint = '（无竖线，默认策略通常抽不到表）' if vertical == 0 else ''
+                print(f'>> 第 {page_no} 页线型：横线 {horizontal} / 竖线 {vertical} {hint}')
+            except Exception:
+                # 诊断只是辅助信息，个别 PDF 取不到 edges 不该影响主流程
+                print(f'>> 第 {page_no} 页线型诊断不可用，继续按策略回退')
+
+            picked = None
+            for strategy in strategies:
+                label = strategy or 'default'      # None 时 or 会取右边的 'default'
+                settings = build_table_settings(strategy, column_lines)
+                try:
+                    # 空字典时不要传参，让 pdfplumber 用它自己的默认设置
+                    if settings:
+                        raw = page.extract_tables(table_settings=settings)
+                    else:
+                        raw = page.extract_tables()
+                    raw = raw or []          # 抽不到时可能是 None，换成空列表好遍历
+                except Exception as e:
+                    print(f'   第 {page_no} 页 {label} 策略出错，换下一个：{e}')
+                    continue
+                cleaned = [clean_table(t) for t in raw]
+                cleaned = [item for item in cleaned if item[0]]   # 丢掉清洗后空掉的表
+                if cleaned:
+                    picked = label
+                    for rows, info in cleaned:
+                        record = {'page': page_no, 'source': 'pdfplumber',
+                                  'strategy': label, 'rows': rows}
+                        record.update(info)   # 把 n_rows / n_cols / 填充率合并进来
+                        found.append(record)
+                    print(f'   第 {page_no} 页 {label} 策略 → {len(cleaned)} 张表')
+                    break                  # 抽到就停，不再试后面的策略
+                print(f'   第 {page_no} 页 {label} 策略 → 0 张表，继续回退')
+            if not picked:
+                print(f'>> 第 {page_no} 页所有策略都没抽到表格（不静默跳过）：'
+                      f'表格可能是贴图或版式特殊，建议做坐标级兜底，'
+                      f'或只把这一页转图走表格结构模型')
     return found
 
 
@@ -699,10 +837,20 @@ def run(input_path, out_dir=None):
                 # 字符串可以分成两行写，Python 会自动拼接（相邻字面量拼接）。
                 print('>> 注意：该 PDF 有 CropBox 裁剪，抽到的是全部内容流，'
                       '可能包含打开时看不到的文字')
-            # TODO 3：文本层分支用 pdfplumber 抽表格，不需要模型
+            # TODO 3：文本层分支用 pdfplumber 抽表格，按线型做策略回退，不需要模型
             if ENABLE_TABLE:
                 tables = extract_tables_text_layer(input_path)
-                print(f'>> 表格抽取：{len(tables)} 个表格（pdfplumber）')
+                print(f'>> 表格抽取：{len(tables)} 个表格（pdfplumber 策略回退）')
+                for t in tables:
+                    if t['strategy'] == 'text':
+                        note = ' ← text 靠对齐猜列，可能合并/错列，建议人工核对'
+                    elif t['low_confidence']:
+                        note = ' ← 填充率偏低，建议人工核对'
+                    else:
+                        note = ''
+                    print(f'   第 {t["page"]} 页 / {t["strategy"]} 策略 / '
+                          f'{t["n_rows"]}×{t["n_cols"]} / 填充率 {t["fill_ratio"]}'
+                          + note)
         else:
             # TODO 1：无文本层 → 转图，逐页 OCR 后汇总
             print('>> 无文本层（扫描件）→ 转图后逐页 OCR')

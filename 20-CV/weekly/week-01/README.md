@@ -199,6 +199,14 @@ for b in res.json['res']['parsing_res_list']:
    **页码基准（全仓统一，11-13 定稿）：一律从 1 起，和 PDF 阅读器一致。** PDF 第 2 页的表格 → `pipeline_table_p2.html` / `d_table_out_2.html` / `output.json` 里 `"page": 2` / 日志「第 2 页」/ 页图 `_tmp_page_2.png` / `c_page_2.png`，全部对齐，不再需要 `+1` 换算。重跑时脚本会先清掉旧编号的表格 HTML 和旧页图，避免新旧两套编号并存。
 
    只跑一个文件：`python weekend_pipeline.py input/test3.pdf`；跑别的目录：`python weekend_pipeline.py ../week-02/input`。新增 case 只要丢进 `input/` 就会自动被扫到（支持 `.pdf` / 常见图片 / `.csv .txt .md`，见配置区 `SUPPORTED_EXTS`）。OCR 分支的中间页图放在 `<case>/_tmp_pages/`，**跑完保留**方便逐页核对「OCR 看的是哪张图」，下次重跑该 case 时会先清空旧图再生成新图（不用改任何开关，出错时页图也会留着排查）；`output.json` 里的 `temp_dir` / `temp_pages` 会记下页图位置和张数；表格识别每页约 +20s，只想快速看文字把 `ENABLE_TABLE` 改成 `False`。输入统一放 `input/`，产物按上面两层规则自动建目录。
+
+   **有文本层 PDF 的表格解析（11-13 补充）**：有文本层 ≠ 抽得到表格，但**不需要**为此转图走 OCR 模型——字符本来就是精确的，转图反而引入识别误差、慢两个数量级。`test3.pdf` 就是反例：明明是银行流水表，这一页却有 208 条横线、**0 条竖线**，旧版只调一次 pdfplumber 默认 `extract_tables()`，静默返回 0 张表。现在改成：
+
+   - `TABLE_STRATEGIES = (None, 'lines', 'text')`：先诊断线型，再按「默认 → lines → text」逐个回退，第一个抽到表就停；无竖线的 stream 型表格靠 `text` 策略按文字对齐猜列。
+   - `TABLE_COLUMN_LINES`：固定版式可人工标定列边界（`explicit` 策略优先）。`test3.pdf` 已配好 9 条竖线，能拆出正确的 8 列表头；**换文件记得删掉或改掉这项**，坐标和版式绑定。
+   - 抽到的表会清洗空行空列，`output.json` 的表格记录多出 `strategy` / `n_rows` / `n_cols` / `fill_ratio` / `low_confidence`；所有策略都失败会打印排查建议，不再静默跳过。
+
+   生产上的通用思路是**分层兜底**：文本层解析（首选）→ 坐标级规则 → **只对失败的那几页**转图走表格结构模型 → 用行数 / 列数 / 金额合计做业务校验。`text` 策略仍可能合并列（本例「借 贷」合成一列），日志会提示人工核对；单元格内换行被切成多行属于数据清洗，不是结构识别问题。
 2. **bad case 库雏形**：建一个文件夹 `bad_cases/`，把你跑的过程中**识别错、识别不全、模糊/倾斜/反光**的样本图存进去，附一个 `notes.md` 记"这张为什么失败"。**这是第 2 周和 P4 的宝贵素材，现在就开始攒。**
 
 ---
