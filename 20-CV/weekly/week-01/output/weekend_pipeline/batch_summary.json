@@ -7,7 +7,7 @@
     "pages": 1,
     "chars": 254,
     "tables": 0,
-    "elapsed": 27.0,
+    "elapsed": 20.85,
     "ok": true
   },
   {
@@ -18,7 +18,7 @@
     "pages": 1,
     "chars": 169,
     "tables": 1,
-    "elapsed": 11.92,
+    "elapsed": 12.19,
     "ok": true
   },
   {
@@ -29,7 +29,7 @@
     "pages": 1,
     "chars": 2054,
     "tables": 0,
-    "elapsed": 0.55,
+    "elapsed": 0.9,
     "ok": true
   },
   {
@@ -40,7 +40,7 @@
     "pages": 5,
     "chars": 1750,
     "tables": 1,
-    "elapsed": 64.63,
+    "elapsed": 63.11,
     "ok": true
   },
   {

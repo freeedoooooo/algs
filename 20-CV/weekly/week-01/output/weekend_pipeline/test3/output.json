@@ -1,5 +1,5 @@
 {
-  "source": "input/test3.pdf",
+  "source": "input\\test3.pdf",
   "out_dir": "output/weekend_pipeline/test3",
   "kind": "pdf",
   "mode": "text_layer",
@@ -8,6 +8,6 @@
   "pages": 1,
   "text_scope": "all_content_stream",
   "cropbox_limited": true,
-  "elapsed": 0.55,
+  "elapsed": 0.9,
   "tables": []
 }
