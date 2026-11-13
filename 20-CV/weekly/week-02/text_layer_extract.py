@@ -1,14 +1,16 @@
 """
 第2周 · 有文本层 PDF / CSV 的「直读」提取（不加载 OCR 模型）
 
-【谁在调用我】（11-13 补）
-只被 a_batch_ocr.py 调用：build_case_record() 遇到 PDF / CSV 分支时执行
-    extract_case(path, pages_dir=<case 目录>/pages/)
-图片分支完全不碰我。我没有 main()，不单独运行；想单独调试可在 week-02 下用：
-    python -c "from text_layer_extract import extract_case; r=extract_case('input/103_real_bank_statement_textlayer.pdf'); print(r['kind'], len(r['tables']), r['tables'][0]['n_rows'])"
-（上面这行会打印 `pdf 1 105`，即「类型 / 抽到的表数 / 行数」；不加载任何 OCR 模型。
- 首页预览图落在 `output/text_layer_extract/pages/p1.png`，是本模块的调试产物，
- 按脚本名隔离，不会混进 `output/a_batch_ocr/` 的正式结果。）
+【谁在调用我 / 怎么单独测】（11-13 补）
+两条路都能用，区别在「要测什么」：
+    ① 正式跑批：a_batch_ocr.py 的 build_case_record() 遇到 PDF / CSV 分支时
+       调用 extract_case(path, pages_dir=<case 目录>/pages/)，
+       返回的 dict 被写进该 case 的 result.json，再和 OCR 结果一起进对比报告。
+    ② 单独调试：直接 `python text_layer_extract.py`（见文件末尾 main()），
+       不加载 OCR 模型、不写正式产物，只把直读结果打印到终端。
+       **只想验证 103 的表格抽得对不对，用这条最轻**，毫秒级、不用跑全量。
+两条路页图落点不同：① 在 <case 目录>/pages/，② 在
+output/text_layer_extract/pages/（按脚本名隔离，不混进正式产物）。
 我自己还 import 了 case_naming，用它的 strip_no() 匹配人工列边界模板。
 
 【为什么单独一个模块】
@@ -28,8 +30,10 @@
 所以给真实 case 换编号（103 → 108）不会让模板失效。
 
 【产物】
-    output/a_batch_ocr/<case 目录>/pages/p1.png   PDF 首页渲染图（中间产物，单独一层）
-    函数返回 dict，交给 a_batch_ocr.py 写进该 case 的 result.json
+    ① 被 a 调用：<case 目录>/pages/p1.png + 返回 dict → 写进该 case 的 result.json
+    ② 单独调试：output/text_layer_extract/pages/p1.png + 终端摘要
+    本模块自己不写 result.json、不画识别框、不生成 HTML 报告 ——
+    那些是 a_batch_ocr.py / vis_ocr_result.py 的职责。
 
 【坑位记录（第1周实测）】
 - paddlex 的 save_to_html() 遇空表格会 IndexError → 这里根本不用它，自己写 HTML。
@@ -46,6 +50,9 @@ PDF_RENDER_DPI = 110                             # PDF 首页预览图分辨率�
 #   那会在 a 的正式产物根目录里多出一个「不属于任何 case」的目录，
 #   破坏按输入隔离的结构，还会被 report_stale_cases() 当成旧 case 误报。
 PDF_PAGES_DIR = 'output/text_layer_extract/pages'
+# 不传命令行参数时，`python text_layer_extract.py` 默认单独调试哪个 case。
+# 想测别的文件直接跟在后面：python text_layer_extract.py input/105_real_transactions_gbk.csv
+DEBUG_CASE = 'input/103_real_bank_statement_textlayer.pdf'
 TABLE_STRATEGIES = (None, 'lines', 'text')       # 策略回退顺序：默认 → 网格线 → 文字对齐
 TABLE_MIN_FILL_RATIO = 0.20                      # 非空单元格占比低于它 → 标「低置信度」
 # 人工标定的列边界（固定版式专用）：键是**去掉数字编号后的文件名**。
@@ -64,6 +71,9 @@ MIN_TEXT_LAYER_CHARS = 50                         # 前几页抽到超过这么�
 import os
 import io
 import csv
+import sys
+import json
+from pathlib import Path   # as_posix()：把 Windows 的 \ 统一显示成 /，方便和文档路径对照
 
 import pdfplumber
 import pymupdf
@@ -306,3 +316,68 @@ def extract_case(path, pages_dir=None):
         result['diagnostics'].setdefault('notes', []).append(
             '该 PDF 有 CropBox 裁剪，预览图已按 MediaBox 整页渲染（含阅读器里看不到的内容）')
     return result
+
+
+# --------------------------------------------------------------------------
+# 四、单独调试入口（不跑 OCR，只把直读结果打印出来）
+# --------------------------------------------------------------------------
+
+def debug_summary(path, result):
+    """把 extract_case() 返回的 dict 打印成人能读的摘要；--json 时再补一份全量。"""
+    print('>> 单独调试 text_layer_extract（不加载任何 OCR 模型，不写正式产物）')
+    print(f'>> 文件：{path}')
+    print(f"类型：{result['kind']}　页数：{result['pages']}　"
+          f"文本层：{'是' if result['text_layer'] else '否'}　"
+          f"CropBox 裁剪：{'是' if result['cropbox_limited'] else '否'}")
+    if result['preview_image']:
+        print(f"首页预览图：{Path(result['preview_image']).as_posix()}")
+
+    tables = result['tables']
+    print(f'抽到表格：{len(tables)} 张')
+    for t in tables:
+        print(f"  第 {t['page']} 页 / {t['strategy']} 策略 / "
+              f"{t['n_rows']}×{t['n_cols']} / 填充率 {t['fill_ratio']} / "
+              f"低置信度：{'是' if t['low_confidence'] else '否'}")
+
+    diag = result.get('diagnostics') or {}
+    notes, pages = diag.get('notes') or [], diag.get('pages') or []
+    if pages or notes:
+        print('--- 抽取诊断 ---')
+        for line in pages + notes:
+            print(f'  {line}')
+
+    if tables and tables[0].get('rows'):
+        print(f"--- 第 1 张表前 3 行（共 {tables[0]['n_rows']} 行）---")
+        for i, row in enumerate(tables[0]['rows'][:3], 1):
+            print(f"  {i} | {' | '.join(str(c) for c in row)}")
+    if result.get('plain_text'):
+        print(f"--- 原文（{result.get('encoding')}）---")
+        print(result['plain_text'].strip()[:500])
+
+
+def main():
+    """
+    单独调试入口。和 a_batch_ocr.py 的区别见文件头「谁在调用我 / 怎么单独测」：
+        python text_layer_extract.py                      # 测配置区 DEBUG_CASE（默认 103）
+        python text_layer_extract.py input/105_...csv     # 测别的文件
+        python text_layer_extract.py --json               # 额外打印完整 dict
+    只调用 extract_case()，所以不加载 OCR 模型、不写 result.json、不画框、不生成 HTML。
+    """
+    # 把 --json 从位置参数里挑出来，剩下的第一个当作文件路径。
+    args = [a for a in sys.argv[1:] if a != '--json']
+    path = args[0] if args else DEBUG_CASE
+    if not os.path.isfile(path):
+        sys.exit(f'找不到文件：{os.path.abspath(path)}\n'
+                 f'改配置区 DEBUG_CASE，或命令行指定：'
+                 f'python text_layer_extract.py 文件路径')
+
+    result = extract_case(path)
+    debug_summary(path, result)
+    if '--json' in sys.argv[1:]:
+        print('--- 完整 dict（--json）---')
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+# 主程序守卫：直接运行才执行 main()；被 a_batch_ocr.py import 时不会自动跑。
+if __name__ == '__main__':
+    main()

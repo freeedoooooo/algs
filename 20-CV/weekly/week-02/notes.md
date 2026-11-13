@@ -178,7 +178,9 @@ CSV 卡片加「查看原始文件」链接；只重画报告就生效，不用�
   时调 `build_report()`；画报告失败不影响已落盘的 JSON / TXT。
 - `case_naming.py` 另被 `c_try_params.py` / `make_samples.py` /
   `text_layer_extract.py` / `vis_ocr_result.py` 引用，共 **5 个调用方**。
-- 只有 `vis_ocr_result.py`、`c_try_params.py` 带 `main()` 能独立跑；另两个是纯模块。
+- `vis_ocr_result.py` / `c_try_params.py` / `text_layer_extract.py` 带 `main()`
+  能独立跑；`case_naming.py` 是纯函数模块，没有 `main()`。
+  （`text_layer_extract.py` 的 main 是下面这一节补的，之前只能靠 `python -c` 调试。）
 
 **四层体现**（从「打开文件」到「跑一次」逐级可见）：
 1. 三个模块各自 docstring 顶部加「谁在调用我」小节 —— 打开即见。
@@ -200,3 +202,32 @@ CSV 卡片加「查看原始文件」链接；只重画报告就生效，不用�
 `output/text_layer_extract/pages`（按脚本名隔离），并让 `report_stale_cases()`
 跳过 `pages` / `__pycache__` 这类非 case 目录。
 复核：正式产物根 25 个目录、`多余 = []`、误报为空；调试页图按脚本隔离保留供核对。
+
+## 11-13 晚 · 「单独测 103」该走哪个入口
+
+**问题**：只想验证 case 103，是只调 `text_layer_extract.py` 就行，
+还是应该从 `a_batch_ocr.py` 流水线入口跑？
+
+**结论：看测的是哪一层，两条路不能互相替代**
+
+| 目标 | 入口 | 得到什么 / 得不到什么 |
+|---|---|---|
+| 验证文本层直读逻辑 | `python text_layer_extract.py` | 得到策略 / 行列数 / 诊断 / 表头；**没有** OCR 文字、识别框、result.json、HTML |
+| 看「像素 OCR vs 文本层直读」并排 | `python a_batch_ocr.py` | 得到完整 result.json、带框 PNG、25 卡片报告；代价是全量约 100s |
+
+`text_layer_extract.py` 原来没有 `main()`，「只调用这一个脚本」得写很长的
+`python -c`，对单测不友好。已补 CLI：配置区 `DEBUG_CASE` 默认指向 103，
+`debug_summary()` 打印人能读的摘要，`--json` 输出完整 dict，
+页图仍落在 `output/text_layer_extract/pages/`（不碰正式产物）。
+`if __name__ == '__main__'` 守卫保证它被 a import 时不会自动跑。
+
+**为什么不给 a 加「只跑一个 case」**：`save_results()` / `build_report()`
+会整体重写 `batch_summary.json` 与 `index.html`；单跑 103 会把全量汇总和
+25 张卡片覆盖成 1 张，`report_stale_cases()` 还会把其余 24 个目录误报为废弃。
+正式结果一律跑全量；已经跑好的 103 直接看它自己的目录，不必重跑。
+
+**验证**：`python text_layer_extract.py` 打印 103 的 `explicit 105×8`、
+填充率 0.293、横线 208 / 竖线 0、CropBox 裁剪提示与表头前 3 行；
+单测 105 CSV 得到 `csv.reader 2×8`、GBK 原文；`--json`、文件不存在、
+`import` 不触发 main 三条路径都正常；6 脚本 py_compile 通过；
+正式产物 25 个 case 目录、多余 0。文档里「纯模块 / 无 main」的 4 处旧描述已同步。

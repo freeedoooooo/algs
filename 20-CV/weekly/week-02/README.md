@@ -51,7 +51,7 @@ a_batch_ocr.py   ← 你只运行这一个（主入口 / 编排）
 |---|---|---|---|---|
 | `a_batch_ocr.py` | 主入口：遍历 case、跑 OCR、落盘 | 你（命令行） | — | 是，`python a_batch_ocr.py` |
 | `case_naming.py` | 命名 / 分组 / 排序的唯一真相源 | **5 个脚本**（见下） | 各脚本 import 时 | 否，纯函数模块、无 main |
-| `text_layer_extract.py` | PDF 文本层 / CSV 直读，不加载模型 | 仅 `a_batch_ocr.py` | a 的文件顶部 | 否，纯模块、无 main |
+| `text_layer_extract.py` | PDF 文本层 / CSV 直读，不加载模型 | `a_batch_ocr.py`（正式跑批），也可单独调试 | a 的文件顶部 | 是，`python text_layer_extract.py`（只测直读） |
 | `vis_ocr_result.py` | 画原图 + 识别框 + 直读结果的 HTML | `a_batch_ocr.py`，也可直接运行 | **懒加载**，画报告时才 import | 是，`python vis_ocr_result.py` |
 
 `case_naming.py` 是公共底座，除 a 外还有 4 个调用方：
@@ -66,6 +66,28 @@ a_batch_ocr.py   ← 你只运行这一个（主入口 / 编排）
 
 > 想知道某个文件被谁调用，最快的办法：在 week-02 目录搜它的文件名，
 > 或看该文件顶部 docstring 里的「谁在调用我」小节。
+
+### 只想单独测 case 103 怎么跑
+
+看你要测的是哪一层，两条路别混：
+
+| 想验证什么 | 用哪个入口 | 命令 | 代价 |
+|---|---|---|---|
+| 103 的文本层表格抽得对不对（策略 / 行列数 / 列边界模板 / 诊断） | `text_layer_extract.py` 单独调试 | `python text_layer_extract.py` | 毫秒级，不加载模型、不写正式产物 |
+| OCR 识别框 vs 直读表格并排、带框 PNG、报告卡片 | `a_batch_ocr.py` 完整流水线 | `python a_batch_ocr.py` | 约 100s，跑全量 25 个 case |
+
+`text_layer_extract.py` 不传参数时默认测配置区的 `DEBUG_CASE`
+（`103_real_bank_statement_textlayer.pdf`），打印类型 / 文本层 / CropBox、
+每张表的策略与行列数、抽取诊断、表头前 3 行；加 `--json` 看完整 dict。
+测别的文件把路径跟在后面即可，例如
+`python text_layer_extract.py input/105_real_transactions_gbk.csv`。
+
+**为什么 a 没有「只跑一个 case」的开关**：`a_batch_ocr.py` 会整体重写
+`batch_summary.json` 和 `index.html`；只跑 103 会把全量汇总和 25 张卡片的
+报告覆盖成 1 张，`report_stale_cases()` 还会把其余 24 个目录误报成「已废弃」。
+所以正式结果一律跑全量；单测走上面的独立入口。
+已经跑好的 103 结果直接看 `output/a_batch_ocr/103_real_bank_statement_textlayer/`
+和 `index.html`，不必重跑。
 
 ## 学什么 & 怎么学
 

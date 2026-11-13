@@ -7,7 +7,8 @@
        这样即使报告生成失败，已经落盘的 result.json / result.txt 也不会白跑。
     ② 直接 python vis_ocr_result.py 独立运行，只重画报告、不重跑 OCR，
        结果从各 case 目录的 result.json 读回来。
-所以我是这三个模块里唯一「既被 import、又带 main() 能独立跑」的一个。
+我和 text_layer_extract.py 都能被 import、也都能独立运行；
+区别是它只打印直读结果，我负责画 HTML 报告；case_naming.py 是纯函数模块，没有 main()。
 
 【解决什么问题】
 result.json 里只有文字和坐标，读起来不直观：

@@ -31,8 +31,11 @@
 即使报告生成失败，已经落盘的 result.json / result.txt 也不会白跑。
 这种「用到才 import」叫懒加载，是 Python 很常见的写法。
 
-单独运行：python vis_ocr_result.py（只重画报告）、python c_try_params.py（调参）；
-case_naming.py 与 text_layer_extract.py 是纯模块，没有 main()，由别的脚本调用。
+单独运行：python vis_ocr_result.py（只重画报告）、
+python text_layer_extract.py（只测文本层直读，默认 case 103）、python c_try_params.py（调参）；
+case_naming.py 是纯函数模块，没有 main()，只由别的脚本 import。
+只想验证某个 case 的「直读」抽得对不对 → 跑 text_layer_extract.py 就够（不加载模型）；
+想看它和 OCR 识别框并排的对比 → 仍要跑本脚本走完整流水线。
 
 环境（本机 miniforge，环境名就是 paddle）：
     conda activate paddle
