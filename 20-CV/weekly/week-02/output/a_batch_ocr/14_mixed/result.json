@@ -3,7 +3,7 @@
   "lines": 12,
   "avg_score": 0.9551,
   "low_score_lines": 0,
-  "elapsed": 2.47,
+  "elapsed": 2.01,
   "texts": [
     "华远科技有限公司 出库单",
     "单批编号：CK-2026-1112-0087",
@@ -252,6 +252,11 @@
   ],
   "kind": "image",
   "preview_image": null,
+  "table_route": "skipped",
+  "structured_tables": [],
+  "table_notes": [
+    "长直线预筛未命中（长横线 0 / 长竖线 0），判定无表格网格，跳过表格模型"
+  ],
   "out_dir": "14_mixed",
   "group": "synthetic",
   "case_no": 14

@@ -1,8 +1,10 @@
 case：104_real_certificates_scan.pdf
 分组：real　类型：pdf
 模型：PP-OCRv4_mobile_det + PP-OCRv4_mobile_rec
-OCR 行数：53　平均置信度：0.52　可疑行：34　耗时：6.64s
+OCR 行数：53　平均置信度：0.52　可疑行：34　耗时：8.45s
 文本层 / 纯文本直读：0 张表（共 5 页，text_layer=False）
+  · 长直线预筛命中（长横线 7 / 长竖线 10），启用 PPStructureV3（自动校正整页方向）
+  · 表格模型未检测到表格（有网格线但不是表格，或识别失败）
 --- 逐行 OCR 结果（文字<TAB>置信度）---
 日捐市场主体身份码	0.89
 解更多登记、备案	0.98

@@ -3,7 +3,7 @@
   "lines": 76,
   "avg_score": 0.6033,
   "low_score_lines": 35,
-  "elapsed": 6.9,
+  "elapsed": 6.98,
   "texts": [
     "国家市场监督管理总局监制",
     "扫描市场主体身份码",
@@ -1532,6 +1532,12 @@
   ],
   "kind": "image",
   "preview_image": null,
+  "table_route": "table_model",
+  "structured_tables": [],
+  "table_notes": [
+    "长直线预筛命中（长横线 7 / 长竖线 13），启用 PPStructureV3（自动校正整页方向）",
+    "表格模型未检测到表格（有网格线但不是表格，或识别失败）"
+  ],
   "out_dir": "106_real_scan_page1",
   "group": "real",
   "case_no": 106

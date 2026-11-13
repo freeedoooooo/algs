@@ -1,0 +1,43 @@
+{
+  "file": "105_real_transactions_gbk.csv",
+  "route": "text_layer",
+  "notes": [
+    "有文本层 / 纯文本：直接读字符，未加载任何表格模型"
+  ],
+  "n_tables": 1,
+  "tables": [
+    {
+      "page": 1,
+      "source": "csv",
+      "strategy": "csv.reader",
+      "title": "",
+      "headers": [
+        "交易日期",
+        "借",
+        "贷",
+        "余额",
+        "摘要",
+        "收(付)方名称",
+        "收(付)方账号",
+        "交易类型"
+      ],
+      "rows": [
+        [
+          "2021/11/29 15:42",
+          "0",
+          "56",
+          "56",
+          "上海保洁月费-程",
+          "",
+          "",
+          "代发款项"
+        ]
+      ],
+      "n_rows": 1,
+      "n_cols": 8,
+      "fill_ratio": 0.75,
+      "low_confidence": false,
+      "csv_file": "table_1.csv"
+    }
+  ]
+}

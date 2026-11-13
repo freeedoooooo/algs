@@ -3,7 +3,7 @@
   "lines": 35,
   "avg_score": 0.9635,
   "low_score_lines": 1,
-  "elapsed": 5.94,
+  "elapsed": 4.52,
   "texts": [
     "设备巡检记录表（局部）",
     "01机房温度23.5°℃正常",
@@ -712,6 +712,11 @@
   ],
   "kind": "image",
   "preview_image": null,
+  "table_route": "skipped",
+  "structured_tables": [],
+  "table_notes": [
+    "长直线预筛未命中（长横线 7 / 长竖线 0），判定无表格网格，跳过表格模型"
+  ],
   "out_dir": "09_dense_small",
   "group": "synthetic",
   "case_no": 9

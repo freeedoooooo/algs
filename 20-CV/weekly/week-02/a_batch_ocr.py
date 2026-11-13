@@ -110,14 +110,13 @@ SUPPORTED_EXTS = IMAGE_EXTS + PDF_EXTS + TEXT_EXTS
 #                  矫正后的图像，画回原图时框会整体错位。想试时改成 True 再跑一次。
 USE_DOC_PREPROCESS = False
 MAKE_VIS = True                                  # 跑完自动生成可视化对照报告（建议保持 True）
-# 表格检测与结构化提取：只对明确含表格的真实 case 生效
-# （用户 11-13 指定：103 文本层银行流水、107 扫描备案表）。
-# 其它 22 个 case 一律只做原来的文本提取，不跑表格逻辑、不生成 tables.json / table_N.csv，
-# 这样它们的产物和以往完全一致，也不会因为表格预筛 / 模型异常被连累。
-# 想给更多 case 加表格提取，只往 TABLE_EXTRACT_CASES 里加「去后缀的输入文件名」即可
-# （命名规则与输出目录名一致：文件名去掉扩展名，如 103_real_bank_statement_textlayer）。
+# 表格检测与结构化提取：**对所有 case 都跑「表格检测」**，检测到表格就提取并输出
+# （文本层 PDF / CSV → pdfplumber 直读；图片 / 扫描件 → 长直线预筛命中网格才加载
+#  表格结构模型）。检测不到表格的 case（纯文字图 / 证件扫描）自动判定 skipped，
+#  不产生任何表格产物、连表格模型都不加载，开销极小。
+# 因此「103/107 有表、其它 case 没表」是自然结果，不再是写死的白名单：
+# 11-13 上午曾限定只对 103/107 跑，当日晚改为「全量检测 + 命中才提取」。
 TABLE_EXTRACT = True
-TABLE_EXTRACT_CASES = ['103_real_bank_statement_textlayer', '107_real_scan_page2']
 SHOW_DEPS = True                                 # 运行时打印「本次用到哪些模块」，想让日志安静改 False
 MANIFEST_NAME = 'samples_manifest.json'          # 说明书文件名，脚本会在输入目录里找它
 # ==========================================================================
@@ -217,8 +216,9 @@ def prepare_case_dir(case_abs):
         后面 save_results（写 result.json / result.txt）、copy_source（写 source.*）、
         draw_boxes_png（写 boxes.png）都是用「w」模式把同名文件**覆盖重写**，
         清不清理结果都一样新；
-        而 tables.json / table_*.csv 只有 enrich_case() 给 103 / 107 写，
-        其它 case 不会重写，留着就会变成「新旧混存」，所以只针对它们清理。
+        而 tables.json / table_*.csv 只有「检测并命中表格」的 case 才会由
+        enrich_case() 写，其余 case 本次不会重写，留着就会变成「新旧混存」，
+        所以只针对它们清理。
     好处：一次全量重跑最多删十来个文件，不会触发批量删除保护
     （之前把 result.json 等也一起删，25 个 case 累计删 50+ 被沙箱拦中断过）。
     安全边界：不递归、不删子目录、不碰你手工放进去的文件。
@@ -338,13 +338,13 @@ def build_case_record(ocr, path, case_abs):
 
     def finish(rec):
         """
-        所有分支的统一出口：只有「明确要表格提取的 case」才过 enrich_case()，
-        把结构化表格写回 rec，并写出 tables.json / table_N.csv。
-        其它 case 原样返回，保持原来的纯文本提取产物不变（不生成任何表格文件）；
-        表格是增强功能，enrich_case 内部自己吞掉模型异常，OCR 结果永不被连累。
+        所有分支的统一出口：对每个 case 都过 enrich_case() 做「表格检测 + 结构化」，
+        把检测到的表格写回 rec，并写出 tables.json / table_N.csv。
+        检测不到表格的 case（纯文字图 / 证件扫描）内部自动 skipped，不产生任何
+        表格产物、连表格模型都不加载；表格是增强功能，enrich_case 内部自己吞掉
+        模型异常，OCR / 文本层结果永不被连累。
         """
-        stem = naming.case_dir_name(name)
-        if TABLE_EXTRACT and stem in TABLE_EXTRACT_CASES:
+        if TABLE_EXTRACT:
             return enrich_case(rec, path, case_abs)
         return rec
 

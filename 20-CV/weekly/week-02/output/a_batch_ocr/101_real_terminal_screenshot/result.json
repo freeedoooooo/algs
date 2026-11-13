@@ -3,7 +3,7 @@
   "lines": 4,
   "avg_score": 0.1684,
   "low_score_lines": 4,
-  "elapsed": 2.12,
+  "elapsed": 1.66,
   "texts": [
     "Co",
     "Cm",
@@ -92,6 +92,11 @@
   ],
   "kind": "image",
   "preview_image": null,
+  "table_route": "skipped",
+  "structured_tables": [],
+  "table_notes": [
+    "长直线预筛未命中（长横线 0 / 长竖线 0），判定无表格网格，跳过表格模型"
+  ],
   "out_dir": "101_real_terminal_screenshot",
   "group": "real",
   "case_no": 101

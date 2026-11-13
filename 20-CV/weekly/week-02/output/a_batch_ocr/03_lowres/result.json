@@ -3,7 +3,7 @@
   "lines": 13,
   "avg_score": 0.3803,
   "low_score_lines": 12,
-  "elapsed": 2.89,
+  "elapsed": 2.04,
   "texts": [
     "华远科技有限公司出库单",
     "羊0号1CX-206-1112-0087",
@@ -272,6 +272,11 @@
   ],
   "kind": "image",
   "preview_image": null,
+  "table_route": "skipped",
+  "structured_tables": [],
+  "table_notes": [
+    "长直线预筛未命中（长横线 3 / 长竖线 0），判定无表格网格，跳过表格模型"
+  ],
   "out_dir": "03_lowres",
   "group": "synthetic",
   "case_no": 3

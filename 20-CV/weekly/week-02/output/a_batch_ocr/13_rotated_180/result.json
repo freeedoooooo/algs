@@ -3,7 +3,7 @@
   "lines": 12,
   "avg_score": 0.9831,
   "low_score_lines": 0,
-  "elapsed": 2.93,
+  "elapsed": 2.34,
   "texts": [
     "SAMPLEDOCUMENT-NOTFOROFEICIALUSE",
     "制单日期：2026年11月12日",
@@ -252,6 +252,11 @@
   ],
   "kind": "image",
   "preview_image": null,
+  "table_route": "skipped",
+  "structured_tables": [],
+  "table_notes": [
+    "长直线预筛未命中（长横线 2 / 长竖线 0），判定无表格网格，跳过表格模型"
+  ],
   "out_dir": "13_rotated_180",
   "group": "synthetic",
   "case_no": 13

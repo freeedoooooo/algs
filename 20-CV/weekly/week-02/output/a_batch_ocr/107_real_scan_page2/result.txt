@@ -1,7 +1,7 @@
 case：107_real_scan_page2.jpg
 分组：real　类型：image
 模型：PP-OCRv4_mobile_det + PP-OCRv4_mobile_rec
-OCR 行数：58　平均置信度：0.85　可疑行：11　耗时：5.95s
+OCR 行数：58　平均置信度：0.85　可疑行：11　耗时：9.37s
 --- 结构化表格（路线 table_model）---
   table_1.csv: 8 行 × 5 列 / 填充率 1.0 / 标题 从事证券服务业务会计师事务所备案名单
     表头：序号 | 会计师事务所名称 | 统一社会信用代码 | 执业证书编号 | 备案公告日期

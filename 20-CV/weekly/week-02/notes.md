@@ -264,3 +264,29 @@ CSV 卡片加「查看原始文件」链接；只重画报告就生效，不用�
 
 **注意**：`output/table_extract/`（我单测 103/107 时留下的调试副本）与正式结果无关，
 可直接删；要彻底重新生成全部产物：`python a_batch_ocr.py`。
+
+## 11-13 晚（二次纠正）：表格提取改为「对所有 case 全量检测、命中才提取」
+
+**用户二次纠正**：上一段「只跑 103/107」理解错了——用户真实意图是**对所有 case 都做表格检测**，
+检测到表格就提取并输出（像 103/107 那样），没检测到就跳过；文本提取仍照常做、结果都保留。
+
+**改动**
+- `a_batch_ocr.finish()`：去掉 `TABLE_EXTRACT_CASES` 白名单，统一对**每个 case** 调
+  `enrich_case()` 做检测 + 结构化；`TABLE_EXTRACT` 仍作总开关（默认 True）。
+- `table_extract.export_case_tables()`：**检测不到表格（skipped/failed/纯文字图）时不写任何文件**，
+  避免 25 个 case 目录都多一个空 `tables.json`；诊断信息（table_notes）已随 result.json 落盘，
+  报告从 result.json 读取，不依赖这个文件。
+- `vis_ocr_result.build_card()` 的「有问题」判定：非图片分支不再因「有文本层却没抽到表」误标，
+  只认 `table_route == 'failed'`（真失败）或 `error`；纯文字 / 证件扫描属正常 skipped。
+
+**重跑验证（25 case）**：只有 103（text_layer）/ 105（CSV 也按文本层读成 1 张表）/ 107（table_model）
+实际产出结构化表格 + CSV；104 / 106 扫描件预筛命中网格（长横线 7 / 长竖线 10）并加载了
+PPStructureV3，但模型没还原出表 → 仍 skipped、无表格文件；其余 18 个纯文字图/合成样本无网格 → skipped。
+表格模型仅在 104/106/107 三个命中预筛的 case 触发加载（懒加载 + 单例），纯文字图一分钱不花。
+报告 `index.html` 每张卡片都带「表格提取」区块，命中表格的显示表 + CSV 下载，未命中的显示诊断说明。
+
+**附带修复（用户反馈「带框 PNG 的框不如 HTML 准」）**：`vis_ocr_result.draw_boxes_png` 原来用
+`width=3, joint='curve'`（圆角会让框在拐角外鼓，看着比文字松），改成 `width=2`、去掉圆角，
+与 HTML 里 `<polygon>`（尖角）+ `stroke-width:2`（vector-effect:non-scaling-stroke）对齐。
+根因其实是「boxes.png 把框烘焙进一张光栅图、缩放会重采样变软；HTML 是把框作为矢量 SVG
+叠在原图上、任意缩放都保持锐利」—— 两者坐标完全相同，差异只是光栅 vs 矢量；改尖角 + 等线宽后两者观感一致。

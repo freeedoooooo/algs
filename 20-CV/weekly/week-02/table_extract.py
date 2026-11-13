@@ -330,9 +330,16 @@ def export_case_tables(case_abs, rec):
 
     CSV 第一行固定是表头（方便 pandas / Excel 直接读），标题放在 tables.json
     和 HTML 报告里；编码用 utf-8-sig（带 BOM），Windows Excel 打开中文不乱码。
+
+    没有任何检测到表格（route=skipped / failed / 纯文字图）时直接返回 []，
+    不写 tables.json / table_N.csv ——「没检测到就不产出」，避免每个 case 目录
+    都多一个空的 tables.json。诊断信息（table_notes）已随 result.json 落盘，
+    报告从 result.json 读取，不依赖这个文件。
     """
     os.makedirs(case_abs, exist_ok=True)
     tables = rec.get('structured_tables') or []
+    if not tables:
+        return []
     written = []
     for t in tables:
         path = os.path.join(case_abs, t['csv_file'])

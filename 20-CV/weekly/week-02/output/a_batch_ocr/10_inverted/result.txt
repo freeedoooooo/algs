@@ -1,7 +1,8 @@
 case：10_inverted.png
 分组：synthetic　类型：image
 模型：PP-OCRv4_mobile_det + PP-OCRv4_mobile_rec
-OCR 行数：8　平均置信度：0.98　可疑行：0　耗时：3.0s
+OCR 行数：8　平均置信度：0.98　可疑行：0　耗时：2.46s
+  · 长直线预筛未命中（长横线 83 / 长竖线 0），判定无表格网格，跳过表格模型
 --- 逐行 OCR 结果（文字<TAB>置信度）---
 PS D:\work> python -m pip show paddleocr	0.96
 Name:paddleocr	0.98

@@ -1,7 +1,8 @@
 case：13_rotated_180.png
 分组：synthetic　类型：image
 模型：PP-OCRv4_mobile_det + PP-OCRv4_mobile_rec
-OCR 行数：12　平均置信度：0.98　可疑行：0　耗时：2.93s
+OCR 行数：12　平均置信度：0.98　可疑行：0　耗时：2.34s
+  · 长直线预筛未命中（长横线 2 / 长竖线 0），判定无表格网格，跳过表格模型
 --- 逐行 OCR 结果（文字<TAB>置信度）---
 SAMPLEDOCUMENT-NOTFOROFEICIALUSE	0.97
 制单日期：2026年11月12日	1.00

@@ -3,7 +3,7 @@
   "lines": 4,
   "avg_score": 0.9924,
   "low_score_lines": 0,
-  "elapsed": 1.52,
+  "elapsed": 1.13,
   "texts": [
     "今日巡检记录",
     "三楼机房温度正常，空调运行平稳。",
@@ -92,6 +92,11 @@
   ],
   "kind": "image",
   "preview_image": null,
+  "table_route": "skipped",
+  "structured_tables": [],
+  "table_notes": [
+    "长直线预筛未命中（长横线 9 / 长竖线 0），判定无表格网格，跳过表格模型"
+  ],
   "out_dir": "12_handwriting",
   "group": "synthetic",
   "case_no": 12

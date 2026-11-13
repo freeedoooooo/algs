@@ -179,8 +179,11 @@ def draw_boxes_png(image_path, rec, out_path):
         score = scores[i] if i < len(scores) else 1.0
         color = COLOR_LOW if score < LOW_SCORE else COLOR_OK
 
-        # 首尾相连：最后一个点再连回第一个点，框才闭合
-        draw.line(points + [points[0]], fill=color, width=3, joint='curve')
+        # 首尾相连：最后一个点再连回第一个点，框才闭合。
+        # 不用 joint='curve'：圆角会让框在拐角处向外鼓出，看起来比文字「松」、
+        # 不如 HTML 里 <polygon> 的尖角贴合；也不加宽，宽度 2 与 HTML 的
+        # stroke-width:2（vector-effect:non-scaling-stroke）对齐，两个视图的框一致。
+        draw.line(points + [points[0]], fill=color, width=2)
 
         # 在框左上角画一个小色块 + 行号，方便和右侧表格对上。
         # 色块宽度按位数算，否则第 10 行以后两位数会被裁掉。
@@ -513,12 +516,11 @@ def build_card(rec, card_no, image_dir, out_root, manifest_map):
         problem = 1 if (low_lines or rec.get('error') or not texts
                         or (expect and rough_misses(expect, texts))) else 0
     else:
-        # 非图片分支的 OCR 结果不代表成败：只有「有文本层却一张表都没抽到」
-        # 才算问题。扫描件 PDF 本来就没有文本层，不该被误标。
+        # 非图片分支的 OCR 结果不代表成败：表格检测是增强功能，只有「检测
+        # 流程本身失败（table_route='failed'）」才算问题；纯文字 / 证件扫描
+        # 这类「检测后判定无表格（skipped）」属正常预期，不该被误标。
         problem = 1 if (rec.get('error')
-                        or (kind == 'pdf' and rec.get('text_layer')
-                            and not tables and not n_struct)
-                        or (kind == 'csv' and not tables and not n_struct)) else 0
+                        or rec.get('table_route') == 'failed') else 0
     head = (
         f'<div class="card-head"><h2>{esc(name)}</h2>'
         f'<span class="tag">{esc(category)}</span>'

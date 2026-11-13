@@ -3,7 +3,7 @@
   "lines": 8,
   "avg_score": 0.9814,
   "low_score_lines": 0,
-  "elapsed": 3.0,
+  "elapsed": 2.46,
   "texts": [
     "PS D:\\work> python -m pip show paddleocr",
     "Name:paddleocr",
@@ -172,6 +172,11 @@
   ],
   "kind": "image",
   "preview_image": null,
+  "table_route": "skipped",
+  "structured_tables": [],
+  "table_notes": [
+    "长直线预筛未命中（长横线 83 / 长竖线 0），判定无表格网格，跳过表格模型"
+  ],
   "out_dir": "10_inverted",
   "group": "synthetic",
   "case_no": 10

@@ -1,7 +1,7 @@
 case：103_real_bank_statement_textlayer.pdf
 分组：real　类型：pdf
 模型：PP-OCRv4_mobile_det + PP-OCRv4_mobile_rec
-OCR 行数：226　平均置信度：0.98　可疑行：0　耗时：25.89s
+OCR 行数：226　平均置信度：0.98　可疑行：0　耗时：23.44s
 文本层 / 纯文本直读：1 张表（共 1 页，text_layer=True）
   第 1 页 / explicit 策略 / 25×8 / 填充率 0.74
 --- 结构化表格（路线 text_layer）---

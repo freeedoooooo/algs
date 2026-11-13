@@ -3,7 +3,7 @@
   "lines": 53,
   "avg_score": 0.518,
   "low_score_lines": 34,
-  "elapsed": 6.64,
+  "elapsed": 8.45,
   "texts": [
     "日捐市场主体身份码",
     "解更多登记、备案",
@@ -1087,6 +1087,12 @@
       "这是扫描件 PDF：没有文本层可直读，表格只能走 OCR / 表格结构模型"
     ]
   },
+  "table_route": "table_model",
+  "structured_tables": [],
+  "table_notes": [
+    "长直线预筛命中（长横线 7 / 长竖线 10），启用 PPStructureV3（自动校正整页方向）",
+    "表格模型未检测到表格（有网格线但不是表格，或识别失败）"
+  ],
   "out_dir": "104_real_certificates_scan",
   "group": "real",
   "case_no": 104
