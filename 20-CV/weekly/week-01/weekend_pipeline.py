@@ -13,18 +13,23 @@
 直接运行 `python weekend_pipeline.py`，脚本会扫描【配置区】INPUT_DIR 目录里
 **所有支持的 case**，一个一个跑完，并给每个输入单独建一个输出目录：
 
-    input/                              output/
-      test1.jpg        ───────────→      test1/         output.json + pipeline_result.txt
-      test2.jpg        ───────────→      test2/         output.json + pipeline_result.txt
-      test3.pdf        ───────────→      test3/         output.json + pipeline_result.txt
-      test3_image.pdf  ───────────→      test3_image/   output.json + pipeline_result.txt
-                                                        + _tmp_page_*.png（跑完自动删）
-                                                        + pipeline_table_p*.html
-      test4.csv        ───────────→      test4/         output.json + pipeline_result.txt
-                                         batch_summary.json   ← 所有 case 的总览表
-                                         batch_summary.txt    ← 人直接看的总览表
+    input/                       output/weekend_pipeline/
+      test1.jpg        ───────→    test1/         output.json + pipeline_result.txt
+      test2.jpg        ───────→    test2/         output.json + pipeline_result.txt
+      test3.pdf        ───────→    test3/         output.json + pipeline_result.txt
+      test3_image.pdf  ───────→    test3_image/   output.json + pipeline_result.txt
+                                                   + pipeline_table_p*.html
+                                                   + _tmp_pages/（OCR 页图，跑完自动删）
+      test4.csv        ───────→    test4/         output.json + pipeline_result.txt
+                                   batch_summary.json   ← 所有 case 的总览表
+                                   batch_summary.txt    ← 人直接看的总览表
 
-这样不同输入的结果不会混在一起，一眼就知道哪个文件产出了什么。
+其它三个脚本也各有自己的目录，互不干扰：
+    output/b_ocr_image/<输入名>/       文字 / 带框 PNG / HTML 报告
+    output/c_pdf_text_layer/<输入名>/  抽取文本 + pages/ 页图
+    output/d_table_ocr/<输入名>/       表格 HTML
+全仓统一规则：**output/<脚本名>/<输入文件名>/**，中间产物再单独放一层子目录。
+这样不同脚本、不同输入的结果都不会混在一起，一眼就知道哪个文件产出了什么。
 新增 case 只要丢进 input/，下次运行自动被扫到，不用改任何代码。
 
 【Python 初学者阅读提示】
@@ -49,7 +54,8 @@
     TODO 1 判断有无文本层 → 有则 pdfplumber 直接抽字，无则转图逐页 OCR
     TODO 2 结果写成 JSON（另存一份纯文本方便看全文）
     TODO 3 进阶表格识别：文本层用 pdfplumber，扫描件用 PP-StructureV3
-11-13 改进：改成批量扫描 input/、每个 case 独立输出目录、支持图片和 CSV/TXT。
+11-13 改进：改成批量扫描 input/、每个 case 独立输出目录、支持图片和 CSV/TXT；
+      再把全仓输出统一为「output/<脚本名>/<输入名>/」两层隔离，中间页图单独一层。
 
 run(输入路径) 返回一个 dict（字典，含 mode / text / pages / elapsed / tables 等键），
 同时把结果落盘；run_batch() 负责把它们串起来并写汇总表。
@@ -68,15 +74,19 @@ run(输入路径) 返回一个 dict（字典，含 mode / text / pages / elapsed
 # 全大写只是程序员之间的约定：这些是配置项，想调整就直接改这一行。
 # 等号左边是变量名，右边是值；`变量 = 值` 叫「赋值语句」。
 INPUT_DIR = 'input'                             # 输入目录（字符串）。默认批量扫描这里所有 case
-OUT_DIR = 'output'                              # 产物总目录；每个 case 会在它下面再建一个专属子目录
+# ↓ 产物总目录：本流水线单独占一个，和 b / c / d 三个脚本的产物互不干扰。
+#   每个 case 会在它下面再建一个专属子目录，形成「脚本名 / 输入名」两层隔离。
+OUT_DIR = 'output/weekend_pipeline'
+TEMP_DIRNAME = '_tmp_pages'                     # OCR 中间页图的子目录名（在每个 case 目录里面）
 
 # ↓ 注意：这两个现在是「文件名」，不再是完整路径！
-#   脚本会把它们拼到每个 case 的目录里，例如 output/test3/output.json。
+#   脚本会把它们拼到每个 case 的目录里，
+#   例如 output/weekend_pipeline/test3/output.json。
 #   这样 5 个输入各写各的，不会互相覆盖。
 OUT_JSON = 'output.json'                        # 结构化结果（含模式、页数、耗时、表格）
 OUT_TXT = 'pipeline_result.txt'                 # 纯文本结果，方便直接打开看全文；改成 None 就不写
 
-# ↓ 这两个是「批量总览表」，属于所有 case 共有，所以放在 output/ 根目录
+# ↓ 这两个是「批量总览表」，属于所有 case 共有，所以放在 OUT_DIR 根目录
 SUMMARY_JSON = 'batch_summary.json'             # 机器可读的汇总
 SUMMARY_TXT = 'batch_summary.txt'               # 人直接看的汇总
 
@@ -93,7 +103,7 @@ MIN_CHARS = 50                                  # 前几页抽到超过这么多
 SAMPLE_PAGES = 3                                # 只检查前几页，避免大 PDF 判断太慢
 ENABLE_TABLE = True                             # 表格识别开关（布尔值）。OCR 分支每页约 +20s，
                                                 # 批量跑全部 case 会比较久，只想快速看文字就改 False
-KEEP_TEMP_IMAGES = False                        # 是否保留 OCR 分支生成的中间页图；False = 跑完自动删
+KEEP_TEMP_IMAGES = False                        # 是否保留 OCR 中间页图；False = 跑完连 _tmp_pages/ 一起删
 # ==========================================================================
 
 
@@ -141,6 +151,18 @@ import pymupdf     # PyMuPDF：把 PDF 页面渲染成图片；也能读 MediaBo
 # 这两个变量定义在函数外面，叫「全局变量」，所有函数都能读到。
 _ocr = None
 _table_engine = None
+
+
+def show(path):
+    """
+    只用于「显示 / 写入汇总表」：把 Windows 的反斜杠统一成正斜杠。
+
+    os.path.join 在 Windows 上会拼出 output/weekend_pipeline\\test1 这种
+    斜杠混用的字符串 —— 功能完全正常，但读起来别扭。
+    这里仅替换要打印或写进结果文件的字符串，真正传给 open()、
+    os.makedirs() 的路径一个都不动，所以不会影响任何文件操作。
+    """
+    return str(path).replace(os.sep, '/') if path else path
 
 
 def get_ocr():
@@ -232,11 +254,12 @@ def pdf_pages_to_images(pdf_path, dpi=None, out_dir=None):
     Python 的**默认参数值在函数定义那一刻就被算好并固定了**，之后就算改了配置区的
     OUT_DIR（或在别的文件里 import 后改），也不会生效。写成 None 才是「运行时读配置」。
 
-    批量模式下 run() 会明确传入当前 case 的专属目录，所以每个 PDF 的中间图
-    各放各的，不会像以前那样全堆在 output/ 根目录互相覆盖。
+    批量模式下 run() 会传入 <case 目录>/_tmp_pages/，所以每个 PDF 的页图
+    各放各的，而且单独一层，不会和 output.json 这类正式结果混在一起，
+    更不会像早期版本那样全堆在 output/ 根目录互相覆盖。
 
     这些 PNG 只是「中间产物」：识别完就没用了。run() 会在收尾时调用
-    cleanup_temp_images() 把它们删掉（除非配置区 KEEP_TEMP_IMAGES=True）。
+    cleanup_temp_images() 把它们连同空目录一起删掉（除非 KEEP_TEMP_IMAGES=True）。
     """
     dpi = DPI if dpi is None else dpi
     out_dir = OUT_DIR if out_dir is None else out_dir
@@ -272,16 +295,26 @@ def cleanup_temp_images(paths):
     所以永远不会被误删 —— 清理只针对「脚本自己生成的临时文件」。
     """
     if KEEP_TEMP_IMAGES:   # 想留着逐页核对就把它改成 True
-        print(f'>> 按配置保留 {len(paths)} 张中间页图')
+        print(f'>> 按配置保留 {len(paths)} 张中间页图（在 {TEMP_DIRNAME}/ 里）')
         return
     removed = 0
+    parent_dirs = set()      # set 自动去重：收集页图所在的目录，等下把空目录一起删掉
     for path in paths:
         try:
             os.remove(path)          # os.remove 删单个文件
             removed += 1
+            parent_dirs.add(os.path.dirname(path))
         except OSError:
             pass                     # 已经不在了 / 被占用，都不影响主流程
-    print(f'>> 已清理 {removed}/{len(paths)} 张中间页图'
+    # 页图删完后，把空掉的 _tmp_pages/ 一起删，让 case 目录里只剩正式产物。
+    # os.rmdir 只能删空目录；里面还有别的文件时会报错，用 try 忽略即可，绝不会误删内容。
+    for d in parent_dirs:
+        if os.path.basename(d) == TEMP_DIRNAME:
+            try:
+                os.rmdir(d)
+            except OSError:
+                pass
+    print(f'>> 已清理 {removed}/{len(paths)} 张中间页图及空的 {TEMP_DIRNAME}/ 目录'
           f'（想保留就把配置区 KEEP_TEMP_IMAGES 改成 True）')
 
 
@@ -615,11 +648,13 @@ def run(input_path, out_dir=None):
         else:
             # TODO 1：无文本层 → 转图，逐页 OCR 后汇总
             print('>> 无文本层（扫描件）→ 转图后逐页 OCR')
-            # ★ 把 out_dir 传下去：这个 PDF 的中间图只放在它自己的目录里
-            images = pdf_pages_to_images(input_path, out_dir=out_dir)
+            # ★ 中间页图单独放 <case 目录>/_tmp_pages/：
+            #   既和别的 case 隔离，也不与 output.json / 表格 HTML 混在同一层。
+            temp_dir = os.path.join(out_dir, TEMP_DIRNAME)
+            images = pdf_pages_to_images(input_path, out_dir=temp_dir)
             chunks = []
             # try/finally：无论中间哪一页出错，finally 里的清理都一定会执行，
-            # 不会把一堆 _tmp_page_*.png 留在 case 目录里。
+            # 不会把一堆页图留在 _tmp_pages/ 里。
             try:
                 for i, img in enumerate(images):
                     t1 = time.perf_counter()          # 单页耗时起点
@@ -636,7 +671,7 @@ def run(input_path, out_dir=None):
                         tables.append(info)
                         # 外层 f-string 用单引号，里面取字典键用双引号，两种引号不冲突。
                         print(f'   表格识别：{info["table_count"]} 个表格块'
-                              + (f'，HTML → {info["html"]}' if info['html'] else ''))
+                              + (f'，HTML → {show(info["html"])}' if info['html'] else ''))
             finally:
                 cleanup_temp_images(images)
             text = '\n'.join(chunks)              # 把所有行用换行符连成一整篇文本
@@ -673,7 +708,7 @@ def run(input_path, out_dir=None):
     # {'键': 值, ...} 定义字典；缩进只是为了让结构好看，不影响含义。
     result = {
         'source': input_path,                 # 输入文件路径
-        'out_dir': out_dir,                   # 本次产物目录（批量时用来定位）
+        'out_dir': show(out_dir),              # 本次产物目录（显示层统一用正斜杠）
         'kind': kind,                         # 'pdf' / 'image' / 'plain_text'
         'mode': mode,                         # 'text_layer' / 'ocr' / 'plain_text'
         'text': text,
@@ -690,7 +725,7 @@ def run(input_path, out_dir=None):
 
     # TODO 2：落盘（ensure_ascii=False 保证中文不变成 \uXXXX）
     out_json = save_result(result, out_dir)
-    print(f'>> 已保存 {out_json}（mode={mode}, {pages} 页, {len(text)} 字符, '
+    print(f'>> 已保存 {show(out_json)}（mode={mode}, {pages} 页, {len(text)} 字符, '
           f'{result["elapsed"]}s）')
     return result
 
@@ -713,9 +748,10 @@ def count_tables(result):
 
 def save_summary(summary, input_dir):
     """
-    把所有 case 的结果写成 output/batch_summary.json 和 batch_summary.txt。
+    把所有 case 的结果写成 OUT_DIR/batch_summary.json 和 batch_summary.txt。
 
-    汇总表不属于任何一个 case，所以放在 OUT_DIR 根目录，而不是某个 case 子目录里。
+    汇总表不属于任何一个 case，所以放在本脚本的产物根目录
+    output/weekend_pipeline/，而不是某个 case 子目录里。
     input_dir 传的是本轮实际扫描的目录（命令行可能指定别的目录，不能写死 INPUT_DIR）。
     """
     os.makedirs(OUT_DIR, exist_ok=True)
@@ -726,7 +762,7 @@ def save_summary(summary, input_dir):
     txt_path = os.path.join(OUT_DIR, SUMMARY_TXT)
     lines = [
         f'批量结果汇总  共 {len(summary)} 个 case',
-        f'输入目录：{input_dir}    产物目录：{OUT_DIR}',
+        f'输入目录：{show(input_dir)}    产物目录：{show(OUT_DIR)}',
         '=' * 78,
         '序号 | 输入文件 | 类型 | 识别方式 | 页 | 字符数 | 表格数 | 耗时(s) | 输出目录',
         '-' * 78,
@@ -737,12 +773,12 @@ def save_summary(summary, input_dir):
             lines.append(
                 f'{i:>2} | {os.path.basename(s["source"])} | {s["kind"]} | '
                 f'{s["mode"]} | {s["pages"]} | {s["chars"]} | {s["tables"]} | '
-                f'{s["elapsed"]} | {s["out_dir"]}'
+                f'{s["elapsed"]} | {show(s["out_dir"])}'
             )
         else:
             # 失败的那一行也要留在表里，不能悄悄消失
             lines.append(f'{i:>2} | {os.path.basename(s["source"])} | 失败 | '
-                         f'{s["error"]} | - | - | - | - | {s["out_dir"]}')
+                         f'{s["error"]} | - | - | - | - | {show(s["out_dir"])}')
     lines.append('=' * 78)
     with open(txt_path, 'w', encoding='utf-8') as f:
         f.write('\n'.join(lines) + '\n')
@@ -779,7 +815,7 @@ def run_batch(input_dir=None):
     # enumerate(cases, 1)：第二个参数是「序号从几开始」，写 1 就显示 [1/5] 而不是 [0/5]
     for i, path in enumerate(cases, 1):
         out_dir = case_out_dir(path, used_names)
-        print(f'\n===== [{i}/{len(cases)}] {os.path.basename(path)}  →  {out_dir} =====')
+        print(f'\n===== [{i}/{len(cases)}] {os.path.basename(path)}  →  {show(out_dir)} =====')
         try:
             r = run(path, out_dir)
             summary.append({
@@ -791,7 +827,7 @@ def run_batch(input_dir=None):
             # type(e).__name__ 拿到错误的类型名（如 ValueError），比只打印消息更好排查。
             print(f'!! 这个 case 处理失败，继续跑下一个：{type(e).__name__}: {e}')
             summary.append({
-                'source': path, 'out_dir': out_dir, 'ok': False,
+                'source': path, 'out_dir': show(out_dir), 'ok': False,
                 'error': f'{type(e).__name__}: {e}',
             })
 
@@ -799,7 +835,7 @@ def run_batch(input_dir=None):
     ok_count = sum(1 for s in summary if s['ok'])   # 生成器 + sum：数一数成功几个
     print(f'\n>> 全部完成：{ok_count}/{len(summary)} 个成功，'
           f'总耗时 {time.perf_counter() - t_all:.2f}s（含模型加载）')
-    print(f'>> 汇总表：{json_path}  /  {txt_path}')
+    print(f'>> 汇总表：{show(json_path)}  /  {show(txt_path)}')
     return summary
 
 
@@ -823,13 +859,13 @@ def main():
 
     # 单文件模式：仍然给它单独建一个目录，保持「结果不混在一起」的规则
     out_dir = case_out_dir(arg, set())
-    print(f'>> 单文件模式：{arg}  →  {out_dir}')
+    print(f'>> 单文件模式：{show(arg)}  →  {show(out_dir)}')
     result = run(arg, out_dir)
     print('>> 前 300 字预览：')
     # [:300] 是切片，取前 300 个字符；`or '(空)'` 处理文本为空的情况。
     print(result['text'][:300] or '(空)')
     if OUT_TXT:
-        print(f'>> 全文见 {os.path.join(out_dir, OUT_TXT)}')
+        print(f'>> 全文见 {show(os.path.join(out_dir, OUT_TXT))}')
 
 
 # ---------------------------------------------------------------------------

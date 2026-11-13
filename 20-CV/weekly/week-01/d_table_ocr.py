@@ -10,8 +10,11 @@
 
 调试要改的路径都在文件顶部的【配置区】，不用往下翻代码。
 
-跑完会生成配置区 OUT_HTML 指定的文件（默认 output/d_table_out.html），
-用浏览器打开看还原效果；脚本会自动补 <meta charset="utf-8">，中文不会乱码。
+【产物】两层隔离，一眼看出「哪个脚本、哪个输入」的产物：
+    output/d_table_ocr/<输入文件名去后缀>/
+        d_table_out.html     表格还原结果（多个结果会自动加编号，不互相覆盖）
+例如输入 input/test2.jpg → output/d_table_ocr/test2/d_table_out.html。
+脚本会自动补 <meta charset="utf-8">，中文不会乱码。
 
 版本说明（paddleocr 3.7 / paddlex 3.x）：
     旧的 PPStructure 已在 3.x 移除，改用 PPStructureV3。
@@ -27,7 +30,11 @@
 
 # =========================== 配置区：调试只改这里 ===========================
 INPUT_IMAGE = 'input/test2.jpg'             # 输入图片（含表格的图）
-OUT_HTML = 'output/d_table_out.html'        # 表格还原结果，浏览器打开看效果
+# ↓ 产物隔离规则：output/<脚本名>/<输入文件名>/
+#   OUT_DIR 是本脚本专属目录，和 b / c / weekend_pipeline 的产物互不干扰；
+#   OUT_HTML 只是「文件名」，运行时会拼到 OUT_DIR/<输入文件名>/ 里。
+OUT_DIR = 'output/d_table_ocr'              # 本脚本的产物总目录
+OUT_HTML = 'd_table_out.html'               # 表格还原结果，浏览器打开看效果
 # ==========================================================================
 
 import os
@@ -41,6 +48,22 @@ import time
 # 所以这两行一定会在它之前执行，时序是安全的。
 os.environ.setdefault('PADDLE_PDX_MODEL_SOURCE', 'BOS')
 os.environ.setdefault('PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK', 'True')
+
+
+def show(path):
+    """日志专用：把 Windows 的反斜杠显示成 /，实际读写路径不变。"""
+    return str(path).replace(os.sep, '/') if path else path
+
+
+def case_dir(input_path):
+    """
+    按输入文件名算出专属产物目录：OUT_DIR/<输入文件名去后缀>/。
+
+    os.path.basename 去掉前面的目录只留文件名，splitext 再去掉后缀，
+    os.path.join 用当前系统的分隔符拼路径（Windows 是反斜杠，别自己手写）。
+    """
+    stem = os.path.splitext(os.path.basename(input_path))[0]
+    return os.path.join(OUT_DIR, stem)
 
 
 def build_engine():
@@ -140,6 +163,7 @@ def main():
         sys.exit('\n'.join(msg))
 
     # ---- 1) 初始化（加载流水线里的多个模型） ----
+    print(f'>> 产物目录：{show(case_dir(image))}')
     print('>> 初始化 PPStructureV3（表格识别流水线），首次加载/下载模型可能较慢…')
     t0 = time.perf_counter()
     engine = build_engine()
@@ -165,20 +189,21 @@ def main():
             print(f'   [{label}] {content[:60]}')
 
     # ---- 4) 导出 HTML 并补编码声明 ----
-    # 用 OUT_HTML 所在目录建文件夹，而不是写死 'output'：
-    # 否则把 OUT_HTML 改成别的目录时会报 FileNotFoundError。
-    os.makedirs(os.path.dirname(OUT_HTML) or '.', exist_ok=True)
+    # 产物目录 = 脚本专属目录 / 输入文件名；不再写死 output/ 根目录。
+    out_dir = case_dir(image)
+    os.makedirs(out_dir, exist_ok=True)
     stem, ext = os.path.splitext(OUT_HTML)
     saved = []
     for i, res in enumerate(result):
         # 多个输入时给每个结果单独命名，避免后面的覆盖前面的
-        path = OUT_HTML if len(result) == 1 else f'{stem}_{i}{ext}'
+        name = OUT_HTML if len(result) == 1 else f'{stem}_{i}{ext}'
+        path = os.path.join(out_dir, name)
         res.save_to_html(path)
         if ensure_readable_html(path):
-            print(f'>> 已为 {path} 补充 <meta charset="utf-8"> 与表格样式')
+            print(f'>> 已为 {show(path)} 补充 <meta charset="utf-8"> 与表格样式')
         saved.append(path)
 
-    print(f'\n>> 已保存 {", ".join(saved)}，用浏览器打开查看表格还原效果')
+    print(f'\n>> 已保存 {", ".join(show(p) for p in saved)}，用浏览器打开查看表格还原效果')
     print(f'>> 总耗时：{t2 - t0:.2f}s（加载 {t1 - t0:.2f}s + 推理 {t2 - t1:.2f}s）')
 
 

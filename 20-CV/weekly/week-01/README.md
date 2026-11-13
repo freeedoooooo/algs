@@ -92,7 +92,7 @@
 
 > ⚠️ **版本提示**：3.x 把 `.ocr(cls=True)` 改成 `.predict()`，结果从「三层嵌套列表」变成 dict 风格的 `rec_texts / rec_scores / rec_polys`；`use_angle_cls`、`PPStructure`、`import fitz` 也都换了名字。另外**默认开启的 UVDoc 去扭曲会让坐标基于矫正后图像**，要把识别框画回原图必须关掉上面那两项。换版本仍以官方 Quickstart 为准：https://github.com/PaddlePaddle/PaddleOCR
 
-**产出**：`output/b_ocr_result.txt`（文字 + 置信度）、`output/b_ocr_boxes.png`（原图叠加识别框）、`output/b_ocr_report.html`（左图右文字的离线对照报告，浏览器直接打开）。**原图有字却没框的地方就是漏检**，比只看文本直观得多；不想要可视化就把配置区 `MAKE_VIS` 改成 `False`。
+**产出**：产物按「脚本名 / 输入名」分目录。例如识别 `input/test2.jpg` → `output/b_ocr_image/test2/`，里面是 `b_ocr_result.txt`（文字 + 置信度）、`b_ocr_boxes.png`（原图叠加识别框）、`b_ocr_report.html`（左图右文字的离线对照报告，浏览器直接打开）。换一张图会自动进另一个目录，不会覆盖上一次的结果。**原图有字却没框的地方就是漏检**，比只看文本直观得多；不想要可视化就把配置区 `MAKE_VIS` 改成 `False`。
 
 ---
 
@@ -121,7 +121,8 @@ print("预览：", preview)
   doc = pymupdf.open("scan.pdf")
   for i, page in enumerate(doc):
       pix = page.get_pixmap(dpi=200)      # dpi 越高越清晰但越慢
-      pix.save(f"output/page_{i}.png")           # 存成图片，再走 PaddleOCR
+      # 页图是中间产物，脚本会单独放到该输入目录下的 pages/ 子目录
+      pix.save(f"output/c_pdf_text_layer/scan/pages/page_{i}.png")
   doc.close()
   ```
 
@@ -144,13 +145,13 @@ engine = PPStructureV3(
 )
 result = engine.predict('input/test2.jpg')   # 3.x 用 predict()，返回 list[结果对象]
 res = result[0]
-res.save_to_html('output/d_table_out.html')  # 表格会还原成 <table>
+res.save_to_html('output/d_table_ocr/test2/d_table_out.html')  # 按输入名分目录
 for b in res.json['res']['parsing_res_list']:
     print(b['block_label'], str(b['block_content'])[:50])   # header / text / table ...
 ```
 > 表格识别是**多模型流水线**（版面检测 + 表格分类 + 结构识别 + 单元格检测），首次运行要下模型；脚本里已切到百度云 BOS 源，避免卡 HuggingFace。本周**跑通一个表格→HTML**即可，不追求完美。
 
-**产出**：把一张表格图片转成 HTML，用浏览器打开看到还原的表格。（代码已备好为 `d_table_ocr.py`，`python d_table_ocr.py` 直接跑，输出配置区 `OUT_HTML` 指定的 `output/d_table_out.html`。脚本会自动补 `<meta charset="utf-8">`，中文不会乱码。）
+**产出**：把一张表格图片转成 HTML，用浏览器打开看到还原的表格。（代码已备好为 `d_table_ocr.py`，`python d_table_ocr.py` 直接跑，输出 `output/d_table_ocr/test2/d_table_out.html`。脚本会自动补 `<meta charset="utf-8">`，中文不会乱码。）
 
 ---
 
@@ -170,19 +171,29 @@ for b in res.json['res']['parsing_res_list']:
 
    **现在直接 `python weekend_pipeline.py` 就会批量跑 `input/` 下所有 case**，不用再手改输入路径。它按后缀分三条路：PDF 判断文本层（有则 `pdfplumber` 抽字、无则转图逐页 OCR）、图片直接 OCR、CSV/TXT 直接读（连模型都不用加载）。
 
-   **每个输入单独一个输出目录**，互不覆盖、方便对照：
+   **产物全部隔离**：全周统一规则是 **`output/<脚本名>/<输入文件名>/`** —— 脚本之间互不干扰，同一脚本换一个输入也不会覆盖上一次的结果。中间产物（转出的页图、OCR 临时页图）再单独放一层子目录，不和正式结果混在一起。
 
    ```text
    output/
-     test1/          output.json + pipeline_result.txt
-     test2/          output.json + pipeline_result.txt + pipeline_table_p0.html
-     test3/          output.json + pipeline_result.txt
-     test3_image/    output.json + pipeline_result.txt + pipeline_table_p1.html
-     test4/          output.json + pipeline_result.txt
-     batch_summary.json / batch_summary.txt   ← 所有 case 的总览表
+     b_ocr_image/
+       test2/             b_ocr_result.txt + b_ocr_boxes.png + b_ocr_report.html
+     c_pdf_text_layer/
+       test3/             test3_text.txt（抽出的全文）
+       test3_image/
+         pages/           c_page_0~4.png（转出的页图，中间产物）
+     d_table_ocr/
+       test2/             d_table_out.html
+     weekend_pipeline/
+       batch_summary.json / batch_summary.txt   ← 所有 case 的总览表
+       test1/             output.json + pipeline_result.txt
+       test2/             output.json + pipeline_result.txt + pipeline_table_p0.html
+       test3/             output.json + pipeline_result.txt
+       test3_image/       output.json + pipeline_result.txt + pipeline_table_p1.html
+                          + _tmp_pages/（OCR 页图，跑完自动删）
+       test4/             output.json + pipeline_result.txt
    ```
 
-   只跑一个文件：`python weekend_pipeline.py input/test3.pdf`；跑别的目录：`python weekend_pipeline.py ../week-02/input`。新增 case 只要丢进 `input/` 就会自动被扫到（支持 `.pdf` / 常见图片 / `.csv .txt .md`，见配置区 `SUPPORTED_EXTS`）。OCR 分支的中间页图跑完自动清理，想留着核对把 `KEEP_TEMP_IMAGES` 改成 `True`；表格识别每页约 +20s，只想快速看文字把 `ENABLE_TABLE` 改成 `False`。输入统一放 `input/`，产物统一放 `output/`，目录已建好。
+   只跑一个文件：`python weekend_pipeline.py input/test3.pdf`；跑别的目录：`python weekend_pipeline.py ../week-02/input`。新增 case 只要丢进 `input/` 就会自动被扫到（支持 `.pdf` / 常见图片 / `.csv .txt .md`，见配置区 `SUPPORTED_EXTS`）。OCR 分支的中间页图放在 `_tmp_pages/`、跑完自动清理，想留着核对把 `KEEP_TEMP_IMAGES` 改成 `True`；表格识别每页约 +20s，只想快速看文字把 `ENABLE_TABLE` 改成 `False`。输入统一放 `input/`，产物按上面两层规则自动建目录。
 2. **bad case 库雏形**：建一个文件夹 `bad_cases/`，把你跑的过程中**识别错、识别不全、模糊/倾斜/反光**的样本图存进去，附一个 `notes.md` 记"这张为什么失败"。**这是第 2 周和 P4 的宝贵素材，现在就开始攒。**
 
 ---

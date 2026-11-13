@@ -1,6 +1,6 @@
 {
   "source": "input\\test1.jpg",
-  "out_dir": "output\\test1",
+  "out_dir": "output/weekend_pipeline\\test1",
   "kind": "image",
   "mode": "ocr",
   "text": "manuaLLy\nnectorymanually:\nC:\\Users\\Administrator\\.paddlexofficial_models\\pp-0cRv4_servep_seaL_det\npectorymanualLy:\n:c:\\Users\\Administrator.paddLexofficial_modelsPp-ocRv4_server_rec\nectory manually:C:Users\\Administrator.paddlex\\official_models\\slANet_plus",
@@ -8,7 +8,7 @@
   "pages": 1,
   "text_scope": "image",
   "cropbox_limited": false,
-  "elapsed": 23.13,
+  "elapsed": 27.0,
   "tables": [
     {
       "page": 0,

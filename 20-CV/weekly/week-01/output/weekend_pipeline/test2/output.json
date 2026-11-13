@@ -1,6 +1,6 @@
 {
   "source": "input\\test2.jpg",
-  "out_dir": "output\\test2",
+  "out_dir": "output/weekend_pipeline\\test2",
   "kind": "image",
   "mode": "ocr",
   "text": "招商银行\nCHINA MIERCHANTS BANK\n用户所属公司：XXX科技有限公司\n打印时间：2022/11/29\n15:47\n记录数：1160\n交易日期\n借\n贷\n余额摘要\n收(付)方名称\n收(付)方账号\n交易类型\n021-11-29\n上海保洁月费-\n0, 000.00\n00, 000, 000. 56\n代发款项\n程\n5:42:05",
@@ -8,7 +8,7 @@
   "pages": 1,
   "text_scope": "image",
   "cropbox_limited": false,
-  "elapsed": 10.53,
+  "elapsed": 11.92,
   "tables": [
     {
       "page": 0,
@@ -20,7 +20,7 @@
           "content": "<html><body><table><tr><td>交易日期</td><td>借</td><td>贷</td><td>余额摘要</td><td>收 (付)方名称</td><td>收(付)方账号</td><td>交易类型</td></tr><tr><td>021-11-29</td><td>上海保洁月费-</td><td>0, 000.00</td><td>00, 000, 000. 56</td><td>代发款项</td><td>5:42:05</td><td>程</td></tr></table></body></html>"
         }
       ],
-      "html": "output\\test2\\pipeline_table_p0.html"
+      "html": "output/weekend_pipeline\\test2\\pipeline_table_p0.html"
     }
   ]
 }

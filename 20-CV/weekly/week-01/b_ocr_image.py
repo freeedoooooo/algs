@@ -8,10 +8,13 @@
 
 调试要改的路径都在文件顶部的【配置区】，不用往下翻代码。
 
-【产物】默认都放在 output/ 下：
-    b_ocr_result.txt      每行文字 + 置信度
-    b_ocr_boxes.png       原图上叠加识别框，一眼看出哪里认出来了、哪里漏了
-    b_ocr_report.html     离线对照报告（左图右文字），浏览器直接打开，不用起服务
+【产物】两层隔离，一眼看出「哪个脚本、哪个输入」的产物：
+    output/b_ocr_image/<输入文件名去后缀>/
+        b_ocr_result.txt      每行文字 + 置信度
+        b_ocr_boxes.png       原图上叠加识别框，一眼看出哪里认出来了、哪里漏了
+        b_ocr_report.html     离线对照报告（左图右文字），浏览器直接打开，不用起服务
+例如输入 input/test2.jpg → output/b_ocr_image/test2/。
+换一张图跑，结果自动进另一个目录，不会覆盖上一次的。
 HTML 把图片用 base64 内嵌进去了，所以单独把 HTML 拷走也能正常显示。
 不想要可视化就把配置区的 MAKE_VIS 改成 False。
 
@@ -43,9 +46,14 @@ HTML 把图片用 base64 内嵌进去了，所以单独把 HTML 拷走也能正�
 
 # =========================== 配置区：调试只改这里 ===========================
 INPUT_IMAGE = 'input/test2.jpg'             # 输入图片
-OUT_TXT = 'output/b_ocr_result.txt'         # 纯文本结果；不想落盘就改成 None
-OUT_BOX_PNG = 'output/b_ocr_boxes.png'      # 原图 + 识别框
-OUT_REPORT_HTML = 'output/b_ocr_report.html'  # 离线对照报告，浏览器直接打开
+# ↓ 产物隔离规则：output/<脚本名>/<输入文件名>/
+#   OUT_DIR 是本脚本专属目录，和 c / d / weekend_pipeline 的产物互不干扰。
+#   下面三项只是「文件名」，运行时会拼到 OUT_DIR/<输入文件名>/ 里，
+#   所以换一张图跑不会覆盖上一次的结果。
+OUT_DIR = 'output/b_ocr_image'              # 本脚本的产物总目录
+OUT_TXT = 'b_ocr_result.txt'                # 纯文本结果；不想落盘就改成 None
+OUT_BOX_PNG = 'b_ocr_boxes.png'             # 原图 + 识别框
+OUT_REPORT_HTML = 'b_ocr_report.html'       # 离线对照报告，浏览器直接打开
 DET_MODEL = 'PP-OCRv4_mobile_det'           # 文本检测模型（找文字在哪）
 REC_MODEL = 'PP-OCRv4_mobile_rec'           # 文本识别模型（读出来）
 USE_DOC_PREPROCESS = False                  # False = 坐标对齐原图（画框必须）；True = 只取文字时可能更准
@@ -72,6 +80,23 @@ os.environ.setdefault('PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK', 'True')
 # 一是保证上面两行环境变量先设置好（paddle 在被导入那一刻会读走并"快照"）；
 # 二是别的文件 import 本模块做复用时，不会连带花几秒钟加载模型（懒加载）。
 # 真正的 import 写在下面的 build_ocr() 里。
+
+
+def show(path):
+    """日志专用：把 Windows 的反斜杠显示成 /，实际读写路径不变。"""
+    return str(path).replace(os.sep, '/') if path else path
+
+
+def case_dir(input_path):
+    """
+    按输入文件名算出专属产物目录：OUT_DIR/<输入文件名去后缀>/。
+
+    os.path.splitext('input/test2.jpg') → ('input/test2', '.jpg')，取 [0] 得到不带后缀的部分；
+    os.path.basename 先去掉前面的目录，只留文件名。
+    这样 test2.jpg 和 test1.jpg 的产物自然分到两个目录，谁也不会覆盖谁。
+    """
+    stem = os.path.splitext(os.path.basename(input_path))[0]
+    return os.path.join(OUT_DIR, stem)
 
 
 def build_ocr():
@@ -129,12 +154,15 @@ def save_text(rows, path):
     os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
         f.write('\n'.join(f"{r['text']}\t置信度={r['score']:.2f}" for r in rows))
-    print(f'>> 文字结果已保存：{path}')
+    print(f'>> 文字结果已保存：{show(path)}')
 
 
-def save_visualization(image_path, rows):
+def save_visualization(image_path, rows, out_dir):
     """
     生成 ① 带框 PNG ② 自包含的离线 HTML 对照报告。
+
+    out_dir 是本次输入专属的目录，OUT_BOX_PNG / OUT_REPORT_HTML 只是文件名，
+    要用 os.path.join 拼上去 —— 这正是「不同输入不混在一起」的实现点。
 
     这部分是「脚手架」，不是本周要学的 OCR 原理 —— 它只负责把坐标画出来，
     让你能直观看到「原图有字但没框 = 漏检」，这是只看 JSON/TXT 看不出来的。
@@ -142,7 +170,9 @@ def save_visualization(image_path, rows):
     """
     from PIL import Image, ImageDraw   # 只在需要画图时才导入
 
-    os.makedirs(os.path.dirname(OUT_BOX_PNG) or '.', exist_ok=True)
+    os.makedirs(out_dir, exist_ok=True)
+    box_png = os.path.join(out_dir, OUT_BOX_PNG)
+    report_html = os.path.join(out_dir, OUT_REPORT_HTML)
 
     # ---- ① 在原图副本上画识别框 ----
     img = Image.open(image_path).convert('RGB')
@@ -163,10 +193,10 @@ def save_visualization(image_path, rows):
             width = 9 * len(label) + 8
             draw.rectangle([lx, top, lx + width, top + 16], fill=color)
             draw.text((lx + 4, top + 2), label, fill=(255, 255, 255))
-    img.save(OUT_BOX_PNG)
+    img.save(box_png)
 
     # ---- ② 生成 HTML：图片用 base64 内嵌，拷到任何地方都能显示 ----
-    with open(OUT_BOX_PNG, 'rb') as f:
+    with open(box_png, 'rb') as f:
         data_uri = 'data:image/png;base64,' + base64.b64encode(f.read()).decode('ascii')
 
     # html.escape 把文字里的 < > & 转义，避免识别结果被浏览器当成 HTML 标签
@@ -212,11 +242,10 @@ def save_visualization(image_path, rows):
         + '\n'.join(lines)
         + '\n</table></div>\n</div>\n</body>\n</html>\n'
     )
-    os.makedirs(os.path.dirname(OUT_REPORT_HTML) or '.', exist_ok=True)
-    with open(OUT_REPORT_HTML, 'w', encoding='utf-8') as f:
+    with open(report_html, 'w', encoding='utf-8') as f:
         f.write(doc)
-    print(f'>> 带框图已保存：{OUT_BOX_PNG}')
-    print(f'>> 对照报告已保存：{OUT_REPORT_HTML}（浏览器直接打开）')
+    print(f'>> 带框图已保存：{show(box_png)}')
+    print(f'>> 对照报告已保存：{show(report_html)}（浏览器直接打开）')
 
 
 def main():
@@ -242,11 +271,16 @@ def main():
     for row in rows:
         print(f"{row['text']}  置信度={row['score']:.2f}")
 
-    save_text(rows, OUT_TXT)
+    # ---- 产物目录：脚本名 + 输入文件名 两层隔离 ----
+    out_dir = case_dir(image)
+    os.makedirs(out_dir, exist_ok=True)
+    print(f'>> 产物目录：{show(out_dir)}')
+
+    save_text(rows, os.path.join(out_dir, OUT_TXT) if OUT_TXT else None)
     if MAKE_VIS:
         if USE_DOC_PREPROCESS:
             print('>> 警告：USE_DOC_PREPROCESS=True 时坐标基于矫正后图像，画出的框会错位')
-        save_visualization(image, rows)
+        save_visualization(image, rows, out_dir)
     t3 = time.perf_counter()
 
     low_count = sum(1 for r in rows if r['score'] < LOW_SCORE)

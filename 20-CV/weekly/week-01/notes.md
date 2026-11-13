@@ -8,6 +8,8 @@
 > 📌 2026-11-12 补：四个脚本做了一轮工程优化，见文末「2026-11-12 优化记录」。
 > 📌 2026-11-13 补：流水线改成**批量扫 `input/` + 每个 case 独立输出目录**，
 > 并新增图片 / CSV 两条分支，见文末「2026-11-13 优化记录」。
+> 📌 2026-11-13 再补：全仓输出统一为 **`output/<脚本名>/<输入名>/` 两层隔离**，
+> 中间产物再单独一层子目录；`output/` 根目录旧产物已清理，见文末「全仓两层输出隔离」。
 > 📌 2026-11-13 补：两份旧文档的结论已提炼进下方「本周结论速查」（A = 11-02 实测知识，
 > B = 无影云工作站手册摘要与过期项）。本文件已自包含，不再依赖任何外部 md。
 
@@ -129,8 +131,8 @@ doc.save('out.pdf', garbage=4, deflate=True)
 - ✅ `c_pdf_text_layer.py`：test3.pdf 0.34s 抽出 2054 字符；转图分支可用；新增逐页字符数概览
 - ✅ `d_table_ocr.py`：test2.jpg → 4 个内容块 + 表格 HTML（乱码已修）
 - ✅ `weekend_pipeline.py`：三个 TODO 补全；**2026-11-13 起改为批量跑 `input/` 全部 case**，
-  不再手改输入路径。每个输入单独输出到 `output/<文件名>/`，总览写在
-  `output/batch_summary.json` / `.txt`。实跑 5/5 成功（2 图片 + 2 PDF + 1 CSV）
+  不再手改输入路径。每个输入单独输出到 `output/weekend_pipeline/<文件名>/`，总览写在
+  `output/weekend_pipeline/batch_summary.json` / `.txt`。实跑 5/5 成功（2 图片 + 2 PDF + 1 CSV）
 - ✅ `weekend_pipeline.py` 的 OCR 分支首次实跑通过：`test3_image.pdf` 5 页 → 197 行 / 1750 字符 / 35.48s（关闭表格开关），中间页图 5/5 自动清理；批量模式下默认开表格重跑为 60.11s，产物仍落在自己的目录里
 - ✅ `b`、`d` 已改成 `main()` + 主程序守卫（2026-11-12 优化）；`import` 三个模块仅 0.38s，不再加载模型
 - ⬜ 3B1B 第 1 集：笔记里没记录，需自评
@@ -167,7 +169,7 @@ doc.save('out.pdf', garbage=4, deflate=True)
   因为要把 `rec_polys` 画回原图；`weekend_pipeline.py` **保留默认开启**，
   它只取文字不画框，UVDoc 对亮字暗底的图识别更好。这是两种场景的不同取舍，别统一。
 - **结果呈现**：`b` 原先取了 `boxes` 却从未使用（死代码）。现在用它生成
-  `output/b_ocr_boxes.png` + 自包含的 `output/b_ocr_report.html`（图片 base64 内嵌，
+  `output/b_ocr_image/<输入名>/b_ocr_boxes.png` + 自包含的 `b_ocr_report.html`（图片 base64 内嵌，
   单独拷走 HTML 也能显示）；低置信度行标橙红。
 - **真 bug**：`d` 用 `os.makedirs('output')` 写死目录，把 `OUT_HTML` 改到别处会报错；
   多结果时 `save_to_html` 还会互相覆盖；静默把缺失输入换成 `test2.jpg` 也容易误导。三处都已修。
@@ -193,19 +195,21 @@ doc.save('out.pdf', garbage=4, deflate=True)
   按文件名排序、只保留 `SUPPORTED_EXTS` 里的类型；`run_batch()` 循环调用 `run()`，
   单个 case 出错只记一笔失败、继续跑下一个（和 week-02 `a_batch_ocr.py` 同款写法）。
   新增 case 只要丢进 `input/`，下次运行自动被扫到。
-- **每个 case 独立目录**：`case_out_dir()` 按文件名（去后缀）生成 `output/<stem>/`，
+- **每个 case 独立目录**：`case_out_dir()` 按文件名（去后缀）生成
+  `output/weekend_pipeline/<stem>/`（上午是 `output/<stem>/`，下午再加一层脚本名）。
   用一个 `set` 记录已用过的名字，处理 `a.pdf` 与 `a.jpg` 这种重名撞车。
   `OUT_JSON` / `OUT_TXT` 从「完整路径」改成「文件名」，由 `save_result()` 拼到各自目录里。
   中间页图、表格 HTML 也全部跟着传 `out_dir`，不再堆在 `output/` 根目录互相覆盖。
   顺带解决了一个历史隐患：根目录 `_tmp_page_0~4.png` 已被 git 跟踪，
-  以前跑默认 OCR 分支会覆盖并删除它们；现在中间图在子目录里，不会碰那 5 张。
+  以前跑默认 OCR 分支会覆盖并删除它们；现在中间图在子目录里，不会碰那 5 张
+  （下午统一清理旧产物时这 5 张一并删除了，均可从 git 恢复）。
 - **补齐两条分支**（否则「所有 case」会漏掉 3 个）：图片直接 `ocr_image()`（没有文本层概念，
   也绝不清理输入原图）；`.csv/.txt/.md` 直接读文本、完全不加载模型。
   `input/test4.csv` 是 Excel 另存的 **GBK** 中文，直接按 utf-8 读会报错/乱码，
   所以 `read_plain_text()` 按 `utf-8-sig → gbk → latin-1` 逐个试编码，
   并把实际用的编码记进结果字典 —— 和 d 的 HTML 乱码是同一类「字节没错、解码规则没说清」问题。
   CSV 另用 `csv.reader` + `io.StringIO` 解析成表格，三条分支的 `tables` 就都有产出了。
-- **汇总表**：`output/batch_summary.json` / `.txt` 列出每个 case 的
+- **汇总表**：`output/weekend_pipeline/batch_summary.json` / `.txt` 列出每个 case 的
   类型 / 识别方式 / 页数 / 字符数 / 表格数 / 耗时 / 输出目录。
   统计表格数时踩了一个口径坑：OCR 分支的 `tables` 里是「**每页一条检查记录**」
   （哪怕该页 0 个表格），文本层/CSV 分支则是「一个元素 = 一张表」，
@@ -217,7 +221,36 @@ doc.save('out.pdf', garbage=4, deflate=True)
   `test1.jpg` 254 字 / `test2.jpg` 169 字 / `test3.pdf` 2054 字 /
   `test3_image.pdf` 1750 字 / `test4.csv` 79 字（gbk）；中间图 5/5 自动清理；
   两个表格 HTML 均带 `charset="utf-8"`、无嵌套；单文件模式、空目录提示、
-  不支持类型提示均正常；`output/` 根目录原有历史文件一张没动。
+  不支持类型提示均正常（当时 `output/` 根目录的历史文件未动，下午已统一清理，见下节）。
+
+### 同日追加：全仓两层输出隔离（2026-11-13 下午）
+
+**要解决的问题**：上午只给流水线做了「按输入分目录」，但 b / c / d 三个脚本仍把产物
+直接写在 `output/` 根目录；四个脚本的产物和 5 个 case 目录混在一起，分不清哪个文件
+是谁生成的。`output/` 根还堆着 34 个历史文件。
+
+- **统一规则 `output/<脚本名>/<输入文件名>/`**：四个脚本各有自己的 `OUT_DIR`
+  （`b_ocr_image` / `c_pdf_text_layer` / `d_table_ocr` / `weekend_pipeline`），
+  再各加一个 `case_dir()` 按输入文件名（去后缀）建第二层。`b` / `d` 的输出配置项
+  从「完整路径」改成「文件名」，由 `os.path.join` 拼到 case 目录；
+  `c` 顺带修了 `pdf_to_images(dpi=DPI, out_dir=OUT_DIR)` 的**默认参数快照**坑。
+- **中间产物再单独一层**：`c` 转出的页图放 `<case>/pages/`；
+  `weekend_pipeline` 的 OCR 临时页图放 `<case>/_tmp_pages/`，
+  `cleanup_temp_images()` 删完文件再用 `os.rmdir` 删空目录（只删空目录，不会误删内容）。
+  正式结果（`output.json` / 表格 HTML）和中间图不再混在同一层。
+- **汇总表归位**：`batch_summary.json` / `.txt` 放在 `output/weekend_pipeline/` 根，
+  属于所有 case 共有，不属于任何单个输入。
+- **日志可读性**：四个脚本各加 `show()`，只在打印和写汇总表时把 Windows 的 `\`
+  显示成 `/`，实际读写路径一个都不改 —— 避免 `output/weekend_pipeline\test1` 这种斜杠混用。
+- **清理旧产物**：`output/` 根目录下 21 个散文件 + 5 个旧 case 目录（共 34 个文件）全部删除。
+  删前逐个 `git cat-file -e HEAD:<path>` 确认都在 git 里，
+  恢复用 `git checkout -- "20-CV/weekly/week-01/output"`。
+- **验证**：四脚本 `py_compile` 通过；`import` 四模块 0.29s 不加载模型；
+  b / c / d 实跑确认各自落到 `output/b_ocr_image/test2/`、
+  `output/c_pdf_text_layer/test3_image/pages/`、`output/d_table_ocr/test2/`；
+  `weekend_pipeline` 批量 5/5 成功、104.29s；单独验证 `_tmp_pages/` 生成 5 张图、
+  清理后目录自动消失、case 目录只剩 3 个正式产物；4 个 HTML 均带 charset；
+  汇总表与各 case 的 `output.json` 数据对齐。
 
 ## 疑问（留着后面阶段解答）
 - 为什么亮字暗底会几乎全军覆没？检测阶段到底在看什么特征？（week-02 反色实验 / P4）
