@@ -1,7 +1,7 @@
 case：102_real_clear_doc.jpg
 分组：real　类型：image
 模型：PP-OCRv4_mobile_det + PP-OCRv4_mobile_rec
-OCR 行数：21　平均置信度：0.94　可疑行：1　耗时：4.29s
+OCR 行数：21　平均置信度：0.94　可疑行：1　耗时：3.97s
 --- 逐行 OCR 结果（文字<TAB>置信度）---
 招商银行	0.99
 CHINA MIERCHANTS BANK	0.97

@@ -38,12 +38,14 @@
 ## 脚本地图：谁调用谁
 
 **一句话**：`a_batch_ocr.py` 是本周唯一的主入口，你只需要运行它；
-`case_naming.py`、`text_layer_extract.py`、`vis_ocr_result.py` 都是被它调用的模块。
+`case_naming.py`、`text_layer_extract.py`、`table_extract.py`、`vis_ocr_result.py`
+都是被它调用的模块。
 
 ```
 a_batch_ocr.py   ← 你只运行这一个（主入口 / 编排）
     ├── case_naming.py         ① 文件顶部 import，全程用：命名 / 分组 / 排序
     ├── text_layer_extract.py ② 文件顶部 import，只在 PDF / CSV 分支直读表格
+    ├── table_extract.py      ④ 文件顶部 import；**仅 103 / 107 两个含表格的 case**做表格检测 + CSV 导出
     └── vis_ocr_result.py     ③ main() 里「用到才 import」：画对照报告
 ```
 
@@ -51,8 +53,9 @@ a_batch_ocr.py   ← 你只运行这一个（主入口 / 编排）
 |---|---|---|---|---|
 | `a_batch_ocr.py` | 主入口：遍历 case、跑 OCR、落盘 | 你（命令行） | — | 是，`python a_batch_ocr.py` |
 | `case_naming.py` | 命名 / 分组 / 排序的唯一真相源 | **5 个脚本**（见下） | 各脚本 import 时 | 否，纯函数模块、无 main |
-| `text_layer_extract.py` | PDF 文本层 / CSV 直读，不加载模型 | `a_batch_ocr.py`（正式跑批），也可单独调试 | a 的文件顶部 | 是，`python text_layer_extract.py`（只测直读） |
-| `vis_ocr_result.py` | 画原图 + 识别框 + 直读结果的 HTML | `a_batch_ocr.py`，也可直接运行 | **懒加载**，画报告时才 import | 是，`python vis_ocr_result.py` |
+| `text_layer_extract.py` | PDF 文本层 / CSV 直读，不加载模型 | `a_batch_ocr.py`、`table_extract.py`，也可单独调试 | a 的文件顶部 | 是，`python text_layer_extract.py`（只测直读） |
+| `table_extract.py` | 表格检测 + 结构化 + 导出 CSV（**只对 103/107 生效**） | `a_batch_ocr.py`，也可单独调试 | a 的文件顶部；**内部的表格模型按需懒加载** | 是，`python table_extract.py`（默认测 103 + 107） |
+| `vis_ocr_result.py` | 画原图 + 识别框 + 表格提取区块的 HTML | `a_batch_ocr.py`，也可直接运行 | **懒加载**，画报告时才 import | 是，`python vis_ocr_result.py` |
 
 `case_naming.py` 是公共底座，除 a 外还有 4 个调用方：
 `c_try_params.py`（自动挑默认图）、`make_samples.py`（生成 / 补登记样本）、
@@ -61,6 +64,8 @@ a_batch_ocr.py   ← 你只运行这一个（主入口 / 编排）
 
 **为什么 ③ 是懒加载**：画图属于附加功能。放在 `main()` 里、并裹在 `try` 中，
 即使报告生成失败，已经落盘的 `result.json` / `result.txt` 也不会白跑。
+④ 虽然写在文件顶部，但它自己不 import paddleocr —— 只有「长直线预筛命中
+表格网格」的 case 才会真正加载 `PPStructureV3`，且整批只加载一次（单例）。
 跑 `a_batch_ocr.py` 时日志开头会打印「本次运行会用到的模块」，
 想让日志安静就把配置区 `SHOW_DEPS` 改成 `False`。
 
@@ -74,13 +79,16 @@ a_batch_ocr.py   ← 你只运行这一个（主入口 / 编排）
 | 想验证什么 | 用哪个入口 | 命令 | 代价 |
 |---|---|---|---|
 | 103 的文本层表格抽得对不对（策略 / 行列数 / 列边界模板 / 诊断） | `text_layer_extract.py` 单独调试 | `python text_layer_extract.py` | 毫秒级，不加载模型、不写正式产物 |
-| OCR 识别框 vs 直读表格并排、带框 PNG、报告卡片 | `a_batch_ocr.py` 完整流水线 | `python a_batch_ocr.py` | 约 100s，跑全量 25 个 case |
+| 103 / 107 的**表格结构化和 CSV** 对不对（表头 / 数据行 / 提取路线） | `table_extract.py` 单独调试 | `python table_extract.py` | 103 毫秒级；107 首次加载表格模型约 23s |
+| OCR 识别框 vs 结构化表格并排、带框 PNG、报告卡片 | `a_batch_ocr.py` 完整流水线 | `python a_batch_ocr.py` | 约 130s，跑全量 25 个 case |
 
 `text_layer_extract.py` 不传参数时默认测配置区的 `DEBUG_CASE`
 （`103_real_bank_statement_textlayer.pdf`），打印类型 / 文本层 / CropBox、
 每张表的策略与行列数、抽取诊断、表头前 3 行；加 `--json` 看完整 dict。
 测别的文件把路径跟在后面即可，例如
 `python text_layer_extract.py input/105_real_transactions_gbk.csv`。
+`table_extract.py` 不传参数会依次测 103（文本层直读）和 107（表格模型），
+产物落在 `output/table_extract/<输入名>/`，不碰正式结果。
 
 **为什么 a 没有「只跑一个 case」的开关**：`a_batch_ocr.py` 会整体重写
 `batch_summary.json` 和 `index.html`；只跑 103 会把全量汇总和 25 张卡片的
@@ -88,6 +96,58 @@ a_batch_ocr.py   ← 你只运行这一个（主入口 / 编排）
 所以正式结果一律跑全量；单测走上面的独立入口。
 已经跑好的 103 结果直接看 `output/a_batch_ocr/103_real_bank_statement_textlayer/`
 和 `index.html`，不必重跑。
+
+### case 103 / 107：怎么把表格真正抽出来
+
+这两个文件里**最关键的信息是表格**（银行流水明细、事务所备案名单），但
+早期批量结果里只有一堆 OCR 文字行，表格要么被切碎、要么根本没检测。
+11-13 下午按「载体分层」补齐，两条路线各解决一半问题：
+
+```
+判载体
+ ├── 有文本层（103 PDF、105 CSV）──→ 直读字符，不加载任何模型
+ │      pdfplumber：人工列边界（竖）+ 页面真实横线（横）
+ │      → 表头 / 数据行分离 → table_1.csv
+ └── 无文本层（107 扫描图、104 扫描 PDF）──→ 长直线预筛 → 表格结构模型
+        有网格线才启用 PPStructureV3（自动校正 90° 旋转）
+        → 表格 HTML 解析成 rows → table_1.csv
+```
+
+**103 原来的坑不是「没抽到表」，而是抽成了伪表格**：`explicit` 策略配了
+`horizontal_strategy='text'`，pdfplumber 按「文字物理行」切行，一笔交易因为
+单元格内换行（日期 / 时间 / 金额 / 摘要分属几行）被拆成 3~5 行，得到
+105×8、填充率 0.293 的碎表。改成按页面 **26 条真实横线**切行后变成
+25×8（1 行表头 + 24 笔交易）、填充率 0.74，抬头「用户所属公司 / 打印时间 /
+记录数」因没有横线包围自动落在表外。这一处同样同步到了第1周
+`week-01/weekend_pipeline.py`。
+
+**107 的坑是旋转 + 无文本层**：原图是顺时针转了 90° 的扫描页，OCR 出来的
+58 行文字全是无结构的碎片，也完全没有表格分支。实测把原图直接喂给
+`PPStructureV3`，内部的整页方向分类会自动转正并还原出 5 列 × 8 行的
+备案名单（含表头），不必自己转图 —— 因为这里只要表格结构，不需要识别框
+坐标，所以不受「文档预处理导致坐标错位」那个坑影响。
+
+**每个 case 目录新增的产物**：
+
+| 文件 | 内容 |
+|---|---|
+| `tables.json` | 结构化表格（标题 / 表头 / 数据行 / 行列数 / 填充率）+ 提取路线 + 诊断 |
+| `table_1.csv`、`table_2.csv` … | 第一行是表头，`utf-8-sig` 编码，Excel 双击不乱码 |
+| `index.html` 卡片下方 | 「表格提取」主区块：带表头的表格 + CSV 下载链接；原始抽取记录收进折叠区 |
+
+三类输入**都有**这段区块，以前图片卡片是空的。汇总表 / 报告顶部也会统计
+「结构化表格」总数。想关掉：`a_batch_ocr.py` 的 `TABLE_EXTRACT=False`
+（整个表格增强都关），或 `table_extract.py` 的 `ENABLE_TABLE_MODEL=False`
+（只关图片表格模型，保留文本层直读）。
+
+**为什么不慢**：表格模型首次加载约 23s，但 ① 只有长直线预筛命中的 case
+才加载（18 张合成图竖线数全是 0，直接跳过）；② 模型做成模块级单例，
+整批只加载一次。`table_extract.py` 里 `GRID_MIN_H_LINES` /
+`GRID_MIN_V_LINES` 可调预筛松紧。
+
+**当前边界**：PDF 只渲染 / 解析第 1 页，图片只处理整张图；103 的人工列边界
+模板是**固定版式专用**（按语义名匹配，换编号仍生效），换成别的版式要改
+`TABLE_COLUMN_LINES` 或删掉它走策略回退。
 
 ## 学什么 & 怎么学
 

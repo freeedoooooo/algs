@@ -10,31 +10,38 @@
     PDF  (.pdf)           → 首页渲染成图给 OCR；**有文本层时额外直读表格**
                             （策略回退见 text_layer_extract.py，完全不加载表格模型）
     CSV/TXT (.csv/...)    → 直接按文本读，解析成表格，不跑 OCR
-这样在 output/a_batch_ocr/index.html 的对比预览里，同一个 PDF 能同时看到
-「像素 OCR 的框」和「文本层直读出来的表格」，一眼比出两条路线的差距。
+11-13 下午新增：表格不再只是「文字之外的补充」，而是一等公民。
+三类输入都会再过一遍 table_extract.py：有文本层就直读、无文本层就先
+长直线预筛再走表格结构模型，最终每个 case 目录里额外产出 tables.json +
+table_N.csv（可直接用 Excel 打开）。典型例子：103 银行流水、107 备案名单。
 
 【脚本之间怎么串起来】（11-13 补：想一眼看清「谁调用谁」就看这里）
-本脚本是本周**唯一的主入口**，另外 3 个模块都是被它调用的：
+本脚本是本周**唯一的主入口**，另外 4 个模块都是被它调用的：
 
     a_batch_ocr.py  ← 你只需要运行这一个
         ├── case_naming.py        ① 文件顶部 import，全程用
         │                          命名 / 分组 / 排序 / 输出目录名
         ├── text_layer_extract.py ② 文件顶部 import，只在 PDF / CSV 分支
         │                          build_case_record() 里调 extract_case()
+        ├── table_extract.py      ④ 文件顶部 import，build_case_record() 末尾
+        │                          调 enrich_case()：表格检测 + 结构化 + 导出 CSV
         └── vis_ocr_result.py     ③ main() 里「用到才 import」（懒加载）
                                   build_report() 生成对照报告
 
     另外 case_naming.py 是公共底座，还被 c_try_params.py / make_samples.py /
     text_layer_extract.py / vis_ocr_result.py 引用（一共 5 个调用方）。
+    ④ 内部会复用 ② 的直读结果，并在确实需要时懒加载 PPStructureV3。
 
 为什么 ③ 不写在文件顶部：画图是附加功能。放在 main() 里、并裹在 try 中，
 即使报告生成失败，已经落盘的 result.json / result.txt 也不会白跑。
 这种「用到才 import」叫懒加载，是 Python 很常见的写法。
 
 单独运行：python vis_ocr_result.py（只重画报告）、
-python text_layer_extract.py（只测文本层直读，默认 case 103）、python c_try_params.py（调参）；
-case_naming.py 是纯函数模块，没有 main()，只由别的脚本 import。
+python text_layer_extract.py（只测文本层直读，默认 case 103）、
+python table_extract.py（只测表格提取，默认 103 + 107 两条路线）、
+python c_try_params.py（调参）；case_naming.py 是纯函数模块，没有 main()。
 只想验证某个 case 的「直读」抽得对不对 → 跑 text_layer_extract.py 就够（不加载模型）；
+只想验证「表格结构化 / CSV 导出」对不对 → 跑 table_extract.py（也不跑 a 的 OCR）；
 想看它和 OCR 识别框并排的对比 → 仍要跑本脚本走完整流水线。
 
 环境（本机 miniforge，环境名就是 paddle）：
@@ -51,6 +58,8 @@ case_naming.py 是纯函数模块，没有 main()，只由别的脚本 import。
         <输入文件名去后缀>/
             result.json             这个 case 的完整结果：文字 / 置信度 / 坐标 / 直读表格
             result.txt              这个 case 的纯文本结果
+            tables.json             ★ 结构化表格（表头 + 数据行 + 提取路线 + 诊断）
+            table_1.csv …           ★ 可直接用 Excel 打开的表头 + 数据行
             source.<ext>            输入副本（图片=原图 / PDF=首页渲染图 / CSV=原始文本）
             boxes.png               原图 + 识别框（纯文本没有像素，不生成）
             pages/p1.png            PDF 首页渲染图（中间产物，单独一层，跑完保留）
@@ -101,6 +110,14 @@ SUPPORTED_EXTS = IMAGE_EXTS + PDF_EXTS + TEXT_EXTS
 #                  矫正后的图像，画回原图时框会整体错位。想试时改成 True 再跑一次。
 USE_DOC_PREPROCESS = False
 MAKE_VIS = True                                  # 跑完自动生成可视化对照报告（建议保持 True）
+# 表格检测与结构化提取：只对明确含表格的真实 case 生效
+# （用户 11-13 指定：103 文本层银行流水、107 扫描备案表）。
+# 其它 22 个 case 一律只做原来的文本提取，不跑表格逻辑、不生成 tables.json / table_N.csv，
+# 这样它们的产物和以往完全一致，也不会因为表格预筛 / 模型异常被连累。
+# 想给更多 case 加表格提取，只往 TABLE_EXTRACT_CASES 里加「去后缀的输入文件名」即可
+# （命名规则与输出目录名一致：文件名去掉扩展名，如 103_real_bank_statement_textlayer）。
+TABLE_EXTRACT = True
+TABLE_EXTRACT_CASES = ['103_real_bank_statement_textlayer', '107_real_scan_page2']
 SHOW_DEPS = True                                 # 运行时打印「本次用到哪些模块」，想让日志安静改 False
 MANIFEST_NAME = 'samples_manifest.json'          # 说明书文件名，脚本会在输入目录里找它
 # ==========================================================================
@@ -117,13 +134,17 @@ os.environ.setdefault('PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK', 'True')
 
 from paddleocr import PaddleOCR  # noqa: E402  （放在 env 设置之后是故意的）
 
-# ---------- 本项目的 3 个依赖模块（对应关系见文件头「脚本之间怎么串起来」）----------
+# ---------- 本项目的依赖模块（对应关系见文件头「脚本之间怎么串起来」）----------
 # ① case_naming.py —— 纯函数，全程用：list_cases() / case_rel_name() / save_results() / main()
 import case_naming as naming                # noqa: E402
 # ② text_layer_extract.py —— 只依赖 pdfplumber + pymupdf，不加载任何 OCR 模型。
 #    单独成模块是为了让「哪些结果来自像素、哪些来自文字本身」在代码里就分得清；
 #    只在 build_case_record() 的 PDF / CSV 分支调 extract_case()。
 from text_layer_extract import extract_case  # noqa: E402
+# ④ table_extract.py —— 表格检测 / 结构化 / 导出 CSV，在 build_case_record() 末尾
+#    调 enrich_case()。它自己不 import paddleocr（模型在用到时才懒加载），
+#    所以放文件顶部 import 很轻，不会拖慢启动。
+from table_extract import enrich_case        # noqa: E402
 # ③ vis_ocr_result.py 不在这里 import —— 它在 main() 里懒加载，见下方 MAKE_VIS 分支。
 
 
@@ -131,12 +152,15 @@ def show_dependencies():
     """
     运行时打印「本次会用到哪些模块」，让调用关系不只写在注释里，跑一次也能看见。
     由配置区 SHOW_DEPS 控制；这里只打印文本，不额外 import 任何东西
-    （① ② 已在文件顶部加载完，③ 要等画报告时才加载）。
+    （①②④ 已在文件顶部加载完，③ 要等画报告时才加载；④ 内部的表格模型
+     更要等「预筛命中网格」才加载）。
     """
     print('>> 本次运行会用到的模块（主入口：a_batch_ocr.py）：')
     print('   ① case_naming.py         命名 / 分组 / 排序（已随本脚本加载）')
     print('   ② text_layer_extract.py  PDF / CSV 直读（已随本脚本加载）')
+    print('   ④ table_extract.py       表格检测 + CSV 导出（已随本脚本加载）')
     print('   ③ vis_ocr_result.py      对照报告（画报告时才加载，懒加载）')
+    print('      └ PPStructureV3       表格结构模型（仅网格命中的 case 才加载）')
 
 
 def list_cases(src_dir):
@@ -187,20 +211,27 @@ def case_rel_name(name, used):
 
 def prepare_case_dir(case_abs):
     """
-    重跑前清掉这个 case 目录里**本脚本自己生成的旧文件**，再重建目录。
+    重跑前清掉这个 case 目录里的**表格类旧产物**，再确保目录存在。
 
-    安全边界：只删固定名单（result.json / result.txt / boxes.png / source.* /
-    pages/*.png），不递归、不删子目录、不碰你手工放进去的文件。
-    和第1周「重跑前先清旧页图」是同一个规矩。
+    为什么只清表格文件、不清 result.json / boxes.png / source.* ：
+        后面 save_results（写 result.json / result.txt）、copy_source（写 source.*）、
+        draw_boxes_png（写 boxes.png）都是用「w」模式把同名文件**覆盖重写**，
+        清不清理结果都一样新；
+        而 tables.json / table_*.csv 只有 enrich_case() 给 103 / 107 写，
+        其它 case 不会重写，留着就会变成「新旧混存」，所以只针对它们清理。
+    好处：一次全量重跑最多删十来个文件，不会触发批量删除保护
+    （之前把 result.json 等也一起删，25 个 case 累计删 50+ 被沙箱拦中断过）。
+    安全边界：不递归、不删子目录、不碰你手工放进去的文件。
     """
     os.makedirs(case_abs, exist_ok=True)
-    fixed = {RESULT_JSON, RESULT_TXT, BOXES_NAME}
     removed = 0
     for name in os.listdir(case_abs):
         path = os.path.join(case_abs, name)
         if not os.path.isfile(path):
             continue
-        if name in fixed or os.path.splitext(name)[0] == SOURCE_BASENAME:
+        is_table = (name == 'tables.json'
+                    or (name.startswith('table_') and name.lower().endswith('.csv')))
+        if is_table:
             os.remove(path)
             removed += 1
     pages = os.path.join(case_abs, PAGES_SUBDIR)
@@ -305,12 +336,24 @@ def build_case_record(ocr, path, case_abs):
     name = os.path.basename(path)
     ext = os.path.splitext(name)[1].lower()
 
-    # ---- 图片：和以前完全一样，直接 OCR ----
+    def finish(rec):
+        """
+        所有分支的统一出口：只有「明确要表格提取的 case」才过 enrich_case()，
+        把结构化表格写回 rec，并写出 tables.json / table_N.csv。
+        其它 case 原样返回，保持原来的纯文本提取产物不变（不生成任何表格文件）；
+        表格是增强功能，enrich_case 内部自己吞掉模型异常，OCR 结果永不被连累。
+        """
+        stem = naming.case_dir_name(name)
+        if TABLE_EXTRACT and stem in TABLE_EXTRACT_CASES:
+            return enrich_case(rec, path, case_abs)
+        return rec
+
+    # ---- 图片：先 OCR，再判有没有表格网格（107 这种扫描表格会命中）----
     if ext in IMAGE_EXTS:
         rec = recognize(ocr, path)
         rec['kind'] = 'image'
         rec['preview_image'] = None
-        return rec
+        return finish(rec)
 
     # ---- PDF / CSV：先走「直读」，不加载任何模型 ----
     # PDF 首页渲染图放进 <case 目录>/pages/，每个输入各一份，互不干扰。
@@ -347,7 +390,7 @@ def build_case_record(ocr, path, case_abs):
     rec['diagnostics'] = extra['diagnostics']
     if extra['encoding']:
         rec['encoding'] = extra['encoding']
-    return rec
+    return finish(rec)
 
 
 def case_text_lines(rec):
@@ -370,6 +413,19 @@ def case_text_lines(rec):
         for t in tables:
             lines.append(f'  第 {t["page"]} 页 / {t["strategy"]} 策略 / '
                          f'{t["n_rows"]}×{t["n_cols"]} / 填充率 {t["fill_ratio"]}')
+    # 结构化表格是所有 case 共有的增强结果：图片分支也可能有（107）。
+    structured = rec.get('structured_tables') or []
+    if structured:
+        lines.append(f'--- 结构化表格（路线 {rec.get("table_route", "?")}）---')
+        for t in structured:
+            lines.append(f'  {t["csv_file"]}: {t["n_rows"]} 行 × {t["n_cols"]} 列'
+                         f' / 填充率 {t["fill_ratio"]}'
+                         + (f' / 标题 {t["title"]}' if t['title'] else ''))
+            lines.append(f'    表头：{" | ".join(t["headers"])}')
+            if t['rows']:
+                lines.append(f'    首行：{" | ".join(t["rows"][0])}')
+    for note in rec.get('table_notes') or []:
+        lines.append(f'  · {note}')
     lines.append('--- 逐行 OCR 结果（文字<TAB>置信度）---')
     # zip() 把文字和置信度一一配对
     for text, score in zip(rec.get('texts') or [], rec.get('scores') or []):
@@ -410,6 +466,8 @@ def save_results(records):
             'avg_score': r.get('avg_score', 0),
             'low_score_lines': r.get('low_score_lines', 0),
             'tables': len(r.get('tables') or []),
+            'structured_tables': len(r.get('structured_tables') or []),
+            'table_route': r.get('table_route'),
             'elapsed': r.get('elapsed', 0),
             'error': r.get('error'),
         } for r in records],
@@ -421,6 +479,8 @@ def save_results(records):
         f'模型：{DET_MODEL} + {REC_MODEL}',
         f'case 数：{len(records)}（合成 {len(records) - summary["real_count"]} / '
         f'真实 {summary["real_count"]}；真实 case 从 {naming.REAL_START_NO} 起编号）',
+        f'结构化表格：{sum(c["structured_tables"] for c in summary["cases"])} 张'
+        f'（CSV 见各 case 目录的 table_N.csv）',
         f'每个 case 的完整结果在：{OUT_ROOT}/<输入名>/{RESULT_JSON}',
         '',
     ]
@@ -428,7 +488,8 @@ def save_results(records):
         lines.append(
             f'{item["file"]:42s} | {str(item["group"]):9s} | {item["kind"]:5s} | '
             f'OCR {item["lines"]:4d} 行 | 置信度 {item["avg_score"]:.2f} | '
-            f'直读表格 {item["tables"]} | {item["elapsed"]}s'
+            f'直读表格 {item["tables"]} | 结构化 {item["structured_tables"]}'
+            f' | {item["elapsed"]}s'
             + (f' | 失败：{item["error"]}' if item['error'] else '')
         )
     with open(os.path.join(OUT_ROOT, SUMMARY_TXT), 'w', encoding='utf-8') as f:
@@ -496,8 +557,10 @@ def main():
         rec['case_no'] = naming.parse_no(name)
         records.append(rec)
         if not rec.get('error'):
-            table_note = (f', 直读表格 {len(rec.get("tables") or [])} 张'
-                          if rec.get('kind') != 'image' else '')
+            n_struct = len(rec.get('structured_tables') or [])
+            # 只在该 case 真有表格时才打印，25 行日志里一眼能找到 103 / 107。
+            table_note = (f', 结构化表格 {n_struct} 张'
+                          f' [{rec.get("table_route", "?")}]' if n_struct else '')
             print(
                 f'>> [{i}/{len(cases)}] {name}: OCR {rec["lines"]} 行, '
                 f'平均置信度 {rec["avg_score"]:.2f}, '

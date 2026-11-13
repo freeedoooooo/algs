@@ -448,10 +448,12 @@ def build_table_settings(strategy, column_lines=None):
     返回空字典 {} 表示「什么都不传，用 pdfplumber 自己的默认值」。
     """
     if strategy == 'explicit' and column_lines:
-        # 人工给定竖线：pdfplumber 不再自己找线，行仍按文字聚类切。
+        # 人工给定竖线，横线用页面里真实画出来的表格线。
+        # 11-13 同步 week-02 的修正：原来 horizontal_strategy='text' 会按文字行
+        # 切，把「单元格内换行」当成新的一行，流水表被切碎且列内容错位。
         return {'vertical_strategy': 'explicit',
                 'explicit_vertical_lines': column_lines,
-                'horizontal_strategy': 'text'}
+                'horizontal_strategy': 'lines'}
     if strategy == 'lines':
         return {'vertical_strategy': 'lines', 'horizontal_strategy': 'lines'}
     if strategy == 'text':

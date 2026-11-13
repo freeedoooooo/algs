@@ -1,7 +1,7 @@
 case：15_heavy_blur.png
 分组：synthetic　类型：image
 模型：PP-OCRv4_mobile_det + PP-OCRv4_mobile_rec
-OCR 行数：4　平均置信度：0.07　可疑行：4　耗时：0.83s
+OCR 行数：4　平均置信度：0.07　可疑行：4　耗时：1.11s
 --- 逐行 OCR 结果（文字<TAB>置信度）---
 	0.00
 厦	0.27

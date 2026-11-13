@@ -23,11 +23,12 @@ result.json 里只有文字和坐标，读起来不直观：
 报告的每张卡片：
       左边 = 原图，识别框以 SVG 叠加在图上，鼠标悬停会互相高亮
       右边 = 逐行文字 + 置信度条，低置信度行标橙红色
-      下方 = 标准答案对照（若有）、PDF / CSV 的「直读结果」
+      下方 = 标准答案对照（若有）、**所有 case 共有的「表格提取」区块**
       顶部 = 全部 case 的汇总指标，可一键只筛「有问题的 case」
-   11-13 新增：PDF / CSV 卡片右侧下面多一块「直读结果」——
-      直接读文本层（或纯文本）抽出的表格、策略与质量指标、抽取诊断、原文，
-      同一个 PDF 因此能并排比较「像素 OCR 读出来的字」和「文本层无损抽出的表」。
+   11-13 下午改版：原来「直读结果」只对 PDF / CSV 显示，图片卡片是空的；
+      现在三类输入都有表格区块，主角是 table_extract.py 产出的结构化表格
+      （带表头、标题、可下载 CSV），原始抽取记录与诊断收进折叠区。
+      103 银行流水 / 107 备案名单这两张表因此成为卡片里最显眼的内容。
 
 【与第1周一致的产物隔离】
 每个输入一个目录，报告只在根目录放跨 case 的汇总。
@@ -300,62 +301,93 @@ document.getElementById('filterBtn').addEventListener('click', function(){
 """
 
 
-def build_extract_html(rec):
+def build_extract_html(rec, case_href=''):
     """
-    渲染「文本层 / 纯文本直读」区域：抽出的表格 + 抽取诊断 + 原文。
-    图片分支没有这段，直接返回空字符串。
+    渲染右侧下方的「表格提取」区块 —— **所有 case 都有这段**，图片分支不再空白。
 
-    这是 11-13 新增的对比重点：同一个 PDF 卡片里，
-    上面的表格是「把页面当图片 OCR 读出来的字」，下面这段是「直接读文本层」，
-    一个带识别误差、一个字符无损，放在一起才看得出差别。
+    11-13 下午改版：原来这里只对 PDF / CSV 显示「直读结果」，而且是把
+    pdfplumber 给的 rows 原样平铺；103 的 105 行碎表、107 干脆没有这一段。
+    现在主角换成 table_extract.py 产出的 structured_tables：有表头、有标题、
+    有可下载的 CSV。OCR 的 226 行文字仍在上面当对照，但最关键的表格不再
+    被埋在补充信息里。
+
+    原始抽取记录降级成折叠区（调试用），诊断信息合并进来，不丢数据。
+    case_href 是这个 case 目录相对报告的路径，用来拼 CSV 的下载链接。
     """
     kind = rec.get('kind', 'image')
-    if kind == 'image':
-        return ''
-    tables = rec.get('tables') or []
-    diag = rec.get('diagnostics') or {}
-    parts = [f'<div class="extract"><h3>直读结果（{esc(kind)}）：{len(tables)} 张表</h3>']
+    raw_tables = rec.get('tables') or []
+    tables = rec.get('structured_tables') or []
+    route_label = {
+        'text_layer': '文本层直读（字符无损，未加载表格模型）',
+        'table_model': '表格结构模型 PPStructureV3（含整页方向自动校正）',
+        'skipped': '未启用 / 未命中表格网格',
+        'failed': '表格模型失败（OCR 结果不受影响）',
+    }.get(rec.get('table_route', ''), '未运行表格提取（旧结果或开关关闭）')
 
+    parts = [f'<div class="extract"><h3>表格提取：{len(tables)} 张结构化表</h3>']
     if kind == 'pdf':
         note = (f'共 {rec.get("pages", 1)} 页 · '
-                + ('有文本层，表格直接抽取、未加载表格模型'
-                   if rec.get('text_layer') else '无文本层，表格只能走 OCR / 结构模型'))
+                + ('有文本层' if rec.get('text_layer') else '无文本层'))
         if rec.get('cropbox_limited'):
             note += ' · 预览图已按 MediaBox 整页渲染（含阅读器里看不到的内容）'
-    else:
+    elif kind == 'csv':
         note = f'纯文本按 {rec.get("encoding", "?")} 解码 · 不跑 OCR'
-    parts.append(f'<p class="note">{esc(note)}</p>')
+    else:
+        note = '图片输入 · OCR 只给文字行，表格结构由下面的路线补足'
+    parts.append(f'<p class="note">{esc(note)}<br>提取路线：{esc(route_label)}</p>')
 
     if not tables:
-        parts.append('<p class="note">没有抽到表格，见下方诊断</p>')
+        parts.append('<p class="note">本 case 未提取到结构化表格。'
+                     '纯文字图 / 证件扫描属正常情况，详见下方诊断。</p>')
     for idx, t in enumerate(tables, 1):
-        rows = t.get('rows') or []
-        head = (f'第 {t.get("page", 1)} 页 · {t.get("strategy", "?")} 策略 · '
-                f'{t.get("n_rows", 0)}×{t.get("n_cols", 0)} · '
+        head = (f'第 {t.get("page", 1)} 页 · {t.get("source", "?")} · '
+                f'{t.get("strategy", "?")} · '
+                f'{t.get("n_rows", 0)} 行 × {t.get("n_cols", 0)} 列 · '
                 f'填充率 {t.get("fill_ratio", 0)}'
                 + (' · 低置信度，建议人工核对' if t.get('low_confidence') else ''))
+        csv_file = t.get('csv_file', f'table_{idx}.csv')
+        csv_href = (f'{case_href}/{quote(csv_file, safe="")}' if case_href
+                    else quote(csv_file, safe=''))
         parts.append(f'<p class="note"><b>表 {idx}</b>　{esc(head)}　'
-                     f'· 按原始抽取顺序平铺，首行可能是页眉</p>')
-        if not rows:
-            continue
-        # 不做「第一行当表头」的假设：pdfplumber 的 text/explicit 策略常把
-        # 页眉也切进表格，真正的表头可能在第 2、3 行。这里如实平铺最不容易误导。
-        body = ''.join(
-            f'<tr class="{"first" if j == 0 else ""}">'
-            + ''.join(f'<td>{esc(c)}</td>' for c in r) + '</tr>'
-            for j, r in enumerate(rows)
-        )
-        parts.append(f'<div class="tablewrap"><table><tbody>{body}</tbody></table></div>')
+                     f'<a href="{csv_href}" target="_blank">下载 {esc(csv_file)}</a></p>')
+        if t.get('title'):
+            parts.append(f'<p class="note">标题：{esc(t["title"])}</p>')
+        headers = t.get('headers') or []
+        rows = t.get('rows') or []
+        thead = ('<thead><tr>' + ''.join(f'<th>{esc(c)}</th>' for c in headers)
+                 + '</tr></thead>') if headers else ''
+        body = ''.join('<tr>' + ''.join(f'<td>{esc(c)}</td>' for c in r) + '</tr>'
+                       for r in rows)
+        parts.append(f'<div class="tablewrap"><table>{thead}'
+                     f'<tbody>{body}</tbody></table></div>')
 
     if rec.get('plain_text'):
         parts.append('<div class="plain"><p class="note"><b>原文</b></p>'
                      f'<pre>{esc(rec["plain_text"])}</pre></div>')
 
-    notes = list(diag.get('pages') or []) + list(diag.get('notes') or [])
+    # 诊断：新模块的表格路线说明 + 原来 pdfplumber 的线型 / 策略诊断
+    diag = rec.get('diagnostics') or {}
+    notes = (list(rec.get('table_notes') or [])
+             + list(diag.get('pages') or []) + list(diag.get('notes') or []))
     if notes:
         li = ''.join(f'<li>{esc(n)}</li>' for n in notes)
         parts.append(f'<details><summary>抽取诊断（{len(notes)} 条）</summary>'
                      f'<ul>{li}</ul></details>')
+
+    # 原始抽取记录保留在折叠区：策略调参时要看「pdfplumber 到底给了什么」
+    if raw_tables:
+        chunks = []
+        for idx, t in enumerate(raw_tables, 1):
+            rows = t.get('rows') or []
+            body = ''.join('<tr>' + ''.join(f'<td>{esc(c)}</td>' for c in r)
+                           + '</tr>' for r in rows)
+            chunks.append(
+                f'<p class="note"><b>原始表 {idx}</b>　第 {t.get("page", 1)} 页 · '
+                f'{t.get("strategy", "?")} 策略 · {len(rows)} 行 · '
+                f'按抽取顺序平铺（单元格内换行仍保留）</p>'
+                f'<div class="tablewrap"><table><tbody>{body}</tbody></table></div>')
+        parts.append(f'<details><summary>原始抽取记录（{len(raw_tables)} 张，调试用）'
+                     f'</summary>{"".join(chunks)}</details>')
     parts.append('</div>')
     return ''.join(parts)
 
@@ -446,7 +478,7 @@ def build_card(rec, card_no, image_dir, out_root, manifest_map):
         rows.append(f'<tr><td colspan="3" style="color:var(--low)">'
                     f'识别失败：{esc(rec["error"])}</td></tr>')
     if not rows:
-        hint = ('该输入没有 OCR 文字（纯文本 / 无文本层），见下方直读结果'
+        hint = ('该输入没有 OCR 文字（纯文本 / 无文本层），见下方表格提取'
                 if kind != 'image' else '没有识别到任何文字（整图漏检）')
         rows.append(f'<tr><td colspan="3" class="empty">{hint}</td></tr>')
 
@@ -471,6 +503,11 @@ def build_card(rec, card_no, image_dir, out_root, manifest_map):
 
     low_lines = rec.get('low_score_lines', 0)
     tables = rec.get('tables') or []
+    n_struct = len(rec.get('structured_tables') or [])
+    # 结构化表格是三类输入共有的指标：107 是图片，但也抽出了备案名单表格，
+    # 所以不能像以前那样只在非图片分支显示。
+    table_metric = (f'<span><em>结构化表格</em> <b>{n_struct}</b></span>'
+                    if n_struct or kind != 'image' else '')
     if kind == 'image':
         # 图片分支：低置信 / 识别失败 / 整图漏检 / 标准答案未命中，都算「有问题」
         problem = 1 if (low_lines or rec.get('error') or not texts
@@ -479,10 +516,9 @@ def build_card(rec, card_no, image_dir, out_root, manifest_map):
         # 非图片分支的 OCR 结果不代表成败：只有「有文本层却一张表都没抽到」
         # 才算问题。扫描件 PDF 本来就没有文本层，不该被误标。
         problem = 1 if (rec.get('error')
-                        or (kind == 'pdf' and rec.get('text_layer') and not tables)
-                        or (kind == 'csv' and not tables)) else 0
-    table_metric = (f'<span><em>直读表格</em> <b>{len(tables)}</b></span>'
-                    if kind != 'image' else '')
+                        or (kind == 'pdf' and rec.get('text_layer')
+                            and not tables and not n_struct)
+                        or (kind == 'csv' and not tables and not n_struct)) else 0
     head = (
         f'<div class="card-head"><h2>{esc(name)}</h2>'
         f'<span class="tag">{esc(category)}</span>'
@@ -501,7 +537,7 @@ def build_card(rec, card_no, image_dir, out_root, manifest_map):
     right = (
         f'<div class="pane"><table><thead><tr><th>#</th><th>识别文字</th>'
         f'<th>置信度</th></tr></thead><tbody>{"".join(rows)}</tbody></table>'
-        f'{details}{build_extract_html(rec)}</div>'
+        f'{details}{build_extract_html(rec, case_href)}</div>'
     )
     return (
         f'<section class="card" data-problem="{problem}">{head}'
@@ -539,6 +575,8 @@ def build_report(records, image_dir=IMAGE_DIR, out_root=OUT_ROOT,
     avg = sum(scores) / len(scores) if scores else 0.0
     total_time = sum(rec.get('elapsed', 0) for rec in records)
     total_tables = sum(len(rec.get('tables') or []) for rec in records)
+    # 结构化表格单独统计：图片分支（107）也可能有，不能只看直读的 tables。
+    total_structured = sum(len(rec.get('structured_tables') or []) for rec in records)
     # 真实 case 的统计也走命名规则：manifest 没登记的新 case 照样算进来。
     real_count = sum(
         1 for rec in records
@@ -556,7 +594,8 @@ def build_report(records, image_dir=IMAGE_DIR, out_root=OUT_ROOT,
         f'<div class="stat"><b>{avg:.2f}</b><span>平均置信度</span></div>'
         f'<div class="stat"><b style="color:var(--low)">{total_low}</b>'
         f'<span>可疑行（&lt; {LOW_SCORE}）</span></div>'
-        f'<div class="stat"><b>{total_tables}</b><span>直读表格</span></div>'
+        f'<div class="stat"><b>{total_tables}</b><span>直读原始表</span></div>'
+        f'<div class="stat"><b>{total_structured}</b><span>结构化表格（CSV）</span></div>'
         f'<div class="stat"><b>{problem_count}</b><span>有问题的 case</span></div>'
         f'<div class="stat"><b>{total_time:.1f}s</b><span>识别总耗时</span></div>'
         f'</div>'
@@ -574,11 +613,12 @@ def build_report(records, image_dir=IMAGE_DIR, out_root=OUT_ROOT,
         f'{esc(model.get("rec", "?"))}　·　'
         '左图彩色框 = OCR 检测到的文字行（绿=正常，橙红=低置信度），'
         '鼠标移到右侧任意一行，左图对应框会高亮。'
-        'PDF / CSV 卡片下方另有「直读结果」：直接读文本层或纯文本抽出的表格，'
-        '字符无损、不经过模型，可和上面的 OCR 文字对照看。'
+        '每个 case 卡片下方是「表格提取」：有文本层 PDF / CSV 直接读字符，'
+        '图片 / 扫描件则用表格结构模型还原行列，两者都会给出带表头的表格和'
+        '可下载的 CSV；原始抽取记录与诊断放在折叠区。'
         '01~18 是合成样本；101~ 起编号的 1xx_real_* 是真实 case，恒排最后。'
-        '每个 case 的 result.json、带框 PNG、原图副本都在同名目录里，'
-        '卡片上可直接点开该 case 的结果。</div>\n'
+        '每个 case 的 result.json、tables.json、table_N.csv、带框 PNG、原图副本'
+        '都在同名目录里，卡片上可直接点开。</div>\n'
         f'{stats}'
         '<button id="filterBtn" type="button">只看有问题的图</button>\n'
         '</header>\n'

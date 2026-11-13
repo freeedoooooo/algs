@@ -1,7 +1,7 @@
 case：07_shadow.png
 分组：synthetic　类型：image
 模型：PP-OCRv4_mobile_det + PP-OCRv4_mobile_rec
-OCR 行数：12　平均置信度：0.99　可疑行：0　耗时：1.87s
+OCR 行数：12　平均置信度：0.99　可疑行：0　耗时：2.42s
 --- 逐行 OCR 结果（文字<TAB>置信度）---
 华远科技有限公司出库单	1.00
 单据编号：CK-2026-1112-0087	1.00

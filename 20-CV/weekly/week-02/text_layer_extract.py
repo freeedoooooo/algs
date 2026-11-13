@@ -40,6 +40,14 @@ output/text_layer_extract/pages/（按脚本名隔离，不混进正式产物）
 - pdfplumber 默认 / lines 策略靠竖线切列；只有横线的流水表会静默返回 0 张表。
 - pymupdf 默认按 CropBox 渲染；被裁剪过的 PDF 要用 set_cropbox(mediabox)
   才能看到整页（test3.pdf 默认只有 910×218，整页是 910×1287）。
+- 【11-13 新增】显式列边界必须配 horizontal_strategy='lines' 一起用。只用
+  'text' 会把「单元格内换行」当成新表格行，103 从 24 笔交易膨胀成 105 行碎表。
+  判断标准看填充率：碎表 0.293，按横线切的真表 0.74。
+
+【我负责到哪一步】
+本模块只负责「把字符和表格抽出来」并返回一个 dict。把抽出来的表格整理成
+带表头的结构、导出 CSV、在报告里作为主结果展示，是 table_extract.py 和
+vis_ocr_result.py 的事 —— 我不写文件、不加载模型、不画 HTML。
 """
 
 # =========================== 配置区：调试只改这里 ===========================
@@ -126,10 +134,21 @@ def has_text_layer(pdf_path):
 def build_table_settings(strategy, column_lines=None):
     """把策略名翻译成 pdfplumber 认识的 table_settings 字典；空字典 = 用默认值。"""
     if strategy == 'explicit' and column_lines:
-        # 人工给定竖线，pdfplumber 不再自己找线；行仍按文字聚类切。
+        # 人工给定竖线（列边界），横线交给页面里真实画出来的表格线。
+        #
+        # ★ 11-13 实测修正：这里原来是 horizontal_strategy='text'（按文字行切），
+        #   结果 103 那份银行流水被切成 105 行「伪表格」：一笔交易因为单元格里
+        #   换了行（日期 / 时间 / 金额 / 摘要分属不同物理行）被拆成 3~5 行，
+        #   列内容互相错位，填充率只有 0.293。
+        #   改成 'lines' 后按 26 条真实横线切出 25 行（1 行表头 + 24 笔交易），
+        #   抬头「用户所属公司 / 打印时间 / 记录数」因为没有横线包围会自动落在
+        #   表格之外，填充率升到 0.74。单元格内的换行由 pdfplumber 保留成 \n，
+        #   导出 CSV 时再压成空格（见 table_extract.py）。
+        # 注意：只有「有横线但没竖线」的流水表才配这个组合；纯 lines 策略在
+        #   竖线数为 0 时会直接抽不到表，所以不能整体改成 lines。
         return {'vertical_strategy': 'explicit',
                 'explicit_vertical_lines': column_lines,
-                'horizontal_strategy': 'text'}
+                'horizontal_strategy': 'lines'}
     if strategy == 'lines':
         return {'vertical_strategy': 'lines', 'horizontal_strategy': 'lines'}
     if strategy == 'text':

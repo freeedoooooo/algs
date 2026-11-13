@@ -1,29 +1,30 @@
 模型：PP-OCRv4_mobile_det + PP-OCRv4_mobile_rec
 case 数：25（合成 18 / 真实 7；真实 case 从 101 起编号）
+结构化表格：2 张（CSV 见各 case 目录的 table_N.csv）
 每个 case 的完整结果在：output/a_batch_ocr/<输入名>/result.json
 
-01_clear.png                               | synthetic | image | OCR   12 行 | 置信度 0.99 | 直读表格 0 | 3.59s
-02_blur.png                                | synthetic | image | OCR   12 行 | 置信度 0.96 | 直读表格 0 | 2.49s
-03_lowres.jpg                              | synthetic | image | OCR   13 行 | 置信度 0.38 | 直读表格 0 | 3.21s
-04_skew.png                                | synthetic | image | OCR   12 行 | 置信度 0.99 | 直读表格 0 | 1.63s
-05_perspective.png                         | synthetic | image | OCR   12 行 | 置信度 0.99 | 直读表格 0 | 1.71s
-06_glare.png                               | synthetic | image | OCR   12 行 | 置信度 0.99 | 直读表格 0 | 2.32s
-07_shadow.png                              | synthetic | image | OCR   12 行 | 置信度 0.99 | 直读表格 0 | 1.87s
-08_low_contrast.png                        | synthetic | image | OCR   12 行 | 置信度 0.99 | 直读表格 0 | 1.91s
-09_dense_small.png                         | synthetic | image | OCR   35 行 | 置信度 0.96 | 直读表格 0 | 3.7s
-10_inverted.png                            | synthetic | image | OCR    8 行 | 置信度 0.98 | 直读表格 0 | 1.99s
-11_low_contrast_noise.png                  | synthetic | image | OCR   13 行 | 置信度 0.64 | 直读表格 0 | 2.22s
-12_handwriting.png                         | synthetic | image | OCR    4 行 | 置信度 0.99 | 直读表格 0 | 1.03s
-13_rotated_180.png                         | synthetic | image | OCR   12 行 | 置信度 0.98 | 直读表格 0 | 2.12s
-14_mixed.png                               | synthetic | image | OCR   12 行 | 置信度 0.96 | 直读表格 0 | 1.75s
-15_heavy_blur.png                          | synthetic | image | OCR    4 行 | 置信度 0.07 | 直读表格 0 | 0.83s
-16_glare_wipe.png                          | synthetic | image | OCR    8 行 | 置信度 0.95 | 直读表格 0 | 1.64s
-17_dark_shadow.png                         | synthetic | image | OCR   12 行 | 置信度 0.99 | 直读表格 0 | 1.86s
-18_faint.png                               | synthetic | image | OCR   12 行 | 置信度 0.99 | 直读表格 0 | 2.07s
-101_real_terminal_screenshot.jpg           | real      | image | OCR    4 行 | 置信度 0.17 | 直读表格 0 | 1.75s
-102_real_clear_doc.jpg                     | real      | image | OCR   21 行 | 置信度 0.94 | 直读表格 0 | 4.29s
-103_real_bank_statement_textlayer.pdf      | real      | pdf   | OCR  226 行 | 置信度 0.98 | 直读表格 1 | 25.98s
-104_real_certificates_scan.pdf             | real      | pdf   | OCR   53 行 | 置信度 0.52 | 直读表格 0 | 7.1s
-105_real_transactions_gbk.csv              | real      | csv   | OCR    0 行 | 置信度 0.00 | 直读表格 1 | 0.0s
-106_real_scan_page1.jpg                    | real      | image | OCR   76 行 | 置信度 0.60 | 直读表格 0 | 10.79s
-107_real_scan_page2.jpg                    | real      | image | OCR   58 行 | 置信度 0.85 | 直读表格 0 | 8.13s
+01_clear.png                               | synthetic | image | OCR   12 行 | 置信度 0.99 | 直读表格 0 | 结构化 0 | 3.19s
+02_blur.png                                | synthetic | image | OCR   12 行 | 置信度 0.96 | 直读表格 0 | 结构化 0 | 2.65s
+03_lowres.jpg                              | synthetic | image | OCR   13 行 | 置信度 0.38 | 直读表格 0 | 结构化 0 | 2.89s
+04_skew.png                                | synthetic | image | OCR   12 行 | 置信度 0.99 | 直读表格 0 | 结构化 0 | 2.25s
+05_perspective.png                         | synthetic | image | OCR   12 行 | 置信度 0.99 | 直读表格 0 | 结构化 0 | 2.49s
+06_glare.png                               | synthetic | image | OCR   12 行 | 置信度 0.99 | 直读表格 0 | 结构化 0 | 3.15s
+07_shadow.png                              | synthetic | image | OCR   12 行 | 置信度 0.99 | 直读表格 0 | 结构化 0 | 2.42s
+08_low_contrast.png                        | synthetic | image | OCR   12 行 | 置信度 0.99 | 直读表格 0 | 结构化 0 | 2.3s
+09_dense_small.png                         | synthetic | image | OCR   35 行 | 置信度 0.96 | 直读表格 0 | 结构化 0 | 5.94s
+10_inverted.png                            | synthetic | image | OCR    8 行 | 置信度 0.98 | 直读表格 0 | 结构化 0 | 3.0s
+11_low_contrast_noise.png                  | synthetic | image | OCR   13 行 | 置信度 0.64 | 直读表格 0 | 结构化 0 | 3.15s
+12_handwriting.png                         | synthetic | image | OCR    4 行 | 置信度 0.99 | 直读表格 0 | 结构化 0 | 1.52s
+13_rotated_180.png                         | synthetic | image | OCR   12 行 | 置信度 0.98 | 直读表格 0 | 结构化 0 | 2.93s
+14_mixed.png                               | synthetic | image | OCR   12 行 | 置信度 0.96 | 直读表格 0 | 结构化 0 | 2.47s
+15_heavy_blur.png                          | synthetic | image | OCR    4 行 | 置信度 0.07 | 直读表格 0 | 结构化 0 | 1.11s
+16_glare_wipe.png                          | synthetic | image | OCR    8 行 | 置信度 0.95 | 直读表格 0 | 结构化 0 | 2.33s
+17_dark_shadow.png                         | synthetic | image | OCR   12 行 | 置信度 0.99 | 直读表格 0 | 结构化 0 | 2.84s
+18_faint.png                               | synthetic | image | OCR   12 行 | 置信度 0.99 | 直读表格 0 | 结构化 0 | 2.95s
+101_real_terminal_screenshot.jpg           | real      | image | OCR    4 行 | 置信度 0.17 | 直读表格 0 | 结构化 0 | 2.12s
+102_real_clear_doc.jpg                     | real      | image | OCR   21 行 | 置信度 0.94 | 直读表格 0 | 结构化 0 | 3.97s
+103_real_bank_statement_textlayer.pdf      | real      | pdf   | OCR  226 行 | 置信度 0.98 | 直读表格 1 | 结构化 1 | 25.89s
+104_real_certificates_scan.pdf             | real      | pdf   | OCR   53 行 | 置信度 0.52 | 直读表格 0 | 结构化 0 | 6.64s
+105_real_transactions_gbk.csv              | real      | csv   | OCR    0 行 | 置信度 0.00 | 直读表格 1 | 结构化 0 | 0.0s
+106_real_scan_page1.jpg                    | real      | image | OCR   76 行 | 置信度 0.60 | 直读表格 0 | 结构化 0 | 6.9s
+107_real_scan_page2.jpg                    | real      | image | OCR   58 行 | 置信度 0.85 | 直读表格 0 | 结构化 1 | 5.95s

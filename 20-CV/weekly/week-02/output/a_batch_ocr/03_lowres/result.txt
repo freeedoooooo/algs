@@ -1,7 +1,7 @@
 case：03_lowres.jpg
 分组：synthetic　类型：image
 模型：PP-OCRv4_mobile_det + PP-OCRv4_mobile_rec
-OCR 行数：13　平均置信度：0.38　可疑行：12　耗时：3.21s
+OCR 行数：13　平均置信度：0.38　可疑行：12　耗时：2.89s
 --- 逐行 OCR 结果（文字<TAB>置信度）---
 华远科技有限公司出库单	1.00
 羊0号1CX-206-1112-0087	0.72
