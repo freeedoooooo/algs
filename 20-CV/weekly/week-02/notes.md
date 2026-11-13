@@ -89,5 +89,54 @@
   表格按原始抽取顺序平铺，**不假设第 1 行是表头**（这文件第 1 行其实是页眉）。
 
 **验证**（不加载模型）：5 个脚本 `py_compile` 通过；`extract_case()` 对两个 PDF + 一个
-CSV 结果正确；构造 3 类 record 生成报告，10 项 HTML 检查全通过。完整批量重跑结果见
-`output/batch_ocr_results.json` 与 `output/vis/index.html`。
+CSV 结果正确；构造 3 类 record 生成报告，10 项 HTML 检查全通过。
+（当时产物路径是 `output/batch_ocr_results.json` + `output/vis/`，
+11-13 晚已改成两层隔离的 `output/a_batch_ocr/`，见下一节。）
+
+## 11-13 晚 · 101 起编号 + 新增 case 自动生效 + 产物按 case 隔离
+
+**需求**：真实 case 改成 `101_real_xxx` 这种数字前缀（从 101 起）方便查找；
+希望以后新增 case 只要丢进 `input/` 重跑就直接生效；
+输出不要全挤在一个大 JSON 里，改成和第 1 周一样按输入隔离，方便排查。
+
+**为什么「只改文件名 + 重跑」原本不生效**（实测 5 处耦合）：
+
+| 位置 | 原来的写法 | 改名后的后果 |
+|---|---|---|
+| `vis_ocr_result.py` 卡片分组 | `info.get('group', 'synthetic' if name[:2].isdigit() else 'real')` | `101_` 前两位是数字 → 未登记的新 case 被误判成合成样本 |
+| `vis_ocr_result.py` 顶部统计 | 只数 manifest 里 `group=='real'` | 改名后匹配不上，真实 case 数变 0 |
+| `text_layer_extract.py` 列边界模板 | 字典键写死 `real_bank_statement_textlayer.pdf` | 模板失效，8 列表格退回 `text` 策略（7 列、借贷合并） |
+| `c_try_params.py` 默认图 | 写死 `input/real_terminal_screenshot.jpg` | 直接 FileNotFoundError |
+| `make_samples.py` / manifest | `REAL_CASES` 与 `file` 字段都是旧名 | 重跑生成旧名副本、卡片说明丢失 |
+
+还有一个**隐蔽的排序坑**：字典序里 `'101_'` 比 `'10_'` 小（第二位 `'0'` < `'_'`），
+`ls`/`sorted()` 实测把 `101~107` 插在 `09_` 和 `10_` 之间，反而没排到最后。
+所以「靠字母 r 排在数字之后」的老办法在三位编号上彻底失效，必须显式分组排序。
+
+**做法**
+- 新建 **`case_naming.py`** 作为唯一真相源：`REAL_START_NO=101`、
+  `parse_no()` / `strip_no()` / `case_dir_name()` / `is_real_case()` /
+  `case_group()` / `case_sort_key()` / `next_real_no()` / `pick_real_image()`。
+  分组优先级：manifest 明确登记 > 编号 ≥ 101 > 旧 `real_` 前缀；
+  排序 `(分组, 编号, 文件名)`，真实 case 恒排最后、组内按编号升序。
+- 输入重命名为 `101_real_terminal_screenshot.jpg` ~ `107_real_scan_page2.jpg`；
+  manifest 的 `file`/`design`/`groups` 同步，`REAL_CASES` 同步；
+  `make_samples.py` 重跑时会把**用户新增 case 补登记**进说明书，不会再冲掉。
+- 新增 case 自动生效：`list_cases()` 只按后缀过滤、不查清单；分组靠命名规则推断；
+  日志打印「未登记的新 case」与下一个建议编号（当前是 108）。
+  `TABLE_COLUMN_LINES` 改按 `strip_no()` 的语义名匹配，换编号不失效；
+  `c_try_params.py` 默认图改成 `pick_real_image()` 自动挑。
+- **输出两层隔离**（与 week-01 一致）：
+  `output/a_batch_ocr/<输入名>/` 放 `result.json`、`result.txt`、`source.<ext>`、
+  `boxes.png`、`pages/p1.png`；根目录只放 `index.html` +
+  `batch_summary.json/.txt`。报告用 `<case>/source.<ext>` 相对路径引用图片，
+  整目录可搬走；卡片上有「本 case 的 result.json」直达链接。
+  重跑前 `prepare_case_dir()` 只清固定名单的旧产物，废弃的旧 case 目录只提示不删。
+  `vis_ocr_result.py` 独立运行时改成遍历各 case 目录读回 `result.json`。
+  `c_try_params.py` 的产物也挪到 `output/c_try_params/`。
+
+**验证**（不加载模型）：6 个脚本 `py_compile` 通过；命名规则（101 排最后、
+旧名兼容、未登记 108 判真实、next=108、默认图自动挑）全通过；
+`103_...pdf` 仍命中 explicit 模板抽出 105×8、8 列表头正确；
+临时目录模拟新增 case，扫描顺序正确；报告的相对路径、单 case 链接、
+真实 case 统计、独立读回顺序均正确；清单 / manifest / 磁盘三者 25 个一致。

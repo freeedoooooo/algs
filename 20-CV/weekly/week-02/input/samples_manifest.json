@@ -1,6 +1,6 @@
 {
   "generated_by": "make_samples.py",
-  "design": "01~18 为合成退化样本；real_* 为用户真实 case（real_ 前缀，字典序天然排在最后）。expect_lines 是标准答案",
+  "design": "01~18 为合成退化样本；101~ 起编号的 1xx_real_* 为用户真实 case（规则见 case_naming.py，新增 case 重跑 a_batch_ocr.py 即生效）。expect_lines 是标准答案",
   "seed": 20261112,
   "samples": [
     {
@@ -370,47 +370,7 @@
       "group": "synthetic"
     },
     {
-      "file": "real_bank_statement_textlayer.pdf",
-      "category": "文本层表格",
-      "distortion": "第1周原件：有文本层的银行流水 PDF（含 8 列表格）",
-      "source": "week-01/input/test3.pdf",
-      "expect_lines": null,
-      "group": "real"
-    },
-    {
-      "file": "real_certificates_scan.pdf",
-      "category": "扫描件",
-      "distortion": "第1周原件：5 页证书 / 备案表扫描件 PDF",
-      "source": "week-01/input/test3_image.pdf",
-      "expect_lines": null,
-      "group": "real"
-    },
-    {
-      "file": "real_clear_doc.jpg",
-      "category": "对照组",
-      "distortion": "第1周原件：真实清晰文档",
-      "source": "week-01/input/test2.jpg",
-      "expect_lines": null,
-      "group": "real"
-    },
-    {
-      "file": "real_scan_page1.jpg",
-      "category": "01_模糊低质",
-      "distortion": "真实扫描件第 1 页（PDF 渲染图缩放，带噪点与印章）",
-      "source": "week-01/output/c_pdf_text_layer/test3_image/pages/c_page_1.png",
-      "expect_lines": null,
-      "group": "real"
-    },
-    {
-      "file": "real_scan_page2.jpg",
-      "category": "04_密集小字",
-      "distortion": "真实扫描件第 2 页（备案名单表格）",
-      "source": "week-01/output/c_pdf_text_layer/test3_image/pages/c_page_2.png",
-      "expect_lines": null,
-      "group": "real"
-    },
-    {
-      "file": "real_terminal_screenshot.jpg",
+      "file": "101_real_terminal_screenshot.jpg",
       "category": "06_漏检",
       "distortion": "第1周原件：真实终端截图（亮字暗底）",
       "source": "week-01/input/test1.jpg",
@@ -418,17 +378,58 @@
       "group": "real"
     },
     {
-      "file": "real_transactions_gbk.csv",
+      "file": "102_real_clear_doc.jpg",
+      "category": "对照组",
+      "distortion": "第1周原件：真实清晰文档",
+      "source": "week-01/input/test2.jpg",
+      "expect_lines": null,
+      "group": "real"
+    },
+    {
+      "file": "103_real_bank_statement_textlayer.pdf",
+      "category": "文本层表格",
+      "distortion": "第1周原件：有文本层的银行流水 PDF（含 8 列表格）",
+      "source": "week-01/input/test3.pdf",
+      "expect_lines": null,
+      "group": "real"
+    },
+    {
+      "file": "104_real_certificates_scan.pdf",
+      "category": "扫描件",
+      "distortion": "第1周原件：5 页证书 / 备案表扫描件 PDF",
+      "source": "week-01/input/test3_image.pdf",
+      "expect_lines": null,
+      "group": "real"
+    },
+    {
+      "file": "105_real_transactions_gbk.csv",
       "category": "纯文本表格",
       "distortion": "第1周原件：GBK 编码的 CSV 交易流水",
       "source": "week-01/input/test4.csv",
       "expect_lines": null,
       "group": "real"
+    },
+    {
+      "file": "106_real_scan_page1.jpg",
+      "category": "01_模糊低质",
+      "distortion": "真实扫描件第 1 页（PDF 渲染图缩放，带噪点与印章）",
+      "source": "week-01/output/c_pdf_text_layer/test3_image/pages/c_page_1.png",
+      "expect_lines": null,
+      "group": "real"
+    },
+    {
+      "file": "107_real_scan_page2.jpg",
+      "category": "04_密集小字",
+      "distortion": "真实扫描件第 2 页（备案名单表格）",
+      "source": "week-01/output/c_pdf_text_layer/test3_image/pages/c_page_2.png",
+      "expect_lines": null,
+      "group": "real"
     }
   ],
   "groups": {
-    "synthetic": "01~18 合成样本（数字前缀）",
-    "real": "real_* 真实 case（统一前缀，排在最后）"
+    "synthetic": "01~18 合成样本（编号 < 101）",
+    "real": "101~ 起的真实 case（101_real_*，恒排最后）"
   },
-  "sample_count": 25
+  "sample_count": 25,
+  "real_start_no": 101
 }

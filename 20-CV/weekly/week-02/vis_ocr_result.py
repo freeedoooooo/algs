@@ -2,28 +2,33 @@
 第2周 · OCR 结果与原图对照可视化
 
 【解决什么问题】
-batch_ocr_results.json 里只有文字和坐标，读起来不直观：
+result.json 里只有文字和坐标，读起来不直观：
 看不出「哪个框框住了哪行字」，也看不出「哪一块压根没被检测到」。
-本脚本把 JSON 里已有的 boxes / texts / scores 还原到原图上，产出两样东西：
+本脚本把已有的 boxes / texts / scores 还原到原图上，产出一份可离线打开的
+对照报告，并把每个 case 的图片产物放回它自己的目录：
 
-1. output/vis/*_boxes.png   原图 + 彩色识别框 + 行号（单张图，可直接贴进笔记）
-2. output/vis/index.html    一份可离线打开的对照报告：
+    output/a_batch_ocr/index.html                 报告（跨 case，放根）
+    output/a_batch_ocr/<输入名>/source.<ext>      原图副本（给报告引用）
+    output/a_batch_ocr/<输入名>/boxes.png         原图 + 彩色识别框 + 行号
+
+报告的每张卡片：
       左边 = 原图，识别框以 SVG 叠加在图上，鼠标悬停会互相高亮
       右边 = 逐行文字 + 置信度条，低置信度行标橙红色
-      下方 = 该图的标准答案（若有）与「粗略未命中行数」，方便挑 bad case
+      下方 = 标准答案对照（若有）、PDF / CSV 的「直读结果」
       顶部 = 全部 case 的汇总指标，可一键只筛「有问题的 case」
-
-   11-13 新增：PDF / CSV 卡片在右侧表格下面多一块「直读结果」——
-      直接读文本层（或纯文本）抽出的表格、策略与质量指标、抽取诊断、原文。
+   11-13 新增：PDF / CSV 卡片右侧下面多一块「直读结果」——
+      直接读文本层（或纯文本）抽出的表格、策略与质量指标、抽取诊断、原文，
       同一个 PDF 因此能并排比较「像素 OCR 读出来的字」和「文本层无损抽出的表」。
-      PDF 左侧显示的是 a_batch_ocr.py 渲染的首页 PNG（不是 input/ 里的 .pdf），
-      CSV 没有图像，左侧给出占位说明。
+
+【与第1周一致的产物隔离】
+每个输入一个目录，报告只在根目录放跨 case 的汇总。
+卡片标题下方有链接直接跳到该 case 的 result.json，排查时不用翻大 JSON。
 
 【重要】可视化不会重新跑 OCR，只是把已有结果画出来，所以瞬间完成、不加载模型。
 
 【用法】在 week-02 目录下：
     python a_batch_ocr.py                # 正常批量识别，跑完会自动调用本脚本
-    python vis_ocr_result.py             # 只重新生成报告（改了样式 / 换了 JSON 时用）
+    python vis_ocr_result.py             # 只重新生成报告（改了样式时用）
     python vis_ocr_result.py ../week-01/input   # 临时指定别的原图目录
 
 【为什么用 HTML 而不是弹窗】
@@ -31,23 +36,27 @@ HTML 是纯文本产物，可以反复打开、Ctrl+F 搜文字、Ctrl+S 保存�
 不依赖任何 GUI 库，也不需要起本地服务。注意文件头必须写 <meta charset="utf-8">，
 否则中文会乱码（第1周 d_table_ocr.py 踩过这个坑）。
 
-【图片路径为什么是 vis/img/】
-报告会把原图复制一份到 output/vis/img/，HTML 用 img/xxx.png 引用。
+【图片路径为什么复制进 case 目录】
+报告用相对路径 <case 目录>/source.<ext> 引用图片。
 一开始用的是 ../../input/xxx.png，本地双击能显示，但通过静态服务 / 预览面板打开时
 目录会被重映射，跳出目录的路径一律 404，整页只剩空框。
-放进同级子目录后，file:// 双击、静态服务、整个 vis/ 目录拷走，三种方式都能显示。
-代价只是多一份图片副本（可再生产物，随时能重画）。
+把副本放进报告所在目录的子目录后，file:// 双击、静态服务、整个
+a_batch_ocr/ 目录拷走，三种方式都能显示（代价只是多一份可再生的图片副本）。
 """
 
 # =========================== 配置区：调试只改这里 ===========================
-RESULT_JSON = 'output/batch_ocr_results.json'   # 批量识别的结果
-IMAGE_DIR = 'input'                             # 原图目录（必须与跑 OCR 时一致）
-MANIFEST = 'input/samples_manifest.json'        # 样本说明书，不存在就跳过标准答案
-VIS_DIR = 'output/vis'                          # 可视化产物目录
-IMG_SUBDIR = 'img'                              # 原图副本放在 vis/img/，让报告自包含
-LOW_SCORE = 0.8                                 # 低于此值标为「可疑」，与 a_batch_ocr.py 保持一致
-COLOR_OK = (34, 150, 90)                        # 正常行的框：绿
-COLOR_LOW = (222, 92, 40)                       # 可疑行的框：橙红
+OUT_ROOT = 'output/a_batch_ocr'         # 与 a_batch_ocr.py 共用的产物根（脚本一层隔离）
+IMAGE_DIR = 'input'                     # 原图目录（必须与跑 OCR 时一致）
+MANIFEST = 'input/samples_manifest.json'  # 样本说明书；缺条目不影响分组
+# 下面只写「文件名 / 子目录名」，具体路径由 OUT_ROOT/<case 目录>/ 拼出来。
+RESULT_JSON = 'result.json'             # 独立运行时从各 case 目录读回这个文件
+SUMMARY_JSON = 'batch_summary.json'     # 跨 case 汇总表（模型信息从这里取）
+SOURCE_BASENAME = 'source'              # 原图副本主文件名（扩展名沿用原图）
+BOXES_NAME = 'boxes.png'                # 带框 PNG
+REPORT_NAME = 'index.html'              # 报告落在 OUT_ROOT 根目录
+LOW_SCORE = 0.8                          # 低于此值标为「可疑」，与 a_batch_ocr.py 一致
+COLOR_OK = (34, 150, 90)                 # 正常行的框：绿
+COLOR_LOW = (222, 92, 40)                # 可疑行的框：橙红
 # ==========================================================================
 
 import os
@@ -58,6 +67,8 @@ import shutil
 from urllib.parse import quote            # 把文件名转成 URL 安全的写法
 
 from PIL import Image, ImageDraw
+
+import case_naming as naming   # 命名 / 分组 / 排序规则的唯一真相源
 
 
 # --------------------------------------------------------------------------
@@ -94,20 +105,21 @@ def normalize_box(box):
     return points if len(points) >= 3 else None     # 至少要 3 点才能画多边形
 
 
-def prepare_image(image_path, vis_dir):
+def prepare_image(image_path, case_abs, case_rel):
     """
-    把原图复制一份到 vis/img/，返回 HTML 里可用的相对路径（如 img/01_clear.png）。
+    把左侧要显示的图复制进**这个 case 自己的目录**，返回报告里可用的相对路径。
 
     为什么不用 ../../input/xxx.png：本地双击能显示，但静态服务 / 预览面板会把
     HTML 映射到一个新目录，任何跳出该目录的相对路径都会 404，报告就只剩空框。
-    把图片放在报告的同级子目录里，三种打开方式（file://、静态服务、整目录拷走）都能显示。
-    quote 负责处理文件名里的空格与中文；复制用原始文件名，不做重命名。
+    把副本放进「报告所在目录 / <case 目录>」里，file://、静态服务、整个
+    a_batch_ocr/ 拷走，三种打开方式都能显示。
+    quote 负责处理目录名 / 文件名里的空格与中文。
     """
-    img_dir = os.path.join(vis_dir, IMG_SUBDIR)
-    os.makedirs(img_dir, exist_ok=True)
-    name = os.path.basename(image_path)
-    shutil.copy2(image_path, os.path.join(img_dir, name))
-    return f'{IMG_SUBDIR}/{quote(name, safe="")}'
+    os.makedirs(case_abs, exist_ok=True)
+    ext = os.path.splitext(image_path)[1].lower() or '.png'
+    filename = SOURCE_BASENAME + ext
+    shutil.copy2(image_path, os.path.join(case_abs, filename))
+    return f'{quote(case_rel, safe="")}/{quote(filename, safe="")}'
 
 
 def esc(text):
@@ -334,16 +346,21 @@ def build_extract_html(rec):
     return ''.join(parts)
 
 
-def build_card(rec, card_no, image_dir, vis_dir, manifest_map):
-    """生成一张图对应的 HTML 卡片。"""
+def build_card(rec, card_no, image_dir, out_root, manifest_map):
+    """生成一张图对应的 HTML 卡片；图片产物写进这个 case 自己的目录。"""
     name = rec.get('file', '(未知文件)')
     info = manifest_map.get(name, {})
-    category = info.get('category', '真实/自定义')
-    distortion = info.get('distortion', '未提供退化说明')
-    group = info.get('group', 'synthetic' if name[:2].isdigit() else 'real')
+    category = info.get('category', '自定义 / 未登记')
+    distortion = info.get('distortion',
+                          '新增 case：未登记退化说明（不影响识别，可手工补进说明书）')
+    # 分组统一交给 case_naming：manifest 有登记就信登记，没登记就按编号推断。
+    # 这样 108_real_xxx.jpg 刚丢进来、还没写进说明书，也不会被误当成合成样本。
+    group = naming.case_group(name, info.get('group'))
     group_label = '真实 case' if group == 'real' else '合成样本'
+    case_rel = rec.get('out_dir') or naming.case_dir_name(name)
+    case_abs = os.path.join(out_root, case_rel)
+    case_href = quote(case_rel, safe='')
     image_path = os.path.join(image_dir, name)
-    stem = os.path.splitext(name)[0]
     kind = rec.get('kind', 'image')
     preview = rec.get('preview_image')
     # PDF 的框是画在「首页渲染图」上的，左侧必须显示同一张图，否则坐标对不上。
@@ -356,9 +373,10 @@ def build_card(rec, card_no, image_dir, vis_dir, manifest_map):
                 '右侧直接看解析出的表格与原文</div>')
         extra = '纯文本分支，不跑 OCR'
     elif os.path.isfile(display_image):
-        png_name = f'{stem}_boxes.png'
-        w, h = draw_boxes_png(display_image, rec, os.path.join(vis_dir, png_name))
-        src = prepare_image(display_image, vis_dir)
+        # 原图副本和带框 PNG 都放进 <OUT_ROOT>/<case>/，报告用相对路径引用。
+        src = prepare_image(display_image, case_abs, case_rel)
+        png_href = f'{case_href}/{BOXES_NAME}'
+        w, h = draw_boxes_png(display_image, rec, os.path.join(case_abs, BOXES_NAME))
         polys = []
         for i, box in enumerate(rec.get('boxes') or []):
             pts = normalize_box(box)
@@ -381,12 +399,16 @@ def build_card(rec, card_no, image_dir, vis_dir, manifest_map):
             f'{"".join(polys)}</svg></div>'
         )
         extra = (
-            f'<a href="{src}" target="_blank">查看原图</a> · '
-            f'<a href="{esc(png_name)}" target="_blank">查看带框 PNG</a>'
+            f'<a href="{src}" target="_blank">查看原图副本</a> · '
+            f'<a href="{png_href}" target="_blank">查看带框 PNG</a>'
         )
     else:
         left = f'<div class="stage empty">找不到预览图：{esc(display_image)}</div>'
         extra = '（重新跑一次 python a_batch_ocr.py 生成 PDF 首页渲染图）'
+
+    # 每个 case 的结果单独成文件，卡片上给一个直达链接，排查时不用翻大 JSON。
+    extra += (f' · <a href="{case_href}/{quote(RESULT_JSON, safe="")}" '
+              f'target="_blank">本 case 的 {RESULT_JSON}</a>')
 
     # ---- 右侧：逐行文字表格 ----
     rows = []
@@ -469,13 +491,18 @@ def build_card(rec, card_no, image_dir, vis_dir, manifest_map):
     )
 
 
-def build_report(records, image_dir=IMAGE_DIR, vis_dir=VIS_DIR,
-                 manifest_path=MANIFEST, result_json=RESULT_JSON):
+def build_report(records, image_dir=IMAGE_DIR, out_root=OUT_ROOT,
+                 manifest_path=MANIFEST, summary_path=None):
     """
     对外主函数：a_batch_ocr.py 跑完会调用它；独立运行时 main() 也会调用它。
     返回生成的 HTML 绝对路径，方便调用方打印出来。
+
+    out_root 是「脚本一层」的产物根（报告放根，各 case 的图片放子目录）。
+    summary_path 用来取模型信息；不传就默认读 out_root/batch_summary.json。
     """
-    os.makedirs(vis_dir, exist_ok=True)
+    os.makedirs(out_root, exist_ok=True)
+    if summary_path is None:
+        summary_path = os.path.join(out_root, SUMMARY_JSON)
 
     manifest = read_json(manifest_path, {}) or {}
     manifest_map = {
@@ -484,7 +511,7 @@ def build_report(records, image_dir=IMAGE_DIR, vis_dir=VIS_DIR,
     }
 
     cards = [
-        build_card(rec, i, image_dir, vis_dir, manifest_map)
+        build_card(rec, i, image_dir, out_root, manifest_map)
         for i, rec in enumerate(records)
     ]
 
@@ -494,15 +521,19 @@ def build_report(records, image_dir=IMAGE_DIR, vis_dir=VIS_DIR,
     avg = sum(scores) / len(scores) if scores else 0.0
     total_time = sum(rec.get('elapsed', 0) for rec in records)
     total_tables = sum(len(rec.get('tables') or []) for rec in records)
-    real_count = sum(1 for rec in records
-                     if manifest_map.get(rec.get('file', ''), {}).get('group') == 'real')
+    # 真实 case 的统计也走命名规则：manifest 没登记的新 case 照样算进来。
+    real_count = sum(
+        1 for rec in records
+        if naming.is_real_case(rec.get('file', ''),
+                               manifest_map.get(rec.get('file', ''), {}).get('group'))
+    )
     problem_count = sum(1 for c in cards if 'data-problem="1"' in c)
-    model = (read_json(result_json, {}) or {}).get('model', {})
+    model = (read_json(summary_path, {}) or {}).get('model', {})
 
     stats = (
         f'<div class="stats">'
         f'<div class="stat"><b>{len(records)}</b><span>case 数</span></div>'
-        f'<div class="stat"><b>{real_count}</b><span>真实 case（real_*）</span></div>'
+        f'<div class="stat"><b>{real_count}</b><span>真实 case（101~ 起编号）</span></div>'
         f'<div class="stat"><b>{total_lines}</b><span>识别总行数</span></div>'
         f'<div class="stat"><b>{avg:.2f}</b><span>平均置信度</span></div>'
         f'<div class="stat"><b style="color:var(--low)">{total_low}</b>'
@@ -527,7 +558,9 @@ def build_report(records, image_dir=IMAGE_DIR, vis_dir=VIS_DIR,
         '鼠标移到右侧任意一行，左图对应框会高亮。'
         'PDF / CSV 卡片下方另有「直读结果」：直接读文本层或纯文本抽出的表格，'
         '字符无损、不经过模型，可和上面的 OCR 文字对照看。'
-        '01~18 是合成样本，real_* 是真实 case，统一排在最后。</div>\n'
+        '01~18 是合成样本；101~ 起编号的 1xx_real_* 是真实 case，恒排最后。'
+        '每个 case 的 result.json、带框 PNG、原图副本都在同名目录里，'
+        '卡片上可直接点开该 case 的结果。</div>\n'
         f'{stats}'
         '<button id="filterBtn" type="button">只看有问题的图</button>\n'
         '</header>\n'
@@ -535,28 +568,46 @@ def build_report(records, image_dir=IMAGE_DIR, vis_dir=VIS_DIR,
         f'\n<script>{JS}</script>\n</body>\n</html>\n'
     )
 
-    out_html = os.path.join(vis_dir, 'index.html')
+    out_html = os.path.join(out_root, REPORT_NAME)
     with open(out_html, 'w', encoding='utf-8') as f:
         f.write(doc)
     return os.path.abspath(out_html)
 
 
+def collect_records(out_root):
+    """
+    独立运行（只重画报告）时，把各个 case 目录里的 result.json 读回来。
+
+    以前是读一个 output/batch_ocr_results.json 大文件；现在结果按 case 拆开了，
+    所以改成「遍历子目录 → 各读一个」再按命名规则排序，顺序和批量跑时一致。
+    """
+    if not os.path.isdir(out_root):
+        return []
+    found = []
+    for rel in os.listdir(out_root):
+        path = os.path.join(out_root, rel, RESULT_JSON)
+        rec = read_json(path)
+        if isinstance(rec, dict) and rec.get('file'):
+            rec.setdefault('out_dir', rel)
+            found.append(rec)
+    found.sort(key=lambda r: naming.case_sort_key(r['file']))
+    return found
+
+
 def main():
     # 命令行第一个参数可临时覆盖原图目录（例如指向 ../week-01/input）
     image_dir = sys.argv[1] if len(sys.argv) > 1 else IMAGE_DIR
-    payload = read_json(RESULT_JSON)
-    if payload is None:
-        sys.exit(f'找不到识别结果：{os.path.abspath(RESULT_JSON)}\n'
-                 f'请先运行：python a_batch_ocr.py')
-    # 兼容两种结构：批量脚本写的 {records:[...]}，或直接一个列表
-    records = payload.get('records', []) if isinstance(payload, dict) else payload
+    records = collect_records(OUT_ROOT)
     if not records:
-        sys.exit('结果文件里没有记录，先跑一次批量识别。')
+        sys.exit(f'找不到各 case 的 {RESULT_JSON}：{os.path.abspath(OUT_ROOT)}\n'
+                 f'请先运行：python a_batch_ocr.py')
 
-    out = build_report(records, image_dir=image_dir)
-    print(f'>> 可视化产物目录：{os.path.abspath(VIS_DIR)}')
+    out = build_report(records, image_dir=image_dir, out_root=OUT_ROOT,
+                       manifest_path=MANIFEST,
+                       summary_path=os.path.join(OUT_ROOT, SUMMARY_JSON))
+    print(f'>> 产物根目录：{os.path.abspath(OUT_ROOT)}')
     print(f'>> 用浏览器打开对照报告：{out}')
-    print('>> 每张图另有一份 *_boxes.png（原图 + 识别框），可直接贴进 bad_cases/notes.md')
+    print(f'>> 每个 case 的 {BOXES_NAME} / {SOURCE_BASENAME}.* 就在它自己的目录里')
 
 
 if __name__ == '__main__':

@@ -12,13 +12,14 @@
 两者并排，一眼看出两条路线的差距。这正是「对比预览」想表达的东西。
 
 【与第1周的关系】
-策略与常量移植自 week-01/weekend_pipeline.py，只把列边界模板的键
-换成第2周的文件名 real_bank_statement_textlayer.pdf。两份各自独立维护，互不 import，
+策略与常量移植自 week-01/weekend_pipeline.py。两份各自独立维护，互不 import，
 避免第1周的教学脚手架被第2周改动牵连。
+人工列边界模板按「去掉数字编号后的语义名」匹配（见 case_naming.strip_no），
+所以给真实 case 换编号（103 → 108）不会让模板失效。
 
 【产物】
-    output/pages/<输入名>_p1.png   PDF 首页渲染图（中间产物，单独一层）
-    函数返回 dict，交给 a_batch_ocr.py 写进 batch_ocr_results.json
+    output/a_batch_ocr/<case 目录>/pages/p1.png   PDF 首页渲染图（中间产物，单独一层）
+    函数返回 dict，交给 a_batch_ocr.py 写进该 case 的 result.json
 
 【坑位记录（第1周实测）】
 - paddlex 的 save_to_html() 遇空表格会 IndexError → 这里根本不用它，自己写 HTML。
@@ -29,12 +30,16 @@
 
 # =========================== 配置区：调试只改这里 ===========================
 PDF_RENDER_DPI = 110                             # PDF 首页预览图分辨率，够看清即可，别太大
-PDF_PAGES_DIR = 'output/pages'                   # 首页渲染图的存放目录（单独一层，不与正式结果混放）
+# 只有单独调试本模块时才用这个默认值；正常由 a_batch_ocr.py 传入
+# <case 目录>/pages/，让每个输入的中间产物各自隔离。
+PDF_PAGES_DIR = 'output/a_batch_ocr/pages'
 TABLE_STRATEGIES = (None, 'lines', 'text')       # 策略回退顺序：默认 → 网格线 → 文字对齐
 TABLE_MIN_FILL_RATIO = 0.20                      # 非空单元格占比低于它 → 标「低置信度」
-# 人工标定的列边界（固定版式专用）：键是第2周 input/ 里的文件名。
-# real_bank_statement_textlayer.pdf 是第1周那份银行流水，9 条竖线能拆出正确的 8 列表头。
-# 自动按 words 的 x0 聚类会把页眉混进表头，实测不如人工模板。
+# 人工标定的列边界（固定版式专用）：键是**去掉数字编号后的文件名**。
+#   103_real_bank_statement_textlayer.pdf → real_bank_statement_textlayer.pdf
+# 这是第1周那份银行流水，9 条竖线能拆出正确的 8 列表头；自动按 words 的 x0
+# 聚类会把页眉混进表头，实测不如人工模板。
+# 用语义名当键的好处：以后换编号、复制出新 case，模板照样命中，不必改这里。
 # 换文件请删掉或改掉这一项；不需要就把字典清空。
 TABLE_COLUMN_LINES = {
     'real_bank_statement_textlayer.pdf': [17, 112, 175, 265, 326, 393, 463, 532, 578],
@@ -49,6 +54,8 @@ import csv
 
 import pdfplumber
 import pymupdf
+
+import case_naming as naming   # 命名规则的唯一真相源（这里只用 strip_no）
 
 
 # --------------------------------------------------------------------------
@@ -127,7 +134,11 @@ def clean_table(table):
 
 def table_strategies_for(pdf_path):
     """命中人工模板时把 explicit 插到最前；返回 (策略元组, 列边界或 None)。"""
-    lines = TABLE_COLUMN_LINES.get(os.path.basename(pdf_path))
+    name = os.path.basename(pdf_path)
+    # 先按原名找，再按「去掉数字编号」的语义名找。
+    # 这样 103_real_xxx.pdf 换成 108_real_xxx.pdf 后模板照样命中。
+    lines = (TABLE_COLUMN_LINES.get(name)
+             or TABLE_COLUMN_LINES.get(naming.strip_no(name)))
     if lines:
         return ('explicit',) + tuple(TABLE_STRATEGIES), lines
     return tuple(TABLE_STRATEGIES), None
@@ -257,8 +268,9 @@ def extract_case(path, pages_dir=None):
         return result
 
     # ---- PDF ----
-    out_png = os.path.join(pages_dir or PDF_PAGES_DIR,
-                           os.path.splitext(name)[0] + '_p1.png')
+    # pages_dir 由调用方传入 <case 目录>/pages/，目录名已经带上了 case 名，
+    # 所以图片本身统一叫 p1.png，不再把文件名重复拼一遍。
+    out_png = os.path.join(pages_dir or PDF_PAGES_DIR, 'p1.png')
     png, pages, limited = render_first_page(path, out_png)
     result['preview_image'] = png
     result['pages'] = pages

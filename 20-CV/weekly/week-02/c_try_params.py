@@ -9,8 +9,12 @@
     conda activate paddle
 
 用法（在 week-02 目录下）：
-    python c_try_params.py                                       # 用配置区 IMG
-    python c_try_params.py input/real_terminal_screenshot.jpg    # 命令行临时指定图片
+    python c_try_params.py                              # 自动挑第一张真实 case 图片
+    python c_try_params.py input/101_real_terminal_screenshot.jpg  # 命令行临时指定
+    python c_try_params.py ../week-01/input/test1.jpg   # 也可以指到第1周原件
+
+默认图不写死文件名：由 case_naming.pick_real_image() 按编号规则自动挑，
+所以以后给真实 case 换编号、加新 case，这里都不会报「找不到图片」。
 
 【3.x 的关键变化】
     参数名：det_db_thresh / det_db_box_thresh  →  text_det_thresh / text_det_box_thresh
@@ -24,8 +28,10 @@
 """
 
 # =========================== 配置区：调试只改这里 ===========================
-IMG = 'input/real_terminal_screenshot.jpg'   # 真实终端截图（亮字暗底，有漏检），第1周原件
-OUT_TXT = 'output/param_compare.txt'     # 对比结果存哪里；改成 None 就不写
+IMG = None                               # None = 自动挑第一张真实 case 图片；也可写死路径
+INPUT_DIR = 'input'                      # 自动挑选时在这个目录里找
+IMAGE_EXTS = ('.png', '.jpg', '.jpeg', '.bmp')
+OUT_TXT = 'output/c_try_params/param_compare.txt'   # 本脚本专属目录，与其它脚本产物隔离
 DET_MODEL = 'PP-OCRv4_mobile_det'        # 检测模型（第1周已缓存，免下载）
 REC_MODEL = 'PP-OCRv4_mobile_rec'        # 识别模型
 
@@ -44,6 +50,7 @@ os.environ.setdefault('PADDLE_PDX_MODEL_SOURCE', 'BOS')
 os.environ.setdefault('PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK', 'True')
 
 from paddleocr import PaddleOCR  # noqa: E402
+import case_naming as naming     # noqa: E402  命名 / 分组规则的唯一真相源
 
 
 def collect(results):
@@ -56,12 +63,15 @@ def collect(results):
 
 
 def main():
-    # 命令行参数优先于配置区，方便临时换图。
+    # 优先级：命令行参数 > 配置区 IMG > 自动挑第一张真实 case 图片。
     image = sys.argv[1] if len(sys.argv) > 1 else IMG
-    if not os.path.exists(image):
+    if image is None:
+        image = naming.pick_real_image(INPUT_DIR, IMAGE_EXTS)
+    if not image or not os.path.exists(image):
         sys.exit(
-            f'找不到图片：{os.path.abspath(image)}\n'
-            f'改文件顶部的 IMG，或命令行指定：python c_try_params.py 你的图片.jpg'
+            f'找不到图片：{os.path.abspath(image or INPUT_DIR)}\n'
+            f'在 input/ 放一张 1xx_real_*.jpg，或改文件顶部的 IMG，\n'
+            f'或命令行指定：python c_try_params.py 你的图片.jpg'
         )
 
     print(f'>> 对比图片：{image}')
@@ -109,7 +119,7 @@ def main():
         print('      ① 这张图本来就没有漏检（例如清晰对照组）；')
         print('      ② 漏检处的文字像素已被破坏（过曝洗白、糊成色块），')
         print('         调低检测阈值也救不回来，因为信息已经不存在了。')
-        print('      判断方法：打开 output/vis/index.html，看原图上')
+        print('      判断方法：打开 output/a_batch_ocr/index.html，看原图上')
         print('      「有字却没有框」的位置 —— 有，就是第 ② 种。')
         print('      两种情况都不是脚本没生效。')
     print('\nB 组新认出的前 10 行：')

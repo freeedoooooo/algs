@@ -54,28 +54,33 @@
 | `06~08`、`16~18` | 反光、阴影、低对比，以及三种重度版本 | 03_反光光照 |
 | `09`、`12` | 双栏 16px 密集小字、行楷手写 | 04_密集小字 |
 | `10`、`14` | 亮字暗底、模糊+倾斜+阴影混合退化 | 06_漏检 |
-| `real_*` | 7 个用户真实 case（统一前缀，全部排在最后） | 见下表 |
+| `101~107` | 7 个用户真实 case（101 起编号，全部排在最后） | 见下表 |
 
-真实 case（11-13 整理后）：
+真实 case（11-13 定稿，编号 101 起）：
 
 | 文件名 | 内容 |
 |---|---|
-| `real_terminal_screenshot.jpg` | 第1周真实终端截图（亮字暗底） |
-| `real_clear_doc.jpg` | 第1周真实清晰文档 |
-| `real_bank_statement_textlayer.pdf` | 有文本层的银行流水 PDF（含 8 列表格） |
-| `real_certificates_scan.pdf` | 5 页证书 / 备案表扫描件 PDF |
-| `real_transactions_gbk.csv` | GBK 编码的 CSV 交易流水 |
-| `real_scan_page1.jpg` / `real_scan_page2.jpg` | 第1周渲染出的真实扫描页（带噪点、印章） |
+| `101_real_terminal_screenshot.jpg` | 第1周真实终端截图（亮字暗底） |
+| `102_real_clear_doc.jpg` | 第1周真实清晰文档 |
+| `103_real_bank_statement_textlayer.pdf` | 有文本层的银行流水 PDF（含 8 列表格） |
+| `104_real_certificates_scan.pdf` | 5 页证书 / 备案表扫描件 PDF |
+| `105_real_transactions_gbk.csv` | GBK 编码的 CSV 交易流水 |
+| `106_real_scan_page1.jpg` / `107_real_scan_page2.jpg` | 第1周渲染出的真实扫描页（带噪点、印章） |
 
-> **命名约定（11-13 定稿）**：合成样本用数字前缀 `01~18`，真实 case 统一
-> `real_` 前缀 + 一眼看懂内容的描述。字母 `r` 的字典序在数字之后，
-> `sorted()` 时真实 case 天然全部排在最后。原先 `test1/test2` 各存了
-> 两份字节级相同的副本，已去重删掉，只留正本。
+> **命名约定（11-13 定稿）**：合成样本 `01~18`（编号 < 101）；自己的真实 case
+> **从 101 起编号**，格式 `101_real_xxx`，数字前缀好找、`real_` 一眼看出是自己的素材。
+> 新增 case 从 108 接着编，直接丢进 `input/` 再跑 `a_batch_ocr.py` 就生效 ——
+> 不用改脚本、不用改清单，日志还会提示「未登记的新 case」和下一个建议编号。
+> 分组 / 排序规则集中在 **`case_naming.py`**（唯一真相源）：真实 case 恒排最后，
+> 组内按编号升序。注意不能靠纯 `sorted()`：字典序里 `101_` 会插到 `10_` 前面。
+> 原先 `test1/test2` 各存了两份字节级相同的副本，已去重删掉，只留正本。
 
 设计要点：**01~14 共用同一份干净底稿，每张只施加一种退化**，所以结果差异能归因到单一因素；
 `input/samples_manifest.json` 记着每类的退化参数、分组与「标准答案文字」，报告会自动算出
-「命中 / 未命中」行。想换成自己拍的照片，直接丢进 `input/` 再跑一遍即可；
-重新生成全套样本用 `python make_samples.py`（只覆盖同名文件，不删你自己的图）。
+「命中 / 未命中」行。想加自己的素材，按 `108_real_xxx` 丢进 `input/` 再跑一遍即可 ——
+manifest 不是白名单，没登记照样跑（分组由 `case_naming.py` 按编号推断）。
+重新生成全套样本用 `python make_samples.py`（只覆盖同名文件，不删你自己的图；
+顺带把新增 case 补登记进说明书，不会把它们冲掉）。
 
 > ⚠️ 合成图是教学用的对照实验，不等于真实分布。第 1 周那两张真实图和两张扫描页
 > 就是用来补这一课的：真实文档的噪点、印章、版式复杂度是画不出来的。
@@ -89,25 +94,35 @@
    - 密集小字 / 复杂版面 / 多栏
    - 手写体（**只观察效果，不深究**——这是兔子洞，本计划不攻手写）
 2. 用 `a_batch_ocr.py` 批量跑，把每张的**识别结果和原图对应存好**。
-3. **打开 `output/vis/index.html`** —— 这是本周最该花时间看的地方：
+3. **打开 `output/a_batch_ocr/index.html`** —— 这是本周最该花时间看的地方：
    - 左边原图上叠着识别框，右边是逐行文字 + 置信度条；
    - 鼠标移到右侧任意一行，左图对应的框会高亮；
    - 橙红框 = 置信度 < 0.8 的可疑行；
    - **原图上有字、却没被框住的地方，就是漏检**；
    - 顶部可一键「只看有问题的图」，折叠区能对照标准答案看哪几行没认出来；
-   - `output/vis/*_boxes.png` 是单张带框图，可直接贴进 `bad_cases/notes.md`；
+   - 每张卡片上有「本 case 的 result.json」链接，配合
+     `output/a_batch_ocr/<输入名>/boxes.png` 单张带框图，排查时只看这一个目录；
    - 只重画报告、不重跑 OCR：`python vis_ocr_result.py`。
 
 **脚本产物**：
 
-| 文件 | 内容 |
+| 路径 | 内容 |
 |---|---|
-| `output/batch_ocr_results.json` | 每个 case：OCR 行数 / 置信度 / 坐标 / 耗时，PDF·CSV 另带直读表格与诊断 |
-| `output/batch_ocr_summary.txt` | 纯文本全文汇总（含直读表格摘要） |
-| `output/pages/` | PDF 首页渲染图（中间产物，单独一层；跑完保留供核对） |
-| `output/vis/index.html` | ★ 可视化对照报告，浏览器直接打开，不用起服务 |
-| `output/vis/*_boxes.png` | 原图（或 PDF 首页图）+ 识别框，单张可贴笔记 |
-| `output/vis/img/` | 原图副本，专门给 HTML 引用；移动报告时要把整个 `vis/` 一起带走 |
+| `output/a_batch_ocr/index.html` | ★ 可视化对照报告，浏览器直接打开，不用起服务 |
+| `output/a_batch_ocr/batch_summary.json` / `.txt` | 跨 case 汇总表（只有关键指标，一眼看全） |
+| `output/a_batch_ocr/<输入名>/result.json` | 该 case 的完整结果：文字 / 置信度 / 坐标 / 直读表格与诊断 |
+| `output/a_batch_ocr/<输入名>/result.txt` | 该 case 的纯文本结果 |
+| `output/a_batch_ocr/<输入名>/source.<ext>` | 原图副本（PDF 是首页渲染图），给 HTML 引用 |
+| `output/a_batch_ocr/<输入名>/boxes.png` | 原图 + 识别框，单张可贴笔记 |
+| `output/a_batch_ocr/<输入名>/pages/p1.png` | PDF 首页渲染图（中间产物，跑完保留供核对） |
+| `output/c_try_params/param_compare.txt` | 模块 C 的调参对比结果 |
+
+> **产物隔离（与第1周同一套规矩）**：脚本一层 `output/a_batch_ocr/`，每个输入再一层
+> `<输入名>/`，中间产物再单独一层 `pages/`。排查某个 case 只看它自己的目录，
+> 不用在一整个大 JSON 里翻。报告放根、图片引用各 case 目录里的副本，
+> 所以移动时把**整个 `a_batch_ocr/` 目录**一起带走，别只拷 HTML。
+> 重跑会先清掉每个 case 目录里本脚本自己生成的旧文件（只删固定名单，不碰你的文件），
+> 已废弃的旧 case 目录只打印提示、不自动删除。
 
 **PDF / CSV 也能进对比预览（11-13 新增）**：`a_batch_ocr.py` 按后缀分三条路 ——
 图片直接 OCR；PDF 首页渲染成图给 OCR，**有文本层时额外用 pdfplumber 直读表格**；
@@ -115,8 +130,9 @@ CSV 直接按文本解析、完全不跑模型。报告里同一个 PDF 卡片�
 「上面的 OCR 文字 + 识别框」和「下面的直读表格 + 抽取诊断」，一眼看出
 像素识别的误差与文本层直读的无损差别。文本层策略与第1周 `weekend_pipeline.py`
 一致（诊断线型 → `TABLE_STRATEGIES` 回退 → 人工列边界模板 → 填充率打分），
-实现放在 `text_layer_extract.py`；`real_bank_statement_textlayer.pdf` 已配好
-9 条竖线模板，能拆出正确的 8 列表头。
+实现放在 `text_layer_extract.py`；`103_real_bank_statement_textlayer.pdf` 已配好
+9 条竖线模板，能拆出正确的 8 列表头。模板按「去掉数字编号后的语义名」登记，
+所以以后把 103 改成 108、或复制出新 case，模板照样命中，不用跟着改字典。
 
 **批量跑参考代码**（`python a_batch_ocr.py` 直接跑 `input/` 下所有 case；也可
 `python a_batch_ocr.py ../week-01/input` 临时换目录。脚手架已按本机
@@ -149,7 +165,7 @@ for res in results:
 > ⚠️ **识别框坐标的坑（本机 3.7.0 实测）**：默认开启的「整页方向分类 + UVDoc 去扭曲」
 > 会先把图矫正一遍，返回的 `rec_polys` 是矫正后图像的坐标，直接画回原图会整体错位
 > （实测标题框 y=27~66，而标题墨迹实际在 y=66~98）。关闭这两项后框与墨迹完全吻合。
-> 代价是某些图识别质量会下降：`real_terminal_screenshot.jpg` 从 6 行 / 0.90 变成 4 行 / 0.17。
+> 代价是某些图识别质量会下降：`101_real_terminal_screenshot.jpg`（原 `real_terminal_screenshot.jpg`）从 6 行 / 0.90 变成 4 行 / 0.17。
 > 顶部配置区 `USE_DOC_PREPROCESS` 可切换；只取文字、不需要坐标时可以试 True。
 
 ---
@@ -213,7 +229,7 @@ texts = sensitive_res[0]['rec_texts']     # 3.x 取数方式
 ```
 （已备好 `c_try_params.py`：把顶部配置区的 `IMG` 改成你的漏检样本，或用命令行
 `python c_try_params.py 图片路径`；脚本会打印 B 组「新增 / 丢掉」的行，
-并把完整对比存到 `output/param_compare.txt`。）
+并把完整对比存到 `output/c_try_params/param_compare.txt`。）
 
 > 参数名/默认值可能随版本变化，以官方文档为准：https://github.com/PaddlePaddle/PaddleOCR
 > 本机可用 `python -c "import inspect; from paddleocr import PaddleOCR; print(inspect.signature(PaddleOCR.predict))"` 直接查当前版本支持哪些参数。
@@ -289,9 +305,9 @@ texts = sensitive_res[0]['rec_texts']     # 3.x 取数方式
 ## 常见坑 & 卡住怎么办
 
 - **照抄旧教程报 `use_angle_cls` / `.ocr()` 的错**：那是 2.x 写法。本机 paddleocr 3.7.0 用 `use_textline_orientation` + `.predict()`，取 `rec_texts` / `rec_scores` / `rec_polys`。本周两个脚手架已按 3.x 校准，报错时先对照它们。
-- **找不到合适的复杂图片**：`input/` 已备好 25 个 case（`python make_samples.py` 可重新生成；18 张合成 + 7 个 `real_*` 真实 case）。想补充真实照片就拍生活里的招牌/票据/说明书（注意脱敏），或网上搜"场景文字识别数据集样本图"。
+- **找不到合适的复杂图片**：`input/` 已备好 25 个 case（`python make_samples.py` 可重新生成；18 张合成 + 7 个 `101~107_real_*` 真实 case）。想加自己的图就按 `108_real_xxx.jpg` 命名丢进去，重跑 `a_batch_ocr.py` 直接生效；素材可以拍生活里的招牌/票据/说明书（注意脱敏），或网上搜"场景文字识别数据集样本图"。
 - **报告里的识别框没套住文字**：多半是 `USE_DOC_PREPROCESS` 被改成了 True。见模块 A 末尾的「识别框坐标的坑」。文字内容没错、只是框错位，就查这一项。
-- **报告打开是乱码 / 图片不显示**：`index.html` 已带 `<meta charset="utf-8">`；原图副本在 `output/vis/img/`，所以要把**整个 `vis/` 目录**一起移动，别只单独拷走 HTML（早期版本用 `../../input/` 跳出目录，静态服务下会 404，已修）。
+- **报告打开是乱码 / 图片不显示**：`index.html` 已带 `<meta charset="utf-8">`；原图副本在每个 case 自己的目录里（`output/a_batch_ocr/<输入名>/source.<ext>`），所以要把**整个 `a_batch_ocr/` 目录**一起移动，别只单独拷走 HTML（早期版本用 `../../input/` 跳出目录，静态服务下会 404，已修）。
 - **调阈值两组结果一模一样 / 反而更差**：正常。清晰印刷体本来就没有漏检，看不出差异；换 `bad_cases/06_漏检/` 里的样本再试。本周只是"感受旋钮存在"，真正会调是 P4。别卡这。
 - **报警告 `lang and ocr_version will be ignored`**：显式指定模型名时 `lang` 会被忽略（语言能力由所选模型决定）。照脚手架删掉 `lang` 即可，不影响识别结果。
 - **3B1B 第 4 集公式看不懂**：**完全没关系**，这集就是劝退向的直觉铺垫，第 3 周会 just-in-time 补数学。跳过继续。

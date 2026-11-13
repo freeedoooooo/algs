@@ -18,16 +18,26 @@
 
 用法（在 week-02 目录下）：
     python a_batch_ocr.py                        # 用配置区 INPUT_DIR
-    python a_batch_ocr.py ../week-01/input       # 命令行临时指定别的图片目录
+    python a_batch_ocr.py ../week-01/input       # 命令行临时指定别的输入目录
 
-产物（都在 output/ 下）：
-    batch_ocr_results.json   每个 case 一条记录：文件名 / 行数 / 置信度 / 坐标 / 耗时
-                             （PDF·CSV 另带直读表格、诊断、原文）
-    batch_ocr_summary.txt    纯文本汇总，方便直接打开看全文
-    pages/                   PDF 首页渲染图（中间产物，跑完保留供核对）
-    vis/index.html           ★ 可视化对照报告：原图 + 识别框 + 逐行文字 + 直读表格
-    vis/*_boxes.png          ★ 每张原图（或 PDF 首页图）的带框版本
+产物（两层隔离，和第1周一致：脚本一层、每个输入一层）：
+    output/a_batch_ocr/
+        index.html                  ★ 跨 case 对比报告（可离线打开）
+        batch_summary.json / .txt   ★ 跨 case 汇总表（只放关键指标，一眼看全）
+        <输入文件名去后缀>/
+            result.json             这个 case 的完整结果：文字 / 置信度 / 坐标 / 直读表格
+            result.txt              这个 case 的纯文本结果
+            source.<ext>            原图副本（PDF 是首页渲染图），给报告引用
+            boxes.png               原图 + 识别框
+            pages/p1.png            PDF 首页渲染图（中间产物，单独一层，跑完保留）
+排查某个 case 时只看它自己的目录即可，不用再在一整个大 JSON 里翻找。
 可视化由 vis_ocr_result.py 生成，跑完本脚本会自动调用；不想要可把 MAKE_VIS 改 False。
+
+【新增 case 怎么用】
+直接把文件丢进 input/，自己的素材从 101 起编号（101_real_xxx.jpg、108_real_xxx.pdf …）。
+不用改任何脚本、不用改清单，重跑本脚本就自动扫到并按规则分组排序；
+命名 / 分组 / 排序规则集中在 case_naming.py，是唯一真相源。
+重跑时每个 case 目录里本脚本自己生成的旧文件会先清掉再重建。
 
 【与第1周的关系】
 第1周的 b_ocr_image.py 一次只跑一张图；这里复用同样的 3.x API，
@@ -41,10 +51,17 @@
 """
 
 # =========================== 配置区：调试只改这里 ===========================
-INPUT_DIR = 'input'                              # 图片目录（相对当前工作目录）
-OUT_DIR = 'output'                               # 产物目录，不存在会自动创建
-OUT_JSON = 'output/batch_ocr_results.json'       # 结构化结果；改成 None 就不写
-OUT_TXT = 'output/batch_ocr_summary.txt'         # 纯文本汇总；改成 None 就不写
+INPUT_DIR = 'input'                              # 输入目录（相对当前工作目录）
+OUT_ROOT = 'output/a_batch_ocr'                  # 本脚本专属产物根目录（第一层隔离）
+# 下面这些只写「文件名」，实际路径由 OUT_ROOT/<case 目录>/ 拼出来（第二层隔离）。
+RESULT_JSON = 'result.json'                      # 每个 case 的完整结构化结果
+RESULT_TXT = 'result.txt'                        # 每个 case 的纯文本结果
+SOURCE_BASENAME = 'source'                       # 原图副本的主文件名（扩展名沿用原图）
+BOXES_NAME = 'boxes.png'                         # 带框 PNG
+PAGES_SUBDIR = 'pages'                           # case 内的中间产物子目录
+# 跨 case 的汇总表放 OUT_ROOT 根目录，不带 case 名。
+SUMMARY_JSON = 'batch_summary.json'
+SUMMARY_TXT = 'batch_summary.txt'
 DET_MODEL = 'PP-OCRv4_mobile_det'                # 检测模型（找文字在哪）
 REC_MODEL = 'PP-OCRv4_mobile_rec'                # 识别模型（读出来）
 # 模型说明：无 GPU 时 server 大模型在 CPU 上极慢（第1周实测 104s vs mobile 3.8s），
@@ -54,14 +71,12 @@ IMAGE_EXTS = ('.png', '.jpg', '.jpeg', '.bmp')   # 图片：走 PaddleOCR
 PDF_EXTS = ('.pdf',)                             # PDF：渲染首页走 OCR + 有文本层时直读表格
 TEXT_EXTS = ('.csv', '.txt', '.md')              # 纯文本：直接读，不跑 OCR
 SUPPORTED_EXTS = IMAGE_EXTS + PDF_EXTS + TEXT_EXTS
-PAGES_DIR = 'output/pages'                       # PDF 首页渲染图（中间产物，单独一层）
 # 文档预处理开关（整页方向分类 + UVDoc 去扭曲）：
 #   False（推荐）：坐标就是原图像素坐标，可视化报告里的框才套得准；少加载 2 个模型。
 #   True         ：对弯曲/歪斜的真实拍照文档可能识别更好，但 rec_polys 会基于
 #                  矫正后的图像，画回原图时框会整体错位。想试时改成 True 再跑一次。
 USE_DOC_PREPROCESS = False
 MAKE_VIS = True                                  # 跑完自动生成可视化对照报告（建议保持 True）
-VIS_DIR = 'output/vis'                           # 可视化产物目录
 MANIFEST_NAME = 'samples_manifest.json'          # 说明书文件名，脚本会在输入目录里找它
 # ==========================================================================
 
@@ -80,14 +95,18 @@ from paddleocr import PaddleOCR  # noqa: E402  （放在 env 设置之后是故�
 # 文本层 / 纯文本的直读提取（只依赖 pdfplumber + pymupdf，不加载任何 OCR 模型）。
 # 单独成模块是为了让「哪些结果来自像素、哪些来自文字本身」在代码里就分得清。
 from text_layer_extract import extract_case  # noqa: E402
+import case_naming as naming                # noqa: E402  命名 / 分组 / 排序规则的唯一真相源
 
 
 def list_cases(src_dir):
     """
     列出目录里所有支持的 case，返回完整路径列表。
 
-    sorted() 保证顺序稳定：数字前缀的 01~18 合成样本在前，
-    real_ 前缀的真实 case 因为字母 r 的字典序更大，天然全部排在最后。
+    只按后缀过滤，**不查任何清单**：新丢进来的文件立刻就能被扫到，
+    这就是「新增 case 重跑直接生效」的关键。
+    排序用 naming.case_sort_key：合成样本在前、真实 case 恒排最后，
+    组内按数字编号升序。不能用纯 sorted() —— 字典序里 '101_' 会插到
+    '10_' 前面，真实 case 反而跑到合成样本中间去了。
     """
     if not os.path.isdir(src_dir):
         sys.exit(
@@ -95,11 +114,75 @@ def list_cases(src_dir):
             f'改文件顶部的 INPUT_DIR，或命令行指定：python a_batch_ocr.py 输入目录'
         )
     # name.lower().endswith(...) 让 .JPG 这种大写后缀也能被认出来。
-    names = sorted(
-        name for name in os.listdir(src_dir)
-        if name.lower().endswith(SUPPORTED_EXTS)
-    )
+    names = [name for name in os.listdir(src_dir)
+             if name.lower().endswith(SUPPORTED_EXTS)]
+    names.sort(key=naming.case_sort_key)
     return [os.path.join(src_dir, name) for name in names]
+
+
+def read_manifest(src_dir):
+    """读样本说明书，返回 {文件名: 条目}；文件不存在就返回空字典（不影响跑批）。"""
+    path = os.path.join(src_dir, MANIFEST_NAME)
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return {item['file']: item for item in (data.get('samples') or [])
+            if isinstance(item, dict) and item.get('file')}
+
+
+def case_rel_name(name, used):
+    """
+    算出这个 case 的输出目录名 = 输入文件名去后缀。
+    万一出现同名不同后缀（a.jpg / a.png），给后者加上后缀避免互相覆盖。
+    """
+    rel = naming.case_dir_name(name)
+    if rel in used:
+        rel = f'{rel}_{os.path.splitext(name)[1].lstrip(".").lower()}'
+    used.add(rel)
+    return rel
+
+
+def prepare_case_dir(case_abs):
+    """
+    重跑前清掉这个 case 目录里**本脚本自己生成的旧文件**，再重建目录。
+
+    安全边界：只删固定名单（result.json / result.txt / boxes.png / source.* /
+    pages/*.png），不递归、不删子目录、不碰你手工放进去的文件。
+    和第1周「重跑前先清旧页图」是同一个规矩。
+    """
+    os.makedirs(case_abs, exist_ok=True)
+    fixed = {RESULT_JSON, RESULT_TXT, BOXES_NAME}
+    removed = 0
+    for name in os.listdir(case_abs):
+        path = os.path.join(case_abs, name)
+        if not os.path.isfile(path):
+            continue
+        if name in fixed or os.path.splitext(name)[0] == SOURCE_BASENAME:
+            os.remove(path)
+            removed += 1
+    pages = os.path.join(case_abs, PAGES_SUBDIR)
+    if os.path.isdir(pages):
+        for name in os.listdir(pages):
+            path = os.path.join(pages, name)
+            if os.path.isfile(path) and name.lower().endswith('.png'):
+                os.remove(path)
+                removed += 1
+    return removed
+
+
+def report_stale_cases(current_rels):
+    """旧编号残留的 case 目录只提示、不自动删，避免误删你放进去的东西。"""
+    if not os.path.isdir(OUT_ROOT):
+        return
+    stale = sorted(name for name in os.listdir(OUT_ROOT)
+                   if os.path.isdir(os.path.join(OUT_ROOT, name))
+                   and name not in current_rels)
+    if stale:
+        print(f'>> 提示：有 {len(stale)} 个旧 case 目录已不再对应输入（不会自动删除）：')
+        for name in stale:
+            print(f'   {name}/')
 
 
 def build_ocr():
@@ -160,9 +243,10 @@ def recognize(ocr, path):
     }
 
 
-def build_case_record(ocr, path):
+def build_case_record(ocr, path, case_abs):
     """
     按后缀分流处理一个 case，统一返回一条 dict 记录。
+    case_abs 是这个 case 的专属输出目录，PDF 首页渲染图会落到它的 pages/ 里。
 
     三类输入共用同一套字段（file / lines / texts / scores / boxes ...），
     这样 vis_ocr_result.py 不用关心输入类型；多出来的字段：
@@ -182,7 +266,8 @@ def build_case_record(ocr, path):
         return rec
 
     # ---- PDF / CSV：先走「直读」，不加载任何模型 ----
-    extra = extract_case(path, pages_dir=PAGES_DIR)
+    # PDF 首页渲染图放进 <case 目录>/pages/，每个输入各一份，互不干扰。
+    extra = extract_case(path, pages_dir=os.path.join(case_abs, PAGES_SUBDIR))
     if extra['kind'] == 'csv':
         # 纯文本没有像素，也就没有识别框和置信度；给它一套空字段保持结构统一。
         rec = {
@@ -218,56 +303,92 @@ def build_case_record(ocr, path):
     return rec
 
 
-def save_results(records, out_json, out_txt):
-    """把全部记录写成 JSON + 纯文本汇总。"""
-    os.makedirs(OUT_DIR, exist_ok=True)   # exist_ok=True：目录已存在也不报错
-    payload = {
-        'model': {'det': DET_MODEL, 'rec': REC_MODEL},
-        'image_count': len(records),          # 兼容旧版字段，含义仍是「记录条数」
-        'case_count': len(records),
-        'records': records,
-    }
-    if out_json:
+def case_text_lines(rec):
+    """把一条记录写成「这个 case 自己的纯文本结果」，方便直接打开看。"""
+    kind = rec.get('kind', 'image')
+    lines = [
+        f'case：{rec["file"]}',
+        f'分组：{rec.get("group", "?")}　类型：{kind}',
+        f'模型：{DET_MODEL} + {REC_MODEL}',
+        f'OCR 行数：{rec["lines"]}　平均置信度：{rec["avg_score"]:.2f}　'
+        f'可疑行：{rec["low_score_lines"]}　耗时：{rec["elapsed"]}s',
+    ]
+    if rec.get('error'):
+        lines.append(f'识别失败：{rec["error"]}')
+    if kind != 'image':
+        tables = rec.get('tables') or []
+        tag = (f'共 {rec.get("pages", 1)} 页，text_layer={rec.get("text_layer")}'
+               if kind == 'pdf' else f'编码 {rec.get("encoding", "?")}')
+        lines.append(f'文本层 / 纯文本直读：{len(tables)} 张表（{tag}）')
+        for t in tables:
+            lines.append(f'  第 {t["page"]} 页 / {t["strategy"]} 策略 / '
+                         f'{t["n_rows"]}×{t["n_cols"]} / 填充率 {t["fill_ratio"]}')
+    lines.append('--- 逐行 OCR 结果（文字<TAB>置信度）---')
+    # zip() 把文字和置信度一一配对
+    for text, score in zip(rec.get('texts') or [], rec.get('scores') or []):
+        lines.append(f'{text}\t{score:.2f}')
+    if rec.get('plain_text'):
+        lines.append('--- 原文 ---')
+        lines.append(rec['plain_text'].strip())
+    return lines
+
+
+def save_results(records):
+    """
+    两层隔离落盘（和第1周同一套规矩）：
+        每个 case → <OUT_ROOT>/<case>/result.json + result.txt（完整结果）
+        OUT_ROOT 根 → batch_summary.json + batch_summary.txt（跨 case 汇总）
+    汇总表刻意只放关键指标；要看某个 case 的逐行文字 / 坐标，直接进它的
+    result.json，不用再在一整个大 JSON 里翻找。
+    """
+    os.makedirs(OUT_ROOT, exist_ok=True)   # exist_ok=True：目录已存在也不报错
+    for rec in records:
+        case_abs = os.path.join(OUT_ROOT, rec['out_dir'])
+        os.makedirs(case_abs, exist_ok=True)
         # ensure_ascii=False 保证中文原样写入，不变成 \uXXXX；indent=2 方便人看。
-        with open(out_json, 'w', encoding='utf-8') as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
+        with open(os.path.join(case_abs, RESULT_JSON), 'w', encoding='utf-8') as f:
+            json.dump(rec, f, ensure_ascii=False, indent=2)
+        with open(os.path.join(case_abs, RESULT_TXT), 'w', encoding='utf-8') as f:
+            f.write('\n'.join(case_text_lines(rec)) + '\n')
 
-    if out_txt:
-        lines = [
-            f'模型：{DET_MODEL} + {REC_MODEL}',
-            f'case 数：{len(records)}（图片 OCR / PDF 文本层直读 / CSV 纯文本）',
-            '',
-        ]
-        for rec in records:
-            kind = rec.get('kind', 'image')
-            lines.append(
-                f'=== {rec["file"]} [{kind}] | OCR {rec["lines"]} 行 | '
-                f'平均置信度 {rec["avg_score"]:.2f} | {rec["elapsed"]}s ==='
-            )
-            if rec.get('error'):
-                lines.append(f'识别失败：{rec["error"]}')
-            # 非图片分支：把「直读」抽到的表格摘要也写进纯文本汇总
-            if kind != 'image':
-                tables = rec.get('tables') or []
-                tag = (f'共 {rec.get("pages", 1)} 页，text_layer='
-                       f'{rec.get("text_layer")}') if kind == 'pdf' \
-                    else f'编码 {rec.get("encoding", "?")}'
-                lines.append(f'文本层 / 纯文本直读：{len(tables)} 张表（{tag}）')
-                for t in tables:
-                    lines.append(f'  第 {t["page"]} 页 / {t["strategy"]} 策略 / '
-                                 f'{t["n_rows"]}×{t["n_cols"]} / '
-                                 f'填充率 {t["fill_ratio"]}')
-            # zip() 把文字和置信度一一配对
-            for text, score in zip(rec['texts'], rec['scores']):
-                lines.append(f'{text}\t{score:.2f}')
-            if rec.get('plain_text'):
-                lines.append('--- 原文 ---')
-                lines.append(rec['plain_text'].strip())
-            lines.append('')
-        with open(out_txt, 'w', encoding='utf-8') as f:
-            f.write('\n'.join(lines))
+    summary = {
+        'model': {'det': DET_MODEL, 'rec': REC_MODEL},
+        'case_count': len(records),
+        'real_count': sum(1 for r in records if r.get('group') == 'real'),
+        'real_start_no': naming.REAL_START_NO,
+        'cases': [{
+            'file': r['file'], 'out_dir': r['out_dir'], 'group': r.get('group'),
+            'case_no': naming.parse_no(r['file']),
+            'kind': r.get('kind', 'image'), 'lines': r.get('lines', 0),
+            'avg_score': r.get('avg_score', 0),
+            'low_score_lines': r.get('low_score_lines', 0),
+            'tables': len(r.get('tables') or []),
+            'elapsed': r.get('elapsed', 0),
+            'error': r.get('error'),
+        } for r in records],
+    }
+    with open(os.path.join(OUT_ROOT, SUMMARY_JSON), 'w', encoding='utf-8') as f:
+        json.dump(summary, f, ensure_ascii=False, indent=2)
 
-    print(f'>> 结果已保存：{out_json or "(未写 JSON)"}、{out_txt or "(未写 TXT)"}')
+    lines = [
+        f'模型：{DET_MODEL} + {REC_MODEL}',
+        f'case 数：{len(records)}（合成 {len(records) - summary["real_count"]} / '
+        f'真实 {summary["real_count"]}；真实 case 从 {naming.REAL_START_NO} 起编号）',
+        f'每个 case 的完整结果在：{OUT_ROOT}/<输入名>/{RESULT_JSON}',
+        '',
+    ]
+    for item in summary['cases']:
+        lines.append(
+            f'{item["file"]:42s} | {str(item["group"]):9s} | {item["kind"]:5s} | '
+            f'OCR {item["lines"]:4d} 行 | 置信度 {item["avg_score"]:.2f} | '
+            f'直读表格 {item["tables"]} | {item["elapsed"]}s'
+            + (f' | 失败：{item["error"]}' if item['error'] else '')
+        )
+    with open(os.path.join(OUT_ROOT, SUMMARY_TXT), 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lines) + '\n')
+
+    print(f'>> 每个 case 的结果已写入 {OUT_ROOT}/<输入名>/{RESULT_JSON}')
+    print(f'>> 跨 case 汇总：{os.path.join(OUT_ROOT, SUMMARY_JSON)} / {SUMMARY_TXT}')
 
 
 def main():
@@ -282,15 +403,36 @@ def main():
         print('>> 先把素材放进 input/，或用命令行指定别的目录。')
         return
 
+    # ---- 新增 case 的可见反馈 ----
+    # manifest 只是「说明书」，不是白名单：没登记照样跑，这里只提示一下。
+    manifest_map = read_manifest(src_dir)
+    case_names = [os.path.basename(p) for p in cases]
+    unknown = [n for n in case_names if n not in manifest_map]
+    if unknown:
+        print(f'>> 发现 {len(unknown)} 个未登记到 {MANIFEST_NAME} 的新 case'
+              f'（照常处理，不影响识别）：')
+        for n in unknown:
+            print(f'   {n}')
+        print(f'>> 下一个建议编号：{naming.next_real_no(case_names)}'
+              f'（自己的 case 从 {naming.REAL_START_NO} 起编号）')
+
+    # 先算好每个 case 的专属目录名，重跑前清旧、并提示已废弃的旧目录。
+    used = set()
+    rels = [case_rel_name(name, used) for name in case_names]
+    report_stale_cases(set(rels))
+
     print(f'>> 共 {len(cases)} 个 case，开始批量处理（图片 OCR / PDF 文本层直读 / CSV 纯文本）')
     ocr = build_ocr()                 # 只创建一次，后面循环复用
     t_all = time.perf_counter()
 
     records = []
-    for i, path in enumerate(cases, start=1):   # enumerate 同时给序号和元素
+    # zip() 把「输入路径」和「输出目录名」一一配对；enumerate 负责给进度序号。
+    for i, (path, rel) in enumerate(zip(cases, rels), start=1):
         name = os.path.basename(path)
+        case_abs = os.path.join(OUT_ROOT, rel)
+        prepare_case_dir(case_abs)      # 重跑先清本脚本生成的旧产物
         try:
-            rec = build_case_record(ocr, path)
+            rec = build_case_record(ocr, path, case_abs)
         except Exception as e:
             # 单个 case 失败不能让整批中断，记下来继续跑下一个。
             print(f'>> [{i}/{len(cases)}] {name} 处理失败：{e}')
@@ -299,6 +441,10 @@ def main():
                 'avg_score': 0.0, 'low_score_lines': 0, 'elapsed': 0.0,
                 'texts': [], 'scores': [], 'boxes': [],
             }
+        # 这几个字段写进 result.json，方便脱离 manifest 也能看懂这条结果。
+        rec['out_dir'] = rel
+        rec['group'] = naming.case_group(name, manifest_map.get(name, {}).get('group'))
+        rec['case_no'] = naming.parse_no(name)
         records.append(rec)
         if not rec.get('error'):
             table_note = (f', 直读表格 {len(rec.get("tables") or [])} 张'
@@ -309,7 +455,7 @@ def main():
                 f'低置信 {rec["low_score_lines"]} 行{table_note}, {rec["elapsed"]}s'
             )
 
-    save_results(records, OUT_JSON, OUT_TXT)
+    save_results(records)
     # 先记下「纯识别」耗时，再画图；否则报告生成时间会混进这个数字里。
     elapsed_all = time.perf_counter() - t_all
 
@@ -322,16 +468,17 @@ def main():
             report = build_report(
                 records,
                 image_dir=src_dir,                                  # 原图要和跑 OCR 时同一个目录
-                vis_dir=VIS_DIR,
+                out_root=OUT_ROOT,
                 manifest_path=os.path.join(src_dir, MANIFEST_NAME),
-                result_json=OUT_JSON or '',
+                summary_path=os.path.join(OUT_ROOT, SUMMARY_JSON),
             )
             print(f'>> 可视化对照报告（用浏览器打开）：{report}')
         except Exception as e:
             print(f'>> 可视化生成失败（识别结果不受影响）：{e}')
 
     print(f'>> 全部完成，总耗时 {elapsed_all:.2f}s（含模型加载）')
-    print('>> 下一步：打开 output/vis/index.html，把有问题的图按类型放进 bad_cases/ 子目录，')
+    print(f'>> 排查单个 case：打开 {OUT_ROOT}/<输入名>/{RESULT_JSON} 或 {RESULT_TXT}')
+    print('>> 下一步：把有问题的 case 按类型放进 bad_cases/ 子目录，')
     print('           并在 bad_cases/notes.md 记一行「现象 + 我的猜测」。')
 
 

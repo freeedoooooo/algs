@@ -13,8 +13,10 @@
 
 因此这里采用「同一份干净底稿 + 每次只变一个因素」的对照实验设计。
 在此基础上，脚本还会把第1周的真实图与原始文件复制进来当真实世界对照组。
-11-13 重排：**合成样本统一 01~18，用户真实 case 统一 `real_xxx` 前缀**，
-字母 r 的字典序排在数字之后，天然全在最后；名字也改成一眼看懂内容的风格。
+11-13 定稿：**合成样本 01~18；真实 case 从 101 起编号，格式 101_real_xxx**。
+数字前缀方便排序查找，real_ 一眼看出是自己的素材；分组与排序规则统一放在
+case_naming.py（唯一真相源）。新增 case 只要丢进 input/ 再跑 a_batch_ocr.py
+就会被自动扫到，不用改这份清单，也不用改任何脚本。
 重复素材已去掉（原先 test1/test2 各存了两份字节相同的副本）。
 
 【用法】在 week-02 目录下：
@@ -22,9 +24,10 @@
     python make_samples.py
 
 【产物】
-    input/01_xxx.png ~ 18_xxx.png   18 张合成退化样本（数字前缀，编号连续）
-    input/real_xxx.*                7 个用户真实 case（real_ 前缀，统一排在最后，已去重）
-    input/samples_manifest.json     每个 case 的类别 / 退化说明 / 分组 / 标准答案
+    input/01_xxx.png ~ 18_xxx.png        18 张合成退化样本（编号连续）
+    input/101_real_xxx.* ~ 107_real_*    7 个用户真实 case（101 起编号，恒排最后，已去重）
+    input/108_real_xxx.* ...             你自己新增的 case：接着编号，重跑即生效
+    input/samples_manifest.json          每个 case 的类别 / 退化说明 / 分组 / 标准答案
 
 其中 15~18 是「重度退化」：首轮实测轻度退化几乎打不垮 PP-OCRv4，
 这 4 张专门把图像劣化到能观察到明显失败，给 bad case 库提供真素材。
@@ -36,6 +39,9 @@
 OUT_DIR = 'input'                                  # 样本输出目录
 MANIFEST = 'input/samples_manifest.json'           # 样本说明书（标准答案在这里）
 WEEK01_INPUT = '../week-01/input'                  # 真实样本来源目录
+WEEK01_PAGES = '../week-01/output/c_pdf_text_layer/test3_image/pages'  # 真实扫描页来源
+# 与 a_batch_ocr.py 保持一致：这些后缀才算 case。补登记用户新增 case 时要用到。
+SUPPORTED_EXTS = ('.png', '.jpg', '.jpeg', '.bmp', '.pdf', '.csv', '.txt', '.md')
 SEED = 20261112                                    # 随机种子：固定后每次生成的噪声完全一样
 PAGE_W, PAGE_H = 1100, 760                         # 干净底稿的尺寸（像素）
 FONT_REGULAR = 'C:/Windows/Fonts/msyh.ttc'         # 微软雅黑：正文
@@ -52,6 +58,9 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 import cv2  # 只用来做透视变换，其余图像操作都用 PIL
+
+# 命名 / 分组 / 排序规则的唯一真相源（本文件不自己猜「谁是真实 case」）。
+import case_naming as naming
 
 
 # --------------------------------------------------------------------------
@@ -302,8 +311,9 @@ SYNTHETIC = [
      lambda im: degrade_low_contrast(im, factor=0.13)),
 ]
 
-# 真实 case：统一 real_ 前缀（字母 r 的字典序排在数字编号之后，天然「都放到最后」）。
-# 11-13 用户要求：① 真实 case 都用 real 前缀；② 去掉重复；③ 名字一眼能看出是什么。
+# 真实 case：**编号从 101 起，格式 101_real_xxx**（用户 11-13 定稿）。
+# 数字前缀方便查找排序，real_ 一眼看出是自己的素材；分组 / 排序 / 编号规则
+# 统一由 case_naming.py 决定，这里只负责「铺哪些文件」。
 # 去重说明：旧版 19_real_terminal / 20_real_doc 与 week-01 的 test1/test2 是
 #   字节级完全相同的副本，已删掉，只留下面这份正本。
 #   real_scan_page1/2 是 PDF 渲染页缩放出来的 JPEG，和 PDF 原件内容不同，
@@ -311,38 +321,41 @@ SYNTHETIC = [
 # 每项：(目标名, 分类, 说明, 来源类型, 源文件名, source 说明)
 #   kind='copy' → 从 WEEK01_INPUT 直接复制；kind='scan' → 从 WEEK01_PAGES 渲染页图缩放
 REAL_CASES = [
-    ('real_terminal_screenshot.jpg',       '06_漏检',
+    ('101_real_terminal_screenshot.jpg',       '06_漏检',
      '真实终端截图（亮字暗底、命令行小字）',      'copy', 'test1.jpg',
      'week-01/input/test1.jpg'),
-    ('real_clear_doc.jpg',                 '对照组',
+    ('102_real_clear_doc.jpg',                 '对照组',
      '真实清晰文档（20 行、平均置信度 0.99）',    'copy', 'test2.jpg',
      'week-01/input/test2.jpg'),
-    ('real_bank_statement_textlayer.pdf',  '文本层表格',
+    ('103_real_bank_statement_textlayer.pdf',  '文本层表格',
      '有文本层的银行流水 PDF（含 8 列表格）',      'copy', 'test3.pdf',
      'week-01/input/test3.pdf'),
-    ('real_certificates_scan.pdf',         '扫描件',
+    ('104_real_certificates_scan.pdf',         '扫描件',
      '5 页证书 / 备案表扫描件 PDF',                'copy', 'test3_image.pdf',
      'week-01/input/test3_image.pdf'),
-    ('real_transactions_gbk.csv',          '纯文本表格',
+    ('105_real_transactions_gbk.csv',          '纯文本表格',
      'GBK 编码的 CSV 交易流水',                    'copy', 'test4.csv',
      'week-01/input/test4.csv'),
-    ('real_scan_page1.jpg',                '01_模糊低质',
+    ('106_real_scan_page1.jpg',                '01_模糊低质',
      '真实扫描件第 1 页（渲染图缩放，带噪点与印章）', 'scan', 'c_page_1.png',
      'week-01/output/c_pdf_text_layer/test3_image/pages/c_page_1.png'),
-    ('real_scan_page2.jpg',                '04_密集小字',
+    ('107_real_scan_page2.jpg',                '04_密集小字',
      '真实扫描件第 2 页（备案名单表格）',          'scan', 'c_page_2.png',
      'week-01/output/c_pdf_text_layer/test3_image/pages/c_page_2.png'),
 ]
 # 第1周 11-13 把页图改成 1 起编号并挪进两层隔离目录，旧的 c_page_0.png 已不存在。
-WEEK01_PAGES = '../week-01/output/c_pdf_text_layer/test3_image/pages'
 
 
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     manifest = {
         'generated_by': 'make_samples.py',
-        'design': '01~18 为合成退化样本；real_* 为用户真实 case（real_ 前缀，字典序天然排在最后）。expect_lines 是标准答案',
-        'groups': {'synthetic': '01~18 合成样本（数字前缀）', 'real': 'real_* 真实 case（统一前缀，排在最后）'},
+        'design': ('01~18 为合成退化样本；101~ 起编号的 1xx_real_* 为用户真实 case'
+                   '（规则见 case_naming.py，新增 case 重跑 a_batch_ocr.py 即生效）。'
+                   'expect_lines 是标准答案'),
+        'groups': {'synthetic': '01~18 合成样本（编号 < 101）',
+                   'real': '101~ 起的真实 case（101_real_*，恒排最后）'},
+        'real_start_no': naming.REAL_START_NO,
         'seed': SEED,
         'samples': [],
     }
@@ -393,6 +406,30 @@ def main():
             'expect_lines': None,             # 真实素材没有逐行标准答案
         })
         print(f'>> 已{"复制" if kind == "copy" else "生成"} {dst_name:34s} {category} / 真实 case')
+
+    # ---- 用户自己新增的 case：不在上面两张清单里，也补一条说明书记录 ----
+    # 这样以后重跑 make_samples.py，不会把新增 case 的分类 / 说明抹掉。
+    # a_batch_ocr.py 本来就不依赖 manifest（分组统一由 case_naming.py 推断），
+    # 这里补登记只是让对比报告里的「分类 / 退化说明」更完整。
+    known = {item['file'] for item in manifest['samples']}
+    extra_count = 0
+    for name in sorted(os.listdir(OUT_DIR), key=naming.case_sort_key):
+        if (name in known or name == os.path.basename(MANIFEST)
+                or name.startswith('.')
+                or not name.lower().endswith(SUPPORTED_EXTS)):
+            continue
+        manifest['samples'].append({
+            'file': name,
+            'category': '自定义',
+            'distortion': '用户新增 case（未登记退化说明，可手工补写）',
+            'source': 'user',
+            'group': naming.case_group(name),
+            'expect_lines': None,
+        })
+        extra_count += 1
+    if extra_count:
+        print(f'>> 另有 {extra_count} 个用户新增 case 已补登记进说明书')
+        print(f'>> 下一个建议编号：{naming.next_real_no(os.listdir(OUT_DIR))}')
 
     manifest['sample_count'] = len(manifest['samples'])
     with open(MANIFEST, 'w', encoding='utf-8') as f:
