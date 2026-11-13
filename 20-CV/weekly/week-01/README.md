@@ -183,18 +183,20 @@ for b in res.json['res']['parsing_res_list']:
      c_pdf_text_layer/
        test3/             test3_text.txt（抽出的全文）
        test3_image/
-         pages/           c_page_0~4.png（转出的页图，中间产物）
+         pages/           c_page_1~5.png（= PDF 第 1~5 页，中间产物）
      d_table_ocr/
        test2/             d_table_out.html
      weekend_pipeline/
        batch_summary.json / batch_summary.txt   ← 所有 case 的总览表
        test1/             output.json + pipeline_result.txt
-       test2/             output.json + pipeline_result.txt + pipeline_table_p0.html
+       test2/             output.json + pipeline_result.txt + pipeline_table_p1.html
        test3/             output.json + pipeline_result.txt
-       test3_image/       output.json + pipeline_result.txt + pipeline_table_p1.html
-                          + _tmp_pages/（OCR 页图，跑完保留供逐页核对）
+       test3_image/       output.json + pipeline_result.txt + pipeline_table_p2.html
+                          + _tmp_pages/_tmp_page_1~5.png（跑完保留供逐页核对）
        test4/             output.json + pipeline_result.txt
    ```
+
+   **页码基准（全仓统一，11-13 定稿）：一律从 1 起，和 PDF 阅读器一致。** PDF 第 2 页的表格 → `pipeline_table_p2.html` / `d_table_out_2.html` / `output.json` 里 `"page": 2` / 日志「第 2 页」/ 页图 `_tmp_page_2.png` / `c_page_2.png`，全部对齐，不再需要 `+1` 换算。重跑时脚本会先清掉旧编号的表格 HTML 和旧页图，避免新旧两套编号并存。
 
    只跑一个文件：`python weekend_pipeline.py input/test3.pdf`；跑别的目录：`python weekend_pipeline.py ../week-02/input`。新增 case 只要丢进 `input/` 就会自动被扫到（支持 `.pdf` / 常见图片 / `.csv .txt .md`，见配置区 `SUPPORTED_EXTS`）。OCR 分支的中间页图放在 `<case>/_tmp_pages/`，**跑完保留**方便逐页核对「OCR 看的是哪张图」，下次重跑该 case 时会先清空旧图再生成新图（不用改任何开关，出错时页图也会留着排查）；`output.json` 里的 `temp_dir` / `temp_pages` 会记下页图位置和张数；表格识别每页约 +20s，只想快速看文字把 `ENABLE_TABLE` 改成 `False`。输入统一放 `input/`，产物按上面两层规则自动建目录。
 2. **bad case 库雏形**：建一个文件夹 `bad_cases/`，把你跑的过程中**识别错、识别不全、模糊/倾斜/反光**的样本图存进去，附一个 `notes.md` 记"这张为什么失败"。**这是第 2 周和 P4 的宝贵素材，现在就开始攒。**

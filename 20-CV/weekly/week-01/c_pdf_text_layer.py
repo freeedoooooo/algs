@@ -10,12 +10,13 @@
 
 调试要改的路径都在文件顶部的【配置区】，不用往下翻代码。
 
-【产物】两层隔离 + 中间产物单独一层：
+【产物】两层隔离 + 中间产物单独一层（页码统一从 1 起，和 PDF 阅读器一致）：
     output/c_pdf_text_layer/<输入文件名去后缀>/
         <文件名>_text.txt    有文本层时抽出的全文
         pages/               无文本层时转出的页图（中间产物，单独放，不混在结果里）
-            c_page_0.png …
+            c_page_1.png …   c_page_2.png = PDF 第 2 页
 换一个 PDF 跑，结果自动进另一个目录，不会覆盖上一次的。
+重跑时 pages/ 里的旧页图会先清空再生成新的，跑完保留供核对。
 
 两个库的分工：
     pdfplumber → 判断/抽取 PDF 的【文本层】（有字就直接读，又快又准）
@@ -39,6 +40,7 @@ SAMPLE_PAGES = 3                            # 只检查前几页，避免大 PDF
 # ==========================================================================
 
 import os
+import re
 import sys
 import time
 
@@ -88,6 +90,30 @@ def case_dir(input_path):
     return os.path.join(OUT_DIR, stem)
 
 
+def prepare_pages_dir(out_dir):
+    """
+    生成新页图之前，先清空 pages/ 里上一次留下的旧页图。
+
+    和 weekend_pipeline.py 的 prepare_temp_dir() 是同一套策略：
+    **跑完保留**页图供核对，**重跑前先清旧**，避免新旧编号混在一个目录里。
+    只删 `c_page_<数字>.png` 这类本脚本自己生成的普通文件；
+    不递归、不删子目录、不碰同目录下别的文件。
+    """
+    if not os.path.isdir(out_dir):
+        return
+    removed = 0
+    for name in os.listdir(out_dir):
+        if not re.fullmatch(r'c_page_\d+\.png', name):
+            continue
+        try:
+            os.remove(os.path.join(out_dir, name))
+            removed += 1
+        except OSError:
+            pass
+    if removed:
+        print(f'>> 重跑前清掉 {removed} 张旧页图 → {show(out_dir)}')
+
+
 def pdf_to_images(pdf_path, dpi=None, out_dir=None):
     """
     扫描件：每页转成图片，再走 PaddleOCR（见 b_ocr_image.py）。
@@ -98,14 +124,18 @@ def pdf_to_images(pdf_path, dpi=None, out_dir=None):
 
     main() 会传入 <case 目录>/pages/，让页图这类中间产物单独待一层，
     不和抽取的文本混在一起。
+
+    全仓统一：页码从 1 起，`c_page_2.png` 就是 PDF 第 2 页。
     """
     dpi = DPI if dpi is None else dpi
     out_dir = OUT_DIR if out_dir is None else out_dir
     os.makedirs(out_dir, exist_ok=True)
+    prepare_pages_dir(out_dir)       # 重跑前先清旧页图，跑完保留
     out_paths = []
     doc = pymupdf.open(pdf_path)          # 新 API：pymupdf.open 等价于老的 fitz.open
     try:
-        for i, page in enumerate(doc):
+        # enumerate(doc, 1) 让 i 直接等于人看到的 PDF 页码
+        for i, page in enumerate(doc, 1):
             pix = page.get_pixmap(dpi=dpi)  # dpi 越高越清晰但越慢；200 够 OCR 用
             out = os.path.join(out_dir, f'c_page_{i}.png')
             pix.save(out)

@@ -13,8 +13,8 @@
 【产物】两层隔离，一眼看出「哪个脚本、哪个输入」的产物：
     output/d_table_ocr/<输入文件名去后缀>/
         d_table_out.html         单页输入：表格还原结果
-        d_table_out_0.html …     PDF 多页输入：按页编号，只有含表格的页才生成
-        d_table_out_1_table_3.html  一页多张表时按表名再分文件，不互相覆盖
+        d_table_out_2.html …     PDF 多页输入：数字 = PDF 页码（1 起），只生成含表格的页
+        d_table_out_2_table_3.html  一页多张表时按表名再分文件，不互相覆盖
 例如输入 input/test2.jpg → output/d_table_ocr/test2/d_table_out.html。
 脚本会自动补 <meta charset="utf-8">，中文不会乱码；
 没有表格的页只在日志里说明，不生成空 HTML。
@@ -34,6 +34,11 @@
     空则再从 [table] 内容块兜底；两者都空就跳过这一页（这是正常情况，不是错误）。
     一页有多张表时，save_to_html() 又只会写第一张并打 warning，
     这里改成每张表各写一个文件，不会悄悄丢表格。
+
+【页码基准（11-13 定稿）】全仓统一从 1 起，和 PDF 阅读器一致：
+    PDF 第 2 页 → `d_table_out_2.html`，日志写「第 2 个输入」。
+    `enumerate(result, 1)` 直接给出 1 起序号，不再做 +1 换算。
+    重跑时 clear_old_html() 先清掉旧编号的文件，避免新旧两套编号并存。
 
 关于首次运行的下载：
     表格识别是"多模型流水线"：版面检测 + 表格分类 + 有线/无线表格结构识别 + 单元格检测。
@@ -203,6 +208,31 @@ def export_html(res, path):
     return saved
 
 
+def clear_old_html(out_dir):
+    """
+    重跑前清掉本 case 上一次生成的表格 HTML。
+
+    页码统一成 1 起之后，旧的 `d_table_out_1.html`（旧规则里是第 2 页）
+    如果留着，会和新的 `d_table_out_2.html` 同时存在，反而更乱。
+    只删本脚本自己生成的、名字符合规则的文件：
+    d_table_out.html / d_table_out_2.html / d_table_out_2_table_3.html。
+    不递归、不碰目录里其它文件；这些结果每次重跑都会重新生成。
+    """
+    if not os.path.isdir(out_dir):
+        return
+    removed = 0
+    for name in os.listdir(out_dir):
+        if not re.fullmatch(r'd_table_out(?:_\d+)?(?:_table_.+)?\.html', name):
+            continue
+        try:
+            os.remove(os.path.join(out_dir, name))
+            removed += 1
+        except OSError:
+            pass
+    if removed:
+        print(f'>> 重跑前清掉 {removed} 个旧编号 HTML → {show(out_dir)}')
+
+
 def list_available_images():
     """输入文件不存在时，列出 input/ 下可用的图片，省得去猜文件名。"""
     folder = 'input'
@@ -233,7 +263,7 @@ def main():
     print(f'>> 流水线加载耗时：{t1 - t0:.2f}s')
 
     # ---- 2) 推理 ----
-    print(f'>> 开始识别：{image}')
+    print(f'>> 开始识别：{show(image)}')
     try:
         result = engine.predict(image)
     except Exception as e:
@@ -242,9 +272,9 @@ def main():
     print(f'>> 推理耗时：{t2 - t1:.2f}s')
 
     # ---- 3) 打印各内容块 ----
-    for i, res in enumerate(result):
+    for i, res in enumerate(result, 1):
         blocks = parse_blocks(res)
-        print(f'>> 第 {i + 1} 个输入，识别到 {len(blocks)} 个内容块：')
+        print(f'>> 第 {i} 个输入，识别到 {len(blocks)} 个内容块：')
         for b in blocks:
             label = b.get('block_label', '?')
             content = str(b.get('block_content', '')).replace('\n', ' ')
@@ -254,18 +284,19 @@ def main():
     # 产物目录 = 脚本专属目录 / 输入文件名；不再写死 output/ 根目录。
     out_dir = case_dir(image)
     os.makedirs(out_dir, exist_ok=True)
+    clear_old_html(out_dir)     # 重跑时先清掉旧编号的文件，保证只有一套页码
     stem, ext = os.path.splitext(OUT_HTML)
     saved = []
     skipped = []
-    for i, res in enumerate(result):
-        # 多个输入时给每个结果单独命名，避免后面的覆盖前面的
+    for i, res in enumerate(result, 1):
+        # 多个输入时按 PDF 页码（1 起）命名，避免后面的覆盖前面的
         name = OUT_HTML if len(result) == 1 else f'{stem}_{i}{ext}'
         path = os.path.join(out_dir, name)
         paths = export_html(res, path)
         if not paths:
             # PDF 里的证书扫描页没有表格，属正常情况；不写空 HTML，也不让 paddlex 抛异常。
-            skipped.append(i + 1)
-            print(f'>> 第 {i + 1} 个输入：没有识别到表格，跳过 HTML 导出')
+            skipped.append(i)
+            print(f'>> 第 {i} 个输入：没有识别到表格，跳过 HTML 导出')
             continue
         for p in paths:
             if ensure_readable_html(p):

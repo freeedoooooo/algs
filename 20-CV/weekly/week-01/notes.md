@@ -305,6 +305,43 @@ doc.save('out.pdf', garbage=4, deflate=True)
 **结论**：`save_to_html()` 只能在**确认这一页有表格**时用；多页 PDF 必须先判空。
 「没识别出表格」是正常业务结果，不该让导出方法把整个流程打断。
 
+### 同日再追加：全仓页码统一从 1 起（2026-11-13 晚）
+
+**要解决的问题**：`test3_image.pdf` 的表格肉眼在**第 2 页**，但 `output.json` 写 `"page": 1`、
+表格叫 `pipeline_table_p1.html`。查下来不是识别错位，而是同一个脚本里混了两套基准：
+`enumerate(images)` 的 `i` 从 0 起，日志却用 `i + 1` 显示「第 N 页」，
+文件名和 JSON 又直接用了 0 起的 `i`。页图 `_tmp_page_0.png` 对应第 1 页也一样容易误读。
+
+**定稿**：所有**可见页码一律从 1 起，和 PDF 阅读器一致**，不再有 `+1` 换算：
+
+| 第 2 页 | 新命名 / 新值 |
+|---|---|
+| 中间页图 | `_tmp_page_2.png`、`c_page_2.png` |
+| 表格 HTML | `pipeline_table_p2.html`、`d_table_out_2.html` |
+| 结构化结果 | `output.json` 里 `"page": 2` |
+| 文本 / 日志 | `--- 第 2 页 ---`、「第 2/5 页 OCR 完成」 |
+
+**改动清单**
+- `weekend_pipeline.py`：`pdf_pages_to_images()` / `extract_tables_text_layer()` /
+  OCR 主循环全部改 `enumerate(..., 1)`；`table_ocr_page(image_path, page_no, ...)`
+  参数名从 `page_index` 改成 `page_no`（语义更明确），`p{page_no}.html` / `'page': page_no`；
+  图片分支传 1、CSV 分支 `page=1`；分页标记与进度日志去掉 `+1`。
+- `d_table_ocr.py`：`main()` 两处 `enumerate(result, 1)`，`d_table_out_<页码>.html`、
+  日志「第 N 个输入」、跳过序号全部 1 起。
+- `c_pdf_text_layer.py`：`enumerate(doc, 1)` → `c_page_1~5.png`。
+- **配套清理**（避免新旧两套编号并存）：`weekend_pipeline.clear_old_table_html()`、
+  `d_table_ocr.clear_old_html()`、`c_pdf_text_layer.prepare_pages_dir()`，
+  在各自重跑前按精确正则只删本脚本生成的页级文件；页图沿用「跑完保留、重跑前清旧」。
+- `b_ocr_image.py` 不动：它的 `enumerate` 是 OCR **文字行**索引（内部用 `polys[i]`），
+  展示给人的行号本来就是 `i + 1`，和页码无关。
+
+**验证**（轻量，不加载模型）：三脚本 `py_compile` 通过；真实 PDF 转图得到
+`_tmp_page_1~5.png` / `c_page_1~5.png` 并清掉旧 0 起文件；
+清旧编号函数只删目标文件、`keep.txt` 保留；`table_ocr_page(2)` → `page=2` /
+`pipeline_table_p2.html`，CSV → `page=1`；`run()` 分页标记为 1~5；
+stub 引擎跑 `d.main()` 两次 → 只生成 `d_table_out_2.html`，第二次正确清旧再重建。
+完整模型推理未代跑，用户自行执行。
+
 ## 疑问（留着后面阶段解答）
 - 为什么亮字暗底会几乎全军覆没？检测阶段到底在看什么特征？（week-02 反色实验 / P4）
 - 调低 `text_det_thresh` 为什么能救漏检，又为什么会带来误检？DBNet 的概率图是什么？（week-02 Day3 感受，P4 深入）

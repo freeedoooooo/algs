@@ -18,8 +18,8 @@
       test2.jpg        ───────→    test2/         output.json + pipeline_result.txt
       test3.pdf        ───────→    test3/         output.json + pipeline_result.txt
       test3_image.pdf  ───────→    test3_image/   output.json + pipeline_result.txt
-                                                   + pipeline_table_p*.html
-                                                   + _tmp_pages/（OCR 页图，跑完保留供核对）
+                                                   + pipeline_table_p2.html（表格在第 2 页）
+                                                   + _tmp_pages/_tmp_page_1~5.png（第 1~5 页）
       test4.csv        ───────→    test4/         output.json + pipeline_result.txt
                                    batch_summary.json   ← 所有 case 的总览表
                                    batch_summary.txt    ← 人直接看的总览表
@@ -31,6 +31,15 @@
 全仓统一规则：**output/<脚本名>/<输入文件名>/**，中间产物再单独放一层子目录。
 这样不同脚本、不同输入的结果都不会混在一起，一眼就知道哪个文件产出了什么。
 新增 case 只要丢进 input/，下次运行自动被扫到，不用改任何代码。
+
+【页码基准（全仓统一，11-13 定稿）】**所有可见页码一律从 1 起，和 PDF 阅读器一致**：
+    第 2 页  →  页图 _tmp_page_2.png / c_page_2.png
+           →  表格 pipeline_table_p2.html / d_table_out_2.html
+           →  output.json 里 "page": 2
+           →  日志「第 2 页」、pipeline_result.txt 里「--- 第 2 页 ---」
+做法：所有 enumerate(..., 1) 从 1 起，不再出现 i + 1 / page + 1 这种换算。
+重跑时 clear_old_table_html() 会先清掉旧编号的表格 HTML，
+prepare_temp_dir() 清掉旧页图，避免新旧两套编号混在一个目录里。
 
 【Python 初学者阅读提示】
 - `#` 开头的行是注释，程序不会执行，纯粹写给人看。
@@ -58,6 +67,8 @@
       再把全仓输出统一为「output/<脚本名>/<输入名>/」两层隔离，中间页图单独一层。
 11-13 再改：OCR 临时页图跑完保留供核对，重跑该 case 时先清空旧图再生成新图，
       避免新旧页图混在一起（去掉了「跑完自动删」和 KEEP_TEMP_IMAGES 开关）。
+11-13 再改：全仓页码统一从 1 起（原先日志 1 起、JSON/文件名 0 起，容易误读），
+      页图、表格 HTML、page 字段、日志全部对齐；重跑前清掉旧编号的表格 HTML。
 
 run(输入路径) 返回一个 dict（字典，含 mode / text / pages / elapsed / tables 等键），
 同时把结果落盘；run_batch() 负责把它们串起来并写汇总表。
@@ -272,10 +283,11 @@ def pdf_pages_to_images(pdf_path, dpi=None, out_dir=None):
     doc = pymupdf.open(pdf_path)         # 打开 PDF，得到一个可以逐页遍历的文档对象
     paths = []                           # 创建一个空列表，用来收集生成的文件路径
     try:
-        # enumerate(可迭代对象) 同时给出「序号」和「元素」，
-        # 比写 for i in range(len(doc)) 更简洁，是 Python 惯用写法。
-        for i, page in enumerate(doc):
-            # f"{TEMP_FILE_PREFIX}{i}.png" 是 f-string，{i} 会被替换成 0、1、2……
+        # enumerate(可迭代对象, 起始值) 同时给出「序号」和「元素」。
+        # 这里第 2 个参数写 1，让 i 直接等于人看到的 PDF 页码（第 1 页 → 1），
+        # 页图文件名、表格 HTML 名和 output.json 的 page 就全都对得上。
+        for i, page in enumerate(doc, 1):
+            # f"{TEMP_FILE_PREFIX}{i}.png" 是 f-string，{i} 会被替换成 1、2、3……
             # 前缀写在配置区：重跑时 prepare_temp_dir() 靠它认出「哪些是本脚本生成的旧图」。
             # os.path.join 负责用当前系统的分隔符拼路径
             # （Windows 是反斜杠，不要自己手写字符串拼接）。
@@ -321,6 +333,32 @@ def prepare_temp_dir(temp_dir):
     if removed:
         print(f'>> 重跑前清掉 {removed} 张旧页图 → {show(temp_dir)}')
     return temp_dir
+
+
+def clear_old_table_html(out_dir):
+    """
+    重跑一个 case 前，清掉它上一次生成的表格 HTML。
+
+    为什么要清：页码基准统一成「从 1 起」之后，旧文件
+    `pipeline_table_p1.html`（旧规则里代表第 2 页）如果不删，
+    就会和新的 `pipeline_table_p2.html` 同时躺在目录里，反而更混乱。
+    和 prepare_temp_dir() 一样只清「本脚本自己生成的、明确规则的文件」：
+    用正则精确匹配 `pipeline_table_p<数字>.html`，不递归、不碰其它产物。
+    这些是正式结果，但每次重跑都会重新生成，所以清掉不会丢内容。
+    """
+    if not os.path.isdir(out_dir):
+        return
+    removed = 0
+    for name in os.listdir(out_dir):
+        if not re.fullmatch(r'pipeline_table_p\d+\.html', name):
+            continue
+        try:
+            os.remove(os.path.join(out_dir, name))
+            removed += 1
+        except OSError:
+            pass
+    if removed:
+        print(f'>> 重跑前清掉 {removed} 个旧表格 HTML → {show(out_dir)}')
 
 
 # ---------------------------------------------------------------- TODO 1 --
@@ -379,7 +417,8 @@ def extract_tables_text_layer(pdf_path):
     """有文本层时直接用 pdfplumber 抽表格：快，且完全不需要加载模型。"""
     found = []
     with pdfplumber.open(pdf_path) as pdf:
-        for i, page in enumerate(pdf.pages):
+        # 全仓统一：页码从 1 起（和 PDF 阅读器一致），不再用 0 起的索引。
+        for i, page in enumerate(pdf.pages, 1):
             try:
                 # extract_tables() 返回「表格的列表」，每个表格又是「行的列表」，
                 # 每行还是「单元格的列表」，所以是嵌套了三层的列表结构。
@@ -388,7 +427,7 @@ def extract_tables_text_layer(pdf_path):
             except Exception as e:
                 # try / except：try 块里出错不会让整个程序崩溃，而是跳到这里处理。
                 # Exception 是绝大多数常见异常的父类；`as e` 把错误对象存进变量 e。
-                print(f'>> 第 {i + 1} 页表格抽取失败，已跳过：{e}')
+                print(f'>> 第 {i} 页表格抽取失败，已跳过：{e}')
                 continue   # 跳过本页剩下的代码，直接进入下一轮 for 循环
             for table in tables:
                 # {'键': 值} 是字典(dict)，以后用 `记录['page']` 按键取值。
@@ -436,9 +475,13 @@ def ensure_readable_html(path):
         f.write(doc)
 
 
-def table_ocr_page(image_path, page_index, out_dir=None):
+def table_ocr_page(image_path, page_no, out_dir=None):
     """
     对一页图跑 PP-StructureV3，挑出表格内容块并导出 HTML。
+
+    page_no 是**人看的 PDF 页码，从 1 起**（第 2 页就传 2）。
+    它同时决定三样东西：导出的 `pipeline_table_p<page_no>.html` 文件名、
+    返回字典里的 `page` 字段、以及日志里打印的「第 N 页」——三者完全一致。
 
     out_dir 是「这个 case 的专属目录」，导出的 HTML 会放在它里面，
     不会跟别的输入的表格混在一起（批量模式的关键）。
@@ -478,13 +521,13 @@ def table_ocr_page(image_path, page_index, out_dir=None):
         html_map = result[0].html or {}
         if html_map:
             os.makedirs(out_dir, exist_ok=True)
-            html_path = os.path.join(out_dir, f'pipeline_table_p{page_index}.html')
+            html_path = os.path.join(out_dir, f'pipeline_table_p{page_no}.html')
             result[0].save_to_html(html_path)   # [0] 表示取列表的第一个元素
             ensure_readable_html(html_path)     # 补 charset，修中文乱码
         else:
-            print(f'>> 第 {page_index + 1} 页有表格块但没有可导出的表格 HTML，跳过')
+            print(f'>> 第 {page_no} 页有表格块但没有可导出的表格 HTML，跳过')
     return {
-        'page': page_index,
+        'page': page_no,
         'source': 'PPStructureV3',
         'table_count': len(tables),
         'blocks': tables,
@@ -531,7 +574,8 @@ def csv_tables(text):
     # any(...) 判断这一行里有没有任何一个非空单元格；全空行就丢掉。
     # 带 if 的列表推导式前面已经用过，这里再练一次。
     rows = [r for r in rows if any(c.strip() for c in r)]
-    return [{'page': 0, 'source': 'csv', 'rows': rows}] if rows else []
+    # CSV / TXT 没有「第几页」的概念，按整份文件算第 1 页，保持和其它分支一致。
+    return [{'page': 1, 'source': 'csv', 'rows': rows}] if rows else []
 
 
 # ---------------------------------------------------------------- TODO 2 --
@@ -627,6 +671,8 @@ def run(input_path, out_dir=None):
     if out_dir is None:
         out_dir = case_out_dir(input_path, set())
     os.makedirs(out_dir, exist_ok=True)
+    # 重跑时先清掉旧编号的表格 HTML，避免 p1(旧=第2页) 与 p2(新=第2页) 并存。
+    clear_old_table_html(out_dir)
 
     t0 = time.perf_counter()                  # 总耗时起点
     kind = classify(input_path)
@@ -671,14 +717,16 @@ def run(input_path, out_dir=None):
             chunks = []
             # 这里不再用 try/finally 做清理：页图是本轮要留着核对的产物，
             # 哪怕某一页 OCR 报错也留在目录里，正好用来排查。
-            for i, img in enumerate(images):
+            # 全仓统一：i 就是 PDF 页码（1 起）。页图名、分页标记、
+            # 表格 HTML 文件名、output.json 的 page 全都用同一个 i。
+            for i, img in enumerate(images, 1):
                 t1 = time.perf_counter()          # 单页耗时起点
                 lines = ocr_image(img)
-                chunks.append(f'--- 第 {i + 1} 页 ---')  # 加一个分页标记，方便看结果
+                chunks.append(f'--- 第 {i} 页 ---')  # 加一个分页标记，方便看结果
                 # extend 把另一个列表的元素「逐个」加进来；
                 # append 则是把整个列表当成「一个」元素塞进去 —— 初学者很容易混。
                 chunks.extend(lines)
-                print(f'>> 第 {i + 1}/{len(images)} 页 OCR 完成：{len(lines)} 行，'
+                print(f'>> 第 {i}/{len(images)} 页 OCR 完成：{len(lines)} 行，'
                       f'{time.perf_counter() - t1:.2f}s')
                 # TODO 3：扫描件分支用 PP-StructureV3 还原表格结构
                 if ENABLE_TABLE:
@@ -704,7 +752,8 @@ def run(input_path, out_dir=None):
         mode, scope = 'ocr', 'image'
         print(f'>> 识别到 {len(lines)} 行')
         if ENABLE_TABLE:
-            info = table_ocr_page(input_path, 0, out_dir)
+            # 单张图片也算「第 1 页」，和其它分支的 1 起页码保持一致。
+            info = table_ocr_page(input_path, 1, out_dir)
             tables.append(info)
             print(f'>> 表格识别：{info["table_count"]} 个表格块'
                   + (f'，HTML → {info["html"]}' if info['html'] else ''))
