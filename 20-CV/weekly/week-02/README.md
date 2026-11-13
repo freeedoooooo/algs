@@ -112,8 +112,8 @@ manifest 不是白名单，没登记照样跑（分组由 `case_naming.py` 按�
 | `output/a_batch_ocr/batch_summary.json` / `.txt` | 跨 case 汇总表（只有关键指标，一眼看全） |
 | `output/a_batch_ocr/<输入名>/result.json` | 该 case 的完整结果：文字 / 置信度 / 坐标 / 直读表格与诊断 |
 | `output/a_batch_ocr/<输入名>/result.txt` | 该 case 的纯文本结果 |
-| `output/a_batch_ocr/<输入名>/source.<ext>` | 原图副本（PDF 是首页渲染图），给 HTML 引用 |
-| `output/a_batch_ocr/<输入名>/boxes.png` | 原图 + 识别框，单张可贴笔记 |
+| `output/a_batch_ocr/<输入名>/source.<ext>` | 输入副本：图片=原图 / PDF=首页渲染图 / CSV=原始文本，给 HTML 引用，也让目录自包含 |
+| `output/a_batch_ocr/<输入名>/boxes.png` | 原图 + 识别框，单张可贴笔记（CSV 等纯文本不生成） |
 | `output/a_batch_ocr/<输入名>/pages/p1.png` | PDF 首页渲染图（中间产物，跑完保留供核对） |
 | `output/c_try_params/param_compare.txt` | 模块 C 的调参对比结果 |
 

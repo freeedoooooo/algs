@@ -1,0 +1,61 @@
+{
+  "file": "105_real_transactions_gbk.csv",
+  "lines": 0,
+  "avg_score": 0.0,
+  "low_score_lines": 0,
+  "elapsed": 0.0,
+  "texts": [],
+  "scores": [],
+  "boxes": [],
+  "plain_text": "交易日期,借,贷,余额,摘要,收(付)方名称,收(付)方账号,交易类型\r\n2021/11/29 15:42,0,56,56,上海保洁月费-程,,,代发款项\r\n",
+  "kind": "csv",
+  "preview_image": null,
+  "pages": 1,
+  "text_layer": true,
+  "cropbox_limited": false,
+  "tables": [
+    {
+      "page": 1,
+      "source": "csv",
+      "strategy": "csv.reader",
+      "rows": [
+        [
+          "交易日期",
+          "借",
+          "贷",
+          "余额",
+          "摘要",
+          "收(付)方名称",
+          "收(付)方账号",
+          "交易类型"
+        ],
+        [
+          "2021/11/29 15:42",
+          "0",
+          "56",
+          "56",
+          "上海保洁月费-程",
+          "",
+          "",
+          "代发款项"
+        ]
+      ],
+      "n_rows": 2,
+      "n_cols": 8,
+      "fill_ratio": 1.0,
+      "low_confidence": false
+    }
+  ],
+  "diagnostics": {
+    "text_layer": true,
+    "template": false,
+    "pages": [
+      "纯文本文件，按 gbk 解码，共 79 字符"
+    ],
+    "notes": []
+  },
+  "encoding": "gbk",
+  "out_dir": "105_real_transactions_gbk",
+  "group": "real",
+  "case_no": 105
+}

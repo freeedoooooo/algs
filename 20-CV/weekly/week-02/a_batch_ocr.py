@@ -10,8 +10,8 @@
     PDF  (.pdf)           → 首页渲染成图给 OCR；**有文本层时额外直读表格**
                             （策略回退见 text_layer_extract.py，完全不加载表格模型）
     CSV/TXT (.csv/...)    → 直接按文本读，解析成表格，不跑 OCR
-这样在 vis/index.html 的对比预览里，同一个 PDF 能同时看到「像素 OCR 的框」
-和「文本层直读出来的表格」，一眼比出两条路线的差距。
+这样在 output/a_batch_ocr/index.html 的对比预览里，同一个 PDF 能同时看到
+「像素 OCR 的框」和「文本层直读出来的表格」，一眼比出两条路线的差距。
 
 环境（本机 miniforge，环境名就是 paddle）：
     conda activate paddle
@@ -27,8 +27,8 @@
         <输入文件名去后缀>/
             result.json             这个 case 的完整结果：文字 / 置信度 / 坐标 / 直读表格
             result.txt              这个 case 的纯文本结果
-            source.<ext>            原图副本（PDF 是首页渲染图），给报告引用
-            boxes.png               原图 + 识别框
+            source.<ext>            输入副本（图片=原图 / PDF=首页渲染图 / CSV=原始文本）
+            boxes.png               原图 + 识别框（纯文本没有像素，不生成）
             pages/p1.png            PDF 首页渲染图（中间产物，单独一层，跑完保留）
 排查某个 case 时只看它自己的目录即可，不用再在一整个大 JSON 里翻找。
 可视化由 vis_ocr_result.py 生成，跑完本脚本会自动调用；不想要可把 MAKE_VIS 改 False。

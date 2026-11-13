@@ -8,8 +8,8 @@ result.json 里只有文字和坐标，读起来不直观：
 对照报告，并把每个 case 的图片产物放回它自己的目录：
 
     output/a_batch_ocr/index.html                 报告（跨 case，放根）
-    output/a_batch_ocr/<输入名>/source.<ext>      原图副本（给报告引用）
-    output/a_batch_ocr/<输入名>/boxes.png         原图 + 彩色识别框 + 行号
+    output/a_batch_ocr/<输入名>/source.<ext>      输入副本（图片=原图 / PDF=首页渲染图 / CSV=原始文本）
+    output/a_batch_ocr/<输入名>/boxes.png         原图 + 彩色识别框 + 行号（纯文本没有图，不生成）
 
 报告的每张卡片：
       左边 = 原图，识别框以 SVG 叠加在图上，鼠标悬停会互相高亮
@@ -36,12 +36,13 @@ HTML 是纯文本产物，可以反复打开、Ctrl+F 搜文字、Ctrl+S 保存�
 不依赖任何 GUI 库，也不需要起本地服务。注意文件头必须写 <meta charset="utf-8">，
 否则中文会乱码（第1周 d_table_ocr.py 踩过这个坑）。
 
-【图片路径为什么复制进 case 目录】
-报告用相对路径 <case 目录>/source.<ext> 引用图片。
+【输入副本为什么复制进 case 目录】
+报告用相对路径 <case 目录>/source.<ext> 引用图片；CSV 这类纯文本也留一份原始文件，
+让每个 case 目录自包含、整目录搬走不会丢输入。
 一开始用的是 ../../input/xxx.png，本地双击能显示，但通过静态服务 / 预览面板打开时
 目录会被重映射，跳出目录的路径一律 404，整页只剩空框。
 把副本放进报告所在目录的子目录后，file:// 双击、静态服务、整个
-a_batch_ocr/ 目录拷走，三种方式都能显示（代价只是多一份可再生的图片副本）。
+a_batch_ocr/ 目录拷走，三种方式都能显示（代价只是多一份可再生的副本）。
 """
 
 # =========================== 配置区：调试只改这里 ===========================
@@ -105,9 +106,13 @@ def normalize_box(box):
     return points if len(points) >= 3 else None     # 至少要 3 点才能画多边形
 
 
-def prepare_image(image_path, case_abs, case_rel):
+def copy_source(src_path, case_abs, case_rel):
     """
-    把左侧要显示的图复制进**这个 case 自己的目录**，返回报告里可用的相对路径。
+    把输入文件复制一份进**这个 case 自己的目录**，返回报告里可用的相对路径。
+
+    图片分支复制原图，PDF 分支复制首页渲染图（框就画在这张图上），
+    CSV / 纯文本分支复制原始文本 —— 三类都留副本，是为了让每个 case 目录
+    自包含：整个目录搬走后，输入、结果、报告引用还在一起，不会丢原始素材。
 
     为什么不用 ../../input/xxx.png：本地双击能显示，但静态服务 / 预览面板会把
     HTML 映射到一个新目录，任何跳出该目录的相对路径都会 404，报告就只剩空框。
@@ -116,9 +121,9 @@ def prepare_image(image_path, case_abs, case_rel):
     quote 负责处理目录名 / 文件名里的空格与中文。
     """
     os.makedirs(case_abs, exist_ok=True)
-    ext = os.path.splitext(image_path)[1].lower() or '.png'
+    ext = os.path.splitext(src_path)[1].lower() or '.png'
     filename = SOURCE_BASENAME + ext
-    shutil.copy2(image_path, os.path.join(case_abs, filename))
+    shutil.copy2(src_path, os.path.join(case_abs, filename))
     return f'{quote(case_rel, safe="")}/{quote(filename, safe="")}'
 
 
@@ -371,10 +376,14 @@ def build_card(rec, card_no, image_dir, out_root, manifest_map):
     if kind == 'csv':
         left = ('<div class="stage empty">CSV / 纯文本输入：没有图像可显示，'
                 '右侧直接看解析出的表格与原文</div>')
-        extra = '纯文本分支，不跑 OCR'
+        # 纯文本没有像素可画，但原始输入照样留一份副本：这样把整个 case 目录
+        # 拷走时，输入 / 结果 / 报告引用都在一起，和图片、PDF 分支保持一致。
+        src_rel = copy_source(image_path, case_abs, case_rel)
+        extra = (f'纯文本分支，不跑 OCR · '
+                 f'<a href="{src_rel}" target="_blank">查看原始文件</a>')
     elif os.path.isfile(display_image):
         # 原图副本和带框 PNG 都放进 <OUT_ROOT>/<case>/，报告用相对路径引用。
-        src = prepare_image(display_image, case_abs, case_rel)
+        src = copy_source(display_image, case_abs, case_rel)
         png_href = f'{case_href}/{BOXES_NAME}'
         w, h = draw_boxes_png(display_image, rec, os.path.join(case_abs, BOXES_NAME))
         polys = []

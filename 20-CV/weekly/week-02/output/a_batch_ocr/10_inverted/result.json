@@ -1,0 +1,178 @@
+{
+  "file": "10_inverted.png",
+  "lines": 8,
+  "avg_score": 0.9814,
+  "low_score_lines": 0,
+  "elapsed": 1.99,
+  "texts": [
+    "PS D:\\work> python -m pip show paddleocr",
+    "Name:paddleocr",
+    "Version:3.7.0",
+    "Location:D:\\miniforge3\\envs\\paddle\\Lib\\site-packages",
+    "PS D:\\work> python b_ocr_image.py",
+    "Loading PP-0cRv4_mobile_det ... done in 2.41s",
+    "Detected 20 text 1ines, avg score 0.99",
+    "Result savedtooutput/b_ocr_result.txt"
+  ],
+  "scores": [
+    0.9583,
+    0.9787,
+    0.9926,
+    0.995,
+    0.9858,
+    0.9661,
+    0.9903,
+    0.9842
+  ],
+  "boxes": [
+    [
+      [
+        58,
+        70
+      ],
+      [
+        540,
+        70
+      ],
+      [
+        540,
+        93
+      ],
+      [
+        58,
+        93
+      ]
+    ],
+    [
+      [
+        59,
+        134
+      ],
+      [
+        241,
+        134
+      ],
+      [
+        241,
+        154
+      ],
+      [
+        59,
+        154
+      ]
+    ],
+    [
+      [
+        359,
+        133
+      ],
+      [
+        530,
+        133
+      ],
+      [
+        530,
+        153
+      ],
+      [
+        359,
+        153
+      ]
+    ],
+    [
+      [
+        59,
+        193
+      ],
+      [
+        697,
+        194
+      ],
+      [
+        697,
+        218
+      ],
+      [
+        59,
+        217
+      ]
+    ],
+    [
+      [
+        57,
+        315
+      ],
+      [
+        456,
+        318
+      ],
+      [
+        456,
+        344
+      ],
+      [
+        57,
+        341
+      ]
+    ],
+    [
+      [
+        60,
+        380
+      ],
+      [
+        602,
+        380
+      ],
+      [
+        602,
+        404
+      ],
+      [
+        60,
+        404
+      ]
+    ],
+    [
+      [
+        59,
+        442
+      ],
+      [
+        518,
+        442
+      ],
+      [
+        518,
+        466
+      ],
+      [
+        59,
+        466
+      ]
+    ],
+    [
+      [
+        59,
+        505
+      ],
+      [
+        529,
+        506
+      ],
+      [
+        529,
+        525
+      ],
+      [
+        59,
+        524
+      ]
+    ]
+  ],
+  "kind": "image",
+  "preview_image": null,
+  "out_dir": "10_inverted",
+  "group": "synthetic",
+  "case_no": 10
+}

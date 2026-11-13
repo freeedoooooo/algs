@@ -1,0 +1,9 @@
+case：101_real_terminal_screenshot.jpg
+分组：real　类型：image
+模型：PP-OCRv4_mobile_det + PP-OCRv4_mobile_rec
+OCR 行数：4　平均置信度：0.17　可疑行：4　耗时：1.75s
+--- 逐行 OCR 结果（文字<TAB>置信度）---
+Co	0.13
+Cm	0.18
+C	0.16
+C	0.21

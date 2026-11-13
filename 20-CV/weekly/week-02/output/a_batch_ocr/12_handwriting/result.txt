@@ -1,0 +1,9 @@
+case：12_handwriting.png
+分组：synthetic　类型：image
+模型：PP-OCRv4_mobile_det + PP-OCRv4_mobile_rec
+OCR 行数：4　平均置信度：0.99　可疑行：0　耗时：1.03s
+--- 逐行 OCR 结果（文字<TAB>置信度）---
+今日巡检记录	0.99
+三楼机房温度正常，空调运行平稳。	0.99
+摄像头03离线，已报修，等待更换。	0.99
+下次复查时间：十一月十九日。	1.00

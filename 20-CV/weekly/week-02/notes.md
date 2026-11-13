@@ -2,10 +2,12 @@
 
 ## 我压测了哪些场景，效果如何
 
-> 首轮基线由 `a_batch_ocr.py` 代跑：22 张样本，`PP-OCRv4_mobile_det/rec`，
+> 首轮基线（11-12 历史记录）由 `a_batch_ocr.py` 代跑：22 张样本，`PP-OCRv4_mobile_det/rec`，
 > 关闭文档预处理，总 37.16s（含模型加载 2.62s）。
-> 逐行结果见 `output/batch_ocr_results.json`，**看图对照见 `output/vis/index.html`**。
 > 格式：`检出行数 / 平均置信度`。
+> 当时的产物是 `output/batch_ocr_results.json` + `output/vis/`，11-13 已清理并改成
+> 按 case 隔离的 `output/a_batch_ocr/`。**现在看图对照请打开
+> `output/a_batch_ocr/index.html`**，跨 case 汇总看 `output/a_batch_ocr/batch_summary.txt`。
 
 > ⚠️ **下面这张表是 11-12 首轮基线的历史记录，用的是当时的旧编号**，数据如实保留、没有改写。
 > 11-13 把输入重排成「01~18 合成样本 + `real_*` 真实 case」，旧名 → 新名对照：
@@ -21,7 +23,9 @@
 > | `21_real_scan_p1.jpg` | `real_scan_page1.jpg` |
 > | `22_real_scan_p2.jpg` | `real_scan_page2.jpg` |
 >
-> 重跑后的新结果一律以 `output/batch_ocr_results.json` / `output/vis/index.html` 为准。
+> 重跑后的新结果一律以 `output/a_batch_ocr/batch_summary.txt` /
+> `output/a_batch_ocr/index.html` 为准；逐行文字与坐标在
+> `output/a_batch_ocr/<输入名>/result.json`。
 
 | 场景 | 代表样本 | 效果 | 备注 |
 |---|---|---|---|
@@ -140,3 +144,23 @@ CSV 结果正确；构造 3 类 record 生成报告，10 项 HTML 检查全通�
 `103_...pdf` 仍命中 explicit 模板抽出 105×8、8 列表头正确；
 临时目录模拟新增 case，扫描顺序正确；报告的相对路径、单 case 链接、
 真实 case 统计、独立读回顺序均正确；清单 / manifest / 磁盘三者 25 个一致。
+
+**实跑收尾（11-13 晚，`paddle` 环境代跑）**：清掉旧结构 `output/vis/`（49 个旧命名
+`real_*` 文件），重跑 `a_batch_ocr.py`（25 个 case，总 99.37s，含模型加载 7.49s）
+和 `c_try_params.py`（默认图自动挑到 `101_real_terminal_screenshot.jpg`；
+两组都是 4 行 / 0.17，说明**调低阈值救不回过曝已经消失的笔画**）。
+
+- 25 个 case 目录各有 `result.json` / `result.txt` / `source.<ext>`；
+  22 张图 + 2 个 PDF 另有 `boxes.png`，2 个 PDF 另有 `pages/p1.png`。
+- 顺序 `01~18` → `101~107`，真实 case 恒排最后；汇总记 25 个 / 真实 7 个。
+- `103_...pdf` 文本层 explicit 模板仍抽出 105×8（填充率 0.293，
+  `cropbox_limited=True`）；`104` 扫描件无文本层、0 张表（符合预期）；
+  `105` GBK CSV 直读 2×8、OCR 行数 0。`index.html` 74 个相对引用全部可达。
+- 真实 case 值得留作 bad case 素材：`101` 终端亮字暗底 4 行 / 0.17，
+  `106` 扫描页 76 行 / 0.60（35 行低置信），`104` 证书扫描 53 行 / 0.52；
+  而 `103` 有文本层的流水 OCR 226 行 / 0.98，正好对照「像素路线 vs 直读路线」。
+
+**顺手补的一个缺口**：CSV 分支原来不复制源文件，`105_.../` 目录搬走会丢原始输入。
+`vis_ocr_result.py` 的 `prepare_image()` 改名 `copy_source()`，三类输入统一留副本，
+CSV 卡片加「查看原始文件」链接；只重画报告就生效，不用重跑 OCR。
+文档里残留的 `output/vis/index.html` / `batch_ocr_results.json` 指引已全部改成新路径。
