@@ -1,6 +1,6 @@
 {
   "generated_by": "make_samples.py",
-  "design": "同一份干净底稿，每张只施加一种退化；expect_lines 是标准答案",
+  "design": "01~18 为合成退化样本；real_* 为用户真实 case（real_ 前缀，字典序天然排在最后）。expect_lines 是标准答案",
   "seed": 20261112,
   "samples": [
     {
@@ -20,7 +20,8 @@
         "联系电话：0574-8731 6620",
         "制单日期：2026 年 11 月 12 日",
         "SAMPLE DOCUMENT - NOT FOR OFFICIAL USE"
-      ]
+      ],
+      "group": "synthetic"
     },
     {
       "file": "02_blur.png",
@@ -39,7 +40,8 @@
         "联系电话：0574-8731 6620",
         "制单日期：2026 年 11 月 12 日",
         "SAMPLE DOCUMENT - NOT FOR OFFICIAL USE"
-      ]
+      ],
+      "group": "synthetic"
     },
     {
       "file": "03_lowres.jpg",
@@ -58,7 +60,8 @@
         "联系电话：0574-8731 6620",
         "制单日期：2026 年 11 月 12 日",
         "SAMPLE DOCUMENT - NOT FOR OFFICIAL USE"
-      ]
+      ],
+      "group": "synthetic"
     },
     {
       "file": "04_skew.png",
@@ -77,7 +80,8 @@
         "联系电话：0574-8731 6620",
         "制单日期：2026 年 11 月 12 日",
         "SAMPLE DOCUMENT - NOT FOR OFFICIAL USE"
-      ]
+      ],
+      "group": "synthetic"
     },
     {
       "file": "05_perspective.png",
@@ -96,7 +100,8 @@
         "联系电话：0574-8731 6620",
         "制单日期：2026 年 11 月 12 日",
         "SAMPLE DOCUMENT - NOT FOR OFFICIAL USE"
-      ]
+      ],
+      "group": "synthetic"
     },
     {
       "file": "06_glare.png",
@@ -115,7 +120,8 @@
         "联系电话：0574-8731 6620",
         "制单日期：2026 年 11 月 12 日",
         "SAMPLE DOCUMENT - NOT FOR OFFICIAL USE"
-      ]
+      ],
+      "group": "synthetic"
     },
     {
       "file": "07_shadow.png",
@@ -134,7 +140,8 @@
         "联系电话：0574-8731 6620",
         "制单日期：2026 年 11 月 12 日",
         "SAMPLE DOCUMENT - NOT FOR OFFICIAL USE"
-      ]
+      ],
+      "group": "synthetic"
     },
     {
       "file": "08_low_contrast.png",
@@ -153,7 +160,8 @@
         "联系电话：0574-8731 6620",
         "制单日期：2026 年 11 月 12 日",
         "SAMPLE DOCUMENT - NOT FOR OFFICIAL USE"
-      ]
+      ],
+      "group": "synthetic"
     },
     {
       "file": "09_dense_small.png",
@@ -189,7 +197,8 @@
         "26  巡检时间  09:15     ",
         "27  备注：摄像头 03 待报修",
         "28  下次巡检  11 月 19 日"
-      ]
+      ],
+      "group": "synthetic"
     },
     {
       "file": "10_inverted.png",
@@ -204,7 +213,8 @@
         "Loading PP-OCRv4_mobile_det ... done in 2.41s",
         "Detected 20 text lines, avg score 0.99",
         "Result saved to output/b_ocr_result.txt"
-      ]
+      ],
+      "group": "synthetic"
     },
     {
       "file": "11_low_contrast_noise.png",
@@ -223,7 +233,8 @@
         "联系电话：0574-8731 6620",
         "制单日期：2026 年 11 月 12 日",
         "SAMPLE DOCUMENT - NOT FOR OFFICIAL USE"
-      ]
+      ],
+      "group": "synthetic"
     },
     {
       "file": "12_handwriting.png",
@@ -235,7 +246,8 @@
         "三楼机房温度正常，空调运行平稳。",
         "摄像头 03 离线，已报修，等待更换。",
         "下次复查时间：十一月十九日。"
-      ]
+      ],
+      "group": "synthetic"
     },
     {
       "file": "13_rotated_180.png",
@@ -254,7 +266,8 @@
         "联系电话：0574-8731 6620",
         "制单日期：2026 年 11 月 12 日",
         "SAMPLE DOCUMENT - NOT FOR OFFICIAL USE"
-      ]
+      ],
+      "group": "synthetic"
     },
     {
       "file": "14_mixed.png",
@@ -273,10 +286,11 @@
         "联系电话：0574-8731 6620",
         "制单日期：2026 年 11 月 12 日",
         "SAMPLE DOCUMENT - NOT FOR OFFICIAL USE"
-      ]
+      ],
+      "group": "synthetic"
     },
     {
-      "file": "17_heavy_blur.png",
+      "file": "15_heavy_blur.png",
       "category": "01_模糊低质",
       "distortion": "重度高斯模糊 radius=7.0",
       "source": "synthetic",
@@ -292,10 +306,11 @@
         "联系电话：0574-8731 6620",
         "制单日期：2026 年 11 月 12 日",
         "SAMPLE DOCUMENT - NOT FOR OFFICIAL USE"
-      ]
+      ],
+      "group": "synthetic"
     },
     {
-      "file": "18_glare_wipe.png",
+      "file": "16_glare_wipe.png",
       "category": "03_反光光照",
       "distortion": "强反光过曝，中部整片洗白",
       "source": "synthetic",
@@ -311,10 +326,11 @@
         "联系电话：0574-8731 6620",
         "制单日期：2026 年 11 月 12 日",
         "SAMPLE DOCUMENT - NOT FOR OFFICIAL USE"
-      ]
+      ],
+      "group": "synthetic"
     },
     {
-      "file": "19_dark_shadow.png",
+      "file": "17_dark_shadow.png",
       "category": "03_反光光照",
       "distortion": "右侧亮度降到 10%",
       "source": "synthetic",
@@ -330,10 +346,11 @@
         "联系电话：0574-8731 6620",
         "制单日期：2026 年 11 月 12 日",
         "SAMPLE DOCUMENT - NOT FOR OFFICIAL USE"
-      ]
+      ],
+      "group": "synthetic"
     },
     {
-      "file": "20_faint.png",
+      "file": "18_faint.png",
       "category": "06_漏检",
       "distortion": "对比度压到 13%",
       "source": "synthetic",
@@ -349,35 +366,69 @@
         "联系电话：0574-8731 6620",
         "制单日期：2026 年 11 月 12 日",
         "SAMPLE DOCUMENT - NOT FOR OFFICIAL USE"
-      ]
+      ],
+      "group": "synthetic"
     },
     {
-      "file": "15_real_terminal.jpg",
-      "category": "06_漏检",
-      "distortion": "第1周真实终端截图：亮字暗底、命令行小字",
-      "source": "week-01/input/test1.jpg",
-      "expect_lines": null
+      "file": "real_bank_statement_textlayer.pdf",
+      "category": "文本层表格",
+      "distortion": "第1周原件：有文本层的银行流水 PDF（含 8 列表格）",
+      "source": "week-01/input/test3.pdf",
+      "expect_lines": null,
+      "group": "real"
     },
     {
-      "file": "16_real_doc.jpg",
+      "file": "real_certificates_scan.pdf",
+      "category": "扫描件",
+      "distortion": "第1周原件：5 页证书 / 备案表扫描件 PDF",
+      "source": "week-01/input/test3_image.pdf",
+      "expect_lines": null,
+      "group": "real"
+    },
+    {
+      "file": "real_clear_doc.jpg",
       "category": "对照组",
-      "distortion": "第1周真实清晰文档：20 行、平均置信度 0.99",
+      "distortion": "第1周原件：真实清晰文档",
       "source": "week-01/input/test2.jpg",
-      "expect_lines": null
+      "expect_lines": null,
+      "group": "real"
     },
     {
-      "file": "21_real_scan_p1.jpg",
+      "file": "real_scan_page1.jpg",
       "category": "01_模糊低质",
-      "distortion": "真实扫描件第 1 页（week-01/output 渲染图缩放）",
-      "source": "week-01/output/c_page_0.png",
-      "expect_lines": null
+      "distortion": "真实扫描件第 1 页（PDF 渲染图缩放，带噪点与印章）",
+      "source": "week-01/output/c_pdf_text_layer/test3_image/pages/c_page_1.png",
+      "expect_lines": null,
+      "group": "real"
     },
     {
-      "file": "22_real_scan_p2.jpg",
+      "file": "real_scan_page2.jpg",
       "category": "04_密集小字",
-      "distortion": "真实扫描件第 2 页（week-01/output 渲染图缩放）",
-      "source": "week-01/output/c_page_1.png",
-      "expect_lines": null
+      "distortion": "真实扫描件第 2 页（备案名单表格）",
+      "source": "week-01/output/c_pdf_text_layer/test3_image/pages/c_page_2.png",
+      "expect_lines": null,
+      "group": "real"
+    },
+    {
+      "file": "real_terminal_screenshot.jpg",
+      "category": "06_漏检",
+      "distortion": "第1周原件：真实终端截图（亮字暗底）",
+      "source": "week-01/input/test1.jpg",
+      "expect_lines": null,
+      "group": "real"
+    },
+    {
+      "file": "real_transactions_gbk.csv",
+      "category": "纯文本表格",
+      "distortion": "第1周原件：GBK 编码的 CSV 交易流水",
+      "source": "week-01/input/test4.csv",
+      "expect_lines": null,
+      "group": "real"
     }
-  ]
+  ],
+  "groups": {
+    "synthetic": "01~18 合成样本（数字前缀）",
+    "real": "real_* 真实 case（统一前缀，排在最后）"
+  },
+  "sample_count": 25
 }

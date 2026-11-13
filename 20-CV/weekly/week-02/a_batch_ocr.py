@@ -2,8 +2,16 @@
 第2周 · 模块A：批量跑真实图片（PaddleOCR 3.7.0 版，可直接运行）
 
 【这份脚本在做什么】
-把 input/ 下的图片逐张交给 PaddleOCR，把「每张图识别到什么」存成结构化结果，
+把 input/ 下的 case 逐个处理，把「每个 case 提取到什么」存成结构化结果，
 用来建立 "什么场景效果好、什么场景效果差" 的直觉，并为 bad case 库挑素材。
+
+11-13 起支持三类输入，按后缀自动分流：
+    图片 (.png/.jpg/...)  → PaddleOCR 逐张识别（原有能力）
+    PDF  (.pdf)           → 首页渲染成图给 OCR；**有文本层时额外直读表格**
+                            （策略回退见 text_layer_extract.py，完全不加载表格模型）
+    CSV/TXT (.csv/...)    → 直接按文本读，解析成表格，不跑 OCR
+这样在 vis/index.html 的对比预览里，同一个 PDF 能同时看到「像素 OCR 的框」
+和「文本层直读出来的表格」，一眼比出两条路线的差距。
 
 环境（本机 miniforge，环境名就是 paddle）：
     conda activate paddle
@@ -13,10 +21,12 @@
     python a_batch_ocr.py ../week-01/input       # 命令行临时指定别的图片目录
 
 产物（都在 output/ 下）：
-    batch_ocr_results.json   每张图一条记录：文件名 / 行数 / 置信度 / 坐标 / 耗时
+    batch_ocr_results.json   每个 case 一条记录：文件名 / 行数 / 置信度 / 坐标 / 耗时
+                             （PDF·CSV 另带直读表格、诊断、原文）
     batch_ocr_summary.txt    纯文本汇总，方便直接打开看全文
-    vis/index.html           ★ 可视化对照报告：原图 + 识别框 + 逐行文字，浏览器打开即可
-    vis/*_boxes.png          ★ 每张原图的带框版本，可直接贴进 bad case 笔记
+    pages/                   PDF 首页渲染图（中间产物，跑完保留供核对）
+    vis/index.html           ★ 可视化对照报告：原图 + 识别框 + 逐行文字 + 直读表格
+    vis/*_boxes.png          ★ 每张原图（或 PDF 首页图）的带框版本
 可视化由 vis_ocr_result.py 生成，跑完本脚本会自动调用；不想要可把 MAKE_VIS 改 False。
 
 【与第1周的关系】
@@ -40,7 +50,11 @@ REC_MODEL = 'PP-OCRv4_mobile_rec'                # 识别模型（读出来）
 # 模型说明：无 GPU 时 server 大模型在 CPU 上极慢（第1周实测 104s vs mobile 3.8s），
 #           这里沿用第1周已缓存的 mobile 模型，免下载、跑得快。
 LOW_SCORE = 0.8                                 # 低于此置信度算「可疑行」，用于挑 bad case
-IMAGE_EXTS = ('.png', '.jpg', '.jpeg', '.bmp')   # 只处理这些后缀，不区分大小写
+IMAGE_EXTS = ('.png', '.jpg', '.jpeg', '.bmp')   # 图片：走 PaddleOCR
+PDF_EXTS = ('.pdf',)                             # PDF：渲染首页走 OCR + 有文本层时直读表格
+TEXT_EXTS = ('.csv', '.txt', '.md')              # 纯文本：直接读，不跑 OCR
+SUPPORTED_EXTS = IMAGE_EXTS + PDF_EXTS + TEXT_EXTS
+PAGES_DIR = 'output/pages'                       # PDF 首页渲染图（中间产物，单独一层）
 # 文档预处理开关（整页方向分类 + UVDoc 去扭曲）：
 #   False（推荐）：坐标就是原图像素坐标，可视化报告里的框才套得准；少加载 2 个模型。
 #   True         ：对弯曲/歪斜的真实拍照文档可能识别更好，但 rec_polys 会基于
@@ -48,7 +62,7 @@ IMAGE_EXTS = ('.png', '.jpg', '.jpeg', '.bmp')   # 只处理这些后缀，不�
 USE_DOC_PREPROCESS = False
 MAKE_VIS = True                                  # 跑完自动生成可视化对照报告（建议保持 True）
 VIS_DIR = 'output/vis'                           # 可视化产物目录
-MANIFEST_NAME = 'samples_manifest.json'          # 说明书文件名，脚本会在图片目录里找它
+MANIFEST_NAME = 'samples_manifest.json'          # 说明书文件名，脚本会在输入目录里找它
 # ==========================================================================
 
 import os       # 拼路径、列目录、建文件夹
@@ -63,19 +77,27 @@ os.environ.setdefault('PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK', 'True')
 
 from paddleocr import PaddleOCR  # noqa: E402  （放在 env 设置之后是故意的）
 
+# 文本层 / 纯文本的直读提取（只依赖 pdfplumber + pymupdf，不加载任何 OCR 模型）。
+# 单独成模块是为了让「哪些结果来自像素、哪些来自文字本身」在代码里就分得清。
+from text_layer_extract import extract_case  # noqa: E402
 
-def list_images(src_dir):
-    """列出目录里的图片，返回完整路径组成的列表。"""
+
+def list_cases(src_dir):
+    """
+    列出目录里所有支持的 case，返回完整路径列表。
+
+    sorted() 保证顺序稳定：数字前缀的 01~18 合成样本在前，
+    real_ 前缀的真实 case 因为字母 r 的字典序更大，天然全部排在最后。
+    """
     if not os.path.isdir(src_dir):
         sys.exit(
-            f'找不到图片目录：{os.path.abspath(src_dir)}\n'
-            f'改文件顶部的 INPUT_DIR，或命令行指定：python a_batch_ocr.py 图片目录'
+            f'找不到输入目录：{os.path.abspath(src_dir)}\n'
+            f'改文件顶部的 INPUT_DIR，或命令行指定：python a_batch_ocr.py 输入目录'
         )
-    # sorted() 保证每次运行顺序一致，方便前后对比。
     # name.lower().endswith(...) 让 .JPG 这种大写后缀也能被认出来。
     names = sorted(
         name for name in os.listdir(src_dir)
-        if name.lower().endswith(IMAGE_EXTS)
+        if name.lower().endswith(SUPPORTED_EXTS)
     )
     return [os.path.join(src_dir, name) for name in names]
 
@@ -138,12 +160,71 @@ def recognize(ocr, path):
     }
 
 
+def build_case_record(ocr, path):
+    """
+    按后缀分流处理一个 case，统一返回一条 dict 记录。
+
+    三类输入共用同一套字段（file / lines / texts / scores / boxes ...），
+    这样 vis_ocr_result.py 不用关心输入类型；多出来的字段：
+        kind              'image' / 'pdf' / 'csv'
+        preview_image     PDF 首页渲染图路径（图片用原图，CSV 没有图）
+        pages / text_layer / cropbox_limited / tables / diagnostics
+        plain_text / encoding   纯文本分支用
+    """
+    name = os.path.basename(path)
+    ext = os.path.splitext(name)[1].lower()
+
+    # ---- 图片：和以前完全一样，直接 OCR ----
+    if ext in IMAGE_EXTS:
+        rec = recognize(ocr, path)
+        rec['kind'] = 'image'
+        rec['preview_image'] = None
+        return rec
+
+    # ---- PDF / CSV：先走「直读」，不加载任何模型 ----
+    extra = extract_case(path, pages_dir=PAGES_DIR)
+    if extra['kind'] == 'csv':
+        # 纯文本没有像素，也就没有识别框和置信度；给它一套空字段保持结构统一。
+        rec = {
+            'file': name, 'lines': 0, 'avg_score': 0.0,
+            'low_score_lines': 0, 'elapsed': 0.0,
+            'texts': [], 'scores': [], 'boxes': [],
+            'plain_text': extra['plain_text'],
+        }
+    else:
+        # PDF：把首页渲染成 PNG 再当普通图片喂给 OCR，
+        # 这样 rec_boxes 的坐标正好对应预览里那张图，框不会错位。
+        png = extra['preview_image']
+        rec = recognize(ocr, png) if png and os.path.isfile(png) else {
+            'file': name, 'lines': 0, 'avg_score': 0.0,
+            'low_score_lines': 0, 'elapsed': 0.0,
+            'texts': [], 'scores': [], 'boxes': [], 'error': 'PDF 首页渲染失败',
+        }
+        rec['plain_text'] = ''
+        # ★ recognize() 内部用 os.path.basename(path) 当 file，这里 path 是
+        #   PDF 首页渲染出的 PNG。必须改回 case 原名，否则 JSON 里会记成
+        #   xxx_p1.png，manifest 匹配不上，预览卡片标题也会变成渲染图名。
+        rec['file'] = name
+
+    rec['kind'] = extra['kind']
+    rec['preview_image'] = extra['preview_image']
+    rec['pages'] = extra['pages']
+    rec['text_layer'] = extra['text_layer']
+    rec['cropbox_limited'] = extra['cropbox_limited']
+    rec['tables'] = extra['tables']
+    rec['diagnostics'] = extra['diagnostics']
+    if extra['encoding']:
+        rec['encoding'] = extra['encoding']
+    return rec
+
+
 def save_results(records, out_json, out_txt):
     """把全部记录写成 JSON + 纯文本汇总。"""
     os.makedirs(OUT_DIR, exist_ok=True)   # exist_ok=True：目录已存在也不报错
     payload = {
         'model': {'det': DET_MODEL, 'rec': REC_MODEL},
-        'image_count': len(records),
+        'image_count': len(records),          # 兼容旧版字段，含义仍是「记录条数」
+        'case_count': len(records),
         'records': records,
     }
     if out_json:
@@ -154,19 +235,34 @@ def save_results(records, out_json, out_txt):
     if out_txt:
         lines = [
             f'模型：{DET_MODEL} + {REC_MODEL}',
-            f'图片数：{len(records)}',
+            f'case 数：{len(records)}（图片 OCR / PDF 文本层直读 / CSV 纯文本）',
             '',
         ]
         for rec in records:
+            kind = rec.get('kind', 'image')
             lines.append(
-                f'=== {rec["file"]} | {rec["lines"]} 行 | '
+                f'=== {rec["file"]} [{kind}] | OCR {rec["lines"]} 行 | '
                 f'平均置信度 {rec["avg_score"]:.2f} | {rec["elapsed"]}s ==='
             )
             if rec.get('error'):
                 lines.append(f'识别失败：{rec["error"]}')
+            # 非图片分支：把「直读」抽到的表格摘要也写进纯文本汇总
+            if kind != 'image':
+                tables = rec.get('tables') or []
+                tag = (f'共 {rec.get("pages", 1)} 页，text_layer='
+                       f'{rec.get("text_layer")}') if kind == 'pdf' \
+                    else f'编码 {rec.get("encoding", "?")}'
+                lines.append(f'文本层 / 纯文本直读：{len(tables)} 张表（{tag}）')
+                for t in tables:
+                    lines.append(f'  第 {t["page"]} 页 / {t["strategy"]} 策略 / '
+                                 f'{t["n_rows"]}×{t["n_cols"]} / '
+                                 f'填充率 {t["fill_ratio"]}')
             # zip() 把文字和置信度一一配对
             for text, score in zip(rec['texts'], rec['scores']):
                 lines.append(f'{text}\t{score:.2f}')
+            if rec.get('plain_text'):
+                lines.append('--- 原文 ---')
+                lines.append(rec['plain_text'].strip())
             lines.append('')
         with open(out_txt, 'w', encoding='utf-8') as f:
             f.write('\n'.join(lines))
@@ -175,28 +271,29 @@ def save_results(records, out_json, out_txt):
 
 
 def main():
-    # 命令行第一个参数优先于配置区，方便临时指向别的图片目录。
+    # 命令行第一个参数优先于配置区，方便临时指向别的输入目录。
     src_dir = sys.argv[1] if len(sys.argv) > 1 else INPUT_DIR
-    images = list_images(src_dir)
+    cases = list_cases(src_dir)
 
-    # 没有图片就直接退出，不加载模型 —— 省得白等几秒。
-    if not images:
-        print(f'>> {os.path.abspath(src_dir)} 里没有图片（支持 {", ".join(IMAGE_EXTS)}）')
-        print('>> 先把收集的图片放进 input/，或用命令行指定别的目录。')
+    # 没有 case 就直接退出，不加载模型 —— 省得白等几秒。
+    if not cases:
+        print(f'>> {os.path.abspath(src_dir)} 里没有可处理的 case'
+              f'（支持 {", ".join(SUPPORTED_EXTS)}）')
+        print('>> 先把素材放进 input/，或用命令行指定别的目录。')
         return
 
-    print(f'>> 共 {len(images)} 张图片，开始批量识别')
+    print(f'>> 共 {len(cases)} 个 case，开始批量处理（图片 OCR / PDF 文本层直读 / CSV 纯文本）')
     ocr = build_ocr()                 # 只创建一次，后面循环复用
     t_all = time.perf_counter()
 
     records = []
-    for i, path in enumerate(images, start=1):   # enumerate 同时给序号和元素
+    for i, path in enumerate(cases, start=1):   # enumerate 同时给序号和元素
         name = os.path.basename(path)
         try:
-            rec = recognize(ocr, path)
+            rec = build_case_record(ocr, path)
         except Exception as e:
-            # 单张失败不能让整批中断，记下来继续跑下一张。
-            print(f'>> [{i}/{len(images)}] {name} 识别失败：{e}')
+            # 单个 case 失败不能让整批中断，记下来继续跑下一个。
+            print(f'>> [{i}/{len(cases)}] {name} 处理失败：{e}')
             rec = {
                 'file': name, 'error': str(e), 'lines': 0,
                 'avg_score': 0.0, 'low_score_lines': 0, 'elapsed': 0.0,
@@ -204,10 +301,12 @@ def main():
             }
         records.append(rec)
         if not rec.get('error'):
+            table_note = (f', 直读表格 {len(rec.get("tables") or [])} 张'
+                          if rec.get('kind') != 'image' else '')
             print(
-                f'>> [{i}/{len(images)}] {name}: {rec["lines"]} 行, '
+                f'>> [{i}/{len(cases)}] {name}: OCR {rec["lines"]} 行, '
                 f'平均置信度 {rec["avg_score"]:.2f}, '
-                f'低置信 {rec["low_score_lines"]} 行, {rec["elapsed"]}s'
+                f'低置信 {rec["low_score_lines"]} 行{table_note}, {rec["elapsed"]}s'
             )
 
     save_results(records, OUT_JSON, OUT_TXT)

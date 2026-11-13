@@ -7,6 +7,22 @@
 > 逐行结果见 `output/batch_ocr_results.json`，**看图对照见 `output/vis/index.html`**。
 > 格式：`检出行数 / 平均置信度`。
 
+> ⚠️ **下面这张表是 11-12 首轮基线的历史记录，用的是当时的旧编号**，数据如实保留、没有改写。
+> 11-13 把输入重排成「01~18 合成样本 + `real_*` 真实 case」，旧名 → 新名对照：
+>
+> | 旧名 | 新名 |
+> |---|---|
+> | `17_heavy_blur.png` | `15_heavy_blur.png` |
+> | `18_glare_wipe.png` | `16_glare_wipe.png` |
+> | `19_dark_shadow.png` | `17_dark_shadow.png` |
+> | `20_faint.png` | `18_faint.png` |
+> | `15_real_terminal.jpg` | `real_terminal_screenshot.jpg` |
+> | `16_real_doc.jpg` | `real_clear_doc.jpg` |
+> | `21_real_scan_p1.jpg` | `real_scan_page1.jpg` |
+> | `22_real_scan_p2.jpg` | `real_scan_page2.jpg` |
+>
+> 重跑后的新结果一律以 `output/batch_ocr_results.json` / `output/vis/index.html` 为准。
+
 | 场景 | 代表样本 | 效果 | 备注 |
 |---|---|---|---|
 | 清晰印刷体（对照） | `01_clear.png` 12 / 0.99、`16_real_doc.jpg` 21 / 0.94 | 好 | 识别框与文字完全对齐，作为基准 |
@@ -43,3 +59,35 @@
 
 ## P0 收尾自评（L1 会用达成了吗）
 - 
+
+## 11-13 · 输入重排 + 让文本层 PDF 进对比预览
+
+**需求**：把 week-01 的样例搬进 week-02/input 并排在最后；所有真实 case 也排最后；
+真实 case 统一 `real_` 前缀、名字一眼看懂、去掉重复；重跑结果；
+再把第1周「有文本层 PDF 的表格直读」搬到第2周，好用对比预览看提取效果。
+
+**输入整理**
+- 18 张合成样本改成连续编号 `01~18`（原 17~20 → 15~18）。
+- 真实 case 统一 `real_` 前缀：`real_terminal_screenshot.jpg`、`real_clear_doc.jpg`、
+  `real_bank_statement_textlayer.pdf`、`real_certificates_scan.pdf`、
+  `real_transactions_gbk.csv`、`real_scan_page1.jpg`、`real_scan_page2.jpg`。
+  字母 r 的字典序在数字之后，`sorted()` 时天然全部排在最后。
+- **去重**：MD5 核对发现两对字节级相同的副本（`test1.jpg` / `test2.jpg` 各存了两份），
+  删掉副本只留正本（旧名都在 git 里，可恢复）。`real_scan_page1/2` 是 PDF 渲染页
+  缩放出来的 JPEG，与 PDF 原件内容不同，保留为独立的扫描 bad case。
+- `make_samples.py` 把原来三段清单合并成一张 `REAL_CASES`（copy / scan 两种来源），
+  重跑不会再生成重复文件；manifest 新增 `group` 字段区分合成 / 真实。
+
+**文本层 PDF 接入**（新模块 `text_layer_extract.py`）
+- 移植第1周的策略回退：线型诊断 → `TABLE_STRATEGIES` → 人工列边界模板 → 清洗 + 填充率。
+  `real_bank_statement_textlayer.pdf` 配 9 条竖线，抽出 105×8、8 列表头正确。
+- `a_batch_ocr.py` 按后缀分三路：图片 OCR / PDF 首页渲染成图后 OCR + 文本层直读 /
+  CSV 纯文本解析（不跑模型）。PDF 渲染必须 `set_cropbox(mediabox)`，否则只出
+  910×218 的顶部一条（整页 910×1287）—— 第1周裁剪陷阱的又一次体现。
+- `vis_ocr_result.py` 每张 PDF/CSV 卡片下方新增「直读结果」区：抽出的表格、
+  策略 / 行列数 / 填充率、抽取诊断、CSV 原文；顶部汇总加「直读表格」「真实 case」统计。
+  表格按原始抽取顺序平铺，**不假设第 1 行是表头**（这文件第 1 行其实是页眉）。
+
+**验证**（不加载模型）：5 个脚本 `py_compile` 通过；`extract_case()` 对两个 PDF + 一个
+CSV 结果正确；构造 3 类 record 生成报告，10 项 HTML 检查全通过。完整批量重跑结果见
+`output/batch_ocr_results.json` 与 `output/vis/index.html`。

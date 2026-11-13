@@ -18,3 +18,8 @@ matplotlib==3.10.9
 # pillow 12.3.0 / numpy 2.2.6 / opencv 4.10.0），故此处不重复锁版本，
 # 避免与 paddle 系列的依赖约束冲突。换环境若报 ModuleNotFoundError，再单独：
 # python -m pip install pillow numpy opencv-python
+#
+# text_layer_extract.py（PDF 文本层直读 + 首页渲染）还会用到：
+# pdfplumber 0.11.10 / pymupdf 1.28.2 —— 第1周已装并锁过版本，见
+# ../week-01/requirements.txt。换环境报 ModuleNotFoundError 时单独装：
+# python -m pip install pdfplumber==0.11.10 pymupdf==1.28.2

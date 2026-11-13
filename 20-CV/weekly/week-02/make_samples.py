@@ -12,18 +12,21 @@
    能精确看出 OCR 漏了哪一行、认错了哪个字 —— 这是真实照片做不到的。
 
 因此这里采用「同一份干净底稿 + 每次只变一个因素」的对照实验设计。
-在此基础上，脚本还会把第1周的两张真实图复制进来当真实世界对照组
-（15_real_terminal.jpg、16_real_doc.jpg），避免全是"实验室数据"。
+在此基础上，脚本还会把第1周的真实图与原始文件复制进来当真实世界对照组。
+11-13 重排：**合成样本统一 01~18，用户真实 case 统一 `real_xxx` 前缀**，
+字母 r 的字典序排在数字之后，天然全在最后；名字也改成一眼看懂内容的风格。
+重复素材已去掉（原先 test1/test2 各存了两份字节相同的副本）。
 
 【用法】在 week-02 目录下：
     conda activate paddle
     python make_samples.py
 
 【产物】
-    input/01_xxx.png ~ 22_xxx.jpg   共 22 张（18 张合成 + 2 张真实图 + 2 张真实扫描页）
-    input/samples_manifest.json     每张图的类别 / 施加了什么退化 / 标准答案文字
+    input/01_xxx.png ~ 18_xxx.png   18 张合成退化样本（数字前缀，编号连续）
+    input/real_xxx.*                7 个用户真实 case（real_ 前缀，统一排在最后，已去重）
+    input/samples_manifest.json     每个 case 的类别 / 退化说明 / 分组 / 标准答案
 
-其中 17~20 是「重度退化」：首轮实测轻度退化几乎打不垮 PP-OCRv4，
+其中 15~18 是「重度退化」：首轮实测轻度退化几乎打不垮 PP-OCRv4，
 这 4 张专门把图像劣化到能观察到明显失败，给 bad case 库提供真素材。
 
 脚本只覆盖自己命名的这些文件，不会删除你放进 input/ 的其他图片，可以反复运行。
@@ -289,40 +292,57 @@ SYNTHETIC = [
     ('14_mixed.png',            '06_漏检',      '模糊 + 倾斜 + 阴影',       make_base_page,        degrade_mixed),
     # ---- 以下 4 张是「重度退化」：首轮实测轻度退化几乎打不垮 PP-OCRv4，
     #      这几张专门用来制造可见的失败，给 bad case 库提供真正的素材 ----
-    ('17_heavy_blur.png',       '01_模糊低质',  '重度高斯模糊 radius=7.0',  make_base_page,
+    ('15_heavy_blur.png',       '01_模糊低质',  '重度高斯模糊 radius=7.0',  make_base_page,
      lambda im: degrade_blur(im, radius=7.0)),
-    ('18_glare_wipe.png',       '03_反光光照',  '强反光过曝，中部整片洗白', make_base_page,
+    ('16_glare_wipe.png',       '03_反光光照',  '强反光过曝，中部整片洗白', make_base_page,
      lambda im: degrade_glare(im, strength=520, sx=330, sy=95)),
-    ('19_dark_shadow.png',      '03_反光光照',  '右侧亮度降到 10%',         make_base_page,
+    ('17_dark_shadow.png',      '03_反光光照',  '右侧亮度降到 10%',         make_base_page,
      lambda im: degrade_shadow(im, keep=0.10)),
-    ('20_faint.png',            '06_漏检',      '对比度压到 13%',           make_base_page,
+    ('18_faint.png',            '06_漏检',      '对比度压到 13%',           make_base_page,
      lambda im: degrade_low_contrast(im, factor=0.13)),
 ]
 
-# 真实样本：从 week-01/input 复制，作为"真实世界"对照组
-REAL_SAMPLES = [
-    ('test1.jpg', '15_real_terminal.jpg', '06_漏检',
-     '第1周真实终端截图：亮字暗底、命令行小字'),
-    ('test2.jpg', '16_real_doc.jpg', '对照组',
-     '第1周真实清晰文档：20 行、平均置信度 0.99'),
+# 真实 case：统一 real_ 前缀（字母 r 的字典序排在数字编号之后，天然「都放到最后」）。
+# 11-13 用户要求：① 真实 case 都用 real 前缀；② 去掉重复；③ 名字一眼能看出是什么。
+# 去重说明：旧版 19_real_terminal / 20_real_doc 与 week-01 的 test1/test2 是
+#   字节级完全相同的副本，已删掉，只留下面这份正本。
+#   real_scan_page1/2 是 PDF 渲染页缩放出来的 JPEG，和 PDF 原件内容不同，
+#   作为独立的「真实扫描页」bad case 保留。
+# 每项：(目标名, 分类, 说明, 来源类型, 源文件名, source 说明)
+#   kind='copy' → 从 WEEK01_INPUT 直接复制；kind='scan' → 从 WEEK01_PAGES 渲染页图缩放
+REAL_CASES = [
+    ('real_terminal_screenshot.jpg',       '06_漏检',
+     '真实终端截图（亮字暗底、命令行小字）',      'copy', 'test1.jpg',
+     'week-01/input/test1.jpg'),
+    ('real_clear_doc.jpg',                 '对照组',
+     '真实清晰文档（20 行、平均置信度 0.99）',    'copy', 'test2.jpg',
+     'week-01/input/test2.jpg'),
+    ('real_bank_statement_textlayer.pdf',  '文本层表格',
+     '有文本层的银行流水 PDF（含 8 列表格）',      'copy', 'test3.pdf',
+     'week-01/input/test3.pdf'),
+    ('real_certificates_scan.pdf',         '扫描件',
+     '5 页证书 / 备案表扫描件 PDF',                'copy', 'test3_image.pdf',
+     'week-01/input/test3_image.pdf'),
+    ('real_transactions_gbk.csv',          '纯文本表格',
+     'GBK 编码的 CSV 交易流水',                    'copy', 'test4.csv',
+     'week-01/input/test4.csv'),
+    ('real_scan_page1.jpg',                '01_模糊低质',
+     '真实扫描件第 1 页（渲染图缩放，带噪点与印章）', 'scan', 'c_page_1.png',
+     'week-01/output/c_pdf_text_layer/test3_image/pages/c_page_1.png'),
+    ('real_scan_page2.jpg',                '04_密集小字',
+     '真实扫描件第 2 页（备案名单表格）',          'scan', 'c_page_2.png',
+     'week-01/output/c_pdf_text_layer/test3_image/pages/c_page_2.png'),
 ]
-
-# 真实扫描件：week-01 用 pymupdf 渲染的 test3_image.pdf 页面，缩放后存成 JPEG。
-# 这是唯一一组「不是画出来的」复杂文档，带真实扫描噪点与版面。
-SCAN_PAGES = [
-    ('c_page_0.png', '21_real_scan_p1.jpg', '01_模糊低质',
-     '真实扫描件第 1 页（week-01/output 渲染图缩放）'),
-    ('c_page_1.png', '22_real_scan_p2.jpg', '04_密集小字',
-     '真实扫描件第 2 页（week-01/output 渲染图缩放）'),
-]
-WEEK01_OUTPUT = '../week-01/output'
+# 第1周 11-13 把页图改成 1 起编号并挪进两层隔离目录，旧的 c_page_0.png 已不存在。
+WEEK01_PAGES = '../week-01/output/c_pdf_text_layer/test3_image/pages'
 
 
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     manifest = {
         'generated_by': 'make_samples.py',
-        'design': '同一份干净底稿，每张只施加一种退化；expect_lines 是标准答案',
+        'design': '01~18 为合成退化样本；real_* 为用户真实 case（real_ 前缀，字典序天然排在最后）。expect_lines 是标准答案',
+        'groups': {'synthetic': '01~18 合成样本（数字前缀）', 'real': 'real_* 真实 case（统一前缀，排在最后）'},
         'seed': SEED,
         'samples': [],
     }
@@ -343,50 +363,42 @@ def main():
             'category': category,
             'distortion': distortion,
             'source': 'synthetic',
+            'group': 'synthetic',
             'expect_lines': ground_truth,
         })
         print(f'>> 已生成 {filename:28s} {category} / {distortion}')
 
-    for src_name, dst_name, category, note in REAL_SAMPLES:
-        src = os.path.join(WEEK01_INPUT, src_name)
+    for dst_name, category, note, kind, src_name, source in REAL_CASES:
+        src_dir = WEEK01_INPUT if kind == 'copy' else WEEK01_PAGES
+        src = os.path.join(src_dir, src_name)
         dst = os.path.join(OUT_DIR, dst_name)
         if not os.path.isfile(src):
-            print(f'!! 跳过真实样本（源文件不存在）：{src}')
+            print(f'!! 跳过真实 case（源文件不存在）：{src}')
             continue
-        shutil.copy2(src, dst)                # copy2 连修改时间一起复制
+        if kind == 'copy':
+            shutil.copy2(src, dst)            # copy2 连修改时间一起复制
+        else:
+            # 扫描页来自 200 DPI 渲染图，等比缩小减少体积与推理耗时
+            page = Image.open(src).convert('RGB')
+            if page.width > 1200:
+                new_h = int(page.height * 1200 / page.width)
+                page = page.resize((1200, new_h), Image.Resampling.LANCZOS)
+            page.save(dst, quality=88)
         manifest['samples'].append({
             'file': dst_name,
             'category': category,
             'distortion': note,
-            'source': f'week-01/input/{src_name}',
-            'expect_lines': None,             # 真实图没有逐行标准答案
+            'source': source,
+            'group': 'real',
+            'expect_lines': None,             # 真实素材没有逐行标准答案
         })
-        print(f'>> 已复制 {dst_name:28s} {category} / 真实样本')
+        print(f'>> 已{"复制" if kind == "copy" else "生成"} {dst_name:34s} {category} / 真实 case')
 
-    for src_name, dst_name, category, note in SCAN_PAGES:
-        src = os.path.join(WEEK01_OUTPUT, src_name)
-        dst = os.path.join(OUT_DIR, dst_name)
-        if not os.path.isfile(src):
-            print(f'!! 跳过扫描页（源文件不存在）：{src}')
-            continue
-        page = Image.open(src).convert('RGB')
-        if page.width > 1200:                 # 原图是 200 DPI，等比缩小减少体积与推理耗时
-            new_h = int(page.height * 1200 / page.width)
-            page = page.resize((1200, new_h), Image.Resampling.LANCZOS)
-        page.save(dst, quality=88)
-        manifest['samples'].append({
-            'file': dst_name,
-            'category': category,
-            'distortion': note,
-            'source': f'week-01/output/{src_name}',
-            'expect_lines': None,
-        })
-        print(f'>> 已生成 {dst_name:28s} {category} / 真实扫描件')
-
+    manifest['sample_count'] = len(manifest['samples'])
     with open(MANIFEST, 'w', encoding='utf-8') as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
 
-    print(f'\n>> 共 {len(manifest["samples"])} 张样本已放入 {os.path.abspath(OUT_DIR)}')
+    print(f'\n>> 共 {manifest["sample_count"]} 个 case 已放入 {os.path.abspath(OUT_DIR)}')
     print(f'>> 样本说明书：{os.path.abspath(MANIFEST)}')
     print('>> 下一步：python a_batch_ocr.py   （跑完会自动生成可视化对照报告）')
 

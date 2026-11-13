@@ -11,7 +11,13 @@ batch_ocr_results.json 里只有文字和坐标，读起来不直观：
       左边 = 原图，识别框以 SVG 叠加在图上，鼠标悬停会互相高亮
       右边 = 逐行文字 + 置信度条，低置信度行标橙红色
       下方 = 该图的标准答案（若有）与「粗略未命中行数」，方便挑 bad case
-      顶部 = 全部图片的汇总指标，可一键只筛「有问题的图」
+      顶部 = 全部 case 的汇总指标，可一键只筛「有问题的 case」
+
+   11-13 新增：PDF / CSV 卡片在右侧表格下面多一块「直读结果」——
+      直接读文本层（或纯文本）抽出的表格、策略与质量指标、抽取诊断、原文。
+      同一个 PDF 因此能并排比较「像素 OCR 读出来的字」和「文本层无损抽出的表」。
+      PDF 左侧显示的是 a_batch_ocr.py 渲染的首页 PNG（不是 input/ 里的 .pdf），
+      CSV 没有图像，左侧给出占位说明。
 
 【重要】可视化不会重新跑 OCR，只是把已有结果画出来，所以瞬间完成、不加载模型。
 
@@ -222,6 +228,19 @@ details{margin-top:12px;border-top:1px dashed var(--line);padding-top:8px}
 summary{cursor:pointer;color:var(--accent);font-size:13px}
 details ul{margin:8px 0 0;padding-left:22px;color:var(--muted);font-size:12px}
 details li.miss{color:var(--low)}
+.tag-real{background:#fff2e6;color:#8a4b0a}
+.extract{margin-top:14px;border-top:1px dashed var(--line);padding-top:10px}
+.extract h3{font-size:13px;font-weight:500;margin:0 0 6px}
+.extract .note{font-size:12px;color:var(--muted);margin:0 0 8px;line-height:1.5}
+.tablewrap{max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.extract table{font-size:12px;width:auto;min-width:100%}
+.extract th,.extract td{border:1px solid var(--line);padding:4px 7px;
+  white-space:nowrap;position:static;background:none;color:var(--ink);font-weight:400}
+.extract thead th{background:#f2f5fa;font-weight:500;position:sticky;top:0}
+.extract table tr.low td{color:var(--ink)}
+.extract table tr.first td{background:#f7f9fc}
+.plain pre{white-space:pre-wrap;word-break:break-all;font-size:12px;
+  background:#f7f9fc;padding:9px;border-radius:8px;margin:6px 0 0}
 .empty{color:var(--muted);padding:20px}
 a{color:var(--accent)}
 @media(max-width:900px){.grid{grid-template-columns:1fr}.stage{border-right:0}}
@@ -255,20 +274,91 @@ document.getElementById('filterBtn').addEventListener('click', function(){
 """
 
 
+def build_extract_html(rec):
+    """
+    渲染「文本层 / 纯文本直读」区域：抽出的表格 + 抽取诊断 + 原文。
+    图片分支没有这段，直接返回空字符串。
+
+    这是 11-13 新增的对比重点：同一个 PDF 卡片里，
+    上面的表格是「把页面当图片 OCR 读出来的字」，下面这段是「直接读文本层」，
+    一个带识别误差、一个字符无损，放在一起才看得出差别。
+    """
+    kind = rec.get('kind', 'image')
+    if kind == 'image':
+        return ''
+    tables = rec.get('tables') or []
+    diag = rec.get('diagnostics') or {}
+    parts = [f'<div class="extract"><h3>直读结果（{esc(kind)}）：{len(tables)} 张表</h3>']
+
+    if kind == 'pdf':
+        note = (f'共 {rec.get("pages", 1)} 页 · '
+                + ('有文本层，表格直接抽取、未加载表格模型'
+                   if rec.get('text_layer') else '无文本层，表格只能走 OCR / 结构模型'))
+        if rec.get('cropbox_limited'):
+            note += ' · 预览图已按 MediaBox 整页渲染（含阅读器里看不到的内容）'
+    else:
+        note = f'纯文本按 {rec.get("encoding", "?")} 解码 · 不跑 OCR'
+    parts.append(f'<p class="note">{esc(note)}</p>')
+
+    if not tables:
+        parts.append('<p class="note">没有抽到表格，见下方诊断</p>')
+    for idx, t in enumerate(tables, 1):
+        rows = t.get('rows') or []
+        head = (f'第 {t.get("page", 1)} 页 · {t.get("strategy", "?")} 策略 · '
+                f'{t.get("n_rows", 0)}×{t.get("n_cols", 0)} · '
+                f'填充率 {t.get("fill_ratio", 0)}'
+                + (' · 低置信度，建议人工核对' if t.get('low_confidence') else ''))
+        parts.append(f'<p class="note"><b>表 {idx}</b>　{esc(head)}　'
+                     f'· 按原始抽取顺序平铺，首行可能是页眉</p>')
+        if not rows:
+            continue
+        # 不做「第一行当表头」的假设：pdfplumber 的 text/explicit 策略常把
+        # 页眉也切进表格，真正的表头可能在第 2、3 行。这里如实平铺最不容易误导。
+        body = ''.join(
+            f'<tr class="{"first" if j == 0 else ""}">'
+            + ''.join(f'<td>{esc(c)}</td>' for c in r) + '</tr>'
+            for j, r in enumerate(rows)
+        )
+        parts.append(f'<div class="tablewrap"><table><tbody>{body}</tbody></table></div>')
+
+    if rec.get('plain_text'):
+        parts.append('<div class="plain"><p class="note"><b>原文</b></p>'
+                     f'<pre>{esc(rec["plain_text"])}</pre></div>')
+
+    notes = list(diag.get('pages') or []) + list(diag.get('notes') or [])
+    if notes:
+        li = ''.join(f'<li>{esc(n)}</li>' for n in notes)
+        parts.append(f'<details><summary>抽取诊断（{len(notes)} 条）</summary>'
+                     f'<ul>{li}</ul></details>')
+    parts.append('</div>')
+    return ''.join(parts)
+
+
 def build_card(rec, card_no, image_dir, vis_dir, manifest_map):
     """生成一张图对应的 HTML 卡片。"""
     name = rec.get('file', '(未知文件)')
     info = manifest_map.get(name, {})
     category = info.get('category', '真实/自定义')
     distortion = info.get('distortion', '未提供退化说明')
+    group = info.get('group', 'synthetic' if name[:2].isdigit() else 'real')
+    group_label = '真实 case' if group == 'real' else '合成样本'
     image_path = os.path.join(image_dir, name)
     stem = os.path.splitext(name)[0]
+    kind = rec.get('kind', 'image')
+    preview = rec.get('preview_image')
+    # PDF 的框是画在「首页渲染图」上的，左侧必须显示同一张图，否则坐标对不上。
+    display_image = (preview if kind == 'pdf' and preview and os.path.isfile(preview)
+                     else image_path)
 
-    # ---- 左侧：原图 + SVG 框 ----
-    if os.path.isfile(image_path):
+    # ---- 左侧：原图 / PDF 首页渲染图 + SVG 框（CSV 没有图像）----
+    if kind == 'csv':
+        left = ('<div class="stage empty">CSV / 纯文本输入：没有图像可显示，'
+                '右侧直接看解析出的表格与原文</div>')
+        extra = '纯文本分支，不跑 OCR'
+    elif os.path.isfile(display_image):
         png_name = f'{stem}_boxes.png'
-        w, h = draw_boxes_png(image_path, rec, os.path.join(vis_dir, png_name))
-        src = prepare_image(image_path, vis_dir)
+        w, h = draw_boxes_png(display_image, rec, os.path.join(vis_dir, png_name))
+        src = prepare_image(display_image, vis_dir)
         polys = []
         for i, box in enumerate(rec.get('boxes') or []):
             pts = normalize_box(box)
@@ -295,8 +385,8 @@ def build_card(rec, card_no, image_dir, vis_dir, manifest_map):
             f'<a href="{esc(png_name)}" target="_blank">查看带框 PNG</a>'
         )
     else:
-        left = f'<div class="stage empty">找不到原图：{esc(image_path)}</div>'
-        extra = '（把原图放回该目录后，重新运行本脚本即可显示）'
+        left = f'<div class="stage empty">找不到预览图：{esc(display_image)}</div>'
+        extra = '（重新跑一次 python a_batch_ocr.py 生成 PDF 首页渲染图）'
 
     # ---- 右侧：逐行文字表格 ----
     rows = []
@@ -316,7 +406,9 @@ def build_card(rec, card_no, image_dir, vis_dir, manifest_map):
         rows.append(f'<tr><td colspan="3" style="color:var(--low)">'
                     f'识别失败：{esc(rec["error"])}</td></tr>')
     if not rows:
-        rows.append('<tr><td colspan="3" class="empty">没有识别到任何文字（整图漏检）</td></tr>')
+        hint = ('该输入没有 OCR 文字（纯文本 / 无文本层），见下方直读结果'
+                if kind != 'image' else '没有识别到任何文字（整图漏检）')
+        rows.append(f'<tr><td colspan="3" class="empty">{hint}</td></tr>')
 
     # ---- 标准答案对照（只有合成样本才有）----
     expect = info.get('expect_lines')
@@ -338,24 +430,38 @@ def build_card(rec, card_no, image_dir, vis_dir, manifest_map):
         )
 
     low_lines = rec.get('low_score_lines', 0)
-    problem = 1 if (low_lines or rec.get('error') or not texts
-                    or (expect and rough_misses(expect, texts))) else 0
+    tables = rec.get('tables') or []
+    if kind == 'image':
+        # 图片分支：低置信 / 识别失败 / 整图漏检 / 标准答案未命中，都算「有问题」
+        problem = 1 if (low_lines or rec.get('error') or not texts
+                        or (expect and rough_misses(expect, texts))) else 0
+    else:
+        # 非图片分支的 OCR 结果不代表成败：只有「有文本层却一张表都没抽到」
+        # 才算问题。扫描件 PDF 本来就没有文本层，不该被误标。
+        problem = 1 if (rec.get('error')
+                        or (kind == 'pdf' and rec.get('text_layer') and not tables)
+                        or (kind == 'csv' and not tables)) else 0
+    table_metric = (f'<span><em>直读表格</em> <b>{len(tables)}</b></span>'
+                    if kind != 'image' else '')
     head = (
         f'<div class="card-head"><h2>{esc(name)}</h2>'
         f'<span class="tag">{esc(category)}</span>'
+        f'<span class="tag {"tag-real" if group == "real" else ""}">'
+        f'{group_label}</span>'
         f'<div class="desc">退化 / 来源：{esc(distortion)}　·　{extra}</div>'
         f'<div class="metrics">'
         f'<span><em>识别行数</em> <b>{rec.get("lines", 0)}</b></span>'
         f'<span><em>平均置信度</em> <b>{rec.get("avg_score", 0):.2f}</b></span>'
         f'<span><em>可疑行</em> <b style="color:{"var(--low)" if low_lines else "var(--ok)"}">'
         f'{low_lines}</b></span>'
+        f'{table_metric}'
         f'<span><em>耗时</em> <b>{rec.get("elapsed", 0)}s</b></span>'
         f'</div></div>'
     )
     right = (
         f'<div class="pane"><table><thead><tr><th>#</th><th>识别文字</th>'
         f'<th>置信度</th></tr></thead><tbody>{"".join(rows)}</tbody></table>'
-        f'{details}</div>'
+        f'{details}{build_extract_html(rec)}</div>'
     )
     return (
         f'<section class="card" data-problem="{problem}">{head}'
@@ -387,17 +493,22 @@ def build_report(records, image_dir=IMAGE_DIR, vis_dir=VIS_DIR,
     scores = [rec.get('avg_score', 0) for rec in records if rec.get('lines', 0)]
     avg = sum(scores) / len(scores) if scores else 0.0
     total_time = sum(rec.get('elapsed', 0) for rec in records)
+    total_tables = sum(len(rec.get('tables') or []) for rec in records)
+    real_count = sum(1 for rec in records
+                     if manifest_map.get(rec.get('file', ''), {}).get('group') == 'real')
     problem_count = sum(1 for c in cards if 'data-problem="1"' in c)
     model = (read_json(result_json, {}) or {}).get('model', {})
 
     stats = (
         f'<div class="stats">'
-        f'<div class="stat"><b>{len(records)}</b><span>图片数</span></div>'
+        f'<div class="stat"><b>{len(records)}</b><span>case 数</span></div>'
+        f'<div class="stat"><b>{real_count}</b><span>真实 case（real_*）</span></div>'
         f'<div class="stat"><b>{total_lines}</b><span>识别总行数</span></div>'
         f'<div class="stat"><b>{avg:.2f}</b><span>平均置信度</span></div>'
         f'<div class="stat"><b style="color:var(--low)">{total_low}</b>'
         f'<span>可疑行（&lt; {LOW_SCORE}）</span></div>'
-        f'<div class="stat"><b>{problem_count}</b><span>有问题的图</span></div>'
+        f'<div class="stat"><b>{total_tables}</b><span>直读表格</span></div>'
+        f'<div class="stat"><b>{problem_count}</b><span>有问题的 case</span></div>'
         f'<div class="stat"><b>{total_time:.1f}s</b><span>识别总耗时</span></div>'
         f'</div>'
     )
@@ -407,14 +518,16 @@ def build_report(records, image_dir=IMAGE_DIR, vis_dir=VIS_DIR,
         '<!DOCTYPE html>\n<html lang="zh-CN">\n<head>\n'
         '<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
-        '<title>OCR 结果与原图对照报告</title>\n'
+        '<title>OCR / 文本层提取 对照报告</title>\n'
         f'<style>{CSS}</style>\n</head>\n<body>\n'
-        '<header><h1>OCR 结果与原图对照报告</h1>'
+        '<header><h1>OCR / 文本层提取 对照报告</h1>'
         f'<div class="sub">模型：{esc(model.get("det", "?"))} + '
         f'{esc(model.get("rec", "?"))}　·　'
-        '左图彩色框 = 检测到的文字行（绿=正常，橙红=低置信度）；'
+        '左图彩色框 = OCR 检测到的文字行（绿=正常，橙红=低置信度），'
         '鼠标移到右侧任意一行，左图对应框会高亮。'
-        '没框到的地方就是漏检。</div>\n'
+        'PDF / CSV 卡片下方另有「直读结果」：直接读文本层或纯文本抽出的表格，'
+        '字符无损、不经过模型，可和上面的 OCR 文字对照看。'
+        '01~18 是合成样本，real_* 是真实 case，统一排在最后。</div>\n'
         f'{stats}'
         '<button id="filterBtn" type="button">只看有问题的图</button>\n'
         '</header>\n'

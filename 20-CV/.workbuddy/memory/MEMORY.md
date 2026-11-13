@@ -14,7 +14,10 @@
 - 批量 / 流水线类脚本：一次跑完 `input/` 下所有 case，不要让用户每次手改输入路径（2026-11-13）。
 - **页码基准统一 1 起（2026-11-13 晚定稿）**：所有可见页码都与 PDF 阅读器一致 —— 页图 `_tmp_page_N.png` / `c_page_N.png`、表格 HTML `pipeline_table_pN.html` / `d_table_out_N.html`、`output.json` 的 `page`、日志「第 N 页」，N 从 1 起。代码统一 `enumerate(..., 1)`，**禁止再出现 `i + 1` 换算或 0 起编号**；`b_ocr_image.py` 的 OCR 文字行索引除外（内部要用 `polys[i]`，展示行号本来就是 `i + 1`）。重跑时脚本先清掉旧编号的表格 HTML / 旧页图，避免新旧两套编号并存。用户原话「统一从1开始，页面与输出保持一致」。
 - 周笔记收敛为**单文件 `notes.md`**：散落的问答全稿、外部机器手册等，提炼结论后即可清理原文，避免同一知识维护两份（2026-11-13）。清理前提：确认文件已被 git 跟踪可恢复、把主笔记改成自包含（清掉所有指向被删文件的链接/章节引用）、全仓确认无其它引用。
-- 用户偏好自己手动执行安装/运行命令；助手只在需要验证时跑轻量检查，不代替用户做环境操作。
+- 用户偏好自己手动执行安装/运行命令；助手只在需要验证时跑轻量检查，不代替用户做环境操作。**例外**：用户明确说「重跑一下结果」时，助手直接代跑完整批量流水线。
+- **week-02 输入 case 命名约定（2026-11-13 用户补充定稿）**：合成样本用数字前缀 `01~18`（连续编号）；**所有用户真实 case 统一 `real_` 前缀 + 一眼看懂内容的语义化名字**（`real_terminal_screenshot.jpg` / `real_bank_statement_textlayer.pdf` 这种风格），不用编号。字母 r 的字典序在数字之后，`sorted()` 时真实 case 天然全排最后。必须去重（MD5 核对，删字节级相同的副本，保留正本）。`make_samples.py` 的 `REAL_CASES` 是命名唯一真相源，manifest 加 `group: synthetic/real`。
+- **有文本层 PDF 的表格不要转图走 OCR 模型**（2026-11-13 定稿）：字符精确、带坐标/字体/矢量线，直读快两个数量级。方案分层：判载体 → lattice/stream 策略解析（pdfplumber `TABLE_STRATEGIES`，无竖线的 stream 型必须回退 `text`）→ 人工列边界模板（固定版式最稳，自动 words 聚类实测会混进页眉）→ 仅失败页转图走表格模型 → 业务校验。week-01 `weekend_pipeline.py` 与 week-02 `text_layer_extract.py` 各维护一份，不互相 import。
+- **pymupdf 渲染被裁剪的 PDF**：默认按 CropBox，只出顶部一条；要 `page.set_cropbox(page.mediabox)` 才渲染整页（test3.pdf 910×218 → 910×1287）。
 
 ## PaddleOCR 3.7.0 坐标基准（2026-11-12 实测，涉及画识别框时必须遵守）
 - 默认 `use_doc_preprocessor=True`（整页方向分类 + UVDoc 去扭曲）会让 `rec_polys` / `dt_polys` 基于**矫正后图像**，直接画回原图整体错位。

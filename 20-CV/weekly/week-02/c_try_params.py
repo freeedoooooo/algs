@@ -9,8 +9,8 @@
     conda activate paddle
 
 用法（在 week-02 目录下）：
-    python c_try_params.py                             # 用配置区 IMG
-    python c_try_params.py ../week-01/input/test1.jpg  # 命令行临时指定图片
+    python c_try_params.py                                       # 用配置区 IMG
+    python c_try_params.py input/real_terminal_screenshot.jpg    # 命令行临时指定图片
 
 【3.x 的关键变化】
     参数名：det_db_thresh / det_db_box_thresh  →  text_det_thresh / text_det_box_thresh
@@ -24,7 +24,7 @@
 """
 
 # =========================== 配置区：调试只改这里 ===========================
-IMG = 'input/test1.jpg'                  # 待对比的图片；建议放一张自己的漏检样本
+IMG = 'input/real_terminal_screenshot.jpg'   # 真实终端截图（亮字暗底，有漏检），第1周原件
 OUT_TXT = 'output/param_compare.txt'     # 对比结果存哪里；改成 None 就不写
 DET_MODEL = 'PP-OCRv4_mobile_det'        # 检测模型（第1周已缓存，免下载）
 REC_MODEL = 'PP-OCRv4_mobile_rec'        # 识别模型
