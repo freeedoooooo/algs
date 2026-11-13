@@ -7,7 +7,7 @@
     "pages": 1,
     "chars": 254,
     "tables": 0,
-    "elapsed": 20.85,
+    "elapsed": 21.54,
     "ok": true
   },
   {
@@ -18,7 +18,7 @@
     "pages": 1,
     "chars": 169,
     "tables": 1,
-    "elapsed": 12.19,
+    "elapsed": 12.11,
     "ok": true
   },
   {
@@ -28,8 +28,8 @@
     "mode": "text_layer",
     "pages": 1,
     "chars": 2054,
-    "tables": 0,
-    "elapsed": 0.9,
+    "tables": 1,
+    "elapsed": 0.99,
     "ok": true
   },
   {
@@ -40,7 +40,7 @@
     "pages": 5,
     "chars": 1750,
     "tables": 1,
-    "elapsed": 63.11,
+    "elapsed": 72.85,
     "ok": true
   },
   {
