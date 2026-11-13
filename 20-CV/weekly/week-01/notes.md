@@ -176,8 +176,9 @@ doc.save('out.pdf', garbage=4, deflate=True)
 - **文档一致性**：`c` 的 `has_text_layer()` 实际返回 3 个值，docstring 却写 2 个；
   新增逐页字符数概览，能看出混合型 PDF。README 里 `conda activate ocr`、
   2.x 的 `.ocr(cls=True)` 示例、默认 PDF 与产物文件名也都同步成本机实际值。
-- **流水线收尾**：`weekend_pipeline.py` 的 OCR 分支跑完会自动删掉中间页图
-  （配置区 `KEEP_TEMP_IMAGES` 可关），`cropbox_is_limited()` 遇到损坏 PDF 不再让主流程崩掉。
+- **流水线收尾**：`weekend_pipeline.py` 的 OCR 分支当时跑完会自动删掉中间页图
+  （配置区 `KEEP_TEMP_IMAGES` 可关；该开关和自动删图已在 11-13 晚移除，见下节），
+  `cropbox_is_limited()` 遇到损坏 PDF 不再让主流程崩掉。
   另修了 `pdf_pages_to_images(pdf_path, dpi=DPI, out_dir=OUT_DIR)` 的**默认参数快照**问题：
   Python 在定义函数时就把默认值算好固定了，之后改 OUT_DIR 不生效；改成 `None` 再在函数体内读配置。
 - **验证**：四个脚本 `py_compile` 通过；`import` 三模块 0.38s 不加载模型；
@@ -235,9 +236,10 @@ doc.save('out.pdf', garbage=4, deflate=True)
   从「完整路径」改成「文件名」，由 `os.path.join` 拼到 case 目录；
   `c` 顺带修了 `pdf_to_images(dpi=DPI, out_dir=OUT_DIR)` 的**默认参数快照**坑。
 - **中间产物再单独一层**：`c` 转出的页图放 `<case>/pages/`；
-  `weekend_pipeline` 的 OCR 临时页图放 `<case>/_tmp_pages/`，
-  `cleanup_temp_images()` 删完文件再用 `os.rmdir` 删空目录（只删空目录，不会误删内容）。
-  正式结果（`output.json` / 表格 HTML）和中间图不再混在同一层。
+  `weekend_pipeline` 的 OCR 临时页图放 `<case>/_tmp_pages/`，**跑完保留**供逐页核对。
+  每次生成新页图前，`prepare_temp_dir()` 只删除该目录里 `_tmp_page_*.png` 旧图
+  （不递归、不删子目录、不碰其它文件），避免新旧页图混在一起。
+  正式结果（`output.json` / 表格 HTML）和中间图始终不在同一层。
 - **汇总表归位**：`batch_summary.json` / `.txt` 放在 `output/weekend_pipeline/` 根，
   属于所有 case 共有，不属于任何单个输入。
 - **日志可读性**：四个脚本各加 `show()`，只在打印和写汇总表时把 Windows 的 `\`
@@ -249,8 +251,30 @@ doc.save('out.pdf', garbage=4, deflate=True)
   b / c / d 实跑确认各自落到 `output/b_ocr_image/test2/`、
   `output/c_pdf_text_layer/test3_image/pages/`、`output/d_table_ocr/test2/`；
   `weekend_pipeline` 批量 5/5 成功、104.29s；单独验证 `_tmp_pages/` 生成 5 张图、
-  清理后目录自动消失、case 目录只剩 3 个正式产物；4 个 HTML 均带 charset；
+  清理后目录自动消失、case 目录只剩 3 个正式产物（**这是当时的「跑完自动删」策略，
+  当晚已改成跑完保留，见下节**）；4 个 HTML 均带 charset；
   汇总表与各 case 的 `output.json` 数据对齐。
+
+### 同日再追加：临时产物跑完保留（2026-11-13 晚）
+
+**要解决的问题**：跑完就删，检查时看不到 `_tmp_pages/`，想核对「OCR 到底看的是哪张
+渲染图」只能把 `KEEP_TEMP_IMAGES` 改成 `True` 再重跑一遍；但直接改成永不清理，
+又会有新旧页图混在一起、分不清哪张是本轮的风险。
+
+- **策略改为「跑完保留 + 重跑前清空」**：移除 `KEEP_TEMP_IMAGES` 开关与
+  `cleanup_temp_images()`（原来挂在 `try/finally` 里删图、再 `os.rmdir` 删空目录），
+  换成 `prepare_temp_dir(temp_dir)`，在 `pdf_pages_to_images()` **之前**调用：
+  先清掉该 case 的 `_tmp_pages/` 里上一次的 `_tmp_page_*.png`，再生成新图，跑完不删。
+  OCR 中途报错时页图也会留下，正好用来排查。
+- **安全边界**：清理只认配置区 `TEMP_FILE_PREFIX` 前缀的 `.png` 普通文件，
+  `os.listdir` 只看这一层、`os.remove` 只删文件；不递归、不删子目录、
+  不碰 `input/` 原图和其它 case 的正式产物。
+- **可追溯**：OCR 分支往 `output.json` 写了 `temp_dir` / `temp_pages` 两个字段，
+  日志也会打印页图目录，事后翻结果能直接找到。
+- **验证**（轻量，不加载模型）：`py_compile` 通过；首次生成 5 张图 →
+  `prepare_temp_dir()` 清掉 5 张旧图，同目录里的 `_keep_me.txt` 和子目录均未被误删 →
+  再生成 5 张并保留；用 stub OCR 在临时目录跑 `run()` 两遍，
+  第二次先清旧图、页图仍是 5 张，`output.json` 的 `temp_dir` / `temp_pages` 正确。
 
 ## 疑问（留着后面阶段解答）
 - 为什么亮字暗底会几乎全军覆没？检测阶段到底在看什么特征？（week-02 反色实验 / P4）

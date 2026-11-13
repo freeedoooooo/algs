@@ -19,7 +19,7 @@
       test3.pdf        ───────→    test3/         output.json + pipeline_result.txt
       test3_image.pdf  ───────→    test3_image/   output.json + pipeline_result.txt
                                                    + pipeline_table_p*.html
-                                                   + _tmp_pages/（OCR 页图，跑完自动删）
+                                                   + _tmp_pages/（OCR 页图，跑完保留供核对）
       test4.csv        ───────→    test4/         output.json + pipeline_result.txt
                                    batch_summary.json   ← 所有 case 的总览表
                                    batch_summary.txt    ← 人直接看的总览表
@@ -56,6 +56,8 @@
     TODO 3 进阶表格识别：文本层用 pdfplumber，扫描件用 PP-StructureV3
 11-13 改进：改成批量扫描 input/、每个 case 独立输出目录、支持图片和 CSV/TXT；
       再把全仓输出统一为「output/<脚本名>/<输入名>/」两层隔离，中间页图单独一层。
+11-13 再改：OCR 临时页图跑完保留供核对，重跑该 case 时先清空旧图再生成新图，
+      避免新旧页图混在一起（去掉了「跑完自动删」和 KEEP_TEMP_IMAGES 开关）。
 
 run(输入路径) 返回一个 dict（字典，含 mode / text / pages / elapsed / tables 等键），
 同时把结果落盘；run_batch() 负责把它们串起来并写汇总表。
@@ -78,6 +80,9 @@ INPUT_DIR = 'input'                             # 输入目录（字符串）。
 #   每个 case 会在它下面再建一个专属子目录，形成「脚本名 / 输入名」两层隔离。
 OUT_DIR = 'output/weekend_pipeline'
 TEMP_DIRNAME = '_tmp_pages'                     # OCR 中间页图的子目录名（在每个 case 目录里面）
+TEMP_FILE_PREFIX = '_tmp_page_'                 # 页图文件名前缀；重跑时只清这个前缀的旧图
+# ↓ 中间页图策略（固定行为，不再设开关）：跑完**保留**在 <case>/_tmp_pages/ 供逐页核对；
+#   下次重跑该 case 时，先清空这个目录里上一次留下的旧图，再生成新图，避免新旧混淆。
 
 # ↓ 注意：这两个现在是「文件名」，不再是完整路径！
 #   脚本会把它们拼到每个 case 的目录里，
@@ -103,7 +108,6 @@ MIN_CHARS = 50                                  # 前几页抽到超过这么多
 SAMPLE_PAGES = 3                                # 只检查前几页，避免大 PDF 判断太慢
 ENABLE_TABLE = True                             # 表格识别开关（布尔值）。OCR 分支每页约 +20s，
                                                 # 批量跑全部 case 会比较久，只想快速看文字就改 False
-KEEP_TEMP_IMAGES = False                        # 是否保留 OCR 中间页图；False = 跑完连 _tmp_pages/ 一起删
 # ==========================================================================
 
 
@@ -258,8 +262,9 @@ def pdf_pages_to_images(pdf_path, dpi=None, out_dir=None):
     各放各的，而且单独一层，不会和 output.json 这类正式结果混在一起，
     更不会像早期版本那样全堆在 output/ 根目录互相覆盖。
 
-    这些 PNG 只是「中间产物」：识别完就没用了。run() 会在收尾时调用
-    cleanup_temp_images() 把它们连同空目录一起删掉（除非 KEEP_TEMP_IMAGES=True）。
+    这些 PNG 是「中间产物」，但**跑完会保留**：想逐页核对「OCR 到底看的是哪张图」
+    时可以直接打开。为了避免新旧页图混在一起，run() 在调用本函数**之前**
+    会先用 prepare_temp_dir() 清空该目录里上一次留下的旧图。
     """
     dpi = DPI if dpi is None else dpi
     out_dir = OUT_DIR if out_dir is None else out_dir
@@ -270,10 +275,11 @@ def pdf_pages_to_images(pdf_path, dpi=None, out_dir=None):
         # enumerate(可迭代对象) 同时给出「序号」和「元素」，
         # 比写 for i in range(len(doc)) 更简洁，是 Python 惯用写法。
         for i, page in enumerate(doc):
-            # f"_tmp_page_{i}.png" 是 f-string，{i} 会被替换成 0、1、2……
+            # f"{TEMP_FILE_PREFIX}{i}.png" 是 f-string，{i} 会被替换成 0、1、2……
+            # 前缀写在配置区：重跑时 prepare_temp_dir() 靠它认出「哪些是本脚本生成的旧图」。
             # os.path.join 负责用当前系统的分隔符拼路径
             # （Windows 是反斜杠，不要自己手写字符串拼接）。
-            out = os.path.join(out_dir, f"_tmp_page_{i}.png")
+            out = os.path.join(out_dir, f"{TEMP_FILE_PREFIX}{i}.png")
             # get_pixmap() 把这一页渲染成位图，.save() 存成 PNG。
             page.get_pixmap(dpi=dpi).save(out)
             paths.append(out)   # list.append(x)：往列表末尾添加一个元素
@@ -284,38 +290,37 @@ def pdf_pages_to_images(pdf_path, dpi=None, out_dir=None):
     return paths
 
 
-def cleanup_temp_images(paths):
+def prepare_temp_dir(temp_dir):
     """
-    删除本次 OCR 分支生成的中间页图。
+    生成**新**页图之前先准备好 <case 目录>/_tmp_pages/，返回这个目录路径。
 
-    只删传进来的这些路径（都是本函数刚刚生成的），不会碰其它文件：
-    input/ 里的原始图片、output/ 里其它 case 的产物、c_pdf_text_layer.py
-    生成的 c_page_*.png 都不会被删。
-    【重要】图片分支直接拿 input/ 里的原图去 OCR，那个文件绝不在 paths 里，
-    所以永远不会被误删 —— 清理只针对「脚本自己生成的临时文件」。
+    策略（11-13 晚按需求改的）：
+      - 跑完**不删**临时目录和页图 —— 事后想核对「OCR 看的到底是哪张渲染图」
+        可以直接打开，OCR 中途报错时页图也会留着，正好用来排查；
+      - 但**重跑时先清空**上一次留下的旧图，否则新旧页图混在一起分不清哪张是本轮的。
+
+    安全边界（很重要）：只在传进来的这一个 _tmp_pages/ 目录里操作，
+    只删 TEMP_FILE_PREFIX 开头、.png 结尾的**普通文件**；不递归、不删子目录、
+    不碰 input/ 原图、也不碰其它 case 的正式产物（output.json / 表格 HTML 等）。
+    os.listdir 只列出这一层，os.remove 只删单个文件，不会误伤别处。
     """
-    if KEEP_TEMP_IMAGES:   # 想留着逐页核对就把它改成 True
-        print(f'>> 按配置保留 {len(paths)} 张中间页图（在 {TEMP_DIRNAME}/ 里）')
-        return
+    os.makedirs(temp_dir, exist_ok=True)   # 目录不存在就建；已存在也别报错
     removed = 0
-    parent_dirs = set()      # set 自动去重：收集页图所在的目录，等下把空目录一起删掉
-    for path in paths:
+    for name in os.listdir(temp_dir):
+        # 只认「本脚本自己生成的临时页图」，其它文件一律不动
+        if not (name.startswith(TEMP_FILE_PREFIX) and name.lower().endswith('.png')):
+            continue
+        path = os.path.join(temp_dir, name)
+        if not os.path.isfile(path):       # 万一同名的是个文件夹，跳过
+            continue
         try:
-            os.remove(path)          # os.remove 删单个文件
+            os.remove(path)                # 删单个文件；os.rmdir 那种删目录的操作这里没有
             removed += 1
-            parent_dirs.add(os.path.dirname(path))
         except OSError:
-            pass                     # 已经不在了 / 被占用，都不影响主流程
-    # 页图删完后，把空掉的 _tmp_pages/ 一起删，让 case 目录里只剩正式产物。
-    # os.rmdir 只能删空目录；里面还有别的文件时会报错，用 try 忽略即可，绝不会误删内容。
-    for d in parent_dirs:
-        if os.path.basename(d) == TEMP_DIRNAME:
-            try:
-                os.rmdir(d)
-            except OSError:
-                pass
-    print(f'>> 已清理 {removed}/{len(paths)} 张中间页图及空的 {TEMP_DIRNAME}/ 目录'
-          f'（想保留就把配置区 KEEP_TEMP_IMAGES 改成 True）')
+            pass                           # 被占用 / 删不掉都不影响主流程
+    if removed:
+        print(f'>> 重跑前清掉 {removed} 张旧页图 → {show(temp_dir)}')
+    return temp_dir
 
 
 # ---------------------------------------------------------------- TODO 1 --
@@ -651,29 +656,33 @@ def run(input_path, out_dir=None):
             # ★ 中间页图单独放 <case 目录>/_tmp_pages/：
             #   既和别的 case 隔离，也不与 output.json / 表格 HTML 混在同一层。
             temp_dir = os.path.join(out_dir, TEMP_DIRNAME)
+            # 重跑时先清掉上一次留下的旧图，再生成新图；跑完**保留**供核对。
+            prepare_temp_dir(temp_dir)
             images = pdf_pages_to_images(input_path, out_dir=temp_dir)
+            print(f'>> 中间页图 {len(images)} 张 → {show(temp_dir)}/'
+                  f'（跑完保留，下次重跑该 case 时先清空）')
             chunks = []
-            # try/finally：无论中间哪一页出错，finally 里的清理都一定会执行，
-            # 不会把一堆页图留在 _tmp_pages/ 里。
-            try:
-                for i, img in enumerate(images):
-                    t1 = time.perf_counter()          # 单页耗时起点
-                    lines = ocr_image(img)
-                    chunks.append(f'--- 第 {i + 1} 页 ---')  # 加一个分页标记，方便看结果
-                    # extend 把另一个列表的元素「逐个」加进来；
-                    # append 则是把整个列表当成「一个」元素塞进去 —— 初学者很容易混。
-                    chunks.extend(lines)
-                    print(f'>> 第 {i + 1}/{len(images)} 页 OCR 完成：{len(lines)} 行，'
-                          f'{time.perf_counter() - t1:.2f}s')
-                    # TODO 3：扫描件分支用 PP-StructureV3 还原表格结构
-                    if ENABLE_TABLE:
-                        info = table_ocr_page(img, i, out_dir)
-                        tables.append(info)
-                        # 外层 f-string 用单引号，里面取字典键用双引号，两种引号不冲突。
-                        print(f'   表格识别：{info["table_count"]} 个表格块'
-                              + (f'，HTML → {show(info["html"])}' if info['html'] else ''))
-            finally:
-                cleanup_temp_images(images)
+            # 这里不再用 try/finally 做清理：页图是本轮要留着核对的产物，
+            # 哪怕某一页 OCR 报错也留在目录里，正好用来排查。
+            for i, img in enumerate(images):
+                t1 = time.perf_counter()          # 单页耗时起点
+                lines = ocr_image(img)
+                chunks.append(f'--- 第 {i + 1} 页 ---')  # 加一个分页标记，方便看结果
+                # extend 把另一个列表的元素「逐个」加进来；
+                # append 则是把整个列表当成「一个」元素塞进去 —— 初学者很容易混。
+                chunks.extend(lines)
+                print(f'>> 第 {i + 1}/{len(images)} 页 OCR 完成：{len(lines)} 行，'
+                      f'{time.perf_counter() - t1:.2f}s')
+                # TODO 3：扫描件分支用 PP-StructureV3 还原表格结构
+                if ENABLE_TABLE:
+                    info = table_ocr_page(img, i, out_dir)
+                    tables.append(info)
+                    # 外层 f-string 用单引号，里面取字典键用双引号，两种引号不冲突。
+                    print(f'   表格识别：{info["table_count"]} 个表格块'
+                          + (f'，HTML → {show(info["html"])}' if info['html'] else ''))
+            # 把页图位置记进 output.json，事后翻结果时能直接找到它
+            extra['temp_dir'] = show(temp_dir)
+            extra['temp_pages'] = len(images)
             text = '\n'.join(chunks)              # 把所有行用换行符连成一整篇文本
             mode, scope = 'ocr', 'visible_cropbox'
 

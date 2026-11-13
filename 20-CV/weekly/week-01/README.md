@@ -189,11 +189,11 @@ for b in res.json['res']['parsing_res_list']:
        test2/             output.json + pipeline_result.txt + pipeline_table_p0.html
        test3/             output.json + pipeline_result.txt
        test3_image/       output.json + pipeline_result.txt + pipeline_table_p1.html
-                          + _tmp_pages/（OCR 页图，跑完自动删）
+                          + _tmp_pages/（OCR 页图，跑完保留供逐页核对）
        test4/             output.json + pipeline_result.txt
    ```
 
-   只跑一个文件：`python weekend_pipeline.py input/test3.pdf`；跑别的目录：`python weekend_pipeline.py ../week-02/input`。新增 case 只要丢进 `input/` 就会自动被扫到（支持 `.pdf` / 常见图片 / `.csv .txt .md`，见配置区 `SUPPORTED_EXTS`）。OCR 分支的中间页图放在 `_tmp_pages/`、跑完自动清理，想留着核对把 `KEEP_TEMP_IMAGES` 改成 `True`；表格识别每页约 +20s，只想快速看文字把 `ENABLE_TABLE` 改成 `False`。输入统一放 `input/`，产物按上面两层规则自动建目录。
+   只跑一个文件：`python weekend_pipeline.py input/test3.pdf`；跑别的目录：`python weekend_pipeline.py ../week-02/input`。新增 case 只要丢进 `input/` 就会自动被扫到（支持 `.pdf` / 常见图片 / `.csv .txt .md`，见配置区 `SUPPORTED_EXTS`）。OCR 分支的中间页图放在 `<case>/_tmp_pages/`，**跑完保留**方便逐页核对「OCR 看的是哪张图」，下次重跑该 case 时会先清空旧图再生成新图（不用改任何开关，出错时页图也会留着排查）；`output.json` 里的 `temp_dir` / `temp_pages` 会记下页图位置和张数；表格识别每页约 +20s，只想快速看文字把 `ENABLE_TABLE` 改成 `False`。输入统一放 `input/`，产物按上面两层规则自动建目录。
 2. **bad case 库雏形**：建一个文件夹 `bad_cases/`，把你跑的过程中**识别错、识别不全、模糊/倾斜/反光**的样本图存进去，附一个 `notes.md` 记"这张为什么失败"。**这是第 2 周和 P4 的宝贵素材，现在就开始攒。**
 
 ---
