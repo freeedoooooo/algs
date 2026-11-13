@@ -164,3 +164,39 @@ CSV 结果正确；构造 3 类 record 生成报告，10 项 HTML 检查全通�
 `vis_ocr_result.py` 的 `prepare_image()` 改名 `copy_source()`，三类输入统一留副本，
 CSV 卡片加「查看原始文件」链接；只重画报告就生效，不用重跑 OCR。
 文档里残留的 `output/vis/index.html` / `batch_ocr_results.json` 指引已全部改成新路径。
+
+## 11-13 晚 · 把「谁调用谁」写进代码和文档
+
+**问题**：`case_naming.py` / `text_layer_extract.py` / `vis_ocr_result.py` 都被
+`a_batch_ocr.py` 调用，但关系散落在注释和各处 import 里，单独打开某个模块
+看不出「我是被谁用的、我能不能单独跑」。
+
+**核实到的关系**（在 week-02 搜 import 得来，不是凭印象）：
+- ①② `case_naming.py`、`text_layer_extract.py` 在 a 的文件顶部 import；
+  前者全程用，后者只在 `build_case_record()` 的 PDF / CSV 分支。
+- ③ `vis_ocr_result.py` 在 `main()` 里函数内 import（懒加载），`MAKE_VIS=True`
+  时调 `build_report()`；画报告失败不影响已落盘的 JSON / TXT。
+- `case_naming.py` 另被 `c_try_params.py` / `make_samples.py` /
+  `text_layer_extract.py` / `vis_ocr_result.py` 引用，共 **5 个调用方**。
+- 只有 `vis_ocr_result.py`、`c_try_params.py` 带 `main()` 能独立跑；另两个是纯模块。
+
+**四层体现**（从「打开文件」到「跑一次」逐级可见）：
+1. 三个模块各自 docstring 顶部加「谁在调用我」小节 —— 打开即见。
+2. `a_batch_ocr.py` 文件头加 ASCII 调用关系图；import 区按 ①②③ 编号标注，
+   ③ 的懒加载处也补对应编号注释。
+3. 配置区 `SHOW_DEPS=True`，`main()` 开头用 `show_dependencies()` 打印依赖树，
+   跑一次就能看见，不必只读注释；想安静就改 False。
+4. README 新增「脚本地图：谁调用谁」章节（图 + 角色表 + 懒加载原因）。
+
+**验证**：6 脚本 `py_compile` 通过；`import a_batch_ocr` 后单独调
+`show_dependencies()` 输出正确；`python vis_ocr_result.py` 独立重画报告正常；
+文档里 `text_layer_extract` 的调试命令实测输出 `pdf 1 105`。
+**没有重跑 OCR** —— 这次只改注释 / 文档 / 日志打印，产物内容不变。
+
+**顺手修掉一个隔离漏洞**：验证那条 `text_layer_extract` 调试命令时发现，
+`PDF_PAGES_DIR` 默认值原是 `output/a_batch_ocr/pages` —— 单独调试（不传
+`pages_dir`）会在正式产物根目录多出一个「不属于任何 case」的 `pages/`，
+还会被 `report_stale_cases()` 当成废弃 case 误报。已改成
+`output/text_layer_extract/pages`（按脚本名隔离），并让 `report_stale_cases()`
+跳过 `pages` / `__pycache__` 这类非 case 目录。
+复核：正式产物根 25 个目录、`多余 = []`、误报为空；调试页图按脚本隔离保留供核对。

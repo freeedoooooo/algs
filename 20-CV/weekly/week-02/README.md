@@ -35,6 +35,38 @@
 
 ---
 
+## 脚本地图：谁调用谁
+
+**一句话**：`a_batch_ocr.py` 是本周唯一的主入口，你只需要运行它；
+`case_naming.py`、`text_layer_extract.py`、`vis_ocr_result.py` 都是被它调用的模块。
+
+```
+a_batch_ocr.py   ← 你只运行这一个（主入口 / 编排）
+    ├── case_naming.py         ① 文件顶部 import，全程用：命名 / 分组 / 排序
+    ├── text_layer_extract.py ② 文件顶部 import，只在 PDF / CSV 分支直读表格
+    └── vis_ocr_result.py     ③ main() 里「用到才 import」：画对照报告
+```
+
+| 文件 | 角色 | 被谁调用 | 加载时机 | 能单独运行吗 |
+|---|---|---|---|---|
+| `a_batch_ocr.py` | 主入口：遍历 case、跑 OCR、落盘 | 你（命令行） | — | 是，`python a_batch_ocr.py` |
+| `case_naming.py` | 命名 / 分组 / 排序的唯一真相源 | **5 个脚本**（见下） | 各脚本 import 时 | 否，纯函数模块、无 main |
+| `text_layer_extract.py` | PDF 文本层 / CSV 直读，不加载模型 | 仅 `a_batch_ocr.py` | a 的文件顶部 | 否，纯模块、无 main |
+| `vis_ocr_result.py` | 画原图 + 识别框 + 直读结果的 HTML | `a_batch_ocr.py`，也可直接运行 | **懒加载**，画报告时才 import | 是，`python vis_ocr_result.py` |
+
+`case_naming.py` 是公共底座，除 a 外还有 4 个调用方：
+`c_try_params.py`（自动挑默认图）、`make_samples.py`（生成 / 补登记样本）、
+`text_layer_extract.py`（`strip_no()` 匹配列边界模板）、
+`vis_ocr_result.py`（卡片分组与统计）。
+
+**为什么 ③ 是懒加载**：画图属于附加功能。放在 `main()` 里、并裹在 `try` 中，
+即使报告生成失败，已经落盘的 `result.json` / `result.txt` 也不会白跑。
+跑 `a_batch_ocr.py` 时日志开头会打印「本次运行会用到的模块」，
+想让日志安静就把配置区 `SHOW_DEPS` 改成 `False`。
+
+> 想知道某个文件被谁调用，最快的办法：在 week-02 目录搜它的文件名，
+> 或看该文件顶部 docstring 里的「谁在调用我」小节。
+
 ## 学什么 & 怎么学
 
 ### 模块 A · 真实图片压测（Day 1）

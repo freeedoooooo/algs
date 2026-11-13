@@ -11,6 +11,16 @@
 人工列边界模板会失效、默认图片会找不到 —— 重跑也说不清生没生效。
 现在把规则集中到这个文件，其它脚本统一 import 它；以后要改编号规则，只改这里。
 
+【谁在调用我】（11-13 补）
+我是本周被复用最多的底层模块，一共 5 个脚本 import 我：
+    a_batch_ocr.py        主入口：分组 / 排序 / 输出目录名 / 汇总
+    vis_ocr_result.py     卡片分组、真实 case 统计、独立运行时的结果排序
+    text_layer_extract.py 用 strip_no() 让列边界模板按语义名匹配
+    c_try_params.py       用 pick_real_image() 自动挑默认图
+    make_samples.py       生成 / 补登记真实 case
+我没有 main()，不单独运行；要改命名规则只改这一个文件，其它脚本自动跟着变。
+想自己核对调用方：在 week-02 目录下搜 `import case_naming`。
+
 【命名约定（用户 11-13 定稿）】
     合成样本：01~18          两位数字前缀，编号 < 101
     真实 case：101_real_xxx.pdf / .jpg / .csv …

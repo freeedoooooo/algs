@@ -1,6 +1,14 @@
 """
 第2周 · OCR 结果与原图对照可视化
 
+【谁在调用我】（11-13 补）
+两种情况用的是同一个函数 build_report()：
+    ① a_batch_ocr.py 跑完自动调用（在 main() 里「用到才 import」，属于懒加载）；
+       这样即使报告生成失败，已经落盘的 result.json / result.txt 也不会白跑。
+    ② 直接 python vis_ocr_result.py 独立运行，只重画报告、不重跑 OCR，
+       结果从各 case 目录的 result.json 读回来。
+所以我是这三个模块里唯一「既被 import、又带 main() 能独立跑」的一个。
+
 【解决什么问题】
 result.json 里只有文字和坐标，读起来不直观：
 看不出「哪个框框住了哪行字」，也看不出「哪一块压根没被检测到」。

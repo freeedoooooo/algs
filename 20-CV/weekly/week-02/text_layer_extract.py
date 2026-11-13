@@ -1,6 +1,16 @@
 """
 第2周 · 有文本层 PDF / CSV 的「直读」提取（不加载 OCR 模型）
 
+【谁在调用我】（11-13 补）
+只被 a_batch_ocr.py 调用：build_case_record() 遇到 PDF / CSV 分支时执行
+    extract_case(path, pages_dir=<case 目录>/pages/)
+图片分支完全不碰我。我没有 main()，不单独运行；想单独调试可在 week-02 下用：
+    python -c "from text_layer_extract import extract_case; r=extract_case('input/103_real_bank_statement_textlayer.pdf'); print(r['kind'], len(r['tables']), r['tables'][0]['n_rows'])"
+（上面这行会打印 `pdf 1 105`，即「类型 / 抽到的表数 / 行数」；不加载任何 OCR 模型。
+ 首页预览图落在 `output/text_layer_extract/pages/p1.png`，是本模块的调试产物，
+ 按脚本名隔离，不会混进 `output/a_batch_ocr/` 的正式结果。）
+我自己还 import 了 case_naming，用它的 strip_no() 匹配人工列边界模板。
+
 【为什么单独一个模块】
 第1周 weekend_pipeline.py 验证过：PDF 只要有文本层，字符本身就是精确的，
 不需要转图让 OCR 再猜一遍。这里把那套「诊断线型 → 策略回退 → 质量打分」
@@ -30,9 +40,12 @@
 
 # =========================== 配置区：调试只改这里 ===========================
 PDF_RENDER_DPI = 110                             # PDF 首页预览图分辨率，够看清即可，别太大
-# 只有单独调试本模块时才用这个默认值；正常由 a_batch_ocr.py 传入
-# <case 目录>/pages/，让每个输入的中间产物各自隔离。
-PDF_PAGES_DIR = 'output/a_batch_ocr/pages'
+# 只有单独调试本模块（不传 pages_dir）时才用这个默认值；正常由 a_batch_ocr.py
+# 传入 <case 目录>/pages/，让每个输入的中间产物各自隔离。
+# ★ 这里刻意放在本模块专属目录，不要写成 output/a_batch_ocr/pages：
+#   那会在 a 的正式产物根目录里多出一个「不属于任何 case」的目录，
+#   破坏按输入隔离的结构，还会被 report_stale_cases() 当成旧 case 误报。
+PDF_PAGES_DIR = 'output/text_layer_extract/pages'
 TABLE_STRATEGIES = (None, 'lines', 'text')       # 策略回退顺序：默认 → 网格线 → 文字对齐
 TABLE_MIN_FILL_RATIO = 0.20                      # 非空单元格占比低于它 → 标「低置信度」
 # 人工标定的列边界（固定版式专用）：键是**去掉数字编号后的文件名**。

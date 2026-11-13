@@ -13,6 +13,27 @@
 这样在 output/a_batch_ocr/index.html 的对比预览里，同一个 PDF 能同时看到
 「像素 OCR 的框」和「文本层直读出来的表格」，一眼比出两条路线的差距。
 
+【脚本之间怎么串起来】（11-13 补：想一眼看清「谁调用谁」就看这里）
+本脚本是本周**唯一的主入口**，另外 3 个模块都是被它调用的：
+
+    a_batch_ocr.py  ← 你只需要运行这一个
+        ├── case_naming.py        ① 文件顶部 import，全程用
+        │                          命名 / 分组 / 排序 / 输出目录名
+        ├── text_layer_extract.py ② 文件顶部 import，只在 PDF / CSV 分支
+        │                          build_case_record() 里调 extract_case()
+        └── vis_ocr_result.py     ③ main() 里「用到才 import」（懒加载）
+                                  build_report() 生成对照报告
+
+    另外 case_naming.py 是公共底座，还被 c_try_params.py / make_samples.py /
+    text_layer_extract.py / vis_ocr_result.py 引用（一共 5 个调用方）。
+
+为什么 ③ 不写在文件顶部：画图是附加功能。放在 main() 里、并裹在 try 中，
+即使报告生成失败，已经落盘的 result.json / result.txt 也不会白跑。
+这种「用到才 import」叫懒加载，是 Python 很常见的写法。
+
+单独运行：python vis_ocr_result.py（只重画报告）、python c_try_params.py（调参）；
+case_naming.py 与 text_layer_extract.py 是纯模块，没有 main()，由别的脚本调用。
+
 环境（本机 miniforge，环境名就是 paddle）：
     conda activate paddle
 
@@ -77,6 +98,7 @@ SUPPORTED_EXTS = IMAGE_EXTS + PDF_EXTS + TEXT_EXTS
 #                  矫正后的图像，画回原图时框会整体错位。想试时改成 True 再跑一次。
 USE_DOC_PREPROCESS = False
 MAKE_VIS = True                                  # 跑完自动生成可视化对照报告（建议保持 True）
+SHOW_DEPS = True                                 # 运行时打印「本次用到哪些模块」，想让日志安静改 False
 MANIFEST_NAME = 'samples_manifest.json'          # 说明书文件名，脚本会在输入目录里找它
 # ==========================================================================
 
@@ -92,10 +114,26 @@ os.environ.setdefault('PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK', 'True')
 
 from paddleocr import PaddleOCR  # noqa: E402  （放在 env 设置之后是故意的）
 
-# 文本层 / 纯文本的直读提取（只依赖 pdfplumber + pymupdf，不加载任何 OCR 模型）。
-# 单独成模块是为了让「哪些结果来自像素、哪些来自文字本身」在代码里就分得清。
+# ---------- 本项目的 3 个依赖模块（对应关系见文件头「脚本之间怎么串起来」）----------
+# ① case_naming.py —— 纯函数，全程用：list_cases() / case_rel_name() / save_results() / main()
+import case_naming as naming                # noqa: E402
+# ② text_layer_extract.py —— 只依赖 pdfplumber + pymupdf，不加载任何 OCR 模型。
+#    单独成模块是为了让「哪些结果来自像素、哪些来自文字本身」在代码里就分得清；
+#    只在 build_case_record() 的 PDF / CSV 分支调 extract_case()。
 from text_layer_extract import extract_case  # noqa: E402
-import case_naming as naming                # noqa: E402  命名 / 分组 / 排序规则的唯一真相源
+# ③ vis_ocr_result.py 不在这里 import —— 它在 main() 里懒加载，见下方 MAKE_VIS 分支。
+
+
+def show_dependencies():
+    """
+    运行时打印「本次会用到哪些模块」，让调用关系不只写在注释里，跑一次也能看见。
+    由配置区 SHOW_DEPS 控制；这里只打印文本，不额外 import 任何东西
+    （① ② 已在文件顶部加载完，③ 要等画报告时才加载）。
+    """
+    print('>> 本次运行会用到的模块（主入口：a_batch_ocr.py）：')
+    print('   ① case_naming.py         命名 / 分组 / 排序（已随本脚本加载）')
+    print('   ② text_layer_extract.py  PDF / CSV 直读（已随本脚本加载）')
+    print('   ③ vis_ocr_result.py      对照报告（画报告时才加载，懒加载）')
 
 
 def list_cases(src_dir):
@@ -173,12 +211,18 @@ def prepare_case_dir(case_abs):
 
 
 def report_stale_cases(current_rels):
-    """旧编号残留的 case 目录只提示、不自动删，避免误删你放进去的东西。"""
+    """
+    旧编号残留的 case 目录只提示、不自动删，避免误删你放进去的东西。
+
+    pages / __pycache__ 这类非 case 目录不算「废弃 case」，直接跳过 ——
+    它们不是某个输入对应的输出，提示出来只会让人误会。
+    """
     if not os.path.isdir(OUT_ROOT):
         return
     stale = sorted(name for name in os.listdir(OUT_ROOT)
                    if os.path.isdir(os.path.join(OUT_ROOT, name))
-                   and name not in current_rels)
+                   and name not in current_rels
+                   and name not in (PAGES_SUBDIR, '__pycache__'))
     if stale:
         print(f'>> 提示：有 {len(stale)} 个旧 case 目录已不再对应输入（不会自动删除）：')
         for name in stale:
@@ -392,6 +436,8 @@ def save_results(records):
 
 
 def main():
+    if SHOW_DEPS:
+        show_dependencies()
     # 命令行第一个参数优先于配置区，方便临时指向别的输入目录。
     src_dir = sys.argv[1] if len(sys.argv) > 1 else INPUT_DIR
     cases = list_cases(src_dir)
@@ -464,7 +510,7 @@ def main():
     # 落盘的 JSON / TXT 白跑。函数内 import 是懒加载（第1周 weekend_pipeline 用过）。
     if MAKE_VIS:
         try:
-            from vis_ocr_result import build_report
+            from vis_ocr_result import build_report   # ③ 懒加载：用到才 import
             report = build_report(
                 records,
                 image_dir=src_dir,                                  # 原图要和跑 OCR 时同一个目录
