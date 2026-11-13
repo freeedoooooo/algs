@@ -290,3 +290,35 @@ PPStructureV3，但模型没还原出表 → 仍 skipped、无表格文件；其
 与 HTML 里 `<polygon>`（尖角）+ `stroke-width:2`（vector-effect:non-scaling-stroke）对齐。
 根因其实是「boxes.png 把框烘焙进一张光栅图、缩放会重采样变软；HTML 是把框作为矢量 SVG
 叠在原图上、任意缩放都保持锐利」—— 两者坐标完全相同，差异只是光栅 vs 矢量；改尖角 + 等线宽后两者观感一致。
+
+## 11-13 晚 · 报告两处 UX 修复（框贴合 / 表格直接预览）
+
+**用户反馈**：① index.html 的框还是不贴合，「至少没有以前有个版本看着贴合」；
+② 检测到表格的 case 希望能**在页面直接预览表格**，且看不到说的 CSV 下载链接。
+
+**① 真正根因是 CSS 不是坐标**：`.stage` 是 grid item，默认 stretch 到整行高度
+（= 左图渲染高度 与 右栏 `.pane` 的 620px 滚动区 取较大者），`<img>` 却是按
+宽高比算出的固定高度。旧 CSS `svg{height:calc(100% - 28px)}` 相对 `.stage` 定位，
+右栏被 OCR 行撑高时 svg 比图高，`preserveAspectRatio="none"` 把框非等比拉长。
+按 1500px 卡片实算拉伸比：`01_clear`/`103`/`107` = 1.00×（所以部分 case 一直贴合）、
+`09_dense_small` = 1.03×、`102_real_clear_doc`(2657×609 扁图) = **3.10×**。
+**修法**：img+svg 一起装进 `.imgwrap{position:relative;line-height:0}`，
+svg `left:0;top:0;width:100%;height:100%` 铺满 wrapper（高度恒等于图渲染高），
+viewBox 仍用原图像素 → 拉伸恒 1.00×。校验 24/24 组 viewBox 与图片真实像素一致。
+（上一节说的「光栅 vs 矢量」只是锐利度差异，不是这次的错位原因，别混淆。）
+
+**② 表格原来被埋住了**：`build_extract_html()` 生成的内容塞在右侧 `.pane`
+（`max-height:620px;overflow:auto`）里，且排在 103 的 **226 行 OCR 文字之后** ——
+不滚到最底根本看不到，所以用户以为没有表格预览、也没有 CSV 链接。
+**修法**：新增 `build_tables_section()`，把「提取到的表格」做成卡片**整行宽度、
+默认展开**的区块，放在 `.grid` 之后；每张表直接渲染成带表头的 HTML 表格，
+配「下载 CSV」+「打开 CSV 文件」两个按钮，卡片标题加绿色徽标一键跳转。
+右侧 pane 只保留逐行 OCR + 轻量诊断（`build_diag_html`）。
+未命中表格的 22 个 case 只留一行说明 + 折叠诊断，不占版面。
+**CSV 下载改成 base64 data URI 自包含**（`csv_data_uri()`，UTF-8 BOM），
+预览面板 / 沙箱 iframe 里相对路径取不到本地文件时也能下载；
+另外保留指向真实 `table_N.csv` 的「打开 CSV 文件」链接。
+
+**验证**：只跑 `python vis_ocr_result.py`（秒级，不重跑 OCR）→
+3 个展开表格区块 + 22 个折叠说明 + 3 个下载 CSV 按钮 + 3 个跳转徽标 + 24 个 imgwrap；
+3 个 data URI 解码后分别是 25×8 / 2×8 / 9×5（含表头），与页面预览完全一致。

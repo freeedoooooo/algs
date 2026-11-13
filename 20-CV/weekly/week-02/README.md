@@ -45,7 +45,7 @@
 a_batch_ocr.py   ← 你只运行这一个（主入口 / 编排）
     ├── case_naming.py         ① 文件顶部 import，全程用：命名 / 分组 / 排序
     ├── text_layer_extract.py ② 文件顶部 import，只在 PDF / CSV 分支直读表格
-    ├── table_extract.py      ④ 文件顶部 import；**仅 103 / 107 两个含表格的 case**做表格检测 + CSV 导出
+    ├── table_extract.py      ④ 文件顶部 import；**对每个 case 都做表格检测**，命中才导出 CSV
     └── vis_ocr_result.py     ③ main() 里「用到才 import」：画对照报告
 ```
 
@@ -54,8 +54,8 @@ a_batch_ocr.py   ← 你只运行这一个（主入口 / 编排）
 | `a_batch_ocr.py` | 主入口：遍历 case、跑 OCR、落盘 | 你（命令行） | — | 是，`python a_batch_ocr.py` |
 | `case_naming.py` | 命名 / 分组 / 排序的唯一真相源 | **5 个脚本**（见下） | 各脚本 import 时 | 否，纯函数模块、无 main |
 | `text_layer_extract.py` | PDF 文本层 / CSV 直读，不加载模型 | `a_batch_ocr.py`、`table_extract.py`，也可单独调试 | a 的文件顶部 | 是，`python text_layer_extract.py`（只测直读） |
-| `table_extract.py` | 表格检测 + 结构化 + 导出 CSV（**只对 103/107 生效**） | `a_batch_ocr.py`，也可单独调试 | a 的文件顶部；**内部的表格模型按需懒加载** | 是，`python table_extract.py`（默认测 103 + 107） |
-| `vis_ocr_result.py` | 画原图 + 识别框 + 表格提取区块的 HTML | `a_batch_ocr.py`，也可直接运行 | **懒加载**，画报告时才 import | 是，`python vis_ocr_result.py` |
+| `table_extract.py` | 表格检测 + 结构化 + 导出 CSV（**全量检测、命中才写文件**） | `a_batch_ocr.py`，也可单独调试 | a 的文件顶部；**内部的表格模型按需懒加载** | 是，`python table_extract.py`（默认测 103 + 107） |
+| `vis_ocr_result.py` | 画原图 + 识别框 + 整宽表格预览区块的 HTML | `a_batch_ocr.py`，也可直接运行 | **懒加载**，画报告时才 import | 是，`python vis_ocr_result.py` |
 
 `case_naming.py` 是公共底座，除 a 外还有 4 个调用方：
 `c_try_params.py`（自动挑默认图）、`make_samples.py`（生成 / 补登记样本）、
@@ -81,6 +81,7 @@ a_batch_ocr.py   ← 你只运行这一个（主入口 / 编排）
 | 103 的文本层表格抽得对不对（策略 / 行列数 / 列边界模板 / 诊断） | `text_layer_extract.py` 单独调试 | `python text_layer_extract.py` | 毫秒级，不加载模型、不写正式产物 |
 | 103 / 107 的**表格结构化和 CSV** 对不对（表头 / 数据行 / 提取路线） | `table_extract.py` 单独调试 | `python table_extract.py` | 103 毫秒级；107 首次加载表格模型约 23s |
 | OCR 识别框 vs 结构化表格并排、带框 PNG、报告卡片 | `a_batch_ocr.py` 完整流水线 | `python a_batch_ocr.py` | 约 130s，跑全量 25 个 case |
+| **只重画报告**（改了框样式 / 表格区块布局，不重跑 OCR） | `vis_ocr_result.py` 独立运行 | `python vis_ocr_result.py` | 秒级，从各 case 的 `result.json` 读回 |
 
 `text_layer_extract.py` 不传参数时默认测配置区的 `DEBUG_CASE`
 （`103_real_bank_statement_textlayer.pdf`），打印类型 / 文本层 / CropBox、
@@ -139,16 +140,21 @@ a_batch_ocr.py   ← 你只运行这一个（主入口 / 编排）
 |---|---|
 | `tables.json` | 结构化表格（标题 / 表头 / 数据行 / 行列数 / 填充率）+ 提取路线 + 诊断 |
 | `table_1.csv` | 第一行是表头，`utf-8-sig` 编码，Excel 双击不乱码 |
-| `index.html` 卡片下方 | 「表格提取」主区块：带表头的表格 + CSV 下载链接；原始抽取收进折叠区 |
+| `index.html` 卡片整行 | 「提取到的表格」区块：直接渲染成带表头的 HTML 表格预览 + 「下载 CSV」+「打开 CSV 文件」 |
 
 > 想整体关闭表格提取，把 `a_batch_ocr.py` 的 `TABLE_EXTRACT` 改成 `False` 即可；
 > 不需要再维护 case 白名单。
 
-注意区分两处表格展示：报告里所有 **PDF / CSV 卡片**本来就有「直读结果」区块
-（直接读文本层 / 纯文本抽出的表，字符无损，不加载模型）；**只有 103 / 107**
-额外再有上面的「表格提取」结构化区块 + CSV 导出。想关掉表格增强：
-`a_batch_ocr.py` 的 `TABLE_EXTRACT=False`（全部关），或 `table_extract.py`
-的 `ENABLE_TABLE_MODEL=False`（只关 107 的图片表格模型，保留 103 直读）。
+**报告里表格怎么预览（11-13 晚定稿）**：所有 case 都跑检测，但只有**命中表格的
+case** 才在卡片里展开一个占整行宽度的「提取到的表格」区块 —— 表格本体直接渲染
+成 HTML 表格（表头 + 数据行，可滚动），上方有「下载 CSV」按钮和「打开 CSV 文件」
+链接；标题上的绿色徽标可一键跳转。未命中表格的 case 只留一行诊断，点开可看原因。
+「下载 CSV」用 base64 data URI 把内容内嵌在 HTML 里，所以在预览面板 / 沙箱 iframe
+中也能下载，不依赖相对路径能否取到本地文件；「打开 CSV 文件」则指向真实落盘的
+`table_N.csv`。原始抽取记录、抽取诊断、CSV 原文都收进折叠区，数据不丢。
+
+想关掉表格增强：`a_batch_ocr.py` 的 `TABLE_EXTRACT=False`（全部关），或
+`table_extract.py` 的 `ENABLE_TABLE_MODEL=False`（只关图片表格模型，保留文本层直读）。
 
 **为什么不慢**：表格模型首次加载约 23s，但 ① 只有长直线预筛命中的 case
 才加载（18 张合成图竖线数全是 0，直接跳过）；② 模型做成模块级单例，
@@ -257,6 +263,37 @@ CSV 直接按文本解析、完全不跑模型。报告里同一个 PDF 卡片�
 实现放在 `text_layer_extract.py`；`103_real_bank_statement_textlayer.pdf` 已配好
 9 条竖线模板，能拆出正确的 8 列表头。模板按「去掉数字编号后的语义名」登记，
 所以以后把 103 改成 108、或复制出新 case，模板照样命中，不用跟着改字典。
+
+### 为什么报告里的识别框以前会「不贴合」（11-13 晚修复）
+
+**不是坐标算错，是 CSS 把 SVG 纵向拉伸了。** `.stage` 是 grid 项，默认被
+`stretch` 成整行高度（= 左图渲染高度 与 右栏 `620px` 滚动区取较大者）；
+但 `<img>` 是按自身宽高比算出的**固定高度**。旧版
+
+```css
+.stage svg{position:absolute;left:14px;top:14px;
+           width:calc(100% - 28px);height:calc(100% - 28px)}
+```
+
+让 svg 相对 `.stage` 定位，右栏被 OCR 行撑高时 svg 就比图高一截，配合
+`preserveAspectRatio="none"` 把框**非等比拉长**，越靠下偏得越多。实测：
+`01_clear`(12行)/`103`(226行但图很高)/`107` 恰好 1.00× 正常，而
+`09_dense_small`(35行) 1.03×、`102_real_clear_doc`(21行，图很扁) **3.10×** ——
+这正好解释了「有的 case 看着贴合、有的明显不贴合」。
+
+修法是把 `img` 和 `svg` 一起装进 `.imgwrap`：
+
+```css
+.imgwrap{position:relative;line-height:0}      /* 高度由 img 撑起 */
+.stage img{display:block;width:100%;height:auto}
+.stage svg{position:absolute;left:0;top:0;width:100%;height:100%}
+```
+
+wrapper 高度恒等于图片渲染高度，svg 100%/100% 铺满它，`viewBox` 仍是原图
+像素尺寸，拉伸比恒为 1.00×，与 `boxes.png`（同一份坐标直接画在图上）完全同源。
+生成后已校验 **24/24** 组 `img+svg` 的 `viewBox` 与图片真实像素一致。
+带框 PNG 也同步改成 `width=2` 尖角（去掉 `joint='curve'` 的圆角外鼓），
+与 HTML 的 `<polygon>` + `stroke-width:2` 观感对齐。
 
 **批量跑参考代码**（`python a_batch_ocr.py` 直接跑 `input/` 下所有 case；也可
 `python a_batch_ocr.py ../week-01/input` 临时换目录。脚手架已按本机

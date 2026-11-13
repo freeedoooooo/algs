@@ -28,6 +28,8 @@
 - 只取文字、不需要坐标时可保留默认：实测 UVDoc 会让亮字暗底终端截图识别更好（6 行/0.90 vs 关闭后 4 行/0.17），属质量与坐标的权衡。
 - week-02 已做成配置区开关 `USE_DOC_PREPROCESS`（默认 False）。week-01（2026-11-12 优化后）：`b_ocr_image.py` 要画框，同样默认关闭并产出带框 PNG + 自包含 HTML；`weekend_pipeline.py` 只取文字不画框，**刻意保留默认开启**，两者不要统一。
 - 用户不接受只看 JSON 的结果呈现；OCR 结果一律配「带框 PNG + 离线 HTML 对照报告」。
+- **HTML 报告里叠加识别框的框必须 1:1 贴合（2026-11-13 晚定稿）**：`<img>` 与 `<svg>` 必须一起包进 `position:relative` 的 wrapper（`line-height:0`），svg 用 `left:0;top:0;width:100%;height:100%` 铺满，`viewBox` 用原图像素尺寸。**禁止**让 svg 相对被 grid stretch 的 `.stage` 用 `calc(100% - 28px)` 定位 —— 右栏内容高时会把框非等比纵向拉长（实测扁图 102 达 3.10×）。带框 PNG 用 `width=2` 去掉 `joint='curve'` 圆角，与 HTML `<polygon>` + `stroke-width:2` 对齐。
+- **报告里的表格必须整行宽度、默认展开直接预览（2026-11-13 晚）**：不要把表格塞进有 `max-height:620px;overflow:auto` 的右侧 pane（前面还有几百行 OCR 文字，用户滚不到、会以为没有表格）。检测到的表格放在 `.grid` 之后的整宽区块，直接渲染带表头的 HTML 表格 + 跳转徽标 + 诊断折叠区；未检测到的只留一行说明。**「下载 CSV」用 base64 data URI 自包含**（预览面板/沙箱 iframe 相对路径取不到本地文件时会失效），另保留指向真实 `table_N.csv` 的链接。改报告样式只需 `python vis_ocr_result.py`（秒级读回 result.json），不必重跑 OCR 全量。
 
 ## PaddleX 3.7.0 表格 HTML 导出坑（2026-11-13 实测）
 - `result.save_to_html(文件路径)` 内部是 `html[list(html.keys())[0]]`；`res.html` 为空字典（这一页没表格）时抛 `IndexError`。多页 PDF 里证书扫描页必踩，不是识别失败。

@@ -21,14 +21,19 @@ result.json 里只有文字和坐标，读起来不直观：
     output/a_batch_ocr/<输入名>/boxes.png         原图 + 彩色识别框 + 行号（纯文本没有图，不生成）
 
 报告的每张卡片：
-      左边 = 原图，识别框以 SVG 叠加在图上，鼠标悬停会互相高亮
+      左边 = 原图 + SVG 识别框（包在同一个 .imgwrap 里，1:1 贴合）
       右边 = 逐行文字 + 置信度条，低置信度行标橙红色
-      下方 = 标准答案对照（若有）、**所有 case 共有的「表格提取」区块**
+      整行 = **「提取到的表格」区块**：检测到的表格直接渲染成 HTML 表格预览，
+             并给「下载 CSV」（data URI 自包含）与「打开 CSV 文件」两个入口
       顶部 = 全部 case 的汇总指标，可一键只筛「有问题的 case」
-   11-13 下午改版：原来「直读结果」只对 PDF / CSV 显示，图片卡片是空的；
-      现在三类输入都有表格区块，主角是 table_extract.py 产出的结构化表格
-      （带表头、标题、可下载 CSV），原始抽取记录与诊断收进折叠区。
-      103 银行流水 / 107 备案名单这两张表因此成为卡片里最显眼的内容。
+   11-13 晚改版（用户反馈「框不贴合 / 看不到表格预览和 csv 下载」）：
+      ① 框不贴合的根因是 CSS：.stage 是 grid item，会被 stretch 到整行高度，
+         旧版 svg 用 height:calc(100% - 28px) 相对 .stage 定位，而 <img> 是
+         按宽高比算出的固定高度；右栏行多时 svg 被纵向拉长，框越靠下偏越多。
+         改成 img+svg 一起装进 .imgwrap，svg 100%/100% 铺满 wrapper 即精准。
+      ② 表格原来塞在右侧 .pane（max-height:620px + 前面 226 行 OCR 文字）里，
+         要滚到最底才看得到。改成卡片整行宽度、默认展开的独立区块。
+      ③ CSV 下载改成 base64 data URI 自包含，预览面板 / 沙箱 iframe 里也能下载。
 
 【与第1周一致的产物隔离】
 每个输入一个目录，报告只在根目录放跨 case 的汇总。
@@ -74,6 +79,9 @@ import os
 import sys
 import json
 import html
+import csv
+import io
+import base64
 import shutil
 from urllib.parse import quote            # 把文件名转成 URL 安全的写法
 
@@ -232,9 +240,17 @@ button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
 .metrics b{font-weight:600}
 .grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(330px,.85fr)}
 .stage{position:relative;background:#eceff3;padding:14px;border-right:1px solid var(--line)}
+/* ★ 11-13 修「框不贴合」：.stage 是 grid item，默认被 stretch 成「整行高度」
+   （= 左图渲染高度 与 右栏 620px 滚动区 取较大者）。旧版 svg 用
+   height:calc(100% - 28px) 相对 .stage 定位，而 <img> 是按自身宽高比算出的
+   固定高度 —— 右栏比图高时（09/102/103 这类行多的 case）svg 被纵向拉长
+   5%~10%，preserveAspectRatio="none" 再把框非等比拉伸，越靠下偏得越多。
+   现在 img+svg 一起装进 .imgwrap：wrapper 高度由 img 撑起、恰好等于图片
+   渲染高度，svg 100%/100% 铺满 wrapper，viewBox 仍是原图像素尺寸 ——
+   无论 grid 怎么拉伸，框和图像永远 1:1，与 boxes.png 完全同源同尺寸。 */
+.imgwrap{position:relative;line-height:0}
 .stage img{display:block;width:100%;height:auto}
-.stage svg{position:absolute;left:14px;top:14px;width:calc(100% - 28px);
-           height:calc(100% - 28px);pointer-events:none}
+.stage svg{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
 .box{fill:rgba(37,99,235,.06);stroke:var(--accent);stroke-width:2;
      vector-effect:non-scaling-stroke}
 .box.low{fill:rgba(222,92,40,.10);stroke:var(--low)}
@@ -273,6 +289,37 @@ details li.miss{color:var(--low)}
   background:#f7f9fc;padding:9px;border-radius:8px;margin:6px 0 0}
 .empty{color:var(--muted);padding:20px}
 a{color:var(--accent)}
+/* ★ 11-13 晚：检测到的表格单独占卡片整行宽度、默认展开。
+   以前它塞在右侧 .pane（max-height:620px 且前面堆了 226 行 OCR 文字）里，
+   要滚到最底才看得到，用户以为「没有表格预览也没有 CSV 下载」。 */
+.tablesec{border-top:1px solid var(--line);padding:16px 18px 18px;background:#fbfcfe}
+.tablesec-head{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px}
+.tablesec-head h3{margin:0;font-size:15px}
+.tablesec-head .cnt{background:var(--accent);color:#fff;border-radius:20px;
+  padding:1px 9px;font-size:12px;font-weight:400}
+.tablesec-head .route{color:var(--muted);font-size:12px}
+.tbl-bar{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin:12px 0 7px;font-size:12px}
+.tbl-bar b{font-size:13px}
+.tbl-bar .meta{color:var(--muted)}
+.btncsv{display:inline-block;padding:4px 12px;border-radius:7px;background:var(--accent);
+  color:#fff;text-decoration:none;font-size:12px;border:1px solid var(--accent)}
+.btncsv:hover{filter:brightness(1.12)}
+.btncsv.ghost{background:#fff;color:var(--accent)}
+.tablesec .tablewrap{max-height:420px;overflow:auto;border:1px solid var(--line);
+  border-radius:8px;background:#fff}
+.tablesec .note{font-size:12px;color:var(--muted);margin:8px 0 6px;line-height:1.5}
+.tablesec .tablewrap table{margin:0}
+.tablesec details .tablewrap{max-height:300px;margin:6px 0 10px}
+.tablesec table{font-size:12px;width:auto;min-width:100%}
+.tablesec th,.tablesec td{border:1px solid var(--line);padding:5px 9px;
+  white-space:nowrap;position:static;background:none;color:var(--ink);font-weight:400}
+.tablesec thead th{background:#eef3fb;font-weight:600;position:sticky;top:0;font-size:12px;
+  color:#25324a}
+.tablesec tbody tr:nth-child(even) td{background:#fafbfd}
+.tablesec .tbl-title{margin:8px 0 0;font-size:12px;color:var(--muted)}
+.tablesec-none{color:var(--muted);font-size:12px}
+.jumptbl{display:inline-block;margin-left:10px;padding:2px 10px;border-radius:20px;
+  background:#e7f8ee;color:#0a7a43;font-size:12px;text-decoration:none;vertical-align:2px}
 @media(max-width:900px){.grid{grid-template-columns:1fr}.stage{border-right:0}}
 """
 
@@ -304,59 +351,92 @@ document.getElementById('filterBtn').addEventListener('click', function(){
 """
 
 
-def build_extract_html(rec, case_href=''):
+def csv_data_uri(headers, rows):
     """
-    渲染右侧下方的「表格提取」区块 —— **所有 case 都有这段**，图片分支不再空白。
+    把表头 + 数据行现编成 base64 data URI，作为「下载 CSV」的链接。
 
-    11-13 下午改版：原来这里只对 PDF / CSV 显示「直读结果」，而且是把
-    pdfplumber 给的 rows 原样平铺；103 的 105 行碎表、107 干脆没有这一段。
-    现在主角换成 table_extract.py 产出的 structured_tables：有表头、有标题、
-    有可下载的 CSV。OCR 的 226 行文字仍在上面当对照，但最关键的表格不再
-    被埋在补充信息里。
-
-    原始抽取记录降级成折叠区（调试用），诊断信息合并进来，不丢数据。
-    case_href 是这个 case 目录相对报告的路径，用来拼 CSV 的下载链接。
+    为什么不直接链到 <case>/table_1.csv：报告常被放进预览面板 / 沙箱 iframe，
+    相对路径的本地文件可能取不到，点「下载」会没反应（用户反馈「并没有 csv 下载」）。
+    data URI 把 CSV 内容直接嵌进 HTML，任何时候点击都能下载，且内容与页面上
+    预览的表格完全一致（同一个 headers/rows）。带 UTF-8 BOM，Excel 打开中文不乱码。
     """
-    kind = rec.get('kind', 'image')
-    raw_tables = rec.get('tables') or []
+    buf = io.StringIO(newline='')
+    writer = csv.writer(buf)
+    if headers:
+        writer.writerow(headers)
+    writer.writerows(rows)
+    payload = ('\ufeff' + buf.getvalue()).encode('utf-8')
+    return ('data:text/csv;charset=utf-8;base64,'
+            + base64.b64encode(payload).decode('ascii'))
+
+
+ROUTE_LABEL = {
+    'text_layer': '文本层直读（字符无损，未加载表格模型）',
+    'table_model': '表格结构模型 PPStructureV3（含整页方向自动校正）',
+    'skipped': '未启用 / 未命中表格网格',
+    'failed': '表格模型失败（OCR 结果不受影响）',
+}
+
+
+def build_tables_section(rec, card_no, case_href=''):
+    """
+    ★ 卡片整行宽度的「提取到的表格」区块，放在 .grid 之后、默认展开可见。
+
+    11-13 晚改版原因：以前表格塞在右侧 .pane 里，而 .pane 有
+    max-height:620px + overflow:auto、前面还堆着 226 行 OCR 文字 —— 用户要
+    滚到最底才看得到，反馈「页面上没有表格预览、也没有 csv 下载」。
+    现在表格单独占一整行、进卡片就能看见；每张表都有：
+        · 直接渲染的 HTML 表格（表头 + 数据行，可横向/纵向滚动）
+        · 「下载 CSV」按钮：data URI 自包含，任何预览环境都能下载
+        · 「打开 CSV 文件」链接：指向 case 目录里真实落盘的 table_N.csv
+    没检测到表格的 case 只留一行说明 + 折叠诊断，不占版面。
+    """
     tables = rec.get('structured_tables') or []
-    route_label = {
-        'text_layer': '文本层直读（字符无损，未加载表格模型）',
-        'table_model': '表格结构模型 PPStructureV3（含整页方向自动校正）',
-        'skipped': '未启用 / 未命中表格网格',
-        'failed': '表格模型失败（OCR 结果不受影响）',
-    }.get(rec.get('table_route', ''), '未运行表格提取（旧结果或开关关闭）')
-
-    parts = [f'<div class="extract"><h3>表格提取：{len(tables)} 张结构化表</h3>']
-    if kind == 'pdf':
-        note = (f'共 {rec.get("pages", 1)} 页 · '
-                + ('有文本层' if rec.get('text_layer') else '无文本层'))
-        if rec.get('cropbox_limited'):
-            note += ' · 预览图已按 MediaBox 整页渲染（含阅读器里看不到的内容）'
-    elif kind == 'csv':
-        note = f'纯文本按 {rec.get("encoding", "?")} 解码 · 不跑 OCR'
-    else:
-        note = '图片输入 · OCR 只给文字行，表格结构由下面的路线补足'
-    parts.append(f'<p class="note">{esc(note)}<br>提取路线：{esc(route_label)}</p>')
+    sec_id = f'tbl-{card_no}'
+    route = rec.get('table_route', '')
+    route_label = ROUTE_LABEL.get(route, '未运行表格提取（旧结果或开关关闭）')
 
     if not tables:
-        parts.append('<p class="note">本 case 未提取到结构化表格。'
-                     '纯文字图 / 证件扫描属正常情况，详见下方诊断。</p>')
+        diag = rec.get('diagnostics') or {}
+        notes = (list(rec.get('table_notes') or [])
+                 + list(diag.get('pages') or []) + list(diag.get('notes') or []))
+        detail = ''
+        if notes:
+            li = ''.join(f'<li>{esc(n)}</li>' for n in notes)
+            detail = (f'<details><summary>为什么没检测到（{len(notes)} 条诊断）</summary>'
+                      f'<ul>{li}</ul></details>')
+        return (f'<div class="tablesec tablesec-none" id="{sec_id}">'
+                f'表格检测：本 case 未检测到表格'
+                f'　<span class="route">路线：{esc(route_label)}</span>'
+                f'{detail}</div>')
+
+    parts = [
+        f'<div class="tablesec" id="{sec_id}">',
+        '<div class="tablesec-head">'
+        f'<h3>提取到的表格</h3><span class="cnt">{len(tables)} 张</span>'
+        f'<span class="route">路线：{esc(route_label)}</span></div>',
+    ]
     for idx, t in enumerate(tables, 1):
-        head = (f'第 {t.get("page", 1)} 页 · {t.get("source", "?")} · '
+        csv_file = t.get('csv_file', f'table_{idx}.csv')
+        file_href = (f'{case_href}/{quote(csv_file, safe="")}' if case_href
+                     else quote(csv_file, safe=''))
+        headers = t.get('headers') or []
+        rows = t.get('rows') or []
+        data_uri = csv_data_uri(headers, rows)
+        meta = (f'第 {t.get("page", 1)} 页 · {t.get("source", "?")} · '
                 f'{t.get("strategy", "?")} · '
                 f'{t.get("n_rows", 0)} 行 × {t.get("n_cols", 0)} 列 · '
                 f'填充率 {t.get("fill_ratio", 0)}'
                 + (' · 低置信度，建议人工核对' if t.get('low_confidence') else ''))
-        csv_file = t.get('csv_file', f'table_{idx}.csv')
-        csv_href = (f'{case_href}/{quote(csv_file, safe="")}' if case_href
-                    else quote(csv_file, safe=''))
-        parts.append(f'<p class="note"><b>表 {idx}</b>　{esc(head)}　'
-                     f'<a href="{csv_href}" target="_blank">下载 {esc(csv_file)}</a></p>')
+        parts.append(
+            f'<div class="tbl-bar"><b>表 {idx}</b>'
+            f'<span class="meta">{esc(meta)}</span>'
+            f'<a class="btncsv" href="{data_uri}" download="{esc(csv_file)}">'
+            f'下载 CSV</a>'
+            f'<a class="btncsv ghost" href="{file_href}" target="_blank">'
+            f'打开 {esc(csv_file)}</a></div>')
         if t.get('title'):
-            parts.append(f'<p class="note">标题：{esc(t["title"])}</p>')
-        headers = t.get('headers') or []
-        rows = t.get('rows') or []
+            parts.append(f'<p class="tbl-title">标题：{esc(t["title"])}</p>')
         thead = ('<thead><tr>' + ''.join(f'<th>{esc(c)}</th>' for c in headers)
                  + '</tr></thead>') if headers else ''
         body = ''.join('<tr>' + ''.join(f'<td>{esc(c)}</td>' for c in r) + '</tr>'
@@ -364,11 +444,7 @@ def build_extract_html(rec, case_href=''):
         parts.append(f'<div class="tablewrap"><table>{thead}'
                      f'<tbody>{body}</tbody></table></div>')
 
-    if rec.get('plain_text'):
-        parts.append('<div class="plain"><p class="note"><b>原文</b></p>'
-                     f'<pre>{esc(rec["plain_text"])}</pre></div>')
-
-    # 诊断：新模块的表格路线说明 + 原来 pdfplumber 的线型 / 策略诊断
+    # 诊断与原始抽取记录收进折叠区，调试时仍可展开，不丢数据。
     diag = rec.get('diagnostics') or {}
     notes = (list(rec.get('table_notes') or [])
              + list(diag.get('pages') or []) + list(diag.get('notes') or []))
@@ -376,8 +452,7 @@ def build_extract_html(rec, case_href=''):
         li = ''.join(f'<li>{esc(n)}</li>' for n in notes)
         parts.append(f'<details><summary>抽取诊断（{len(notes)} 条）</summary>'
                      f'<ul>{li}</ul></details>')
-
-    # 原始抽取记录保留在折叠区：策略调参时要看「pdfplumber 到底给了什么」
+    raw_tables = rec.get('tables') or []
     if raw_tables:
         chunks = []
         for idx, t in enumerate(raw_tables, 1):
@@ -391,8 +466,29 @@ def build_extract_html(rec, case_href=''):
                 f'<div class="tablewrap"><table><tbody>{body}</tbody></table></div>')
         parts.append(f'<details><summary>原始抽取记录（{len(raw_tables)} 张，调试用）'
                      f'</summary>{"".join(chunks)}</details>')
+    if rec.get('plain_text'):
+        parts.append('<div class="plain"><details><summary>原文</summary>'
+                     f'<pre>{esc(rec["plain_text"])}</pre></details></div>')
     parts.append('</div>')
     return ''.join(parts)
+
+
+def build_diag_html(rec):
+    """
+    右侧 .pane 里保留的轻量补充：只放诊断提示（表格本体已移到整宽区块）。
+    这样右侧仍以「逐行 OCR 文字」为主，滚动区不再被表格撑爆。
+    """
+    kind = rec.get('kind', 'image')
+    if kind == 'pdf':
+        note = (f'共 {rec.get("pages", 1)} 页 · '
+                + ('有文本层' if rec.get('text_layer') else '无文本层'))
+        if rec.get('cropbox_limited'):
+            note += ' · 预览图已按 MediaBox 整页渲染'
+    elif kind == 'csv':
+        note = f'纯文本按 {rec.get("encoding", "?")} 解码 · 不跑 OCR'
+    else:
+        note = '图片输入 · 表格（若有）在下方整宽区块直接预览'
+    return f'<div class="extract"><p class="note">{esc(note)}</p></div>'
 
 
 def build_card(rec, card_no, image_dir, out_root, manifest_map):
@@ -446,10 +542,14 @@ def build_card(rec, card_no, image_dir, out_root, manifest_map):
                 f'points="{point_str}"><title>#{i + 1} {esc(tip)} (score={score:.2f})'
                 f'</title></polygon>'
             )
+        # img + svg 必须包在同一个 .imgwrap 里：wrapper 高度由 img 撑起，
+        # svg 用 100%/100% 铺满它，viewBox 是原图像素尺寸 → 框与图 1:1 对齐。
+        # 不能让 svg 直接相对 .stage 定位（grid 拉伸会把框纵向拉长，见 CSS 注释）。
         left = (
-            f'<div class="stage"><img src="{src}" alt="{esc(name)}">'
+            f'<div class="stage"><div class="imgwrap">'
+            f'<img src="{src}" alt="{esc(name)}">'
             f'<svg viewBox="0 0 {w} {h}" preserveAspectRatio="none">'
-            f'{"".join(polys)}</svg></div>'
+            f'{"".join(polys)}</svg></div></div>'
         )
         extra = (
             f'<a href="{src}" target="_blank">查看原图副本</a> · '
@@ -511,6 +611,9 @@ def build_card(rec, card_no, image_dir, out_root, manifest_map):
     # 所以不能像以前那样只在非图片分支显示。
     table_metric = (f'<span><em>结构化表格</em> <b>{n_struct}</b></span>'
                     if n_struct or kind != 'image' else '')
+    # 有表格时给个直达锚点，不用自己往下翻。
+    jump_tbl = (f'<a class="jumptbl" href="#tbl-{card_no}">'
+                f'↓ 查看 {n_struct} 张表格</a>' if n_struct else '')
     if kind == 'image':
         # 图片分支：低置信 / 识别失败 / 整图漏检 / 标准答案未命中，都算「有问题」
         problem = 1 if (low_lines or rec.get('error') or not texts
@@ -525,7 +628,7 @@ def build_card(rec, card_no, image_dir, out_root, manifest_map):
         f'<div class="card-head"><h2>{esc(name)}</h2>'
         f'<span class="tag">{esc(category)}</span>'
         f'<span class="tag {"tag-real" if group == "real" else ""}">'
-        f'{group_label}</span>'
+        f'{group_label}</span>{jump_tbl}'
         f'<div class="desc">退化 / 来源：{esc(distortion)}　·　{extra}</div>'
         f'<div class="metrics">'
         f'<span><em>识别行数</em> <b>{rec.get("lines", 0)}</b></span>'
@@ -539,11 +642,14 @@ def build_card(rec, card_no, image_dir, out_root, manifest_map):
     right = (
         f'<div class="pane"><table><thead><tr><th>#</th><th>识别文字</th>'
         f'<th>置信度</th></tr></thead><tbody>{"".join(rows)}</tbody></table>'
-        f'{details}{build_extract_html(rec, case_href)}</div>'
+        f'{details}{build_diag_html(rec)}</div>'
     )
+    # 表格单独占卡片整行宽度，放在 .grid 之后 —— 不用滚右侧 620px 的小窗。
+    tables_html = build_tables_section(rec, card_no, case_href)
     return (
         f'<section class="card" data-problem="{problem}">{head}'
-        f'<div class="grid">{left}{right}</div></section>'
+        f'<div class="grid">{left}{right}</div>'
+        f'{tables_html}</section>'
     )
 
 
@@ -615,9 +721,9 @@ def build_report(records, image_dir=IMAGE_DIR, out_root=OUT_ROOT,
         f'{esc(model.get("rec", "?"))}　·　'
         '左图彩色框 = OCR 检测到的文字行（绿=正常，橙红=低置信度），'
         '鼠标移到右侧任意一行，左图对应框会高亮。'
-        '每个 case 卡片下方是「表格提取」：有文本层 PDF / CSV 直接读字符，'
-        '图片 / 扫描件则用表格结构模型还原行列，两者都会给出带表头的表格和'
-        '可下载的 CSV；原始抽取记录与诊断放在折叠区。'
+        '检测到表格的 case 在卡片下方有整行宽度的「提取到的表格」：'
+        '直接渲染成带表头的表格供预览，并配「下载 CSV」与「打开 CSV 文件」两个入口；'
+        '未检测到表格的 case 只留一行诊断。卡片标题上的绿色徽标可一键跳转。'
         '01~18 是合成样本；101~ 起编号的 1xx_real_* 是真实 case，恒排最后。'
         '每个 case 的 result.json、tables.json、table_N.csv、带框 PNG、原图副本'
         '都在同名目录里，卡片上可直接点开。</div>\n'
