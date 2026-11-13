@@ -166,7 +166,23 @@ for b in res.json['res']['parsing_res_list']:
 
 ### 周末 · 串成 pipeline + bad case 库雏形（4-6h）
 
-1. **串脚本**：把模块 B/C/D 合起来——`输入一个 PDF → 判断有无文本层 → 有则抽字/无则转图 OCR → 表格走 PP-Structure → 输出一个结构化 txt/json`。这是你**第一个能拿出手的小工具**。（`weekend_pipeline.py` 三个 TODO 已补全，并补了面向初学者的逐行注释；直接 `python weekend_pipeline.py` 即可跑，OCR 分支的中间页图用完会自动清理，想留着核对就把配置区 `KEEP_TEMP_IMAGES` 改成 `True`。）输入统一放 `input/`，产物统一放 `output/`，目录已建好。
+1. **串脚本**：把模块 B/C/D 合起来——`输入文件 → 判断该走哪条路 → 输出结构化 txt/json`。这是你**第一个能拿出手的小工具**。（`weekend_pipeline.py` 三个 TODO 已补全，并补了面向初学者的逐行注释。）
+
+   **现在直接 `python weekend_pipeline.py` 就会批量跑 `input/` 下所有 case**，不用再手改输入路径。它按后缀分三条路：PDF 判断文本层（有则 `pdfplumber` 抽字、无则转图逐页 OCR）、图片直接 OCR、CSV/TXT 直接读（连模型都不用加载）。
+
+   **每个输入单独一个输出目录**，互不覆盖、方便对照：
+
+   ```text
+   output/
+     test1/          output.json + pipeline_result.txt
+     test2/          output.json + pipeline_result.txt + pipeline_table_p0.html
+     test3/          output.json + pipeline_result.txt
+     test3_image/    output.json + pipeline_result.txt + pipeline_table_p1.html
+     test4/          output.json + pipeline_result.txt
+     batch_summary.json / batch_summary.txt   ← 所有 case 的总览表
+   ```
+
+   只跑一个文件：`python weekend_pipeline.py input/test3.pdf`；跑别的目录：`python weekend_pipeline.py ../week-02/input`。新增 case 只要丢进 `input/` 就会自动被扫到（支持 `.pdf` / 常见图片 / `.csv .txt .md`，见配置区 `SUPPORTED_EXTS`）。OCR 分支的中间页图跑完自动清理，想留着核对把 `KEEP_TEMP_IMAGES` 改成 `True`；表格识别每页约 +20s，只想快速看文字把 `ENABLE_TABLE` 改成 `False`。输入统一放 `input/`，产物统一放 `output/`，目录已建好。
 2. **bad case 库雏形**：建一个文件夹 `bad_cases/`，把你跑的过程中**识别错、识别不全、模糊/倾斜/反光**的样本图存进去，附一个 `notes.md` 记"这张为什么失败"。**这是第 2 周和 P4 的宝贵素材，现在就开始攒。**
 
 ---

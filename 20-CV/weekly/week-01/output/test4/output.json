@@ -1,0 +1,41 @@
+{
+  "source": "input\\test4.csv",
+  "out_dir": "output\\test4",
+  "kind": "plain_text",
+  "mode": "plain_text",
+  "text": "交易日期,借,贷,余额,摘要,收(付)方名称,收(付)方账号,交易类型\r\n2021/11/29 15:42,0,56,56,上海保洁月费-程,,,代发款项\r\n",
+  "chars": 79,
+  "pages": 1,
+  "text_scope": "file_content",
+  "cropbox_limited": false,
+  "elapsed": 0.0,
+  "tables": [
+    {
+      "page": 0,
+      "source": "csv",
+      "rows": [
+        [
+          "交易日期",
+          "借",
+          "贷",
+          "余额",
+          "摘要",
+          "收(付)方名称",
+          "收(付)方账号",
+          "交易类型"
+        ],
+        [
+          "2021/11/29 15:42",
+          "0",
+          "56",
+          "56",
+          "上海保洁月费-程",
+          "",
+          "",
+          "代发款项"
+        ]
+      ]
+    }
+  ],
+  "encoding": "gbk"
+}

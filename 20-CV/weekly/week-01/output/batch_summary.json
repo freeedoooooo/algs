@@ -1,0 +1,57 @@
+[
+  {
+    "source": "input\\test1.jpg",
+    "out_dir": "output\\test1",
+    "kind": "image",
+    "mode": "ocr",
+    "pages": 1,
+    "chars": 254,
+    "tables": 0,
+    "elapsed": 23.13,
+    "ok": true
+  },
+  {
+    "source": "input\\test2.jpg",
+    "out_dir": "output\\test2",
+    "kind": "image",
+    "mode": "ocr",
+    "pages": 1,
+    "chars": 169,
+    "tables": 1,
+    "elapsed": 10.53,
+    "ok": true
+  },
+  {
+    "source": "input\\test3.pdf",
+    "out_dir": "output\\test3",
+    "kind": "pdf",
+    "mode": "text_layer",
+    "pages": 1,
+    "chars": 2054,
+    "tables": 0,
+    "elapsed": 0.5,
+    "ok": true
+  },
+  {
+    "source": "input\\test3_image.pdf",
+    "out_dir": "output\\test3_image",
+    "kind": "pdf",
+    "mode": "ocr",
+    "pages": 5,
+    "chars": 1750,
+    "tables": 1,
+    "elapsed": 60.11,
+    "ok": true
+  },
+  {
+    "source": "input\\test4.csv",
+    "out_dir": "output\\test4",
+    "kind": "plain_text",
+    "mode": "plain_text",
+    "pages": 1,
+    "chars": 79,
+    "tables": 1,
+    "elapsed": 0.0,
+    "ok": true
+  }
+]

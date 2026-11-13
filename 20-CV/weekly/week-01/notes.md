@@ -7,15 +7,18 @@
 > 3.x API 的 4 个坑、PDF 的 MediaBox/CropBox 专题、bad case 素材）
 > 📌 2026-11-09 补：`weekend_pipeline.py` 三个 TODO 已完成，并补了面向初学者的详细注释。
 > 📌 2026-11-12 补：四个脚本做了一轮工程优化，见文末「2026-11-12 优化记录」。
+> 📌 2026-11-13 补：流水线改成**批量扫 `input/` + 每个 case 独立输出目录**，
+> 并新增图片 / CSV 两条分支，见文末「2026-11-13 优化记录」。
 
 ## 我跑通了什么
 - ✅ 环境：miniforge 环境名 `paddle`（`conda activate paddle`），Python 3.10.9，`requirements.txt` 全锁版本
 - ✅ `b_ocr_image.py`：test2.jpg 识别 20 行，置信度 0.88~1.00（换 mobile 模型后 5.8~12.4s）；2026-11-12 起额外产出带框 PNG + 离线 HTML 对照报告
 - ✅ `c_pdf_text_layer.py`：test3.pdf 0.34s 抽出 2054 字符；转图分支可用；新增逐页字符数概览
 - ✅ `d_table_ocr.py`：test2.jpg → 4 个内容块 + 表格 HTML（乱码已修）
-- ✅ `weekend_pipeline.py`：三个 TODO 补全；默认 `test3.pdf` 跑通 →
-  `mode=text_layer`、1 页、2054 字符、0.53s，输出 `output/output.json` + `pipeline_result.txt`
-- ✅ `weekend_pipeline.py` 的 OCR 分支首次实跑通过：`test3_image.pdf` 5 页 → 197 行 / 1750 字符 / 35.48s（关闭表格开关），中间页图 5/5 自动清理
+- ✅ `weekend_pipeline.py`：三个 TODO 补全；**2026-11-13 起改为批量跑 `input/` 全部 case**，
+  不再手改输入路径。每个输入单独输出到 `output/<文件名>/`，总览写在
+  `output/batch_summary.json` / `.txt`。实跑 5/5 成功（2 图片 + 2 PDF + 1 CSV）
+- ✅ `weekend_pipeline.py` 的 OCR 分支首次实跑通过：`test3_image.pdf` 5 页 → 197 行 / 1750 字符 / 35.48s（关闭表格开关），中间页图 5/5 自动清理；批量模式下默认开表格重跑为 60.11s，产物仍落在自己的目录里
 - ✅ `b`、`d` 已改成 `main()` + 主程序守卫（2026-11-12 优化）；`import` 三个模块仅 0.38s，不再加载模型
 - ⬜ 3B1B 第 1 集：笔记里没记录，需自评
 
@@ -66,6 +69,42 @@
   b 产出 21 行 + 带框图（目视确认框精确套字）+ 自包含 HTML（charset / base64 / 21 行表格齐备）；
   c 两条分支正常（扫描件转 5 张图 0.72s；文本层 2054 字符 0.34s，逐页字符数 `[2054]`）；
   d 4 个内容块 + HTML 无嵌套无乱码；weekend 文本层 0.48s / 2054 字符，OCR 分支首次跑通。
+
+## 2026-11-13 优化记录（流水线批量化 + 输出隔离）
+
+**要解决的问题**：流水线的定位是「把 b/c/d 串起来」，但原来每次跑都要手改配置区
+`INPUT_PDF`；而且所有结果都写 `output/output.json`，换一个输入就把上一个覆盖掉了，
+不同 case 的产物混在一起没法对照。
+
+- **批量入口**：配置区 `INPUT_PDF` → `INPUT_DIR='input'`。`collect_cases()` 扫描目录、
+  按文件名排序、只保留 `SUPPORTED_EXTS` 里的类型；`run_batch()` 循环调用 `run()`，
+  单个 case 出错只记一笔失败、继续跑下一个（和 week-02 `a_batch_ocr.py` 同款写法）。
+  新增 case 只要丢进 `input/`，下次运行自动被扫到。
+- **每个 case 独立目录**：`case_out_dir()` 按文件名（去后缀）生成 `output/<stem>/`，
+  用一个 `set` 记录已用过的名字，处理 `a.pdf` 与 `a.jpg` 这种重名撞车。
+  `OUT_JSON` / `OUT_TXT` 从「完整路径」改成「文件名」，由 `save_result()` 拼到各自目录里。
+  中间页图、表格 HTML 也全部跟着传 `out_dir`，不再堆在 `output/` 根目录互相覆盖。
+  顺带解决了一个历史隐患：根目录 `_tmp_page_0~4.png` 已被 git 跟踪，
+  以前跑默认 OCR 分支会覆盖并删除它们；现在中间图在子目录里，不会碰那 5 张。
+- **补齐两条分支**（否则「所有 case」会漏掉 3 个）：图片直接 `ocr_image()`（没有文本层概念，
+  也绝不清理输入原图）；`.csv/.txt/.md` 直接读文本、完全不加载模型。
+  `input/test4.csv` 是 Excel 另存的 **GBK** 中文，直接按 utf-8 读会报错/乱码，
+  所以 `read_plain_text()` 按 `utf-8-sig → gbk → latin-1` 逐个试编码，
+  并把实际用的编码记进结果字典 —— 和 d 的 HTML 乱码是同一类「字节没错、解码规则没说清」问题。
+  CSV 另用 `csv.reader` + `io.StringIO` 解析成表格，三条分支的 `tables` 就都有产出了。
+- **汇总表**：`output/batch_summary.json` / `.txt` 列出每个 case 的
+  类型 / 识别方式 / 页数 / 字符数 / 表格数 / 耗时 / 输出目录。
+  统计表格数时踩了一个口径坑：OCR 分支的 `tables` 里是「**每页一条检查记录**」
+  （哪怕该页 0 个表格），文本层/CSV 分支则是「一个元素 = 一张表」，
+  所以加了 `count_tables()` 区分，否则 `test3_image` 会被虚报成 5 个表格（实际 1 个）。
+- **向后兼容**：`main()` 不带参数 = 跑全目录；带一个文件 = 只跑它（仍单独建目录）；
+  带一个目录 = 跑指定目录。`run(input_path, out_dir=None)` 也保留默认参数，
+  别的文件 `import` 后直接 `run('a.pdf')` 仍然可用。
+- **验证**：`py_compile` 通过；默认配置（表格开启）完整批量 5/5 成功、94.33s；
+  `test1.jpg` 254 字 / `test2.jpg` 169 字 / `test3.pdf` 2054 字 /
+  `test3_image.pdf` 1750 字 / `test4.csv` 79 字（gbk）；中间图 5/5 自动清理；
+  两个表格 HTML 均带 `charset="utf-8"`、无嵌套；单文件模式、空目录提示、
+  不支持类型提示均正常；`output/` 根目录原有历史文件一张没动。
 
 ## 疑问（留着后面阶段解答）
 - 为什么亮字暗底会几乎全军覆没？检测阶段到底在看什么特征？（week-02 反色实验 / P4）

@@ -1,0 +1,54 @@
+{
+  "source": "input\\test3_image.pdf",
+  "out_dir": "output\\test3_image",
+  "kind": "pdf",
+  "mode": "ocr",
+  "text": "--- 第 1 页 ---\n营业执照\n统一社会信用代码\n\n\n扫描市场主体身份码\n了解更多登记、备案、\n91110000599649382G\n(副 本)(3-1)\n许可、监管信息，体\n验更多应用服务，\n名\n称\n（特殊普通合\n出资\n师事务所\n额\n人民币元12129万元\n类\n型\n成立日期\n日\n2012年07月10日\n卫\n\n平\n执行事务合伙人\n邹俊\n主要经营场所\n北京市东城区东长安街1号东方广场东2\n座办公楼8层\n一\n经营范围\n报告；办理企业合并、分立、清算事宜中的审计业务，出具有\n关报告；基本建设年度财务决算审计；代理记账；会计咨询、\n场\n监\n税务咨询、管理咨询、会计培训；法律、法规规定的其他业务。\n（市场主体依法自主选择经营项目，开展经营活动：依法须经\n批准的项目，经相关部门批准后依批准的内容开展经营活动；\n不得从事国家和本市产业政策禁止和限制类项目的经营活动。：\n登\n国\n关\n\n2025年03月06日\n市场主体应当于每年1月1日至6月30日通过\n国家企业信用信息公示系统网址：http://www.gsxt.gov.cn\n国家市场监督管理总局监制\n国家企业信息公示系统报送公示年度报告，\n--- 第 2 页 ---\n中华人民共和国财政部\n会计司\nMinistryofFinance ofthePeoplesRepubllcofChina\n消输入关诞子\n会计司\n理\n返回主站\n2021年03月11日星期四\n当前位置：首页>工作通知\n从事证券服务业务会计师事务所备案名单及基本信息\n（截至2020年10月10日）\n从事证券服务业务会计师事务所备案名单\n序号\n会计师事务所名称\n统一社会信用代码\n执业证书编号\n备案公告日期\n1\n安永华明会计师事务所（特殊普通合伙）\n91110000051421390A\n11000243\n2020-11-02\n2\n北京国富会计师事务所（特殊昔通合伙）\n91110108MA007YB00G\n11010274\n2020-11-02\n3\n北京兴华\n合伙）\n911101020855463270\n11000010\n2020-11-02\n4\n毕马威华拓会计师事务所（特殊者通\n合伙）\n91110000599649382G\n11000241\n2020-11-02\n5\n大年\n会计师事务所\n特殊普通\n91110106590676050Q\n11010148\n2020-11-02\n6\n911101085906114840\n11010141\n2020-11-02\n7\n9131000005587870XB\n31000012\n2020-11-02\n8\n公证天业会计师事务所（特殊普通合伙）\n91320200078269333C\n32020028\n2020-11-02\n--- 第 3 页 ---\n华马威华\nV\nO\nh\n口\n售\n师\n蓝尔\n所\n1\n\n不得作其他任何用途\n医\n\n男\n名\n际\n北\nWorkingunit\n身份证号码\nIdentity card No.\nFull name\nDateofbin\nOF\n三\n用\n年\nx\nSex\n除\n州\n出\n\n工\nX\n3\n本文件仅用于出具\n--- 第 4 页 ---\n特殊普通合公\n年度检验登记\n年度检验登记\nAnnualRenewalRegistration\nAnnualRenewalRegistration\nO\n本证书经检验合格，继续有效一年。\n本证书经检验合格，继续有效一年。\nThiscertificateisvalidforanotheryearafter\nThiscertificateisvalidforanotheryearafter\nthis renewal.\nthisrenewal.\n黄嘉程的年检二\n维码.png\n年\n月\n日\n年\n月\n日\n今\n/m\n/d\nly\n/m\n/d\n--- 第 5 页 ---\nP/\n\nP/\n0\ns\n日\n日\n月\n交\n发证日期：\n110002412338\n年\n黄嘉程\n注册会计师协会\n3\nAuthorizedInstituteofCPA\n批准注册协会：\n1100024123\nNo.ofCertificate\n证书编号：\nter\nAnnualRenewalRegistration\n度检验登记\n师\n一\n事",
+  "chars": 1750,
+  "pages": 5,
+  "text_scope": "visible_cropbox",
+  "cropbox_limited": false,
+  "elapsed": 60.11,
+  "tables": [
+    {
+      "page": 0,
+      "source": "PPStructureV3",
+      "table_count": 0,
+      "blocks": [],
+      "html": null
+    },
+    {
+      "page": 1,
+      "source": "PPStructureV3",
+      "table_count": 1,
+      "blocks": [
+        {
+          "label": "table",
+          "content": "<html><body><table><tbody><tr><td colspan=\"5\">从事证券服务业务会计师事务所备案名单</td></tr><tr><td>序号</td><td>会计师事务所名称</td><td>统一社会信用代码</td><td>执业证书编号</td><td>备案公告日期</td></tr><tr><td>1</td><td>安永华明会计师事务所（特殊普通合伙）</td><td>91110000051421390A</td><td>11000243</td><td>2020-11-02</td></tr><tr><td>2</td><td>北京国富会计师事务所（特殊昔通合伙）</td><td>91110108MA007YB00G</td><td>11010274</td><td>2020-11-02</td></tr><tr><td>3</td><td>北京兴华 合伙）</td><td>911101020855463270</td><td>11000010</td><td>2020-11-02</td></tr><tr><td>4</td><td>毕马威集拓会计师事务所（特殊者通 合伙）</td><td>91110000599649382G</td><td>11000241</td><td>2020-11-02</td></tr><tr><td>5</td><td>大年 会计师事务所 特殊普通</td><td>91110106590676050Q</td><td>11010148</td><td>2020-11-02</td></tr><tr><td>6</td><td></td><td>91110108590611484C</td><td>11010141</td><td>2020-11-02</td></tr><tr><td>7</td><td></td><td>9131000005587870XB</td><td>31000012</td><td>2020-11-02</td></tr><tr><td>8</td><td>公证天业会计师事务所（特殊普通合伙）</td><td>91320200078269333C</td><td>32020028</td><td>2020-11-02</td></tr></tbody></table></body></html>"
+        }
+      ],
+      "html": "output\\test3_image\\pipeline_table_p1.html"
+    },
+    {
+      "page": 2,
+      "source": "PPStructureV3",
+      "table_count": 0,
+      "blocks": [],
+      "html": null
+    },
+    {
+      "page": 3,
+      "source": "PPStructureV3",
+      "table_count": 0,
+      "blocks": [],
+      "html": null
+    },
+    {
+      "page": 4,
+      "source": "PPStructureV3",
+      "table_count": 0,
+      "blocks": [],
+      "html": null
+    }
+  ]
+}
