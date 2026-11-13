@@ -12,15 +12,28 @@
 
 【产物】两层隔离，一眼看出「哪个脚本、哪个输入」的产物：
     output/d_table_ocr/<输入文件名去后缀>/
-        d_table_out.html     表格还原结果（多个结果会自动加编号，不互相覆盖）
+        d_table_out.html         单页输入：表格还原结果
+        d_table_out_0.html …     PDF 多页输入：按页编号，只有含表格的页才生成
+        d_table_out_1_table_3.html  一页多张表时按表名再分文件，不互相覆盖
 例如输入 input/test2.jpg → output/d_table_ocr/test2/d_table_out.html。
-脚本会自动补 <meta charset="utf-8">，中文不会乱码。
+脚本会自动补 <meta charset="utf-8">，中文不会乱码；
+没有表格的页只在日志里说明，不生成空 HTML。
 
 版本说明（paddleocr 3.7 / paddlex 3.x）：
     旧的 PPStructure 已在 3.x 移除，改用 PPStructureV3。
     - 输出用 .predict()，结果是 list[PPStructureV3Result]（dict 结构）
-    - 用 result.save_to_html(路径) 直接导出表格 HTML
+    - 用 result.html / 安全封装导出表格 HTML（见下面 export_html 的说明）
     - 结果多一层：真正的内容块在 res.json['res']['parsing_res_list']
+
+【输入是 PDF 时的坑（11-13 修）】
+    predict(一个 5 页的 PDF) 会返回 5 个结果，一页一个。但并不是每页都有表格：
+    test3_image.pdf 的第 3~5 页是证书扫描图，只有 [image]/[header]/[figure_title] 块。
+    paddlex 3.7.0 的 save_to_html() 内部写的是 html[list(html.keys())[0]]，
+    而这一页没有表格时 _to_html() 返回空字典 {} → 直接 IndexError。
+    所以本脚本不再直接调 save_to_html()：先用 res.html 判断有没有表格，
+    空则再从 [table] 内容块兜底；两者都空就跳过这一页（这是正常情况，不是错误）。
+    一页有多张表时，save_to_html() 又只会写第一张并打 warning，
+    这里改成每张表各写一个文件，不会悄悄丢表格。
 
 关于首次运行的下载：
     表格识别是"多模型流水线"：版面检测 + 表格分类 + 有线/无线表格结构识别 + 单元格检测。
@@ -29,7 +42,7 @@
 """
 
 # =========================== 配置区：调试只改这里 ===========================
-INPUT_IMAGE = 'input/test2.jpg'             # 输入图片（含表格的图）
+INPUT_IMAGE = 'input/test3_image.pdf'             # 输入图片或 PDF（多页 PDF 会一页一个结果）
 # ↓ 产物隔离规则：output/<脚本名>/<输入文件名>/
 #   OUT_DIR 是本脚本专属目录，和 b / c / weekend_pipeline 的产物互不干扰；
 #   OUT_HTML 只是「文件名」，运行时会拼到 OUT_DIR/<输入文件名>/ 里。
@@ -98,10 +111,10 @@ def parse_blocks(res):
 
 def ensure_readable_html(path):
     """
-    给 paddlex 导出的 HTML 片段补上编码声明，返回 True 表示确实补过。
+    给导出的 HTML 片段补上编码声明，返回 True 表示确实补过。
 
     坑点（第1周遇到的"日志正常但浏览器乱码"）：
-        save_to_html 写文件时确实是 utf-8（字节没错），
+        写入字节本身是 utf-8（无论走 paddlex 的 save_to_html 还是本脚本自己写），
         但内容只是 `<html><body><table>...` 这种片段，没有 <meta charset>。
         浏览器在中文 Windows 上默认按 GBK 解码 → 中文乱码。
         补上 `<meta charset="utf-8">` 后浏览器才知道该用 utf-8 读。
@@ -139,6 +152,55 @@ def ensure_readable_html(path):
     with open(path, 'w', encoding='utf-8') as f:
         f.write(doc)
     return True
+
+
+def export_html(res, path):
+    """
+    把一个结果的表格写成 HTML 文件，返回「实际写出的文件路径列表」。
+    这一页没有表格就返回空列表 []（调用方据此跳过，不生成空文件）。
+
+    为什么不直接 res.save_to_html(path)（paddlex 3.7.0 的两个坑）：
+      1) 它内部是 `html[list(html.keys())[0]]`。而「这一页没识别出表格」时
+         _to_html() 返回空字典 {}，取 [0] 就直接 IndexError —— 本次报错的原因。
+         输入是 PDF 时一页一个结果，证书扫描页必然命中它，不是识别失败。
+      2) 一页有多张表时，它只写第一张并打一条 warning，会悄悄丢数据。
+
+    所以这里改成自己写：
+      - 先读公开的 res.html（dict：表名 → HTML 片段），空则从内容块兜底；
+      - 兜底：parse_blocks() 里的 [table] 块，其 block_content 已经是还原好的
+        <table> HTML（3.7.0 有些结果 table_res_list 为空但内容块里有表格）；
+      - 多张表 → 每张单独一个文件，文件名带表名，绝不互相覆盖。
+    写文件用 encoding='utf-8'，和 paddlex 的 HtmlWriter 完全一致；
+    之后照样交给 ensure_readable_html() 补 charset 和样式。
+    """
+    # 先取官方 HTML 字典；万一取不到也不能让整条流水线崩，用 try/except 兜住。
+    try:
+        html = res.html or {}
+    except Exception as e:
+        print(f'   >> 读取 res.html 失败（{type(e).__name__}: {e}），改用内容块兜底')
+        html = {}
+
+    if not html:
+        # 字典推导式：遍历内容块，只留 label 含 table 且 content 非空的块。
+        # enumerate 给每张表一个序号，避免多个块生成同名文件。
+        html = {f'block_{n}': str(b.get('block_content'))
+                for n, b in enumerate(parse_blocks(res))
+                if 'table' in str(b.get('block_label', '')).lower()
+                and b.get('block_content')}
+
+    html = {k: v for k, v in html.items() if v}   # 过滤空内容，别写出 0 字节文件
+    if not html:
+        return []
+
+    stem, ext = os.path.splitext(path)
+    saved = []
+    for key, frag in html.items():
+        # 只有一张表就用原文件名；多张表按 key 加后缀。
+        p = path if len(html) == 1 else f'{stem}_{key}{ext}'
+        with open(p, 'w', encoding='utf-8') as f:
+            f.write(frag)
+        saved.append(p)
+    return saved
 
 
 def list_available_images():
@@ -194,17 +256,32 @@ def main():
     os.makedirs(out_dir, exist_ok=True)
     stem, ext = os.path.splitext(OUT_HTML)
     saved = []
+    skipped = []
     for i, res in enumerate(result):
         # 多个输入时给每个结果单独命名，避免后面的覆盖前面的
         name = OUT_HTML if len(result) == 1 else f'{stem}_{i}{ext}'
         path = os.path.join(out_dir, name)
-        res.save_to_html(path)
-        if ensure_readable_html(path):
-            print(f'>> 已为 {show(path)} 补充 <meta charset="utf-8"> 与表格样式')
-        saved.append(path)
+        paths = export_html(res, path)
+        if not paths:
+            # PDF 里的证书扫描页没有表格，属正常情况；不写空 HTML，也不让 paddlex 抛异常。
+            skipped.append(i + 1)
+            print(f'>> 第 {i + 1} 个输入：没有识别到表格，跳过 HTML 导出')
+            continue
+        for p in paths:
+            if ensure_readable_html(p):
+                print(f'>> 已为 {show(p)} 补充 <meta charset="utf-8"> 与表格样式')
+            saved.append(p)
 
-    print(f'\n>> 已保存 {", ".join(show(p) for p in saved)}，用浏览器打开查看表格还原效果')
-    print(f'>> 总耗时：{t2 - t0:.2f}s（加载 {t1 - t0:.2f}s + 推理 {t2 - t1:.2f}s）')
+    if saved:
+        print(f'\n>> 已保存 {len(saved)} 个 HTML：{", ".join(show(p) for p in saved)}')
+        print('   用浏览器打开查看表格还原效果')
+    else:
+        print('\n>> 本次所有页都没有识别出表格，因此没有 HTML 文件；'
+              '各页内容块见上面的日志（可用 input/test2.jpg 试单张表格图）')
+    if skipped:
+        print(f'>> 无表格、未生成 HTML 的输入序号：{", ".join(str(n) for n in skipped)}')
+    print(f'>> 总耗时：{time.perf_counter() - t0:.2f}s'
+          f'（加载 {t1 - t0:.2f}s + 推理 {t2 - t1:.2f}s + 导出）')
 
 
 # 只有直接运行本文件时才执行 main()。

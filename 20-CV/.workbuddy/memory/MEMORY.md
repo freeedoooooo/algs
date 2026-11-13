@@ -21,3 +21,8 @@
 - 只取文字、不需要坐标时可保留默认：实测 UVDoc 会让亮字暗底终端截图识别更好（6 行/0.90 vs 关闭后 4 行/0.17），属质量与坐标的权衡。
 - week-02 已做成配置区开关 `USE_DOC_PREPROCESS`（默认 False）。week-01（2026-11-12 优化后）：`b_ocr_image.py` 要画框，同样默认关闭并产出带框 PNG + 自包含 HTML；`weekend_pipeline.py` 只取文字不画框，**刻意保留默认开启**，两者不要统一。
 - 用户不接受只看 JSON 的结果呈现；OCR 结果一律配「带框 PNG + 离线 HTML 对照报告」。
+
+## PaddleX 3.7.0 表格 HTML 导出坑（2026-11-13 实测）
+- `result.save_to_html(文件路径)` 内部是 `html[list(html.keys())[0]]`；`res.html` 为空字典（这一页没表格）时抛 `IndexError`。多页 PDF 里证书扫描页必踩，不是识别失败。
+- 同一方法遇「一页多张表」只写第一张并打 warning，会悄悄丢数据。
+- 统一做法：先判 `res.html` → 空则从 `parsing_res_list` 的 `[table]` 块 `block_content` 兜底 → 仍空就跳过该页并打印序号；多表按 key 拆文件。week-01 `d_table_ocr.py` 的 `export_html()` 已实现，`weekend_pipeline.table_ocr_page()` 已加判空守卫。

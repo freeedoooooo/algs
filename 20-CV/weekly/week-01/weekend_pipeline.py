@@ -472,10 +472,17 @@ def table_ocr_page(image_path, page_index, out_dir=None):
     html_path = None
     # 在 if 判断里，非空列表、非空字符串都视为 True，空列表 / None 视为 False。
     if tables and result:
-        os.makedirs(out_dir, exist_ok=True)
-        html_path = os.path.join(out_dir, f'pipeline_table_p{page_index}.html')
-        result[0].save_to_html(html_path)   # [0] 表示取列表的第一个元素
-        ensure_readable_html(html_path)     # 补 charset，修中文乱码
+        # 同 d 脚本踩过的坑（11-13）：paddlex 3.7.0 的 save_to_html() 内部是
+        # html[list(html.keys())[0]]，结果里没有任何表格 HTML 时会 IndexError。
+        # 先用公开的 res.html 判空，空就跳过导出 —— 这一页只是没表格，不是错误。
+        html_map = result[0].html or {}
+        if html_map:
+            os.makedirs(out_dir, exist_ok=True)
+            html_path = os.path.join(out_dir, f'pipeline_table_p{page_index}.html')
+            result[0].save_to_html(html_path)   # [0] 表示取列表的第一个元素
+            ensure_readable_html(html_path)     # 补 charset，修中文乱码
+        else:
+            print(f'>> 第 {page_index + 1} 页有表格块但没有可导出的表格 HTML，跳过')
     return {
         'page': page_index,
         'source': 'PPStructureV3',

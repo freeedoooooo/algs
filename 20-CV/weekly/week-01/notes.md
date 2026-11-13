@@ -276,6 +276,35 @@ doc.save('out.pdf', garbage=4, deflate=True)
   再生成 5 张并保留；用 stub OCR 在临时目录跑 `run()` 两遍，
   第二次先清旧图、页图仍是 5 张，`output.json` 的 `temp_dir` / `temp_pages` 正确。
 
+### 同日再追加：d 脚本输入多页 PDF 报 IndexError（2026-11-13 晚）
+
+**现象**：`python d_table_ocr.py`（输入改成 `input/test3_image.pdf`）日志里内容块打印正常，
+但 `res.save_to_html(path)` 抛 `IndexError: list index out of range`，
+`output/d_table_ocr/test3_image/` 一个 HTML 都没生成。
+
+**根因（paddlex 3.7.0 的库 bug，不是识别失败）**：
+`HtmlMixin.save_to_html()`（`paddlex/inference/common/result/mixin.py:555`）写的是
+`html[list(html.keys())[0]]`；而 `PPStructureV3Result._to_html()` 只在
+`table_res_list` 非空时才往字典里放表格（`layout_parsing/result_v2.py:313`），
+**这一页没表格就返回 `{}`** → 取 `[0]` 越界。
+`predict(5 页 PDF)` 一页一个结果，第 3~5 页是证书扫描图（只有 `[image]` /
+`[header]` / `[figure_title]`），必然命中；第 1 页也没有表格，所以循环第一个就崩了。
+另一个隐患：一页多张表时 `save_to_html(文件路径)` 只写第一张并打 warning，会丢数据。
+
+**修法（`weekly/week-01/d_table_ocr.py`）**
+- 新增 `export_html(res, path)`，**不再调 `save_to_html()`**：先读公开的 `res.html`
+  （dict：表名 → HTML 片段）；为空则从 `parse_blocks()` 的 `[table]` 块
+  `block_content` 兜底（3.7.0 有些结果 `table_res_list` 空但内容块里已有还原好的表格）；
+  两者都空返回 `[]`，由调用方跳过该页并打印序号。
+- 多张表按 `key` 拆成多个文件（`<stem>_<key>.html`），用 `open(..., encoding='utf-8')`
+  自己写，和 `HtmlWriter` 行为一致；每个文件照样过 `ensure_readable_html()` 补 charset。
+- `main()` 汇总打印：实际写出的文件数、无表格页序号；全部无表格时给出明确提示，不再抛异常。
+- `weekend_pipeline.py` 的 `table_ocr_page()` 同源风险也加了 `result[0].html` 判空守卫；
+  两个脚本的示例代码 / README / 目录树同步更新。
+
+**结论**：`save_to_html()` 只能在**确认这一页有表格**时用；多页 PDF 必须先判空。
+「没识别出表格」是正常业务结果，不该让导出方法把整个流程打断。
+
 ## 疑问（留着后面阶段解答）
 - 为什么亮字暗底会几乎全军覆没？检测阶段到底在看什么特征？（week-02 反色实验 / P4）
 - 调低 `text_det_thresh` 为什么能救漏检，又为什么会带来误检？DBNet 的概率图是什么？（week-02 Day3 感受，P4 深入）

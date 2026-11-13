@@ -145,13 +145,16 @@ engine = PPStructureV3(
 )
 result = engine.predict('input/test2.jpg')   # 3.x 用 predict()，返回 list[结果对象]
 res = result[0]
-res.save_to_html('output/d_table_ocr/test2/d_table_out.html')  # 按输入名分目录
+if res.html:    # 先判空！这页没表格时是 {}，直接 save_to_html 会 IndexError
+    res.save_to_html('output/d_table_ocr/test2/d_table_out.html')
 for b in res.json['res']['parsing_res_list']:
     print(b['block_label'], str(b['block_content'])[:50])   # header / text / table ...
 ```
 > 表格识别是**多模型流水线**（版面检测 + 表格分类 + 结构识别 + 单元格检测），首次运行要下模型；脚本里已切到百度云 BOS 源，避免卡 HuggingFace。本周**跑通一个表格→HTML**即可，不追求完美。
 
 **产出**：把一张表格图片转成 HTML，用浏览器打开看到还原的表格。（代码已备好为 `d_table_ocr.py`，`python d_table_ocr.py` 直接跑，输出 `output/d_table_ocr/test2/d_table_out.html`。脚本会自动补 `<meta charset="utf-8">`，中文不会乱码。）
+
+> **输入换成多页 PDF 时**：`predict()` 一页返回一个结果，但很多页根本没有表格（`test3_image.pdf` 第 3~5 页是证书扫描图）。paddlex 3.7.0 的 `save_to_html()` 遇到空结果会抛 `IndexError`，所以脚本改为先读 `res.html` 判空、空则从 `[table]` 内容块兜底、仍为空就跳过该页并在日志里列出序号；一页多张表会按表名拆成多个文件，不会只写第一张。
 
 ---
 
