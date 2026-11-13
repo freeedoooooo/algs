@@ -1,14 +1,127 @@
 # 第 1 周笔记（P0 · 环境 + PaddleOCR）
 
 > 边学边记。卡住的点、试出来的经验、对 OCR 的新认识，都写这里。
+> **本周只保留这一份笔记**：11-02 的问答全稿与无影云工作站手册已于 2026-11-13 归并进来后清理，
+> 两者都被 git 跟踪，需要原文可用 `git checkout -- <文件路径>` 恢复。
 >
-> 📌 2026-11-02 的问答与实测已完整整理到 → [学习记录-2026-11-02.md](学习记录-2026-11-02.md)
-> （含：本机环境与版本锁定、paddle/paddlex/paddleocr 三层架构、性能对比、
-> 3.x API 的 4 个坑、PDF 的 MediaBox/CropBox 专题、bad case 素材）
 > 📌 2026-11-09 补：`weekend_pipeline.py` 三个 TODO 已完成，并补了面向初学者的详细注释。
 > 📌 2026-11-12 补：四个脚本做了一轮工程优化，见文末「2026-11-12 优化记录」。
 > 📌 2026-11-13 补：流水线改成**批量扫 `input/` + 每个 case 独立输出目录**，
 > 并新增图片 / CSV 两条分支，见文末「2026-11-13 优化记录」。
+> 📌 2026-11-13 补：两份旧文档的结论已提炼进下方「本周结论速查」（A = 11-02 实测知识，
+> B = 无影云工作站手册摘要与过期项）。本文件已自包含，不再依赖任何外部 md。
+
+## 本周结论速查（先看这里）
+
+> 归并自 11-02 的 11 节问答全稿 + 无影云工作站手册（两份原文已清理）。
+> 这里保留**可复用的结论与关键实测数据**，过程性问答、完整命令清单不再重复；
+> 具体排错过程仍看后文「卡住的点 & 怎么解决的」。
+
+### A. 11-02 实测结论速查
+
+**环境与包管理**
+- 本机：miniforge 环境 `paddle` / `D:\miniforge3\envs\paddle` / Python 3.10.9；
+  `requirements.txt` 锁 `paddlepaddle==3.2.0`(CPU)、`paddlex==3.7.2`、`paddleocr==3.7.0`、
+  `pdfplumber==0.11.10`、`pymupdf==1.28.2`、`matplotlib==3.10.9`。
+- 三条规矩：不带版本号的 `pip install` **会升级**；conda 环境里继续用 pip
+  （`conda install` 的求解器可能顺手升降 numpy，把 paddle 弄坏）；统一 `python -m pip`
+  保证装进当前解释器（本机存在 `python` 3.13 / `pip` 3.12 不一致的情况）。
+- 版本方向是「先定 Python → 包必须有对应轮子」：`matplotlib==3.11.2` 装不上是因为它要求
+  Python ≥3.11，与 paddle 无关；paddlepaddle 3.2.0 其实有 cp313 轮子（支持 3.9~3.13）。
+- CPU / GPU 包互斥，换 GPU 要**同版本** `paddlepaddle-gpu==3.2.0`；
+  `3.2.0 outdated (latest 3.3.1)` 只是提醒、不是错误，已验证组合别动。
+
+**三层架构（本周最重要的概念）**
+- `paddlepaddle 3.2.0` 框架（发动机）→ `paddlex 3.7.2` 产线编排 + 模型下载缓存 + 统一结果
+  （变速箱 + 零件库）→ `paddleocr 3.7.0` 开箱即用的类（整车）。
+- paddlex 具体管 5 件事：产线编排（版面检测 → 表格分类 → 结构识别 → 单元格检测 → OCR）、
+  单模型的加载/预处理/推理/后处理封装、模型下载与缓存（`~/.paddlex/official_models/`）、
+  YAML 默认配置、统一结果对象（`save_to_html` / `save_to_json` / `save_to_img`）。
+- **排错归属**：换模型、调阈值、模型下载、导出 HTML，90% 是 paddlex 的事，不是 paddleocr。
+- 模型不是「自动追新」：3.7.0 把默认映射改成 `PP-OCRv6_medium`，本地缓存没命中才去下载；
+  惰性按需、下过一次就复用。`PADDLE_PDX_MODEL_SOURCE=BOS` 走国内源，但大文件断连仍会
+  回退 HuggingFace（365MB `SLANeXt_wired` 就是这样，靠 curl 断点续传解决）。
+
+**性能**：加分段耗时日志后立刻定位到「CPU 上跑 server 大模型」，换小模型即可：
+
+| 模型 | 加载 | 单张推理 | 总计 |
+|---|---|---|---|
+| `PP-OCRv5_server` | 17.3s | 103.8s | 121s ❌ |
+| `PP-OCRv4_mobile` | 3~7s | 3~5s | 5.8~12.4s ✅ |
+
+精度几乎无损（照样认出"招商银行"），快 10~27 倍。根因不是加载慢，是 **CPU 跑 server 大模型**。
+
+**3.x API 四个坑**：`use_angle_cls`→`use_textline_orientation`、
+`.ocr(cls=True)`→`.predict()` + `rec_texts/scores/polys`、`PPStructure`→`PPStructureV3`、
+`import fitz`→`import pymupdf`；结果多一层 `res.json['res']`；
+`save_to_html()` 缺 `<meta charset>` → 中文按 GBK 解码变乱码（和 11-13 的 GBK CSV 同源）。
+
+**PDF 专题（本周重头戏）**
+- `pdfplumber` 读文本层（底层 pdfminer），`pymupdf` 渲染成图（MuPDF 绑定）；
+  PaddleOCR **直喂 PDF 一律经 paddlex/pypdfium2 转图**（`PDFReaderBackend` → 逐页 `read()`），
+  `paddleocr` 包里一行 PDF 代码都没有，也**不会先判断有没有文本层**。
+- **MediaBox = 纸张尺寸 + 坐标系基准；CropBox = 显示 / 打印视口**（缺省时 = MediaBox）。
+  页面字典里还有 BleedBox / TrimBox / ArtBox，5 个 Box 全是元数据，改哪个都不动内容流。
+  `test3.pdf` 是 `/MediaBox [0 0 595 842]` 配 `/CropBox [0 699.482 595 842]`，
+  只露出顶部 142.518pt（约 A4 的 1/6），下方 30+ 行流水仍完整留在文件里。
+- **裁剪 = 隐藏，不等于删除**。查字节结构后判断是「程序化裁剪」而非人工裁坏：
+  `%%EOF` / `startxref` 各 1 次（无增量更新）、仅 17 个 xref 对象且无 Producer/Creator
+  （脚本产物）、`699.482` 是非整数（程序算的，不是鼠标拖的）。
+- 同一份 PDF 四种读法，差别不在工具好坏，而在「读可见区」还是「读全部内容流」：
+
+| 方式 | 读的范围 | 结果 |
+|---|---|---|
+| pdfplumber `extract_text()` | 全部内容流 | **2054 字符**（0.17s） |
+| pdfplumber `page.crop(cropbox)` | 仅可见区 | 143 字符 |
+| pymupdf 默认 `get_text()` | 可见区 | 144 字符 |
+| PaddleOCR 直喂 PDF | 可见区 | 145 字符 / 19 行 / 2.5s |
+| CropBox 改整页后渲染 → OCR | 整页 | 1802 字符 / 226 行 / 14.1s |
+
+- 涉密内容必须真删，设 CropBox 无效。三种做法：设 CropBox → 文字还在、`extract_text()` 抽得到；
+  **redaction 擦除** → 真删、抽不到；渲染成图再生成 PDF → 文字变像素、只能靠 OCR。
+  擦除代码（PyMuPDF）：
+
+```python
+page.add_redact_annot(pymupdf.Rect(0, 0, 595, 699.482))
+page.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_REMOVE)
+doc.save('out.pdf', garbage=4, deflate=True)
+```
+
+- 工程原则：**先分流，能用文本层就绝不用 OCR**（OCR 是像素→文字的有损重建）。
+  判断方式：抽前几页看字符数（`MIN_CHARS=50`）；有则直接抽字（毫秒级、100% 准确、可复制、带坐标），
+  无（扫描件）才转图 OCR。例外：文本层损坏缺 ToUnicode、需要版面/表格结构、印章/手写/公式。
+
+**Python 基础与工程习惯**
+- `if __name__ == '__main__':` 主程序守卫：直接运行才执行 `main()`，被 `import` 不执行。
+  现在 `b` / `d` / `weekend_pipeline` 都加了守卫（11-12 优化），可以安全复用。
+- 输入 / 输出路径 + 常用参数统一放文件顶部【配置区】，命令行参数优先级更高；
+  流水线 11-13 起改为不带参数就批量扫 `INPUT_DIR`。
+
+### B. 无影云工作站说明（外部机器专用，原文已清理）
+
+原《无影环境搭建说明.md》是**早期写给另一台机器**（阿里云无影云工作站，Windows + GPU）的
+手动安装手册，目标是一次性装好 GPU 版 Paddle、让 P1 训练阶段直接复用、不再重装。
+本机实际用的是 miniforge `paddle` **CPU** 环境，两者不是同一套配置；这份手册内容已过期，
+所以 11-13 归并时只保留「流程 + 冲突清单」，不搬运那些有误的 PowerShell 命令全文。
+
+七步流程：仓库同步到无影 → `nvidia-smi` 查 CUDA → 装 Miniconda → 建 Python 3.10 环境
+→ 按 CUDA 版本装 GPU 版 paddle（失败回退 CPU）→ 装其余依赖 → 冒烟测试 + 跑 `b_ocr_image.py`。
+
+⚠️ **与本机 11-02 实测冲突的地方，照抄前必须先改**：
+
+| 文档写法 | 实测 / 现行结论 |
+|---|---|
+| 环境名 `ocr` | 本机是 miniforge 环境 `paddle` |
+| 「PaddlePaddle 只支持到 3.11，3.13 装不上」 | paddlepaddle 3.2.0 有 cp313 轮子、支持 3.9~3.13；装不上的是 `matplotlib==3.11.2`（要求 Python ≥3.11） |
+| GPU 版 `2.6.2` / `3.0.0` | 锁的是 3.2.0，换 GPU 应同版本 `paddlepaddle-gpu==3.2.0` |
+| `pip install paddleocr pdfplumber ...` 不带版本 | 会升级已装包，应用 `python -m pip install -r requirements.txt` |
+| 裸 `pip install ...` | 统一 `python -m pip`，避免装进别的解释器 |
+| 步骤 7「图片命名 `test.png` 放在 week-01/ 下」 | 输入统一放 `input/`，`b` 的配置区 `INPUT_IMAGE` 默认 `test2.jpg`；产物已是带框 PNG + HTML 报告 |
+| 「首次下载模型慢，等一次即可」 | 默认 v6 模型会卡 HuggingFace，需 `PADDLE_PDX_MODEL_SOURCE=BOS` + 显式指定已缓存的 v4 mobile |
+| 「`.ocr()` 不存在就改调用方式」 | 四个脚本早已全部改成 3.x API，无需再改 |
+
+> 原手册已清理（被 git 跟踪，可恢复）。若以后真要在无影上执行，先按上表修订，
+> 并以上面 A 节的实测结论为准。
 
 ## 我跑通了什么
 - ✅ 环境：miniforge 环境名 `paddle`（`conda activate paddle`），Python 3.10.9，`requirements.txt` 全锁版本
