@@ -356,9 +356,13 @@ viewBox 仍用原图像素 → 拉伸恒 1.00×。校验 24/24 组 viewBox 与�
   `res.json['res']['table_res_list'][i]['cell_box_list']` 取框；
   `split_header()` 多返回 `header_idx`，`structure_table()` 据此切出 `cells`，
   与 `headers + rows` 严格同形状。107 得到 9×5 = 45 个框，x 700~1436 / y 622~918。
-- `vis_ocr_result.py`：双视图 + `.cellsvg` 层（默认隐藏）+ `data-cell` hover 联动 +
-  表格区默认收起 + 多表 tab + 跳转徽标先展开再滚动。两套高亮 class 分开
-  （OCR 用 `.hl`，单元格用 `.ch`）。
+- `vis_ocr_result.py`：双视图 + `.cellsvg` 层 + 表格区默认收起 + 多表 tab +
+  跳转徽标先展开再滚动。两套高亮 class 分开（OCR `.hl`，单元格 `.hv`/`.pin`）。
+  **11-16 二次精进**：用户反馈「一次铺满整表网格反而看不出定位到哪一格」，改为
+  **单格定位** —— 所有 `.cellbox` 默认 `display:none`，悬停只给该格加 `.hv`、
+  点击给该格加 `.pin`（再点取消），`ensureView()` 在点击时自动切到坐标宿主视图；
+  「显示整表网格」降为默认关闭的调试开关（`.all`）。非当前表的框改用 `.off`
+  class 而非 inline style，避免压住 `.hv`/`.pin` 的显示。
 
 **验证（全量重跑 3m47s）**：25 个 case 成功；103 cells 200/200、107 cells 45/45、
 105 `space=none` 无坐标；`rectified.png` 只在 107 生成（1696×1200），104/106 未误生成；

@@ -325,21 +325,28 @@ a{color:var(--accent)}
    表格模型矫正图、叠在 pages/rectified.png。每个 .view 各自包一个 .imgwrap，
    沿用「img 撑高 wrapper、svg 100%/100%」的 1:1 机制，不会重蹈 CSS 拉伸。 */
 .viewbar{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin:0 0 10px}
-.viewbtn,.cellbtn,.tbltoggle,.tbltab{font:inherit;font-size:12px;cursor:pointer;
+.viewbtn,.allcells,.tbltoggle,.tbltab{font:inherit;font-size:12px;cursor:pointer;
   padding:4px 11px;border-radius:7px;border:1px solid var(--line);
   background:#fff;color:var(--ink)}
-.viewbtn.on,.cellbtn.on,.tbltab.on{background:var(--accent);
+.viewbtn.on,.allcells.on,.tbltab.on{background:var(--accent);
   border-color:var(--accent);color:#fff}
 .tbltoggle{background:#eef4ff;border-color:#c9d9f5;color:var(--accent);font-weight:500}
 .tablesec-head .spacer{flex:1}
 .view[hidden],.tblbody[hidden],.tblpane[hidden]{display:none}
-.cellsvg{display:none}
-.cellsvg.on{display:block}
-.cellbox{fill:rgba(15,157,110,.06);stroke:#0f9d6e;stroke-width:2;
+/* ★ 单格定位（11-16 二次精进）：默认一个框都不画。悬停 / 点击表格里的
+   某一格，才让那一个 rect 显示 —— 不再一次性铺满整张表的网格。 */
+.cellsvg{display:block}
+.cellbox{display:none;fill:rgba(15,157,110,.10);stroke:#0f9d6e;stroke-width:3;
   vector-effect:non-scaling-stroke}
-.cellbox.ch{fill:rgba(15,157,110,.34);stroke-width:4}
+.cellbox.off{display:none!important}
+.cellbox.hv{display:block;fill:rgba(15,157,110,.30);stroke-width:5}
+.cellbox.pin{display:block;fill:rgba(216,97,10,.26);stroke:#d8610a;stroke-width:5}
+.cellbox.all{display:block;opacity:.32}
+.cellbox.all.hv,.cellbox.all.pin{opacity:1}
 td.cell,th.cell{cursor:crosshair}
-td.cell:hover,td.cell.ch,th.cell:hover,th.cell.ch{background:#e3f7ee!important}
+td.cell:hover,th.cell:hover,td.cell.hv,th.cell.hv{background:#e3f7ee!important}
+td.cell.pin,th.cell.pin{background:#fff0d9!important;
+  outline:2px solid #d8610a;outline-offset:-2px}
 .tbltabs{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 12px}
 .coordnote{font-size:12px;color:var(--muted);margin:0 0 8px}
 @media(max-width:900px){.grid{grid-template-columns:1fr}.stage{border-right:0}}
@@ -350,6 +357,30 @@ function cardOf(el){ return el.closest('.card'); }
 function activeSpace(card){
   var p = card.querySelector('.tblpane:not([hidden])');
   return p ? p.getAttribute('data-space') : '';
+}
+function currentView(card){
+  var b = card.querySelector('.viewbtn.on');
+  return b ? b.getAttribute('data-view') : 'orig';
+}
+function wantView(card){ return activeSpace(card) === 'rectified' ? 'rect' : 'orig'; }
+function viewMatches(card){ return currentView(card) === wantView(card); }
+function ensureView(card){
+  var w = wantView(card);
+  if(currentView(card) === w) return;
+  var b = card.querySelector('.viewbtn[data-view="'+w+'"]');
+  if(b) b.click();
+}
+function matchingRects(card, el){
+  var sel = '.cellbox[data-card="'+el.getAttribute('data-card')+'"]'+
+            '[data-tbl="'+el.getAttribute('data-tbl')+'"]'+
+            '[data-cell="'+el.getAttribute('data-cell')+'"]';
+  return card.querySelectorAll(sel);
+}
+function clearHover(card){
+  card.querySelectorAll('.hv').forEach(function(x){ x.classList.remove('hv'); });
+}
+function clearPin(card){
+  card.querySelectorAll('.pin').forEach(function(x){ x.classList.remove('pin'); });
 }
 
 // 鼠标悬停：OCR 文字行 <-> 原图上的识别框 双向高亮。
@@ -378,20 +409,16 @@ document.querySelectorAll('.viewbtn').forEach(function(btn){
   });
 });
 
-// 「显示单元格位置」：默认隐藏，打开后才显示 cellsvg；当前表落在矫正图
-// 空间时自动切到矫正图视图，避免把框显示在错误的那张图上。
-document.querySelectorAll('.cellbtn').forEach(function(btn){
+// 次要调试开关：默认关闭。只有调网格对齐时才铺出整张表，
+// 正常「点一格定位一格」完全不需要打开它。
+document.querySelectorAll('.allcells').forEach(function(btn){
   btn.addEventListener('click', function(){
     var card = cardOf(btn), on = !btn.classList.contains('on');
     btn.classList.toggle('on', on);
-    btn.textContent = on ? '隐藏单元格位置' : '显示单元格位置';
-    card.querySelectorAll('.cellsvg').forEach(function(s){
-      s.classList.toggle('on', on);
+    btn.textContent = on ? '隐藏整表网格' : '显示整表网格';
+    card.querySelectorAll('.cellbox').forEach(function(r){
+      r.classList.toggle('all', on);
     });
-    if(on && activeSpace(card) === 'rectified'){
-      var vb = card.querySelector('.viewbtn[data-view="rect"]');
-      if(vb) vb.click();
-    }
   });
 });
 
@@ -418,10 +445,11 @@ document.querySelectorAll('.jumptbl').forEach(function(a){
   });
 });
 
-// 多表切换：只显示选中表的表格本体与图上单元格框。
+// 多表切换：只显示选中表的表格本体与图上单元格框；清掉上一张表的钉住。
 document.querySelectorAll('.tbltab').forEach(function(btn){
   btn.addEventListener('click', function(){
     var card = cardOf(btn), ti = btn.getAttribute('data-tbl');
+    clearPin(card); clearHover(card);
     card.querySelectorAll('.tbltab').forEach(function(b){
       b.classList.toggle('on', b === btn);
     });
@@ -429,28 +457,31 @@ document.querySelectorAll('.tbltab').forEach(function(btn){
       p.hidden = (p.getAttribute('data-tbl') !== ti);
     });
     card.querySelectorAll('.cellbox').forEach(function(r){
-      r.style.display = (r.getAttribute('data-tbl') === ti) ? '' : 'none';
+      r.classList.toggle('off', r.getAttribute('data-tbl') !== ti);
     });
-    var cb = card.querySelector('.cellbtn');
-    if(cb && cb.classList.contains('on')){
-      var want = activeSpace(card) === 'rectified' ? 'rect' : 'orig';
-      var vb = card.querySelector('.viewbtn[data-view="'+want+'"]');
-      if(vb) vb.click();
-    }
+    ensureView(card);
   });
 });
 
-// 表格单元格 <-> 图上单元格框 双向高亮（独立用 .ch，不与 OCR 的 .hl 串）。
-document.querySelectorAll('[data-card][data-cell]').forEach(function(el){
+// ★ 单格定位：默认一个框都不显示。悬停只临时高亮这一格，点击钉住该格
+//   （再点同一格取消）。视图不匹配时不做悬停高亮，避免框落在错误的图上；
+//   点击则先自动切到坐标宿主视图，所以 107 点一下就会切到矫正图。
+document.querySelectorAll('td.cell,th.cell').forEach(function(el){
   el.addEventListener('mouseenter', function(){
-    var c = el.getAttribute('data-card'), k = el.getAttribute('data-cell'),
-        t = el.getAttribute('data-tbl');
-    el.classList.add('ch');
-    document.querySelectorAll('.cellbox[data-card="'+c+'"][data-cell="'+k+'"][data-tbl="'+t+'"]')
-            .forEach(function(x){ x.classList.add('ch'); });
+    var card = cardOf(el);
+    if(!viewMatches(card)) return;
+    clearHover(card);
+    el.classList.add('hv');
+    matchingRects(card, el).forEach(function(r){ r.classList.add('hv'); });
   });
-  el.addEventListener('mouseleave', function(){
-    document.querySelectorAll('.ch').forEach(function(x){ x.classList.remove('ch'); });
+  el.addEventListener('mouseleave', function(){ clearHover(cardOf(el)); });
+  el.addEventListener('click', function(){
+    var card = cardOf(el), wasPinned = el.classList.contains('pin');
+    clearPin(card); clearHover(card);
+    if(wasPinned) return;
+    ensureView(card);
+    el.classList.add('pin');
+    matchingRects(card, el).forEach(function(r){ r.classList.add('pin'); });
   });
 });
 
@@ -511,7 +542,9 @@ def build_cell_rects(rec, card_no, space):
         cells = t.get('cells') or []
         headers = t.get('headers') or []
         rows = t.get('rows') or []
-        hide = '' if ti == 0 else ' style="display:none"'
+        # 非当前表的框用 class 控制（不能写 inline style，否则 CSS 的
+        # .hv / .pin 单格显示会被 inline display:none 压住）。
+        off_cls = '' if ti == 0 else ' off'
         for r, row in enumerate(cells):
             for c, b in enumerate(row):
                 if not b or len(b) < 4:
@@ -523,9 +556,10 @@ def build_cell_rects(rec, card_no, space):
                     text = rows[r - 1][c]
                 w, h = max(0.0, b[2] - b[0]), max(0.0, b[3] - b[1])
                 out.append(
-                    f'<rect class="cellbox" data-card="{card_no}" data-tbl="{ti}" '
+                    f'<rect class="cellbox{off_cls}" data-card="{card_no}" '
+                    f'data-tbl="{ti}" '
                     f'data-cell="{r}_{c}" x="{b[0]:.1f}" y="{b[1]:.1f}" '
-                    f'width="{w:.1f}" height="{h:.1f}"{hide}>'
+                    f'width="{w:.1f}" height="{h:.1f}">'
                     f'<title>表 {ti + 1} · 行 {r} 列 {c + 1} · {esc(text)}</title>'
                     f'</rect>')
     return ''.join(out)
@@ -540,7 +574,7 @@ def build_tables_section(rec, card_no, case_href=''):
     卡片标题的「↓ 查看 N 张表格」徽标点击会先展开再滚动，不会跳到空区。
     每张表：
         · tab 切换（一页多表时只显示选中表，图上只叠选中表的单元格框）
-        · 带表头的 HTML 表格，每格带 data-cell，悬停可在图上高亮
+        · 带表头的 HTML 表格，每格带 data-cell；悬停 / 点击只定位图上的那一格
         · 自包含 CSV 下载 + 指向真实 table_N.csv 的链接
     没检测到表格的 case 只留一行说明 + 折叠诊断。
     """
@@ -589,12 +623,14 @@ def build_tables_section(rec, card_no, case_href=''):
         '<span class="spacer"></span>',
     ]
     if has_coord:
-        parts.append(f'<button type="button" class="cellbtn" data-card="{card_no}">'
-                     '显示单元格位置</button>')
+        parts.append(f'<button type="button" class="allcells" data-card="{card_no}">'
+                     '显示整表网格</button>')
     parts.append('</div>')
     parts.append(f'<div class="tblbody" data-card="{card_no}" hidden>')
+    tip = ('悬停表格单元格：图上只高亮这一格；点击：钉住该格（再点取消）。'
+           '107 点击时会自动切到矫正图视图。')
     parts.append(f'<p class="coordnote">坐标宿主：{esc(" / ".join(spaces))}'
-                 '　·　展开后悬停任意单元格，图上对应位置会高亮</p>')
+                 f'　·　{esc(tip)}</p>')
 
     if len(tables) > 1:
         tabs = ''.join(

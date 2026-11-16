@@ -41,4 +41,4 @@
 - **正确做法 = 换坐标宿主，不做逆变换**：`cell_box_list` 本就基于 `doc_preprocessor_res["output_img"]`（转正 + 去扭曲图），把它另存 `<case>/pages/rectified.png`，框 1:1 叠上去；报告提供「原图 / 矫正图」切换。文本链路完全不动、零额外推理。
 - 103 有文本层 PDF 走另一套空间：`page.find_tables()`（**不要用 `extract_tables()`，它丢坐标**）→ `Table.rows[i].cells` → 乘 `PDF_RENDER_DPI/72` 换到预览图像素；`clean_table()` 删空行空列时必须**同步删/补 bbox 网格**，否则从第 2 行起整体错位。
 - 结构化表的 `cells[r][c]` 必须与「表头 1 行 + 数据 n 行」严格同形状，报告 `<td data-cell="r_c">` 才能直接索引。`split_header()` 多返回 `header_idx` 用于同步切网格；`colspan` 展开格共享同一个框序号（`_TableParser.box_tables` 记原始 `<td>` 序号）。CSV 无图 → `coord.space='none'`。
-- 报告交互定稿：单元格框**默认隐藏**（`.cellsvg` + 「显示单元格位置」开关）、表格预览**默认收起**、多表 tab 选中哪张只叠哪张的框、两套 hover 高亮 class 分开（OCR `.hl` / 单元格 `.ch`）、每个 `.view` 各自一个 `.imgwrap` 保 1:1。
+- 报告交互定稿（11-16 二次精进）：**单格定位** —— 所有 `.cellbox` 默认 `display:none`，悬停表格格只给该格加 `.hv`、点击加 `.pin`（再点取消），点击时 `ensureView()` 自动切到坐标宿主视图；「一次铺满整表网格」被用户否定（看不出定位到哪一格），降级为默认关闭的调试开关 `.all`。表格预览**默认收起**、多表 tab 只激活当前表的框（用 `.off` class，**禁止 inline style**，否则压住 `.hv`/`.pin`）、两套高亮 class 分开（OCR `.hl` / 单元格 `.hv`+`.pin`）、每个 `.view` 各自一个 `.imgwrap` 保 1:1。
