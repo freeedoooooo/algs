@@ -36,6 +36,12 @@
 - 同一方法遇「一页多张表」只写第一张并打 warning，会悄悄丢数据。
 - 统一做法：先判 `res.html` → 空则从 `parsing_res_list` 的 `[table]` 块 `block_content` 兜底 → 仍空就跳过该页并打印序号；多表按 key 拆文件。week-01 `d_table_ocr.py` 的 `export_html()` 已实现，`weekend_pipeline.table_ocr_page()` 已加判空守卫。
 
+## week-02 表格专项 case 20~28（2026-11-16）
+- 用户要求从 20 起编号补充表格类 case。新增唯一脚本 `week-02/make_table_cases.py`（**只写 `input/` 与 manifest，不改任何提取脚本**），生成 9 个：20 跨 3 页、21 一页双表、22 合并单元格、23 跨页+多表、24 无线框 stream、25 无文本层扫描 2 页、26 一页三表+噪声、27 旋转双表图、28 空页混合（4 页）。19 留空。
+- **生成技巧**：pymupdf 内置 CJK 字体 `fontname='china-s'` 能写真实中文文本层（零字体依赖，实测 pdfplumber 可直读）；合并单元格必须把内线**分段画**（跳过某行段的内竖线 = 横向合并，跳过某列段的内横线 = 纵向合并），`find_tables()` 才会把被吞格返回 `None`。
+- **合成样本命名扩充为 `01~18` + `20~28`（编号 < 101）**，`case_sort_key()` 自动处理、真实 case 恒排最后。manifest 由脚本 upsert（只增删 category 以「表格专项」开头的条目）；重跑 `make_samples.py` 会整体重写 manifest，需再跑一次本脚本补登记。
+- **实测暴露的两个现状限制（未改代码，留作练习）**：① `render_first_page()` 只出 `p1.png`，多页 PDF 第 2 页起的表虽有 `cell_grid` 坐标但报告无对应页图可叠；② 纯文字页被 `text` 策略误抽成伪表（28 的 p1 成 3×1）。逐 case 基线见 `week-02/notes.md`。
+
 ## mvp 独立部署与模型加载（2026-11-16 实测）
 - **模型默认全程懒加载**：`import app` 实测 0.53s，连 `paddleocr` 库都不 import（只 FastAPI+config）；`import pipeline` 在后台处理线程里才发生；`pipeline/engines.py` 的 `_OCR/_STRUCT` 单例在首次 `ocr()`/`structure()` 才构造；表格模型更懒 —— `grid_score()` 长直线预筛命中才加载 PPStructureV3，纯文字图/CSV/文本层 PDF 完全不加载。按进程缓存，重启即失效，故 `--workers 1`。`CV_MVP_WARMUP=1` 可改成启动时经 FastAPI lifespan 同步预热（默认关）。
 - **依赖坑（写 requirements.txt 必须记住）**：① `paddleocr 3.7.0` 只声明 `paddlex[ocr-core]>=3.7.0,<3.8.0`，**不装 paddlepaddle**，必须单列 `paddlepaddle==3.2.0`（GPU 换 paddlepaddle-gpu）；② `cv2` 来自 `opencv-contrib-python==4.10.0.84`（paddlex ocr-core extra 指定），**不是 opencv-python**，两个都装会冲突；③ `pdfplumber` / `PyMuPDF` 是本项目自己用的，paddle 不带；④ 上传走 base64 JSON，不需要 `python-multipart`；Starlette 1.x 静态文件不需要 `aiofiles`。

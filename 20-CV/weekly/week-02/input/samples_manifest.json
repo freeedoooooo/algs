@@ -424,6 +424,137 @@
       "source": "week-01/output/c_pdf_text_layer/test3_image/pages/c_page_2.png",
       "expect_lines": null,
       "group": "real"
+    },
+    {
+      "file": "20_multipage_3pages.pdf",
+      "category": "表格专项_跨页表格",
+      "distortion": "无退化；3 页连续流水表，每页重复表头，数据延续",
+      "source": "synthetic",
+      "expect_lines": [
+        "2026 年第四季度交易明细（第 1 页 / 共 3 页）"
+      ],
+      "group": "synthetic",
+      "table_expect": {
+        "pages": 3,
+        "tables": 3,
+        "note": "设计意图（人工标注）；当前流水线实测基线见 notes.md"
+      }
+    },
+    {
+      "file": "21_two_tables_1page.pdf",
+      "category": "表格专项_一页多表",
+      "distortion": "无退化；1 页两张列数不同的表（6 列明细 + 4 列汇总）",
+      "source": "synthetic",
+      "expect_lines": [
+        "月度结算单（一页两张独立表格）"
+      ],
+      "group": "synthetic",
+      "table_expect": {
+        "pages": 1,
+        "tables": 2,
+        "note": "设计意图（人工标注）；当前流水线实测基线见 notes.md"
+      }
+    },
+    {
+      "file": "22_merged_cells.pdf",
+      "category": "表格专项_合并单元格",
+      "distortion": "无退化；横向合并表头 + 纵向合并分组列，合并处 cells 为 None",
+      "source": "synthetic",
+      "expect_lines": [
+        "区域业绩表（含横向与纵向合并单元格）"
+      ],
+      "group": "synthetic",
+      "table_expect": {
+        "pages": 1,
+        "tables": 1,
+        "note": "设计意图（人工标注）；当前流水线实测基线见 notes.md"
+      }
+    },
+    {
+      "file": "23_multipage_multitable.pdf",
+      "category": "表格专项_跨页+多表",
+      "distortion": "无退化；3 页：p1 两表 / p2 续表+小表 / p3 单表",
+      "source": "synthetic",
+      "expect_lines": [
+        "第 1 页：两张表（明细 + 汇总）"
+      ],
+      "group": "synthetic",
+      "table_expect": {
+        "pages": 3,
+        "tables": 5,
+        "note": "设计意图（人工标注）；当前流水线实测基线见 notes.md"
+      }
+    },
+    {
+      "file": "24_stream_no_grid.pdf",
+      "category": "表格专项_无线框表格",
+      "distortion": "无退化；无任何矢量线，靠文字对齐，测策略回退 text",
+      "source": "synthetic",
+      "expect_lines": [
+        "无框线表格（靠文字对齐，测试策略回退）"
+      ],
+      "group": "synthetic",
+      "table_expect": {
+        "pages": 1,
+        "tables": 1,
+        "note": "设计意图（人工标注）；当前流水线实测基线见 notes.md"
+      }
+    },
+    {
+      "file": "25_scan_multipage.pdf",
+      "category": "表格专项_扫描件跨页",
+      "distortion": "无退化；无文本层，2 页各一张表，走 OCR / 表格模型",
+      "source": "synthetic",
+      "expect_lines": [],
+      "group": "synthetic",
+      "table_expect": {
+        "pages": 2,
+        "tables": 2,
+        "note": "设计意图（人工标注）；当前流水线实测基线见 notes.md"
+      }
+    },
+    {
+      "file": "26_three_tables_noise.pdf",
+      "category": "表格专项_一页多表+噪声",
+      "distortion": "无退化；1 页三张小表，夹杂页眉说明与页脚",
+      "source": "synthetic",
+      "expect_lines": [
+        "多表混排页（三张表 + 说明文字噪声）"
+      ],
+      "group": "synthetic",
+      "table_expect": {
+        "pages": 1,
+        "tables": 3,
+        "note": "设计意图（人工标注）；当前流水线实测基线见 notes.md"
+      }
+    },
+    {
+      "file": "27_rotated_two_tables.png",
+      "category": "表格专项_旋转多表",
+      "distortion": "无退化；顺时针旋转 90° 的一页双表扫描图，测模型自动转正",
+      "source": "synthetic",
+      "expect_lines": [],
+      "group": "synthetic",
+      "table_expect": {
+        "pages": 1,
+        "tables": 2,
+        "note": "设计意图（人工标注）；当前流水线实测基线见 notes.md"
+      }
+    },
+    {
+      "file": "28_multipage_blank_mixed.pdf",
+      "category": "表格专项_跨页边界",
+      "distortion": "无退化；4 页：纯文字 / 表格 / 空白 / 表格",
+      "source": "synthetic",
+      "expect_lines": [
+        "第 1 页：只有说明文字，没有表格"
+      ],
+      "group": "synthetic",
+      "table_expect": {
+        "pages": 4,
+        "tables": 2,
+        "note": "设计意图（人工标注）；当前流水线实测基线见 notes.md"
+      }
     }
   ],
   "groups": {
