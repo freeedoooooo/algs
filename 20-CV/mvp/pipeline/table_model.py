@@ -150,12 +150,16 @@ def _save_rectified(res, case_abs):
         return None
 
 
-def tables(image_path, case_abs):
-    """返回 (raw_tables, notes, rectified_size)。"""
+def tables(image_path, case_abs, min_h=None, min_v=None):
+    """返回 (raw_tables, notes, rectified_size)；预筛门槛可由页面参数覆盖。"""
+    mh = config.GRID_MIN_H if min_h is None else int(min_h)
+    mv = config.GRID_MIN_V if min_v is None else int(min_v)
     nh, nv = grid_score(image_path)
-    if nh < config.GRID_MIN_H or nv < config.GRID_MIN_V:
-        return [], ['长直线预筛未命中（横 {} / 竖 {}），跳过表格模型'.format(nh, nv)], None
-    notes = ['长直线预筛命中（横 {} / 竖 {}），启用 PPStructureV3'.format(nh, nv)]
+    if nh < mh or nv < mv:
+        return [], ['长直线预筛未命中（横 {} / 竖 {}，门槛 {}/{}），跳过表格模型'
+                    .format(nh, nv, mh, mv)], None
+    notes = ['长直线预筛命中（横 {} / 竖 {}，门槛 {}/{}），启用 PPStructureV3'
+             .format(nh, nv, mh, mv)]
     raw, rect_size = [], None
     for pno, res in enumerate(engines.structure().predict(image_path), 1):
         htmls = _html_blocks(res)

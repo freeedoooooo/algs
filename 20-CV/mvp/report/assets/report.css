@@ -113,3 +113,14 @@ a{color:#2563eb}
 .lb-noboxes .lb-content svg{display:none!important}
 .lb-hint{padding:8px 14px;background:#1d2330;color:#9aa6bd;font-size:12px;text-align:center}
 @media(max-width:900px){.grid{grid-template-columns:1fr}.stage{border-right:0}}
+/* 参数快照：每个批次自解释「当时用了什么参数」，默认收起不占版面 */
+.paramsnap{margin-top:14px;border:1px solid var(--line);border-radius:8px;
+  background:#fff;padding:8px 12px;font-size:12px}
+.paramsnap summary{cursor:pointer;color:var(--accent);font-weight:500}
+.paramsnap table{border-collapse:collapse;width:100%;margin-top:10px}
+.paramsnap th,.paramsnap td{border-bottom:1px solid var(--line);padding:5px 8px;
+  text-align:left;vertical-align:top}
+.paramsnap th{color:var(--muted);font-weight:500;background:#f7f9fc}
+.paramsnap code{background:#eef4ff;color:var(--accent);padding:1px 6px;
+  border-radius:4px;white-space:nowrap}
+.paramsnap .ph{color:var(--muted)}

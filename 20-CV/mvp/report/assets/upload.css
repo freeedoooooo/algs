@@ -30,3 +30,20 @@ a{color:#2563eb;text-decoration:none}
 .tip{margin-top:18px;color:#6b7688;font-size:12px;line-height:1.7}
 code{background:#eef2f8;padding:1px 5px;border-radius:4px}
 .err{color:#b42318}
+/* 调试参数面板：按优先级分组，控件紧凑，说明用小字 */
+.param-panel{margin-top:16px;border:1px solid #e2e7f0;border-radius:8px;
+  background:#fbfcfe;padding:10px 14px}
+.param-panel>summary{cursor:pointer;color:#25324a;font-weight:500;outline:none}
+.param-groups{margin-top:10px}
+.pgroup{border-left:3px solid #2563eb;padding:2px 0 2px 12px;margin:12px 0}
+.pgroup h4{margin:0 0 8px;font-size:13px;font-weight:500;color:#2563eb}
+.field{display:flex;align-items:center;gap:10px;margin:8px 0;flex-wrap:wrap}
+.field label{min-width:132px;font-size:13px;color:#25324a}
+.field input,.field select{font:inherit;font-size:13px;padding:5px 9px;
+  border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#1f2738;
+  width:210px}
+.field .fhelp{flex:1;min-width:220px;font-size:11px;color:#8a94a6;line-height:1.5}
+.param-actions{display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap}
+.param-hint{font-size:11px;color:#8a94a6}
+button.mini{font-size:12px;padding:5px 12px;background:#fff;color:#2563eb;
+  border:1px solid #cbd5e1}

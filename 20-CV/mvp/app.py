@@ -45,6 +45,7 @@ def _load(name):
 
 
 config = _load('config')           # 必须在 paddle 相关导入之前：设置模型源环境变量
+params_mod = _load('params')       # 调试参数 schema / 校验（纯 Python，不碰模型）
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -74,6 +75,7 @@ STATE = {
     'running': False, 'ready': False, 'error': None,
     'steps': [], 'cases': [], 'batch': None,
     'started': None, 'elapsed': 0,
+    'params': {}, 'warnings': [],
 }
 LOCK = threading.Lock()
 
@@ -132,6 +134,13 @@ def health():
     return {'ok': True, 'service': 'cv-mvp', 'running': STATE['running']}
 
 
+@app.get('/api/params')
+def api_params():
+    """返回参数 schema（顺序=优先级）与当前默认值，上传页据此渲染面板。"""
+    return {'schema': params_mod.public_schema(),
+            'defaults': params_mod.defaults()}
+
+
 @app.post('/api/upload')
 async def upload(request: Request):
     if STATE['running']:
@@ -147,6 +156,8 @@ async def upload(request: Request):
     if not files:
         return JSONResponse({'ok': False, 'error': '没有收到文件'},
                             status_code=400)
+    # 调试参数：校验一次，非法值回退默认并把警告带回页面（不让整批失败）
+    params, warns = params_mod.normalize(body.get('params'))
 
     tag = batch_tag()
     paths, used = [], set()
@@ -183,10 +194,16 @@ async def upload(request: Request):
 
     with LOCK:
         STATE.update(running=True, ready=False, error=None, steps=[],
-                     cases=[], batch=tag, started=time.time(), elapsed=0)
+                     cases=[], batch=tag, started=time.time(), elapsed=0,
+                     params={k: v for k, v in params.items()
+                             if not k.startswith('_')}, warnings=warns)
     step('批次 {} · 收到 {} 个文件'.format(tag, len(paths)))
-    threading.Thread(target=run_batch, args=(paths,), daemon=True).start()
-    return {'ok': True, 'count': len(paths), 'batch': tag}
+    for w in warns:
+        step('  ⚠ ' + w)
+    threading.Thread(target=run_batch, args=(paths, params),
+                     daemon=True).start()
+    return {'ok': True, 'count': len(paths), 'batch': tag,
+            'warnings': warns}
 
 
 @app.get('/api/status')
@@ -204,7 +221,7 @@ def report():
     return FileResponse(path, media_type='text/html; charset=utf-8')
 
 
-def run_batch(paths):
+def run_batch(paths, params=None):
     """后台线程：逐个提取 → 落 result.json → 生成汇总报告。"""
     try:
         pipeline = _load('pipeline')
@@ -216,14 +233,15 @@ def run_batch(paths):
             case_rel = case_dir_name(name)
             case_abs = os.path.join(config.OUTPUT_DIR, case_rel)
             os.makedirs(case_abs, exist_ok=True)
-            rec = pipeline.extract_one(path, case_abs, case_rel)
+            rec = pipeline.extract_one(path, case_abs, case_rel, params)
             records.append(rec)
-            step('  ✓ 识别 {} 行文字 · 结构化表格 {} 张 · 路线 {}'.format(
+            step('  ✓ 识别 {} 行文字 · 结构化表格 {} 张 · 路线 {} · 第 {} 页'.format(
                 rec['lines'], len(rec['structured_tables']),
-                rec['table_route']))
+                rec['table_route'], rec.get('page', 1)))
         step('正在生成报告 …')
         report_mod.build(
-            records, os.path.join(config.OUTPUT_DIR, config.REPORT_NAME))
+            records, os.path.join(config.OUTPUT_DIR, config.REPORT_NAME),
+            params=params)
         with LOCK:
             STATE.update(running=False, ready=True,
                          cases=[r['file'] for r in records],

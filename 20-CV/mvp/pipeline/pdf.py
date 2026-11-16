@@ -13,28 +13,33 @@ import pymupdf
 from .. import config
 
 
-def render_first_page(pdf_path, out_png):
+def render_first_page(pdf_path, out_png, page_no=1, dpi=None):
+    """渲染指定页（页码 1 起）；dpi / page_no 来自页面调试参数。"""
     os.makedirs(os.path.dirname(out_png), exist_ok=True)
     doc = pymupdf.open(pdf_path)
     try:
         if len(doc) == 0:
             return None, 0, False
-        page = doc[0]
+        idx = min(max(int(page_no) - 1, 0), len(doc) - 1)
+        page = doc[idx]
         # pymupdf 默认按 CropBox 渲染；被裁剪的 PDF 要扩到 MediaBox 才看得到整页
         limited = page.cropbox != page.mediabox
         if limited:
             page.set_cropbox(page.mediabox)
-        page.get_pixmap(
-            matrix=pymupdf.Matrix(config.PDF_DPI / 72,
-                                  config.PDF_DPI / 72),
-            alpha=False).save(out_png)
+        zoom = (dpi or config.PDF_DPI) / 72
+        page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom),
+                        alpha=False).save(out_png)
         return out_png, len(doc), limited
     finally:
         doc.close()
 
 
-def text_layer(pdf_path):
+def text_layer(pdf_path, page_no=None):
+    """取文本层；指定 page_no 时只读那一页（配合页码参数定位跨页 case）。"""
     with pdfplumber.open(pdf_path) as pdf:
+        if page_no is not None:
+            idx = min(max(int(page_no) - 1, 0), len(pdf.pages) - 1)
+            return pdf.pages[idx].extract_text() or ''
         return ''.join((p.extract_text() or '') for p in pdf.pages[:3])
 
 
@@ -125,24 +130,40 @@ def auto_column_lines(page, max_cols=14):
         return None
 
 
-def tables(pdf_path):
-    """多策略回退，取填充率最高的那组结果；返回 (raw_tables, notes)。"""
+def tables(pdf_path, column_lines=None, strategy='auto', dpi=None, page_no=1):
+    """
+    多策略回退，取第一个抽出表的结果；返回 (raw_tables, notes)。
+
+    column_lines 来自页面参数（优先）→ 没填才查 config 模板；
+    strategy='auto' 用固定优先级，否则把用户指定的策略提到最前；
+    dpi 决定 cell_grid 缩放（须与预览图一致）；page_no 只处理指定页。
+    """
     found, notes = [], []
-    scale = config.PDF_DPI / 72.0
-    column_lines = template_lines(pdf_path)
-    if column_lines:
-        notes.append('命中人工列边界模板（{} 条竖线）→ explicit 策略优先'
-                     .format(len(column_lines)))
+    scale = (dpi or config.PDF_DPI) / 72.0
+    lines = column_lines or template_lines(pdf_path)
+    if lines:
+        src = '页面参数' if column_lines else '内置模板'
+        notes.append('使用人工列边界（{}，{} 条竖线）→ explicit 策略优先'
+                     .format(src, len(lines)))
+    # 固定优先级：人工/自动列边界 explicit → default → lines → text。
+    # 取第一个抽出表的结果，不按填充率打分 —— 少列碎表填充率反而更高
+    # （实测 25×6 的 0.813 > 正确 25×8 的 0.74），打分会选进列拆错的表。
     with pdfplumber.open(pdf_path) as pdf:
-        for pno, page in enumerate(pdf.pages, 1):
+        if page_no:
+            idx = min(max(int(page_no) - 1, 0), len(pdf.pages) - 1)
+            pages, start = [pdf.pages[idx]], idx + 1
+        else:
+            pages, start = pdf.pages, 1
+        for pno, page in enumerate(pages, start):
             picked = None
-            # 固定优先级：人工模板 explicit → 自动列边界 explicit →
-            # default → lines → text。取第一个抽出表的结果，不按填充率打分 ——
-            # 少列的碎表填充率反而更高（实测 25×6 的 0.813 > 正确 25×8 的 0.74），
-            # 用打分会把列拆错的表选进来。
-            auto_cols = None if column_lines else auto_column_lines(page)
-            strategies = [('explicit', column_lines or auto_cols),
+            auto_cols = None if lines else auto_column_lines(page)
+            strategies = [('explicit', lines or auto_cols),
                           ('default', None), ('lines', None), ('text', None)]
+            if strategy and strategy != 'auto':
+                # 用户强制首选某策略：提到最前，其余仍保留回退
+                chosen = [x for x in strategies if x[0] == strategy]
+                strategies = chosen + [x for x in strategies if x[0] != strategy]
+                notes.append('第 {} 页：表格策略首选 = {}'.format(pno, strategy))
             for label, cols in strategies:
                 if label == 'explicit':
                     if not cols:

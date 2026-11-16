@@ -8,7 +8,25 @@ report/builder.py — 组装最终 index.html。
 import os
 
 from .. import config
+from .. import params as params_mod
 from . import cards
+
+
+def _param_block(params):
+    """报告页头的参数快照：折叠区，按优先级列出本次每个参数与说明。"""
+    if not params:
+        return ''
+    rows = params_mod.describe(params)
+    trs = ''.join(
+        '<tr><td>{}</td><td><code>{}</code></td><td class="ph">{}</td></tr>'
+        .format(cards.esc(r['label']), cards.esc(r['value']),
+                cards.esc(r['help']))
+        for r in rows)
+    return (
+        '<details class="paramsnap"><summary>本次参数快照（{} 项，按优先级）'
+        '</summary><table><thead><tr><th>参数</th><th>本次值</th><th>说明</th>'
+        '</tr></thead><tbody>{}</tbody></table></details>\n'
+        .format(len(rows), trs))
 
 
 def _asset(name):
@@ -17,7 +35,7 @@ def _asset(name):
         return f.read()
 
 
-def build(records, out_path):
+def build(records, out_path, params=None):
     nav = ''.join(
         '<a href="#case-{}">{}</a>'.format(i, cards.esc(r.get('file', '?')))
         for i, r in enumerate(records))
@@ -28,8 +46,10 @@ def build(records, out_path):
         '<header><h1>CV 提取 MVP · 对照报告</h1>'
         '<div class="sub">共 {} 个文件 · {} 行识别文字 · {} 张结构化表格　|　'
         '左图识别框 ↔ 右侧文字行双向高亮；表格单元格可单格定位；点击图片全屏放大'
-        '</div><div class="nav"><a href="/">← 继续上传</a>{}</div></header>\n'
-        .format(len(records), total_lines, total_tables, nav))
+        '</div><div class="nav"><a href="/">← 继续上传</a>{}</div>'
+        '{}</header>\n'
+        .format(len(records), total_lines, total_tables, nav,
+                _param_block(params)))
     body = '\n'.join(cards.card(r, i) for i, r in enumerate(records))
 
     doc = (

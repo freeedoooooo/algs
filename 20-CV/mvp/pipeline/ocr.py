@@ -20,11 +20,21 @@ def to_plain(value):
     return value
 
 
-def recognize(img_path):
-    """返回一段可直接合并进 rec 的 dict。"""
+def recognize(img_path, det_thresh=None, box_thresh=None):
+    """
+    返回一段可直接合并进 rec 的 dict。
+
+    阈值是 predict 级参数：按次覆盖、不重建模型，所以不同文件能用不同值，
+    单例复用不受影响（这正是它们适合放页面的原因）。
+    """
     t0 = time.perf_counter()
     texts, scores, boxes = [], [], []
-    for res in engines.ocr().predict(img_path):
+    kw = {}
+    if det_thresh is not None:
+        kw['text_det_thresh'] = float(det_thresh)
+    if box_thresh is not None:
+        kw['text_det_box_thresh'] = float(box_thresh)
+    for res in engines.ocr().predict(img_path, **kw):
         texts.extend(res['rec_texts'])
         scores.extend(float(s) for s in res['rec_scores'])
         polys = res.get('rec_polys') or res.get('dt_polys') or []

@@ -17,6 +17,14 @@
     </div>
     <input type="file" id="picker" multiple>
     <ul class="files" id="filelist"></ul>
+    <details class="param-panel" id="parampanel" open>
+      <summary>调试参数（按优先级排；留默认即日常用法）</summary>
+      <div class="param-groups" id="paramgroups"></div>
+      <div class="param-actions">
+        <button type="button" class="mini" id="resetparams">恢复默认</button>
+        <span class="param-hint">改参数只影响本次上传；结果会写进每份 result.json 与报告页头，方便对比 badcase。</span>
+      </div>
+    </details>
     <div class="row">
       <button id="go" disabled>开始提取</button>
       <a class="ghost" id="last" href="/report" style="display:none">查看上次报告 →</a>
