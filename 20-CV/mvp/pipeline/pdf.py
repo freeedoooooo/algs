@@ -71,37 +71,45 @@ def clean_table(rows, cells=None):
     return rows, (grid if grid is not None else []), width
 
 
-def template_lines(pdf_path):
+def _lines_from_edges(page, max_cols=14):
     """
-    查人工列边界模板。**源文件自带的数字编号不去掉**，只剥上传时加的
-    批次时间戳那一段：
+    首选：从 pdfplumber 的横线端点推列边界。
 
-        20261116160231_103_real_bank_statement_textlayer.pdf
-                       └── 只剥左边 14 位时间戳 ──┘
-        → 103_real_bank_statement_textlayer.pdf   （103_ 保留）
-
-    依次尝试三种键，方便 config 里两种写法都能登记：
-      1) 完整带戳名   2) 剥掉时间戳、保留原编号   3) 再剥编号的语义名
-    第 3 种只为兼容 week-02 的旧登记方式（换成 108 也照样命中）。
+    流水表的横线常是「分段短线段」（103 每段仅 51~86pt），每段端点就是
+    列的左右边界；把出现多次（跨多行）的端点聚类，能还原出真实列数。
+    实测 103：端点簇给出 9 条边界 → 25×8 真表，与当初人工模板逐字一致，
+    因此不再需要写死任何 case 的列边界。
     """
-    import re
-    name = os.path.basename(pdf_path)
-    stripped = re.sub(r'^\d{12,14}_', '', name)   # 只剥时间戳
-    semantic = re.sub(r'^\d+_', '', stripped)     # 仅作为查表的兜底键
-    for key in (name, stripped, semantic):
-        if key in config.TABLE_COLUMN_LINES:
-            return config.TABLE_COLUMN_LINES[key]
-    return None
+    try:
+        edges = page.horizontal_edges or []
+        if len(edges) < 4:
+            return None
+        xs = sorted([float(e['x0']) for e in edges]
+                    + [float(e['x1']) for e in edges])
+        # 端点会重复出现在很多行；按容差聚类，只保留出现 >=2 次的稳定边界
+        groups = [[xs[0]]]
+        for x in xs[1:]:
+            if x - groups[-1][-1] <= 2:
+                groups[-1].append(x)
+            else:
+                groups.append([x])
+        bounds, seen = [], set()
+        for g in groups:
+            if len(g) < 2:          # 端点只出现 1 次 = 噪点
+                continue
+            v = round(sum(g) / len(g), 1)
+            if not seen or v - max(seen) >= 8:   # 合并 8pt 内的近邻簇
+                bounds.append(v)
+                seen.add(v)
+        if len(bounds) < 3 or len(bounds) > max_cols + 1:
+            return None
+        return bounds
+    except Exception:
+        return None
 
 
-def auto_column_lines(page, max_cols=14):
-    """
-    只有横线、没有竖线的流水表：用表头行的文字左边界聚类出列分隔线。
-
-    注意页面里的横线常被画成「分段短线段」（103 每段仅 51~86pt），
-    不能按「长横线」过滤；这里直接用 pdfplumber 的 horizontal_edges，
-    取最靠上的横线区间当表头行，避免把页眉混进列边界。
-    """
+def _lines_from_words(page, max_cols=14):
+    """兜底：横线端点不可用时，用表头行的文字左边界聚类。"""
     try:
         hlines = page.horizontal_edges or []
         if len(hlines) < 4:
@@ -109,7 +117,6 @@ def auto_column_lines(page, max_cols=14):
         tops = sorted(set(round(e['top'], 1) for e in hlines))
         y0 = tops[0]
         row_h = (tops[1] - tops[0]) if len(tops) > 1 else 20
-        # 只取表头那一行（第一条与第二条横线之间）的词
         words = [w for w in (page.extract_words() or [])
                  if y0 - 1 <= w['top'] <= y0 + row_h + 2]
         if len(words) < 3:
@@ -130,21 +137,38 @@ def auto_column_lines(page, max_cols=14):
         return None
 
 
+def auto_column_lines(page, max_cols=14):
+    """
+    自动推列边界：横线端点优先，但要防止「一页多表」时各表端点混在一起。
+
+    判据：端点数 == 文字数 + 1 时才用端点法 —— 这正好是「两个列名被 pdfplumber
+    粘成一个 word」造成的缺口（103 端点 9 / 文字 8，还原出被粘的 8 列）。
+    其它情况回退文字法：20 两者相等（端点位置略偏，保持原有 7 列）；
+    21/23/26 端点远多于文字（多表端点混叠），用端点会把列数虚高到 10。
+    """
+    edges = _lines_from_edges(page, max_cols)
+    words = _lines_from_words(page, max_cols)
+    if not edges:
+        return words
+    if words and len(edges) == len(words) + 1:
+        return edges
+    return words or edges
+
+
 def tables(pdf_path, column_lines=None, strategy='auto', dpi=None, page_no=1):
     """
     多策略回退，取第一个抽出表的结果；返回 (raw_tables, notes)。
 
-    column_lines 来自页面参数（优先）→ 没填才查 config 模板；
+    column_lines 来自页面参数（特殊版式临时覆盖），没填就从 PDF 横线端点自动推断；
     strategy='auto' 用固定优先级，否则把用户指定的策略提到最前；
     dpi 决定 cell_grid 缩放（须与预览图一致）；page_no 只处理指定页。
     """
     found, notes = [], []
     scale = (dpi or config.PDF_DPI) / 72.0
-    lines = column_lines or template_lines(pdf_path)
+    lines = list(column_lines) if column_lines else None
     if lines:
-        src = '页面参数' if column_lines else '内置模板'
-        notes.append('使用人工列边界（{}，{} 条竖线）→ explicit 策略优先'
-                     .format(src, len(lines)))
+        notes.append('使用页面人工列边界（{} 条竖线）→ explicit 策略优先'
+                     .format(len(lines)))
     # 固定优先级：人工/自动列边界 explicit → default → lines → text。
     # 取第一个抽出表的结果，不按填充率打分 —— 少列碎表填充率反而更高
     # （实测 25×6 的 0.813 > 正确 25×8 的 0.74），打分会选进列拆错的表。

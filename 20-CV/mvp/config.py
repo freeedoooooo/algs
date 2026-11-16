@@ -49,18 +49,8 @@ GRID_MIN_V = 4
 GRID_RESIZE_MAX = 1000
 GRID_LINE_MIN_LEN = 80
 
-# ---- 人工列边界兜底模板（固定版式专用；页面参数 column_lines 优先）----
-# 键 = 「剥掉上传批次时间戳后的原文件名」，源文件自带的数字编号保留。
-# 也兼容去掉编号后的语义名（week-02 的旧写法，换成 108 仍命中）。
-# 只有「有横线但没竖线」的流水表才需要；自动 words 聚类会把页眉混进表头。
-# ★ 现在这个固定值已作为调试参数放上页面：用户填 column_lines 会覆盖这里，
-#   本字典只在页面留空时兜底。没有登记的文件走 auto_column_lines() 自动推断。
-_BANK_LINES = [17, 112, 175, 265, 326, 393, 463, 532, 578]
-TABLE_COLUMN_LINES = {
-    '103_real_bank_statement_textlayer.pdf': _BANK_LINES,
-    # 兼容 week-02 的「去掉编号后语义名」写法：换成 108 也照样命中
-    'real_bank_statement_textlayer.pdf': _BANK_LINES,
-}
+# 列边界不再写死任何 case：自动从 PDF 横线端点推断（pipeline/pdf.py::_lines_from_edges），
+# 实测与原先 103 的人工模板逐字一致。特殊版式在上传页用 column_lines 参数临时覆盖即可。
 
 # ---- 命名：一次上传 = 一个批次戳，input/ 与 output/ 共用同一前缀 ----
 # 例：20261116160231_103_real_bank_statement_textlayer.pdf
