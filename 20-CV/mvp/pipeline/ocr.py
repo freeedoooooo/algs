@@ -1,0 +1,55 @@
+"""
+pipeline/ocr.py — 逐行文字 / 置信度 / 四点框，以及带框 PNG。
+
+坐标基准是喂进去的那张图（原图 / PDF 首页渲染图）的像素坐标，
+与报告左图 1:1 对应。
+"""
+import time
+
+from PIL import Image, ImageDraw
+
+import config
+from . import engines
+
+
+def to_plain(value):
+    if hasattr(value, 'tolist'):
+        return value.tolist()
+    if isinstance(value, (list, tuple)):
+        return [to_plain(x) for x in value]
+    return value
+
+
+def recognize(img_path):
+    """返回一段可直接合并进 rec 的 dict。"""
+    t0 = time.perf_counter()
+    texts, scores, boxes = [], [], []
+    for res in engines.ocr().predict(img_path):
+        texts.extend(res['rec_texts'])
+        scores.extend(float(s) for s in res['rec_scores'])
+        polys = res.get('rec_polys') or res.get('dt_polys') or []
+        boxes.extend(to_plain(b) for b in polys)
+    return {
+        'texts': texts,
+        'scores': [round(s, 4) for s in scores],
+        'boxes': boxes,
+        'lines': len(texts),
+        'avg_score': round(sum(scores) / len(scores), 4) if scores else 0.0,
+        'low_score_lines': sum(1 for s in scores if s < config.LOW_SCORE),
+        'elapsed': round(time.perf_counter() - t0, 2),
+    }
+
+
+def draw_boxes_png(img_path, rec, out_path):
+    """把识别框烘焙进一张 PNG，供单独打开核对（尖角细线，与报告 SVG 一致）。"""
+    im = Image.open(img_path).convert('RGB')
+    draw = ImageDraw.Draw(im)
+    for box, score in zip(rec['boxes'], rec['scores']):
+        pts = [(float(p[0]), float(p[1])) for p in box]
+        if len(pts) < 3:
+            continue
+        color = ((222, 92, 40) if score < config.LOW_SCORE
+                 else (34, 150, 90))
+        draw.line(pts + [pts[0]], fill=color, width=2)
+    im.save(out_path)
+    return im.size
