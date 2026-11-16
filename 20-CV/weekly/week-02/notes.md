@@ -322,3 +322,45 @@ viewBox 仍用原图像素 → 拉伸恒 1.00×。校验 24/24 组 viewBox 与�
 **验证**：只跑 `python vis_ocr_result.py`（秒级，不重跑 OCR）→
 3 个展开表格区块 + 22 个折叠说明 + 3 个下载 CSV 按钮 + 3 个跳转徽标 + 24 个 imgwrap；
 3 个 data URI 解码后分别是 25×8 / 2×8 / 9×5（含表头），与页面预览完全一致。
+
+---
+
+## 11-16 单元格级坐标回溯（矫正图视图方案）
+
+**需求与选型**：用户要「表格内容能回溯到图上位置」，粒度到单元格；并明确
+「单元格框默认隐藏按需打开」「表格预览也按需展示」「多表可切换展示」。
+方案讨论时先评估过「关 UVDoc + 旋转逆变换投回原图」，被实测否决。
+
+**关键实测（推翻 11-13 的一个乐观判断）**：
+- 关 UVDoc 后 107 的结构仍是 10 行 / 46 个 `<td>` / 46 个框，但**逐格文本
+  12/50 个单元格与基准不同**：序号列 `1,2,3,4,5,6,I-,8` → `1,'',2,'',p,6,'',''`，
+  信用代码出现 0/O 混淆与数字错，机构名「特殊普通合伙」→「特殊昔通合伙」。
+- 换 `PP-OCRv4_server_rec`（13/50 差异）、`PP-OCRv5_server_rec`（10/50 差异）
+  都补不回来。说明损失来自去扭曲这一步本身，不是识别模型能力不足。
+- `doc_preprocessor/pipeline.py`：UVDoc **无条件执行**，不判断是否弯曲；
+  `image_unwarping/predictor.py` 只输出 `doctr_img`，**不暴露位移场**。
+- `table_recognition/pipeline_v2.py`：`doc_preprocessor_image = output_img`，
+  即 cell_box_list 的宿主图就是矫正图。
+
+**结论**：不关 UVDoc（文本零损失），把 `output_img` 另存为
+`<case>/pages/rectified.png`，单元格框 1:1 叠在它上面，零几何变换。
+用户确认此方案「更直观也更可靠」。
+
+**实现要点**：
+- `text_layer_extract.py`：`extract_tables()` → `find_tables()`（前者丢坐标），
+  取 `Table.rows[i].cells`，乘 `PDF_RENDER_DPI/72`；`clean_table()` 同步维护
+  bbox 网格；103 得到 25×8 = 200 个框，范围 x 26~883 / y 160~1243。
+- `table_extract.py`：`_TableParser` 增加 `box_tables`（原始 `<td>` 序号网格），
+  colspan 展开格共享同一框；`tables_from_model(..., case_abs)` 从
+  `res['doc_preprocessor_res']['output_img']` 存矫正图（BGR→RGB），从
+  `res.json['res']['table_res_list'][i]['cell_box_list']` 取框；
+  `split_header()` 多返回 `header_idx`，`structure_table()` 据此切出 `cells`，
+  与 `headers + rows` 严格同形状。107 得到 9×5 = 45 个框，x 700~1436 / y 622~918。
+- `vis_ocr_result.py`：双视图 + `.cellsvg` 层（默认隐藏）+ `data-cell` hover 联动 +
+  表格区默认收起 + 多表 tab + 跳转徽标先展开再滚动。两套高亮 class 分开
+  （OCR 用 `.hl`，单元格用 `.ch`）。
+
+**验证（全量重跑 3m47s）**：25 个 case 成功；103 cells 200/200、107 cells 45/45、
+105 `space=none` 无坐标；`rectified.png` 只在 107 生成（1696×1200），104/106 未误生成；
+报告 25 个视图的 `viewBox` 与图片真实像素 **0 不匹配**，109 个引用 **0 失效**；
+合成双表 rec 验证 tab / pane / data-space 分支正常。

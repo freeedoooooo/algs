@@ -81,6 +81,7 @@ import io
 import csv
 import sys
 import json
+import math                # ceil()：把 PDF 点尺寸换算成预览图像素尺寸
 from pathlib import Path   # as_posix()：把 Windows 的 \ 统一显示成 /，方便和文档路径对照
 
 import pdfplumber
@@ -156,22 +157,44 @@ def build_table_settings(strategy, column_lines=None):
     return {}
 
 
-def clean_table(table):
-    """丢全空行 / 全空列、补齐长短不齐的行，返回 (rows, 质量信息 dict)。"""
+def clean_table(table, cells=None):
+    """
+    丢全空行 / 全空列、补齐长短不齐的行，返回 (rows, 质量信息 dict, bbox 网格)。
+
+    cells 是与 table 同形状的单元格 bbox 网格（来源 pdfplumber 的
+    Table.rows[i].cells，调用方已换算成预览图像素）。行列的删除与补齐会
+    **同步作用在网格上**，保证 cell_grid[i][j] 永远对应 rows[i][j]；
+    否则只要删掉一行或一列，从第 2 行起所有坐标就会整体错位。
+    不传 cells 时第三项返回空列表，兼容只想要文本的旧调用。
+    """
     rows = [[('' if c is None else str(c)).strip() for c in row] for row in (table or [])]
-    rows = [r for r in rows if any(c for c in r)]
+    grid = None
+    if cells is not None:
+        grid = [[list(c) if c else None for c in (row or [])] for row in cells]
+        pad = max((len(g) for g in grid), default=0)
+        while len(grid) < len(rows):
+            grid.append([None] * pad)
+        grid = grid[:len(rows)]
+    keep_i = [i for i, r in enumerate(rows) if any(c for c in r)]
+    rows = [rows[i] for i in keep_i]
+    if grid is not None:
+        grid = [grid[i] for i in keep_i]
     if not rows:
-        return [], {}
+        return [], {}, []
     width = max(len(r) for r in rows)
     rows = [r + [''] * (width - len(r)) for r in rows]
+    if grid is not None:
+        grid = [g + [None] * (width - len(g)) for g in grid]
     keep = [j for j in range(width) if any(r[j] for r in rows)]
     rows = [[r[j] for j in keep] for r in rows]
+    if grid is not None:
+        grid = [[g[j] for j in keep] for g in grid]
     total = len(rows) * len(rows[0]) if rows[0] else 0
     filled = sum(1 for r in rows for c in r if c)
     ratio = round(filled / total, 3) if total else 0.0
     info = {'n_rows': len(rows), 'n_cols': len(rows[0]) if rows else 0,
             'fill_ratio': ratio, 'low_confidence': ratio < TABLE_MIN_FILL_RATIO}
-    return rows, info
+    return rows, info, (grid if grid is not None else [])
 
 
 def table_strategies_for(pdf_path):
@@ -213,28 +236,53 @@ def extract_pdf_tables(pdf_path):
                 diag['pages'].append(f'第 {page_no} 页：线型诊断不可用')
 
             picked = None
+            # PDF 点坐标 → 预览图像素：render_first_page() 用 Matrix(dpi/72, dpi/72)
+            # 渲染，所以 bbox 只要乘同一个系数就与报告左图 1:1。pdfplumber 的
+            # (x0, top, x1, bottom) 里 top 已经从页面顶部起算，y 方向无需翻转。
+            scale = PDF_RENDER_DPI / 72.0
             for strategy in strategies:
                 label = strategy or 'default'
                 settings = build_table_settings(strategy, column_lines)
                 try:
-                    if settings:
-                        raw = page.extract_tables(table_settings=settings)
-                    else:
-                        raw = page.extract_tables()
-                    raw = raw or []
+                    # ★ find_tables() 返回 Table 对象，除了 extract() 给文本，
+                    #   rows[i].cells 还给每个单元格的 bbox；extract_tables()
+                    #   只把文本吐出来，坐标全丢了。策略参数完全一致，结果不变。
+                    tables = (page.find_tables(table_settings=settings)
+                              if settings else page.find_tables())
+                    tables = tables or []
                 except Exception as e:
                     diag['notes'].append(f'第 {page_no} 页 {label} 策略出错：{e}')
                     continue
-                cleaned = [clean_table(t) for t in raw]
-                cleaned = [item for item in cleaned if item[0]]
+                cleaned = []
+                for t in tables:
+                    raw_rows = t.extract() or []
+                    px_cells = [[
+                        [round(c[0] * scale, 1), round(c[1] * scale, 1),
+                         round(c[2] * scale, 1), round(c[3] * scale, 1)]
+                        if c else None for c in row.cells
+                    ] for row in t.rows]
+                    rows, info, grid = clean_table(raw_rows, px_cells)
+                    if rows:
+                        cleaned.append((rows, info, grid))
                 if cleaned:
                     picked = label
-                    for rows, info in cleaned:
+                    img_w = int(math.ceil(page.width * scale))
+                    img_h = int(math.ceil(page.height * scale))
+                    for rows, info, grid in cleaned:
                         record = {'page': page_no, 'source': 'pdfplumber',
-                                  'strategy': label, 'rows': rows}
+                                  'strategy': label, 'rows': rows,
+                                  'cell_grid': grid,
+                                  'coord': {
+                                      'space': 'source',
+                                      'image_size': [img_w, img_h],
+                                      'origin': 'pdfplumber',
+                                      'exact': True,
+                                      'note': '文本层单元格 bbox，按 DPI/72 换算到预览图像素',
+                                  }}
                         record.update(info)
                         found.append(record)
-                    diag['pages'].append(f'第 {page_no} 页 {label} 策略 → {len(cleaned)} 张表')
+                    diag['pages'].append(f'第 {page_no} 页 {label} 策略 → {len(cleaned)} 张表'
+                                         f'（含 {sum(len(g) for _, _, g in cleaned)} 行单元格坐标）')
                     break
                 diag['pages'].append(f'第 {page_no} 页 {label} 策略 → 0 张表，回退')
             if not picked:

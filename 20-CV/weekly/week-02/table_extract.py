@@ -52,6 +52,9 @@ GRID_MIN_V_LINES = 4             # 长竖线少于这个数 → 判定「没有�
 GRID_RESIZE_MAX = 1000           # 预筛前把长边缩到这个尺寸，快且与分辨率无关
 GRID_LINE_MIN_LEN = 80           # Hough 认定的「长直线」最小像素长度
 MIN_TABLE_COLS = 3               # 少于 3 列不算表格
+# 矫正图（整页转正 + UVDoc 去扭曲后的图）落在这个 case 的 pages/ 下。
+# 表格模型的 cell_box_list 就基于这张图，所以框可以直接 1:1 叠上去。
+RECTIFIED_NAME = 'rectified.png'
 DEBUG_OUT = 'output/table_extract'   # 单独调试的产物根（按脚本名隔离）
 # 不跟参数就测这两个：一个文本层 PDF、一个无文本层扫描图，正好覆盖两条路线。
 DEBUG_CASES = (
@@ -83,27 +86,40 @@ class _TableParser(HTMLParser):
     """
     极简 <table> 解析器：只关心 tr / td / th / colspan / br。
 
-    为什么自己写：PPStructureV3 给的是一段 HTML 字符串，直接正则去标签会
-    丢失「哪几个字属于同一格」的信息；HTMLParser 是标准库，逐标签回调，
-    能把每个 <td> 的文本收进独立的单元格。
+    除了文字，还同步记录「每个格子对应 cell_box_list 里的第几个框」：
+        self.box_tables —— 与 self.tables 完全同形状，值是原始 <td> 的序号。
+    ★ 关键：colspan="5" 在文字网格里展开成 5 格，但模型只给出 1 个框。
+      展开的 5 格共享同一个框序号，悬停标题行时高亮的是整行合并框，
+      而不是把第 1 个框错配给第 1 格、后面 4 格拿不到坐标。
+    本批样本没有 rowspan，遇到时按 <td> 出现顺序配框（不展开行）。
     """
 
     def __init__(self):
         # convert_charrefs=True：&nbsp; / &amp; 之类自动转成正常字符
         super().__init__(convert_charrefs=True)
         self.tables = []       # 结果：[[[单元格, ...], ...], ...]
+        self.box_tables = []   # 同形状，每格 = 该 <td> 在 cell_box_list 里的下标
         self._table = None     # 当前正在解析的 <table>
+        self._boxtable = None
         self._row = None       # 当前 <tr>
+        self._boxrow = None
         self._buf = None       # 当前 <td> 里攒的文字片段
         self._colspan = 1
+        self._td_index = 0     # 当前 <table> 内已经出现过几个 <td>
+        self._cur_box = None
 
     def handle_starttag(self, tag, attrs):
         if tag == 'table':
             self._table = []
+            self._boxtable = []
+            self._td_index = 0
         elif tag == 'tr' and self._table is not None:
             self._row = []
+            self._boxrow = []
         elif tag in ('td', 'th') and self._row is not None:
             self._buf = []
+            self._cur_box = self._td_index
+            self._td_index += 1
             # colspan="5" 的标题行展开成 [标题, '', '', '', '']，
             # 后面 split_header() 才能认出「这行只有 1 个非空格，是标题不是表头」。
             attr = dict(attrs)
@@ -122,27 +138,38 @@ class _TableParser(HTMLParser):
         if tag in ('td', 'th') and self._buf is not None:
             cell = re.sub(r'\s+', ' ', ''.join(self._buf)).strip()
             self._row.extend([cell] + [''] * (self._colspan - 1))
+            self._boxrow.extend([self._cur_box] * self._colspan)
             self._buf = None
             self._colspan = 1
+            self._cur_box = None
         elif tag == 'tr' and self._row is not None and self._table is not None:
             self._table.append(self._row)
+            self._boxtable.append(self._boxrow)
             self._row = None
+            self._boxrow = None
         elif tag == 'table' and self._table is not None:
             self.tables.append(self._table)
+            self.box_tables.append(self._boxtable)
             self._table = None
+            self._boxtable = None
 
 
-def parse_table_html(html_text):
-    """把一段表格 HTML 解析成若干张表的 rows；输入为空返回 []。"""
+def parse_table_html_with_boxes(html_text):
+    """返回 (tables, box_tables)；box_tables[i][r][c] 是 cell_box_list 的下标。"""
     if not html_text or '<table' not in str(html_text).lower():
-        return []
+        return [], []
     parser = _TableParser()
     try:
         parser.feed(str(html_text))
         parser.close()
     except Exception:
-        return []
-    return parser.tables
+        return [], []
+    return parser.tables, parser.box_tables
+
+
+def parse_table_html(html_text):
+    """把一段表格 HTML 解析成若干张表的 rows；输入为空返回 []。"""
+    return parse_table_html_with_boxes(html_text)[0]
 
 
 # --------------------------------------------------------------------------
@@ -246,21 +273,94 @@ def _model_html_blocks(res):
     return found
 
 
-def tables_from_model(image_path):
+def _model_cell_boxes(res):
+    """从 PPStructureV3 结果里取每张表的 cell_box_list（每张表一个列表）。"""
+    try:
+        data = res.json
+        d = data.get('res', data) if isinstance(data, dict) else {}
+        return [list(t.get('cell_box_list') or [])
+                for t in (d.get('table_res_list') or [])]
+    except Exception:
+        return []
+
+
+def _save_rectified_image(res, case_abs, page_no, notes):
+    """
+    把「整页转正 + UVDoc 去扭曲」后的 output_img 存到 <case>/pages/rectified.png。
+
+    ★ 为什么用矫正图而不是原图：cell_box_list 的坐标本来就基于这张图
+      （PPStructureV3 内部 doc_preprocessor_image = output_img），直接叠框是
+      1:1，无需任何几何逆变换。UVDoc 是非线性形变且不暴露变换场，硬把框投回
+      旋转原图既算不准，又会因为关掉 UVDoc 损失表格文字质量（实测 107 有
+      12/50 个单元格内容退化，换 server 识别模型也补不回来）。
+    """
+    if not case_abs:
+        return None, None
+    try:
+        from PIL import Image
+        out = res['doc_preprocessor_res']['output_img']   # ndarray, BGR
+        img = Image.fromarray(out[:, :, ::-1])           # BGR → RGB
+        size = [img.size[0], img.size[1]]
+        pages = os.path.join(case_abs, 'pages')
+        os.makedirs(pages, exist_ok=True)
+        img.save(os.path.join(pages, RECTIFIED_NAME))
+        rel = f'pages/{RECTIFIED_NAME}'
+        notes.append(f'第 {page_no} 页：已保存矫正图 {rel}（{size[0]}×{size[1]}），'
+                     '单元格框直接叠在它上面，1:1 无需逆变换')
+        return rel, size
+    except Exception as e:
+        notes.append(f'第 {page_no} 页：矫正图保存失败（{e}），该表坐标不可用')
+        return None, None
+
+
+def tables_from_model(image_path, case_abs=None):
     """
     把一张图喂给表格模型，返回 (raw_tables, notes)。
-    raw_tables 里一条 = 一张表，rows 是二维列表（还没做表头分离）。
+
+    raw_tables 里一条 = 一张表，除 rows 外还有：
+        cell_grid[r][c] = [x0,y0,x1,y1] 或 None，与 rows 完全同形状；
+        coord           坐标宿主图（矫正图）、尺寸、精确性说明。
+    文本链路完全不动 —— 保持 UVDoc 开启，识别质量不下降。
     """
     raw, notes = [], []
     results = build_engine().predict(image_path)
     for page_no, res in enumerate(results, 1):          # 页码统一 1 起
-        for html_text in _model_html_blocks(res):
-            for rows in parse_table_html(html_text):
-                if not rows:
-                    continue
-                raw.append({'page': page_no, 'rows': rows,
-                            'source': 'PPStructureV3', 'strategy': 'table_model'})
-                notes.append(f'第 {page_no} 页：表格模型还原出 {len(rows)} 行表格')
+        htmls = _model_html_blocks(res)
+        boxes_by_table = _model_cell_boxes(res)
+        parsed = []
+        for ti, html_text in enumerate(htmls):
+            tables, box_tables = parse_table_html_with_boxes(html_text)
+            boxes = boxes_by_table[ti] if ti < len(boxes_by_table) else []
+            for rows, box_rows in zip(tables, box_tables):
+                if rows:
+                    parsed.append((rows, box_rows, boxes))
+        if not parsed:
+            continue
+        # 只有真的抽到表才落盘矫正图，避免 104/106 这类「预筛命中但没表」的
+        # case 凭空多一张用不上的图。
+        rect_rel, rect_size = _save_rectified_image(res, case_abs, page_no, notes)
+        for rows, box_rows, boxes in parsed:
+            grid = [[
+                [round(float(v), 1) for v in list(boxes[bi])[:4]]
+                if bi is not None and bi < len(boxes) and len(boxes[bi]) >= 4
+                else None
+                for bi in brow
+            ] for brow in box_rows]
+            raw.append({
+                'page': page_no, 'rows': rows,
+                'source': 'PPStructureV3', 'strategy': 'table_model',
+                'cell_grid': grid,
+                'coord': {
+                    'space': 'rectified',
+                    'image': rect_rel,
+                    'image_size': rect_size,
+                    'origin': 'PPStructureV3',
+                    'exact': bool(rect_rel),
+                    'note': '单元格框取自模型矫正图，1:1 叠加；UVDoc 保持开启以保留文字质量',
+                },
+            })
+            notes.append(f'第 {page_no} 页：表格模型还原出 {len(rows)} 行表格，'
+                         f'{sum(1 for g in grid for c in g if c)} 个单元格有坐标')
     if not raw:
         notes.append('表格模型未检测到表格（有网格线但不是表格，或识别失败）')
     return raw, notes
@@ -277,7 +377,7 @@ def normalize_cell(value):
 
 def split_header(rows):
     """
-    猜哪一行是表头，返回 (标题行列表, 表头, 数据行列表)。
+    猜哪一行是表头，返回 (标题行列表, 表头, 数据行列表, 表头在原 rows 里的下标)。
 
     规则很朴素但够用：前 6 行里，找「非空格子数 >= 3 且等于总列数」的第一行。
       - 103：第 1 行就是 8 个列名 → 表头 = 第 1 行，没有标题行
@@ -285,9 +385,11 @@ def split_header(rows):
         「序号 / 会计师事务所名称 / …」→ 标题行单独留着，不混进数据
       - CSV：第 1 行是表头
     找不到就退而求其次把第 1 行当表头，并在报告里如实标注。
+    返回 header_idx 是为了让坐标网格做**同样的切片**：标题行被剔除后网格
+    必须同步剔除，否则第 1 行的坐标会错配到合并标题上。
     """
     if not rows:
-        return [], [], []
+        return [], [], [], 0
     width = max(len(r) for r in rows)
     rows = [list(r) + [''] * (width - len(r)) for r in rows]
     header_idx = 0
@@ -296,19 +398,44 @@ def split_header(rows):
         if filled >= MIN_TABLE_COLS and filled == width:
             header_idx = i
             break
-    return rows[:header_idx], rows[header_idx], rows[header_idx + 1:]
+    return rows[:header_idx], rows[header_idx], rows[header_idx + 1:], header_idx
+
+
+def align_cell_grid(rows, grid):
+    """把 cell_grid 补/截成与 rows 完全同形状；缺失格子记 None（无坐标）。"""
+    if not grid:
+        return []
+    width = max((len(r) for r in rows), default=0)
+    out = [g[:width] + [None] * max(0, width - len(g)) for g in grid][:len(rows)]
+    while len(out) < len(rows):
+        out.append([None] * width)
+    return out
 
 
 def structure_table(raw, index):
-    """把一张 raw 表整理成「有表头、有数据行」的结构化 dict。"""
+    """把一张 raw 表整理成「有表头、有数据行、每格带 bbox」的结构化 dict。"""
     rows = [[normalize_cell(c) for c in r] for r in (raw.get('rows') or [])]
-    title_rows, headers, data = split_header(rows)
-    data = [r for r in data if any(r)]        # 丢掉全空行
+    grid = align_cell_grid(rows, raw.get('cell_grid') or [])
+    title_rows, headers, data, header_idx = split_header(rows)
+    head_grid = grid[header_idx] if grid else []
+    data_grid = grid[header_idx + 1:] if grid else []
+    keep = [i for i, r in enumerate(data) if any(r)]
+    data = [data[i] for i in keep]                    # 丢掉全空行
+    data_grid = [data_grid[i] for i in keep] if data_grid else []
     width = len(headers) if headers else max((len(r) for r in data), default=0)
     total = len(data) * width
     filled = sum(1 for r in data for c in r if c)
     ratio = round(filled / total, 3) if total else 0.0
     title = ' / '.join(c for r in title_rows for c in r if c)
+    # cells 与「报告里渲染的表头 1 行 + 数据 n 行」严格同形状，
+    # 于是 tbody 的 (r, c) 可以直接查 cells[r][c] 拿到框，无需再换算。
+    cells = ([head_grid] + data_grid) if grid else []
+    coord = dict(raw.get('coord') or {
+        'space': 'none', 'exact': False,
+        'note': '该表没有可用的单元格坐标（纯文本输入或未记录坐标）',
+    })
+    coord['grid_rows'] = len(cells)
+    coord['grid_cols'] = width
     return {
         'page': raw.get('page', 1),
         'source': raw.get('source', '?'),
@@ -316,6 +443,8 @@ def structure_table(raw, index):
         'title': title,
         'headers': [normalize_cell(c) for c in headers],
         'rows': data,
+        'cells': cells,
+        'coord': coord,
         'n_rows': len(data),
         'n_cols': width,
         'fill_ratio': ratio,
@@ -406,7 +535,7 @@ def enrich_case(rec, src_path, case_abs):
                 route = 'table_model'
                 notes.append(f'长直线预筛命中（长横线 {nh} / 长竖线 {nv}），'
                              f'启用 PPStructureV3（自动校正整页方向）')
-                raw_tables, model_notes = tables_from_model(image)
+                raw_tables, model_notes = tables_from_model(image, case_abs)
                 notes.extend(model_notes)
             except Exception as e:
                 # 表格是增强功能，失败不能连累已经跑出来的 OCR 结果

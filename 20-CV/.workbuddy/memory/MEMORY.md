@@ -29,9 +29,16 @@
 - week-02 已做成配置区开关 `USE_DOC_PREPROCESS`（默认 False）。week-01（2026-11-12 优化后）：`b_ocr_image.py` 要画框，同样默认关闭并产出带框 PNG + 自包含 HTML；`weekend_pipeline.py` 只取文字不画框，**刻意保留默认开启**，两者不要统一。
 - 用户不接受只看 JSON 的结果呈现；OCR 结果一律配「带框 PNG + 离线 HTML 对照报告」。
 - **HTML 报告里叠加识别框的框必须 1:1 贴合（2026-11-13 晚定稿）**：`<img>` 与 `<svg>` 必须一起包进 `position:relative` 的 wrapper（`line-height:0`），svg 用 `left:0;top:0;width:100%;height:100%` 铺满，`viewBox` 用原图像素尺寸。**禁止**让 svg 相对被 grid stretch 的 `.stage` 用 `calc(100% - 28px)` 定位 —— 右栏内容高时会把框非等比纵向拉长（实测扁图 102 达 3.10×）。带框 PNG 用 `width=2` 去掉 `joint='curve'` 圆角，与 HTML `<polygon>` + `stroke-width:2` 对齐。
-- **报告里的表格必须整行宽度、默认展开直接预览（2026-11-13 晚）**：不要把表格塞进有 `max-height:620px;overflow:auto` 的右侧 pane（前面还有几百行 OCR 文字，用户滚不到、会以为没有表格）。检测到的表格放在 `.grid` 之后的整宽区块，直接渲染带表头的 HTML 表格 + 跳转徽标 + 诊断折叠区；未检测到的只留一行说明。**「下载 CSV」用 base64 data URI 自包含**（预览面板/沙箱 iframe 相对路径取不到本地文件时会失效），另保留指向真实 `table_N.csv` 的链接。改报告样式只需 `python vis_ocr_result.py`（秒级读回 result.json），不必重跑 OCR 全量。
+- **报告里的表格必须整行宽度（2026-11-13 晚），11-16 改为默认收起、按需展开**：不要把表格塞进有 `max-height:620px;overflow:auto` 的右侧 pane（前面还有几百行 OCR 文字，用户滚不到、会以为没有表格）。检测到的表格放在 `.grid` 之后的整宽区块，直接渲染带表头的 HTML 表格 + 跳转徽标 + 诊断折叠区；未检测到的只留一行说明。11-16 用户要求「按需展示」，故 `.tblbody` 默认 `hidden`、由 `.tbltoggle` 展开，跳转徽标点击时 JS 先展开再滚动（不能跳到空区）。**「下载 CSV」用 base64 data URI 自包含**（预览面板/沙箱 iframe 相对路径取不到本地文件时会失效），另保留指向真实 `table_N.csv` 的链接。改报告样式只需 `python vis_ocr_result.py`（秒级读回 result.json），不必重跑 OCR 全量。
 
 ## PaddleX 3.7.0 表格 HTML 导出坑（2026-11-13 实测）
 - `result.save_to_html(文件路径)` 内部是 `html[list(html.keys())[0]]`；`res.html` 为空字典（这一页没表格）时抛 `IndexError`。多页 PDF 里证书扫描页必踩，不是识别失败。
 - 同一方法遇「一页多张表」只写第一张并打 warning，会悄悄丢数据。
 - 统一做法：先判 `res.html` → 空则从 `parsing_res_list` 的 `[table]` 块 `block_content` 兜底 → 仍空就跳过该页并打印序号；多表按 key 拆文件。week-01 `d_table_ocr.py` 的 `export_html()` 已实现，`weekend_pipeline.table_ocr_page()` 已加判空守卫。
+
+## week-02 表格单元格坐标回溯（2026-11-16 定稿，用户选「矫正图视图」）
+- **不要为了拿坐标而关 UVDoc**：实测 107 关闭后 50 个单元格有 12 个内容退化（序号列塌成空值、0/O 混淆、数字错），换 `PP-OCRv4_server_rec` / `PP-OCRv5_server_rec` 也补不回来（差异 13 / 10 个）。UVDoc 无条件执行、只输出 `doctr_img` 不暴露变换场，其非线性形变无法精确逆变换。
+- **正确做法 = 换坐标宿主，不做逆变换**：`cell_box_list` 本就基于 `doc_preprocessor_res["output_img"]`（转正 + 去扭曲图），把它另存 `<case>/pages/rectified.png`，框 1:1 叠上去；报告提供「原图 / 矫正图」切换。文本链路完全不动、零额外推理。
+- 103 有文本层 PDF 走另一套空间：`page.find_tables()`（**不要用 `extract_tables()`，它丢坐标**）→ `Table.rows[i].cells` → 乘 `PDF_RENDER_DPI/72` 换到预览图像素；`clean_table()` 删空行空列时必须**同步删/补 bbox 网格**，否则从第 2 行起整体错位。
+- 结构化表的 `cells[r][c]` 必须与「表头 1 行 + 数据 n 行」严格同形状，报告 `<td data-cell="r_c">` 才能直接索引。`split_header()` 多返回 `header_idx` 用于同步切网格；`colspan` 展开格共享同一个框序号（`_TableParser.box_tables` 记原始 `<td>` 序号）。CSV 无图 → `coord.space='none'`。
+- 报告交互定稿：单元格框**默认隐藏**（`.cellsvg` + 「显示单元格位置」开关）、表格预览**默认收起**、多表 tab 选中哪张只叠哪张的框、两套 hover 高亮 class 分开（OCR `.hl` / 单元格 `.ch`）、每个 `.view` 各自一个 `.imgwrap` 保 1:1。

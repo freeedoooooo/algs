@@ -476,6 +476,52 @@ texts = sensitive_res[0]['rec_texts']     # 3.x 取数方式
 
 ---
 
+## 表格内容 → 图上位置的坐标回溯（11-16 新增）
+
+需求：从 `index.html` 预览的表格**单元格**反查它在图像上的位置，粒度到单元格；
+单元格框默认隐藏、按需打开；表格预览默认收起；一页多表时可切换展示。
+
+### 两套坐标空间（绝不混叠）
+
+| case | 坐标来源 | 宿主图 | 换算 |
+|---|---|---|---|
+| 103 有文本层 PDF | `pdfplumber.find_tables()` → `Table.rows[i].cells` | `source.png`（910×1287） | PDF 点坐标 × `110/72`，无偏移 |
+| 107 旋转扫描图 | `res.json["res"]["table_res_list"][i]["cell_box_list"]` | `pages/rectified.png`（1696×1200，转正 + UVDoc 去扭曲） | **无换算，1:1** |
+| 105 CSV | 无图像载体 | — | `coord.space='none'`，不显示开关 |
+
+**为什么 107 用矫正图、而不是把框投回旋转原图**：`doc_preprocessor_image = output_img`，
+`cell_box_list` 本来就基于矫正图；UVDoc 是非线性形变且 paddlex 不暴露变换场，硬逆变换
+算不准。更关键的是实测**关掉 UVDoc 会损失表格文字质量**：107 的 50 个单元格里有 12 个
+内容退化（序号列塌成空值、`0/O` 混淆、`911101065906760500→911101085906760500`），
+换 `PP-OCRv4_server_rec` / `PP-OCRv5_server_rec` 也补不回来（差异 13 / 10 个）。
+因此保持 UVDoc 开启、另存矫正图作坐标宿主：文本零损失、坐标零变换、零额外推理。
+
+### 数据结构
+
+`result.json` / `tables.json` 的每张 `structured_tables[i]` 新增：
+- `cells[r][c]`：与「表头 1 行 + 数据 n 行」严格同形状的 bbox 网格（`[x0,y0,x1,y1]` 或 `null`），
+  报告里 `<td data-cell="r_c">` 可直接索引，不用再换算；
+- `coord`：`space` / `image` / `image_size` / `origin` / `exact` / `grid_rows` / `grid_cols`。
+
+`colspan="5"` 的标题行展开成 5 格但模型只给 1 个框 → `_TableParser` 记录原始 `<td>` 序号，
+展开格共享同一个 bbox；`clean_table()` 删空行空列时同步删/补 bbox 网格，避免整体错位。
+
+### 报告交互
+
+- 左图按需切换「原图 / 矫正图」（仅存在矫正图的 case 才出现切换条）；
+- 单元格框**默认隐藏**，点表格区的「显示单元格位置」才叠加，并自动切到该表对应的视图；
+- 表格预览**默认收起**，卡片标题的「↓ 查看 N 张表格」徽标点击会先展开再滚动；
+- 一页多表时提供 tab，选中哪张表，图上只叠哪张表的框；
+- 悬停表格单元格 → 图上对应框高亮（`.ch`，与 OCR 行联动的 `.hl` 互不影响）；
+- 每个 `.view` 各自包一个 `.imgwrap`，沿用「img 撑高 wrapper + svg 100%/100%」的 1:1 机制。
+
+### 产物新增
+
+`<case>/pages/rectified.png`（仅真正抽到表的图片 case，如 107）。
+其余产物不变：`tables.json` 多出 `cells` / `coord`，`table_N.csv` 内容不变。
+
+---
+
 ## 进度日志（本周日填）
 
 ```

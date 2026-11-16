@@ -320,13 +320,40 @@ a{color:var(--accent)}
 .tablesec-none{color:var(--muted);font-size:12px}
 .jumptbl{display:inline-block;margin-left:10px;padding:2px 10px;border-radius:20px;
   background:#e7f8ee;color:#0a7a43;font-size:12px;text-decoration:none;vertical-align:2px}
+/* ★ 单元格坐标回溯（11-16）：原图 / 矫正图双视图 + 默认隐藏的单元格框层。
+   两套坐标系绝不混叠：103 的框来自 PDF 文本层、叠在预览图；107 的框来自
+   表格模型矫正图、叠在 pages/rectified.png。每个 .view 各自包一个 .imgwrap，
+   沿用「img 撑高 wrapper、svg 100%/100%」的 1:1 机制，不会重蹈 CSS 拉伸。 */
+.viewbar{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin:0 0 10px}
+.viewbtn,.cellbtn,.tbltoggle,.tbltab{font:inherit;font-size:12px;cursor:pointer;
+  padding:4px 11px;border-radius:7px;border:1px solid var(--line);
+  background:#fff;color:var(--ink)}
+.viewbtn.on,.cellbtn.on,.tbltab.on{background:var(--accent);
+  border-color:var(--accent);color:#fff}
+.tbltoggle{background:#eef4ff;border-color:#c9d9f5;color:var(--accent);font-weight:500}
+.tablesec-head .spacer{flex:1}
+.view[hidden],.tblbody[hidden],.tblpane[hidden]{display:none}
+.cellsvg{display:none}
+.cellsvg.on{display:block}
+.cellbox{fill:rgba(15,157,110,.06);stroke:#0f9d6e;stroke-width:2;
+  vector-effect:non-scaling-stroke}
+.cellbox.ch{fill:rgba(15,157,110,.34);stroke-width:4}
+td.cell,th.cell{cursor:crosshair}
+td.cell:hover,td.cell.ch,th.cell:hover,th.cell.ch{background:#e3f7ee!important}
+.tbltabs{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 12px}
+.coordnote{font-size:12px;color:var(--muted);margin:0 0 8px}
 @media(max-width:900px){.grid{grid-template-columns:1fr}.stage{border-right:0}}
 """
 
 JS = """
-// 鼠标悬停：表格行 <-> 图上的框 双向高亮。
-// data-card 用来区分「第几张图」，data-idx 用来区分「这张图里的第几行」，
-// 否则不同图片的 1、2、3 号会串在一起。
+function cardOf(el){ return el.closest('.card'); }
+function activeSpace(card){
+  var p = card.querySelector('.tblpane:not([hidden])');
+  return p ? p.getAttribute('data-space') : '';
+}
+
+// 鼠标悬停：OCR 文字行 <-> 原图上的识别框 双向高亮。
+// data-card 用来区分「第几张图」，data-idx 用来区分「这张图里的第几行」。
 document.querySelectorAll('[data-card][data-idx]').forEach(function(el){
   el.addEventListener('mouseenter', function(){
     var c = el.getAttribute('data-card'), i = el.getAttribute('data-idx');
@@ -337,6 +364,96 @@ document.querySelectorAll('[data-card][data-idx]').forEach(function(el){
     document.querySelectorAll('.hl').forEach(function(x){ x.classList.remove('hl'); });
   });
 });
+
+// 原图 / 矫正图切换：两套坐标系互斥，切换时只显示对应视图。
+document.querySelectorAll('.viewbtn').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    var card = cardOf(btn), v = btn.getAttribute('data-view');
+    card.querySelectorAll('.viewbtn').forEach(function(b){
+      b.classList.toggle('on', b === btn);
+    });
+    card.querySelectorAll('.view').forEach(function(p){
+      p.hidden = (p.getAttribute('data-view') !== v);
+    });
+  });
+});
+
+// 「显示单元格位置」：默认隐藏，打开后才显示 cellsvg；当前表落在矫正图
+// 空间时自动切到矫正图视图，避免把框显示在错误的那张图上。
+document.querySelectorAll('.cellbtn').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    var card = cardOf(btn), on = !btn.classList.contains('on');
+    btn.classList.toggle('on', on);
+    btn.textContent = on ? '隐藏单元格位置' : '显示单元格位置';
+    card.querySelectorAll('.cellsvg').forEach(function(s){
+      s.classList.toggle('on', on);
+    });
+    if(on && activeSpace(card) === 'rectified'){
+      var vb = card.querySelector('.viewbtn[data-view="rect"]');
+      if(vb) vb.click();
+    }
+  });
+});
+
+// 表格预览：默认收起，按需展开。
+document.querySelectorAll('.tbltoggle').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    var body = cardOf(btn).querySelector('.tblbody');
+    body.hidden = !body.hidden;
+    btn.classList.toggle('on', !body.hidden);
+    btn.textContent = body.hidden ? '展开表格预览' : '收起表格预览';
+  });
+});
+
+// 卡片标题上的跳转徽标：先展开表格区再滚动，否则点过去是空的。
+document.querySelectorAll('.jumptbl').forEach(function(a){
+  a.addEventListener('click', function(e){
+    e.preventDefault();
+    var card = cardOf(a), body = card.querySelector('.tblbody');
+    var t = card.querySelector('.tbltoggle');
+    if(body){ body.hidden = false; }
+    if(t){ t.classList.add('on'); t.textContent = '收起表格预览'; }
+    var sec = card.querySelector('.tablesec');
+    if(sec) sec.scrollIntoView({behavior:'smooth', block:'start'});
+  });
+});
+
+// 多表切换：只显示选中表的表格本体与图上单元格框。
+document.querySelectorAll('.tbltab').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    var card = cardOf(btn), ti = btn.getAttribute('data-tbl');
+    card.querySelectorAll('.tbltab').forEach(function(b){
+      b.classList.toggle('on', b === btn);
+    });
+    card.querySelectorAll('.tblpane').forEach(function(p){
+      p.hidden = (p.getAttribute('data-tbl') !== ti);
+    });
+    card.querySelectorAll('.cellbox').forEach(function(r){
+      r.style.display = (r.getAttribute('data-tbl') === ti) ? '' : 'none';
+    });
+    var cb = card.querySelector('.cellbtn');
+    if(cb && cb.classList.contains('on')){
+      var want = activeSpace(card) === 'rectified' ? 'rect' : 'orig';
+      var vb = card.querySelector('.viewbtn[data-view="'+want+'"]');
+      if(vb) vb.click();
+    }
+  });
+});
+
+// 表格单元格 <-> 图上单元格框 双向高亮（独立用 .ch，不与 OCR 的 .hl 串）。
+document.querySelectorAll('[data-card][data-cell]').forEach(function(el){
+  el.addEventListener('mouseenter', function(){
+    var c = el.getAttribute('data-card'), k = el.getAttribute('data-cell'),
+        t = el.getAttribute('data-tbl');
+    el.classList.add('ch');
+    document.querySelectorAll('.cellbox[data-card="'+c+'"][data-cell="'+k+'"][data-tbl="'+t+'"]')
+            .forEach(function(x){ x.classList.add('ch'); });
+  });
+  el.addEventListener('mouseleave', function(){
+    document.querySelectorAll('.ch').forEach(function(x){ x.classList.remove('ch'); });
+  });
+});
+
 // 一键只看「有问题」的图：有低置信度行、识别失败、或标准答案有未命中行。
 var onlyProblem = false;
 document.getElementById('filterBtn').addEventListener('click', function(){
@@ -378,18 +495,54 @@ ROUTE_LABEL = {
 }
 
 
+def build_cell_rects(rec, card_no, space):
+    """
+    生成某个坐标空间下的单元格 <rect>，供左图 SVG 叠加层使用。
+
+    cells[r][c] 与「表头 1 行 + 数据 n 行」严格同形状（见
+    table_extract.structure_table），所以这里的 (r,c) 可以直接和表格里的
+    data-cell 对上。非当前选中表（data-tbl != 0）的框先隐藏，切 tab 时放开。
+    """
+    out = []
+    for ti, t in enumerate(rec.get('structured_tables') or []):
+        coord = t.get('coord') or {}
+        if coord.get('space') != space or not coord.get('exact'):
+            continue
+        cells = t.get('cells') or []
+        headers = t.get('headers') or []
+        rows = t.get('rows') or []
+        hide = '' if ti == 0 else ' style="display:none"'
+        for r, row in enumerate(cells):
+            for c, b in enumerate(row):
+                if not b or len(b) < 4:
+                    continue
+                text = ''
+                if r == 0 and c < len(headers):
+                    text = headers[c]
+                elif r - 1 < len(rows) and c < len(rows[r - 1]):
+                    text = rows[r - 1][c]
+                w, h = max(0.0, b[2] - b[0]), max(0.0, b[3] - b[1])
+                out.append(
+                    f'<rect class="cellbox" data-card="{card_no}" data-tbl="{ti}" '
+                    f'data-cell="{r}_{c}" x="{b[0]:.1f}" y="{b[1]:.1f}" '
+                    f'width="{w:.1f}" height="{h:.1f}"{hide}>'
+                    f'<title>表 {ti + 1} · 行 {r} 列 {c + 1} · {esc(text)}</title>'
+                    f'</rect>')
+    return ''.join(out)
+
+
 def build_tables_section(rec, card_no, case_href=''):
     """
-    ★ 卡片整行宽度的「提取到的表格」区块，放在 .grid 之后、默认展开可见。
+    ★ 卡片整行宽度的「提取到的表格」区块（11-16 改为默认收起、按需展开）。
 
-    11-13 晚改版原因：以前表格塞在右侧 .pane 里，而 .pane 有
-    max-height:620px + overflow:auto、前面还堆着 226 行 OCR 文字 —— 用户要
-    滚到最底才看得到，反馈「页面上没有表格预览、也没有 csv 下载」。
-    现在表格单独占一整行、进卡片就能看见；每张表都有：
-        · 直接渲染的 HTML 表格（表头 + 数据行，可横向/纵向滚动）
-        · 「下载 CSV」按钮：data URI 自包含，任何预览环境都能下载
-        · 「打开 CSV 文件」链接：指向 case 目录里真实落盘的 table_N.csv
-    没检测到表格的 case 只留一行说明 + 折叠诊断，不占版面。
+    11-13 把表格从右侧 620px 滚动 pane 里搬出来，解决「看不见」；
+    11-16 按用户要求再改成默认收起：整宽区块仍在卡片下部、入口显眼，
+    卡片标题的「↓ 查看 N 张表格」徽标点击会先展开再滚动，不会跳到空区。
+    每张表：
+        · tab 切换（一页多表时只显示选中表，图上只叠选中表的单元格框）
+        · 带表头的 HTML 表格，每格带 data-cell，悬停可在图上高亮
+        · 自包含 CSV 下载 + 指向真实 table_N.csv 的链接
+    没检测到表格的 case 只留一行说明 + 折叠诊断。
     """
     tables = rec.get('structured_tables') or []
     sec_id = f'tbl-{card_no}'
@@ -410,13 +563,52 @@ def build_tables_section(rec, card_no, case_href=''):
                 f'　<span class="route">路线：{esc(route_label)}</span>'
                 f'{detail}</div>')
 
+    has_coord = any(
+        (t.get('coord') or {}).get('exact')
+        and (t.get('coord') or {}).get('space') in ('source', 'rectified')
+        for t in tables)
+    space_label = {
+        'source': '预览图（PDF 文本层坐标，精确）',
+        'rectified': '矫正图（转正 + 去扭曲，1:1 精确）',
+        'none': '无图像载体（纯文本）',
+    }
+    spaces = []
+    for t in tables:
+        s = (t.get('coord') or {}).get('space', 'none')
+        label = space_label.get(s, s)
+        if label not in spaces:
+            spaces.append(label)
+
     parts = [
         f'<div class="tablesec" id="{sec_id}">',
-        '<div class="tablesec-head">'
-        f'<h3>提取到的表格</h3><span class="cnt">{len(tables)} 张</span>'
-        f'<span class="route">路线：{esc(route_label)}</span></div>',
+        '<div class="tablesec-head">',
+        f'<button type="button" class="tbltoggle" data-card="{card_no}">'
+        '展开表格预览</button>',
+        f'<h3>提取到的表格</h3><span class="cnt">{len(tables)} 张</span>',
+        f'<span class="route">路线：{esc(route_label)}</span>',
+        '<span class="spacer"></span>',
     ]
+    if has_coord:
+        parts.append(f'<button type="button" class="cellbtn" data-card="{card_no}">'
+                     '显示单元格位置</button>')
+    parts.append('</div>')
+    parts.append(f'<div class="tblbody" data-card="{card_no}" hidden>')
+    parts.append(f'<p class="coordnote">坐标宿主：{esc(" / ".join(spaces))}'
+                 '　·　展开后悬停任意单元格，图上对应位置会高亮</p>')
+
+    if len(tables) > 1:
+        tabs = ''.join(
+            f'<button type="button" class="tbltab{" on" if i == 0 else ""}" '
+            f'data-card="{card_no}" data-tbl="{i}">表 {i + 1} · '
+            f'{t.get("n_rows", 0)}×{t.get("n_cols", 0)}</button>'
+            for i, t in enumerate(tables))
+        parts.append(f'<div class="tbltabs">{tabs}</div>')
+
     for idx, t in enumerate(tables, 1):
+        ti = idx - 1
+        coord = t.get('coord') or {}
+        space = coord.get('space') or 'none'
+        hidden = '' if ti == 0 else ' hidden'
         csv_file = t.get('csv_file', f'table_{idx}.csv')
         file_href = (f'{case_href}/{quote(csv_file, safe="")}' if case_href
                      else quote(csv_file, safe=''))
@@ -428,6 +620,8 @@ def build_tables_section(rec, card_no, case_href=''):
                 f'{t.get("n_rows", 0)} 行 × {t.get("n_cols", 0)} 列 · '
                 f'填充率 {t.get("fill_ratio", 0)}'
                 + (' · 低置信度，建议人工核对' if t.get('low_confidence') else ''))
+        parts.append(f'<div class="tblpane" data-card="{card_no}" '
+                     f'data-tbl="{ti}" data-space="{esc(space)}"{hidden}>')
         parts.append(
             f'<div class="tbl-bar"><b>表 {idx}</b>'
             f'<span class="meta">{esc(meta)}</span>'
@@ -437,12 +631,19 @@ def build_tables_section(rec, card_no, case_href=''):
             f'打开 {esc(csv_file)}</a></div>')
         if t.get('title'):
             parts.append(f'<p class="tbl-title">标题：{esc(t["title"])}</p>')
-        thead = ('<thead><tr>' + ''.join(f'<th>{esc(c)}</th>' for c in headers)
-                 + '</tr></thead>') if headers else ''
-        body = ''.join('<tr>' + ''.join(f'<td>{esc(c)}</td>' for c in r) + '</tr>'
-                       for r in rows)
+        thead = ('<thead><tr>' + ''.join(
+            f'<th class="cell" data-card="{card_no}" data-tbl="{ti}" '
+            f'data-cell="0_{c}">{esc(v)}</th>'
+            for c, v in enumerate(headers)) + '</tr></thead>') if headers else ''
+        body = ''.join(
+            '<tr>' + ''.join(
+                f'<td class="cell" data-card="{card_no}" data-tbl="{ti}" '
+                f'data-cell="{r}_{c}">{esc(v)}</td>'
+                for c, v in enumerate(row)) + '</tr>'
+            for r, row in enumerate(rows, 1))
         parts.append(f'<div class="tablewrap"><table>{thead}'
                      f'<tbody>{body}</tbody></table></div>')
+        parts.append('</div>')
 
     # 诊断与原始抽取记录收进折叠区，调试时仍可展开，不丢数据。
     diag = rec.get('diagnostics') or {}
@@ -469,7 +670,7 @@ def build_tables_section(rec, card_no, case_href=''):
     if rec.get('plain_text'):
         parts.append('<div class="plain"><details><summary>原文</summary>'
                      f'<pre>{esc(rec["plain_text"])}</pre></details></div>')
-    parts.append('</div>')
+    parts.append('</div></div>')
     return ''.join(parts)
 
 
@@ -542,18 +743,57 @@ def build_card(rec, card_no, image_dir, out_root, manifest_map):
                 f'points="{point_str}"><title>#{i + 1} {esc(tip)} (score={score:.2f})'
                 f'</title></polygon>'
             )
+        # ---- 单元格坐标回溯：判断是否存在「矫正图」视图 ----
+        # 107 这类旋转扫描件的单元格框以 pages/rectified.png 为宿主；
+        # 103 的文本层框直接以预览图为宿主。两套坐标绝不叠到同一张图上。
+        rect_view = ''
+        viewbar = ''
+        rect_link = ''
+        for t in rec.get('structured_tables') or []:
+            co = t.get('coord') or {}
+            rel = co.get('image')
+            if co.get('space') != 'rectified' or not rel or not co.get('exact'):
+                continue
+            abs_img = os.path.join(case_abs, rel)
+            if not os.path.isfile(abs_img):
+                continue
+            rect_src = f'{case_href}/{quote(rel, safe="/")}'
+            with Image.open(abs_img) as im:
+                rw, rh = im.size
+            rect_cells = build_cell_rects(rec, card_no, 'rectified')
+            rect_view = (
+                f'<div class="view" data-card="{card_no}" data-view="rect" hidden>'
+                f'<div class="imgwrap"><img src="{rect_src}" '
+                f'alt="{esc(name)}（矫正图）">'
+                f'<svg class="cellsvg" viewBox="0 0 {rw} {rh}" '
+                f'preserveAspectRatio="none">{rect_cells}</svg>'
+                f'</div></div>')
+            viewbar = (
+                f'<div class="viewbar">'
+                f'<button type="button" class="viewbtn on" data-card="{card_no}" '
+                f'data-view="orig">原图</button>'
+                f'<button type="button" class="viewbtn" data-card="{card_no}" '
+                f'data-view="rect">矫正图（单元格坐标基准）</button></div>')
+            rect_link = f' · <a href="{rect_src}" target="_blank">查看矫正图</a>'
+            break
+        src_cells = build_cell_rects(rec, card_no, 'source')
+        cell_svg = (f'<svg class="cellsvg" viewBox="0 0 {w} {h}" '
+                    f'preserveAspectRatio="none">{src_cells}</svg>') if src_cells else ''
         # img + svg 必须包在同一个 .imgwrap 里：wrapper 高度由 img 撑起，
-        # svg 用 100%/100% 铺满它，viewBox 是原图像素尺寸 → 框与图 1:1 对齐。
-        # 不能让 svg 直接相对 .stage 定位（grid 拉伸会把框纵向拉长，见 CSS 注释）。
+        # svg 100%/100% 铺满它，viewBox 是该视图图像的像素尺寸 → 1:1。
+        # 两个视图各自一个 .imgwrap，避免 grid 拉伸或跨坐标系混叠。
         left = (
-            f'<div class="stage"><div class="imgwrap">'
-            f'<img src="{src}" alt="{esc(name)}">'
+            f'<div class="stage">{viewbar}<div class="views">'
+            f'<div class="view" data-card="{card_no}" data-view="orig">'
+            f'<div class="imgwrap"><img src="{src}" alt="{esc(name)}">'
             f'<svg viewBox="0 0 {w} {h}" preserveAspectRatio="none">'
-            f'{"".join(polys)}</svg></div></div>'
+            f'{"".join(polys)}</svg>{cell_svg}</div></div>'
+            f'{rect_view}</div></div>'
         )
         extra = (
             f'<a href="{src}" target="_blank">查看原图副本</a> · '
             f'<a href="{png_href}" target="_blank">查看带框 PNG</a>'
+            f'{rect_link}'
         )
     else:
         left = f'<div class="stage empty">找不到预览图：{esc(display_image)}</div>'
@@ -647,7 +887,7 @@ def build_card(rec, card_no, image_dir, out_root, manifest_map):
     # 表格单独占卡片整行宽度，放在 .grid 之后 —— 不用滚右侧 620px 的小窗。
     tables_html = build_tables_section(rec, card_no, case_href)
     return (
-        f'<section class="card" data-problem="{problem}">{head}'
+        f'<section class="card" data-card="{card_no}" data-problem="{problem}">{head}'
         f'<div class="grid">{left}{right}</div>'
         f'{tables_html}</section>'
     )

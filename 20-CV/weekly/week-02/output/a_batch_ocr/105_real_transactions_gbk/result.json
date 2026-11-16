@@ -84,6 +84,14 @@
           "代发款项"
         ]
       ],
+      "cells": [],
+      "coord": {
+        "space": "none",
+        "exact": false,
+        "note": "该表没有可用的单元格坐标（纯文本输入或未记录坐标）",
+        "grid_rows": 0,
+        "grid_cols": 8
+      },
       "n_rows": 1,
       "n_cols": 8,
       "fill_ratio": 0.75,

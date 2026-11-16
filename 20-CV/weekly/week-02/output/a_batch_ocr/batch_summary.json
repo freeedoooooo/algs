@@ -19,7 +19,7 @@
       "tables": 0,
       "structured_tables": 0,
       "table_route": "skipped",
-      "elapsed": 2.5,
+      "elapsed": 5.89,
       "error": null
     },
     {
@@ -34,7 +34,7 @@
       "tables": 0,
       "structured_tables": 0,
       "table_route": "skipped",
-      "elapsed": 1.63,
+      "elapsed": 3.98,
       "error": null
     },
     {
@@ -49,7 +49,7 @@
       "tables": 0,
       "structured_tables": 0,
       "table_route": "skipped",
-      "elapsed": 2.04,
+      "elapsed": 4.95,
       "error": null
     },
     {
@@ -64,7 +64,7 @@
       "tables": 0,
       "structured_tables": 0,
       "table_route": "skipped",
-      "elapsed": 1.55,
+      "elapsed": 4.38,
       "error": null
     },
     {
@@ -79,7 +79,7 @@
       "tables": 0,
       "structured_tables": 0,
       "table_route": "skipped",
-      "elapsed": 1.69,
+      "elapsed": 4.16,
       "error": null
     },
     {
@@ -94,7 +94,7 @@
       "tables": 0,
       "structured_tables": 0,
       "table_route": "skipped",
-      "elapsed": 2.29,
+      "elapsed": 5.86,
       "error": null
     },
     {
@@ -109,7 +109,7 @@
       "tables": 0,
       "structured_tables": 0,
       "table_route": "skipped",
-      "elapsed": 1.95,
+      "elapsed": 4.85,
       "error": null
     },
     {
@@ -124,7 +124,7 @@
       "tables": 0,
       "structured_tables": 0,
       "table_route": "skipped",
-      "elapsed": 1.96,
+      "elapsed": 4.96,
       "error": null
     },
     {
@@ -139,7 +139,7 @@
       "tables": 0,
       "structured_tables": 0,
       "table_route": "skipped",
-      "elapsed": 4.52,
+      "elapsed": 8.4,
       "error": null
     },
     {
@@ -154,7 +154,7 @@
       "tables": 0,
       "structured_tables": 0,
       "table_route": "skipped",
-      "elapsed": 2.46,
+      "elapsed": 5.03,
       "error": null
     },
     {
@@ -169,7 +169,7 @@
       "tables": 0,
       "structured_tables": 0,
       "table_route": "skipped",
-      "elapsed": 2.51,
+      "elapsed": 5.08,
       "error": null
     },
     {
@@ -184,7 +184,7 @@
       "tables": 0,
       "structured_tables": 0,
       "table_route": "skipped",
-      "elapsed": 1.13,
+      "elapsed": 2.13,
       "error": null
     },
     {
@@ -199,7 +199,7 @@
       "tables": 0,
       "structured_tables": 0,
       "table_route": "skipped",
-      "elapsed": 2.34,
+      "elapsed": 2.2,
       "error": null
     },
     {
@@ -214,7 +214,7 @@
       "tables": 0,
       "structured_tables": 0,
       "table_route": "skipped",
-      "elapsed": 2.01,
+      "elapsed": 2.55,
       "error": null
     },
     {
@@ -229,7 +229,7 @@
       "tables": 0,
       "structured_tables": 0,
       "table_route": "skipped",
-      "elapsed": 0.96,
+      "elapsed": 1.55,
       "error": null
     },
     {
@@ -244,7 +244,7 @@
       "tables": 0,
       "structured_tables": 0,
       "table_route": "skipped",
-      "elapsed": 1.96,
+      "elapsed": 3.7,
       "error": null
     },
     {
@@ -259,7 +259,7 @@
       "tables": 0,
       "structured_tables": 0,
       "table_route": "skipped",
-      "elapsed": 2.24,
+      "elapsed": 4.99,
       "error": null
     },
     {
@@ -274,7 +274,7 @@
       "tables": 0,
       "structured_tables": 0,
       "table_route": "skipped",
-      "elapsed": 2.45,
+      "elapsed": 5.23,
       "error": null
     },
     {
@@ -289,7 +289,7 @@
       "tables": 0,
       "structured_tables": 0,
       "table_route": "skipped",
-      "elapsed": 1.66,
+      "elapsed": 4.37,
       "error": null
     },
     {
@@ -304,7 +304,7 @@
       "tables": 0,
       "structured_tables": 0,
       "table_route": "skipped",
-      "elapsed": 3.24,
+      "elapsed": 5.52,
       "error": null
     },
     {
@@ -319,7 +319,7 @@
       "tables": 1,
       "structured_tables": 1,
       "table_route": "text_layer",
-      "elapsed": 23.44,
+      "elapsed": 35.61,
       "error": null
     },
     {
@@ -334,7 +334,7 @@
       "tables": 0,
       "structured_tables": 0,
       "table_route": "table_model",
-      "elapsed": 8.45,
+      "elapsed": 4.82,
       "error": null
     },
     {
@@ -364,7 +364,7 @@
       "tables": 0,
       "structured_tables": 0,
       "table_route": "table_model",
-      "elapsed": 6.98,
+      "elapsed": 7.36,
       "error": null
     },
     {
@@ -379,7 +379,7 @@
       "tables": 0,
       "structured_tables": 1,
       "table_route": "table_model",
-      "elapsed": 9.37,
+      "elapsed": 6.09,
       "error": null
     }
   ]

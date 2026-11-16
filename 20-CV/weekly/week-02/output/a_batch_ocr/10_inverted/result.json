@@ -3,7 +3,7 @@
   "lines": 8,
   "avg_score": 0.9814,
   "low_score_lines": 0,
-  "elapsed": 2.46,
+  "elapsed": 5.03,
   "texts": [
     "PS D:\\work> python -m pip show paddleocr",
     "Name:paddleocr",
