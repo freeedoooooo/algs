@@ -29,8 +29,9 @@ SCHEMA = [
               'lines=按矢量线；default=pdfplumber 默认。'),
     dict(key='column_lines', label='人工列边界（x 坐标）', type='str', default='',
          order=3, group='② 表格能不能抽到',
-         help='逗号/空格分隔的竖线 x 坐标，如 17,112,175,265。'
-              '填了就覆盖 config 里的固定版式模板；只对「有横线没竖线」的流水表有意义。'),
+         help='逗号/空格分隔的竖线 x 坐标（例：x1,x2,x3,…，需 ≥2 个且递增）。'
+              '这里是临时覆盖值，代码里没有任何写死的列边界；'
+              '留空则自动从 PDF 横线端点推断。仅「有横线没竖线」的流水表才可能需要填。'),
     dict(key='grid_min_h', label='预筛·最少横线', type='int',
          default=config.GRID_MIN_H, min=0, max=200,
          order=4, group='③ 扫描件进不进模型',
@@ -71,7 +72,7 @@ def public_schema():
 
 
 def parse_lines(value):
-    """'17,112 175' / [17,112] → [17.0,112.0,175.0]；非法返回 None。"""
+    """'12,80 150' / [12,80] → [12.0,80.0,150.0]；非法返回 None（纯示例，非配置）。"""
     if value is None or value == '' or value == []:
         return None
     try:
