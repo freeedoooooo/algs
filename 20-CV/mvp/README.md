@@ -19,12 +19,70 @@ cd mvp && uvicorn app:app --host 0.0.0.0 --port 8765 --workers 1
 - 加载大模型的服务建议 **workers=1**：多 worker 会各自加载一份模型，内存翻倍；要扩容应横向起多实例，前面挂 Nginx 反代，进程用 systemd / Docker 托管。
 - 内置 `GET /healthz` 健康检查；配置（端口、模型、阈值、路径）集中在 `config.py`。
 
+## 独立部署
+
+整个 `mvp/` 目录拷到目标机器即可运行：不依赖仓库其它目录、不 import week-02、路径全部由 `config.ROOT` 推导。
+
+```bash
+# 1) Python 3.10（3.9~3.12 均可），建议独立虚拟环境
+python -m venv .venv && .venv\Scripts\activate     # Linux: source .venv/bin/activate
+python -m pip install -U pip
+python -m pip install -r requirements.txt
+
+# 2) 装完自检（只读、不加载模型，秒级）
+python check_env.py
+
+# 3) 启动
+python app.py                                     # http://127.0.0.1:8765
+uvicorn app:app --host 0.0.0.0 --port 8765 --workers 1    # 生产式
+```
+
+`requirements.txt` 锁的是本机实测版本，几个容易踩的点：
+
+- `paddleocr 3.7.0` **不声明 paddlepaddle**，必须单独安装；GPU 机器把 `paddlepaddle==3.2.0` 换成对应 CUDA 版 `paddlepaddle-gpu`。
+- `cv2` 来自 `opencv-contrib-python==4.10.0.84`（paddlex 的 `ocr-core` extra 指定），**不是** `opencv-python`，两个都装会冲突。
+- 上传走 base64 JSON，所以不需要 `python-multipart`；Starlette 1.x 的静态文件也不需要 `aiofiles`。
+- `pdfplumber` / `PyMuPDF` 是本项目自己用的，paddle 不带，别漏。
+
+**离线 / 内网部署**：PaddleX 官方模型在首次推理时联网下载到 `${PADDLE_PDX_CACHE_HOME:-~/.paddlex}/official_models`（数百 MB）。先在联网机器跑一次把模型下全，再把该目录一起拷贝，并设置 `PADDLE_PDX_CACHE_HOME` 指向其**上级**目录。`check_env.py` 会检查缓存是否就绪。
+
+**环境变量**（全部可选，默认值见 `config.py`）：
+
+| 变量 | 默认 | 用途 |
+|---|---|---|
+| `CV_MVP_HOST` | `127.0.0.1` | 监听地址，服务器设 `0.0.0.0` |
+| `CV_MVP_PORT` | `8765` | 端口 |
+| `CV_MVP_MAX_FILE_MB` | `20` | 单文件上限（改它时同步改 `upload.js` 的前端 20MB 校验） |
+| `CV_MVP_WARMUP` | `0` | 设 `1` 则启动时预加载模型 |
+| `PADDLE_PDX_CACHE_HOME` | `~/.paddlex` | 模型缓存根目录，离线部署必设 |
+
+容器化时把 `official_models` 缓存打进镜像，`CMD python app.py`、`HEALTHCHECK curl -f http://127.0.0.1:8765/healthz`，并保持 `--workers 1`。
+
+## 模型加载时机（默认全程懒加载）
+
+| 阶段 | 发生了什么 | 耗时 |
+|---|---|---|
+| 服务启动 `import app` | 只有 FastAPI + config，**连 paddleocr 库都不 import**（实测 0.53s） | ~0.5s |
+| 首次上传 → 后台线程 `import pipeline` | 才 import cv2 / pdfplumber / pymupdf / PIL，仍不碰模型权重 | 1~3s |
+| 首次 OCR `engines.ocr()` | 构造 PaddleOCR，加载检测 / 识别 / 方向分类模型 | 20~40s |
+| 首次表格 `engines.structure()` | **先跑 `grid_score()` 长直线预筛**，命中网格才构造 PPStructureV3 | 20~40s |
+| 后续文件 | `_OCR` / `_STRUCT` 模块级单例复用 | 每张几秒 |
+
+- 两级懒加载：包级 import 在后台线程，权重只在第一次真正用到时实例化。上传页、`/healthz`、`/report` 都不会触发模型。
+- **纯文字图 / 证件扫描 / CSV / 有文本层 PDF 完全不加载表格结构模型**（预筛不命中，或走 pdfplumber 直读）。
+- 单例按**进程**缓存，重启会重新加载；`--workers 1` 保证只有一份。
+- 想改成「启动即加载、首个请求不等」：设 `CV_MVP_WARMUP=1`，在 FastAPI lifespan 里同步预热，`python app.py` 与 `uvicorn app:app` 都生效。默认关闭。
+
 ## 目录结构（模块化）
 
 ```
 mvp/
-├── config.py                  唯一配置源：模型名 / DPI / 阈值 / 路径 / 端口
-├── app.py                     FastAPI 路由 + 后台任务编排（约 180 行）
+├── requirements.txt           独立部署依赖（实测版本锁定）
+├── check_env.py               部署自检：缺包 / 目录 / 模型缓存
+├── config.py                  唯一配置源：模型 / DPI / 阈值 / 路径 / 环境变量
+├── app.py                     FastAPI 路由 + 后台任务编排（约 200 行）
+├── __init__.py                支持 uvicorn mvp.app:app 包方式启动
+├── .gitignore                 input/output/__pycache__ 不入库
 ├── pipeline/                  提取层
 │   ├── engines.py             模型单例（懒加载，全进程复用）
 │   ├── ocr.py                 逐行文字 / 置信度 / 四点框 + 带框 PNG
@@ -39,11 +97,28 @@ mvp/
 │   └── assets/                前端资源，独立文件可单独编辑
 │       ├── report.css / report.js / lightbox.html
 │       └── upload.html / upload.css / upload.js
-├── input/                     上传文件落盘（运行时生成）
-└── output/                    产物（运行时生成）
+├── input/                     上传文件落盘（运行时生成，带批次时间戳前缀）
+└── output/                    产物（运行时生成，与 input 同名去后缀）
     ├── index.html             汇总报告
-    └── <序号_文件名>/        每个文件一个自包含目录
+    └── <时间戳_文件名>/       每个文件一个自包含目录
 ```
+
+### 命名规则：一次上传 = 一个批次戳
+
+上传时按当前时间生成 `YYYYMMDDHHmmss`（年月日时分秒）前缀，`input/` 与 `output/` 共用它，目录按字典序排就是按时间排：
+
+```
+input/20261116160231_103_real_bank_statement_textlayer.pdf
+output/20261116160231_103_real_bank_statement_textlayer/
+       ├── result.json  boxes.png  source.png  table_1.csv
+       └── pages/p1.png
+```
+
+- **只加前缀，不改原文件名**：源文件自带的 `103_` 这类数字编号完整保留，`output` 目录名就是「带戳输入名去掉后缀」。
+- 重复上传同一个文件**不会覆盖**上一次：新批次有新前缀，历史产物全部保留，方便对比两次调试结果。
+- 同一秒内再次上传加 `-2` / `-3`；同一批里出现重名文件也加 `-2` 区分。
+- 批次号可在 `GET /api/status` 的 `batch` 字段看到，上传接口也直接返回。
+- 注意 `output/index.html` 是**最近一次上传**的汇总报告，不是全历史索引。
 
 **源码模块化，产物自包含**：`builder.py` 生成报告时会把 `report.css` / `report.js` / `lightbox.html`
 内联进 HTML，所以 `output/index.html` 单独拷走、用 `file://` 打开也能正常显示与交互。
@@ -77,11 +152,12 @@ mvp/
 
 - **算法自包含复制**，没有 import week-02，满足「week 目录不动」。代价是存在**逻辑漂移风险**：以后改了 week-02 的提取逻辑，mvp 不会自动同步。稳定后建议把公共部分抽成单一真相源供两边复用（那一步需要动 week 目录，需另行确认）。
 - **定位不同**：week-02 是 25 个 case 的批量回归 + 汇总指标 + 标准答案对照 + bad case 库；mvp 是单文件即时预览。新来一张图先看效果用 mvp，改完算法验证没跑偏仍要跑 `weekly/week-02/a_batch_ocr.py`。
-- 有文本层 PDF 的人工列边界模板放在 `config.TABLE_COLUMN_LINES`，按去掉数字编号后的语义名匹配（换编号仍命中）；未登记文件走 `auto_column_lines()` 自动推断。
+- 有文本层 PDF 的人工列边界模板放在 `config.TABLE_COLUMN_LINES`，键是「剥掉批次时间戳后的原文件名」（**保留 `103_` 这类数字编号**）；查表时还会兜底试一次去掉编号的语义名，所以换编号仍命中。剥前缀只发生在查模板键时，不影响任何落盘文件名。未登记文件走 `auto_column_lines()` 自动推断。
 
 ## 已知限制 / 下一步
 
-- 单任务串行、无鉴权、仅监听 `127.0.0.1`；上传用 base64 JSON，单文件上限 20MB。
+- 单任务串行、无鉴权、默认仅监听 `127.0.0.1`（可用 `CV_MVP_HOST=0.0.0.0` 放开）；上传用 base64 JSON，单文件上限 20MB。
+- 首次运行需联网下载 PaddleX 官方模型（数百 MB）；离线部署要预置缓存，见「独立部署」。
 - 多页 PDF 目前只处理**首页**。
 - 无模型参数面板。调试效率最明显的下一步是把 `PDF_DPI`、`LOW_SCORE`、是否开文档预处理、表格策略做成页面开关，并保留历史任务的参数快照以便对比。
 - 自动列边界对未登记的复杂版式仍是尽力而为；遇到新固定版式，往 `config.TABLE_COLUMN_LINES` 加一行即可。

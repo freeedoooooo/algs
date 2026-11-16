@@ -1,0 +1,32 @@
+# CV 提取 MVP — 独立部署依赖清单
+# 实测通过：Python 3.10.9 / Windows / miniforge(paddle 环境)
+#
+# 安装： python -m pip install -r requirements.txt
+# 自检： python check_env.py
+#
+# 说明：下面是「直接 import 用到的」包；传递依赖（pydantic / starlette / anyio /
+#       pypdfium2 / PyYAML / requests / prettytable 等）由 pip 自动解析，不必手列。
+#       GPU 服务器请把 paddlepaddle 换成对应 CUDA 版本的 paddlepaddle-gpu。
+
+# ---- Web 服务 ----
+fastapi==0.139.0
+uvicorn==0.40.0
+# 上传走 base64 JSON（await request.json()），因此不需要 python-multipart；
+# StaticFiles / FileResponse 在 Starlette 1.x 用 anyio，也不需要 aiofiles。
+
+# ---- Paddle 推理（核心，体积最大）----
+# paddleocr 3.7.0 只声明 paddlex[ocr-core]，并不会装 paddlepaddle，必须显式列出。
+paddlepaddle==3.2.0
+paddleocr==3.7.0
+paddlex[ocr-core]==3.7.2          # 约束：>=3.7.0,<3.8.0，与 paddleocr 必须同代
+
+# ---- 图像处理 ----
+# 注意：cv2 来自 opencv-contrib-python（paddlex 的 ocr-core extra 指定），
+#       不是 opencv-python；两个都装会造成 cv2 冲突。
+opencv-contrib-python==4.10.0.84
+numpy==2.2.6
+Pillow==12.3.0
+
+# ---- PDF / 文本表格 ----
+pdfplumber==0.11.10               # 文本层表格 + 单元格 bbox（本项目直接用，paddle 不带）
+PyMuPDF==1.28.2                   # pip 名 PyMuPDF，import 名 pymupdf；PDF 首页渲染

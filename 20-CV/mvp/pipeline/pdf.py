@@ -67,12 +67,26 @@ def clean_table(rows, cells=None):
 
 
 def template_lines(pdf_path):
-    """按去掉数字编号后的语义名查人工列边界模板。"""
+    """
+    查人工列边界模板。**源文件自带的数字编号不去掉**，只剥上传时加的
+    批次时间戳那一段：
+
+        20261116160231_103_real_bank_statement_textlayer.pdf
+                       └── 只剥左边 14 位时间戳 ──┘
+        → 103_real_bank_statement_textlayer.pdf   （103_ 保留）
+
+    依次尝试三种键，方便 config 里两种写法都能登记：
+      1) 完整带戳名   2) 剥掉时间戳、保留原编号   3) 再剥编号的语义名
+    第 3 种只为兼容 week-02 的旧登记方式（换成 108 也照样命中）。
+    """
     import re
     name = os.path.basename(pdf_path)
-    semantic = re.sub(r'^\d+_', '', name)
-    return (config.TABLE_COLUMN_LINES.get(name)
-            or config.TABLE_COLUMN_LINES.get(semantic))
+    stripped = re.sub(r'^\d{12,14}_', '', name)   # 只剥时间戳
+    semantic = re.sub(r'^\d+_', '', stripped)     # 仅作为查表的兜底键
+    for key in (name, stripped, semantic):
+        if key in config.TABLE_COLUMN_LINES:
+            return config.TABLE_COLUMN_LINES[key]
+    return None
 
 
 def auto_column_lines(page, max_cols=14):

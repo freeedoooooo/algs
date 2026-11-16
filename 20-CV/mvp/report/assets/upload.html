@@ -26,7 +26,9 @@
   </div>
   <p class="tip">
     首次处理会加载 PaddleOCR / 表格结构模型，约需 20~40 秒；之后同一进程内复用模型会快很多。<br>
-    产物按文件隔离写在 <code>mvp/output/&lt;序号_文件名&gt;/</code>，报告为 <code>mvp/output/index.html</code>。
+    每次上传会生成 <code>YYYYMMDDHHmmss</code>（含时分秒）批次前缀，输入存为 <code>mvp/input/&lt;时间戳_原文件名&gt;</code>，
+    产物写在同名的 <code>mvp/output/&lt;时间戳_原文件名&gt;/</code>；原文件名里的数字编号保留，重复上传不会覆盖上一次；
+    报告为 <code>mvp/output/index.html</code>。
   </p>
 </div>
 <script src="/static/upload.js"></script>

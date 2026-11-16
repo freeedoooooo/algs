@@ -18,24 +18,49 @@ mvp/app.py — Web 工具入口（FastAPI + uvicorn）。只负责路由与任�
 """
 import os
 import re
+import sys
 import time
 import base64
 import threading
 import traceback
+from contextlib import asynccontextmanager
 
-import config                      # 必须第一个导入：设置 paddle 环境变量
+# 无论 `python mvp/app.py`（从仓库根）还是 `uvicorn mvp.app:app`（包方式），
+# 都保证 mvp/ 在 sys.path 里，顶层模块 config / pipeline / report 才找得到。
+ROOT = os.path.dirname(os.path.abspath(__file__))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
+import config                      # 必须在 paddle 相关导入之前：设置模型源环境变量
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
-app = FastAPI(title='CV 提取 MVP', version='0.1')
+
+@asynccontextmanager
+async def lifespan(_app):
+    """
+    默认什么都不做 —— 模型保持懒加载，服务启动约 0.5s。
+    部署时若想「启动即加载」，设 CV_MVP_WARMUP=1，避免第一个请求等 20~40s；
+    代价是启动变慢、内存常驻。两种启动方式（app.py / uvicorn app:app）都生效。
+    """
+    if config.WARMUP_ON_START:
+        from pipeline import engines
+        engines.ocr()
+        engines.structure()
+        print('>> 模型预热完成（PaddleOCR + PPStructureV3）')
+    yield
+
+
+app = FastAPI(title='CV 提取 MVP', version='0.1', lifespan=lifespan)
 app.mount('/files', StaticFiles(directory=config.OUTPUT_DIR), name='files')
 app.mount('/static', StaticFiles(directory=config.ASSETS_DIR), name='static')
 
 # 单任务串行：模型单例不是线程安全的，也没必要并发加载第二份大模型
 STATE = {
     'running': False, 'ready': False, 'error': None,
-    'steps': [], 'cases': [], 'started': None, 'elapsed': 0,
+    'steps': [], 'cases': [], 'batch': None,
+    'started': None, 'elapsed': 0,
 }
 LOCK = threading.Lock()
 
@@ -52,10 +77,30 @@ def safe_name(name):
     return name[:120] or 'upload.bin'
 
 
-def case_dir_name(index, name):
+def batch_tag():
+    """
+    本次上传的批次前缀：YYYYMMDDHHmmss（例 20261116160231）。
+
+    input/ 与 output/ 共用它，所以重复传同一个文件也不会覆盖上一次的产物，
+    目录按字典序排就是按时间排。同一秒内再传一次加 -2 / -3 区分。
+    注意：只加前缀，原文件名（含 103_ 这类数字编号）一字不改。
+    """
+    existing = (set(os.listdir(config.INPUT_DIR))
+                | set(os.listdir(config.OUTPUT_DIR)))
+    tag = time.strftime(config.BATCH_TS_FMT, time.localtime())
+    if not any(n.startswith(tag) for n in existing):
+        return tag
+    i = 2
+    while any(n.startswith('{}-{}'.format(tag, i)) for n in existing):
+        i += 1
+    return '{}-{}'.format(tag, i)
+
+
+def case_dir_name(name):
+    """输出目录名 = 带时间戳的输入文件名去掉后缀，与 input/ 一一对应。"""
     stem = os.path.splitext(name)[0]
-    stem = re.sub(r'[^\w\u4e00-\u9fff.-]', '_', stem)[:60]
-    return '{:02d}_{}'.format(index, stem)
+    stem = re.sub(r'[^\w\u4e00-\u9fff.-]', '_', stem)
+    return stem[:config.CASE_NAME_MAX] or 'case'
 
 
 def asset(name):
@@ -90,7 +135,8 @@ async def upload(request: Request):
         return JSONResponse({'ok': False, 'error': '没有收到文件'},
                             status_code=400)
 
-    paths = []
+    tag = batch_tag()
+    paths, used = [], set()
     for item in files:
         name = safe_name(item.get('name', ''))
         ext = os.path.splitext(name)[1].lower()
@@ -98,6 +144,14 @@ async def upload(request: Request):
             return JSONResponse(
                 {'ok': False, 'error': '不支持的格式：{}'.format(ext)},
                 status_code=400)
+        # 同一批里出现重名文件时加 -2 区分，避免后一个把前一个覆盖掉
+        if name in used:
+            stem, e = os.path.splitext(name)
+            k = 2
+            while '{}-{}{}'.format(stem, k, e) in used:
+                k += 1
+            name = '{}-{}{}'.format(stem, k, e)
+        used.add(name)
         try:
             data = base64.b64decode(str(item.get('data', '')).split(',')[-1])
         except Exception:
@@ -109,16 +163,17 @@ async def upload(request: Request):
                 {'ok': False,
                  'error': '{} 超过 {}MB'.format(name, config.MAX_FILE_MB)},
                 status_code=400)
-        path = os.path.join(config.INPUT_DIR, name)
+        path = os.path.join(config.INPUT_DIR, '{}_{}'.format(tag, name))
         with open(path, 'wb') as f:
             f.write(data)
         paths.append(path)
 
     with LOCK:
         STATE.update(running=True, ready=False, error=None, steps=[],
-                     cases=[], started=time.time(), elapsed=0)
+                     cases=[], batch=tag, started=time.time(), elapsed=0)
+    step('批次 {} · 收到 {} 个文件'.format(tag, len(paths)))
     threading.Thread(target=run_batch, args=(paths,), daemon=True).start()
-    return {'ok': True, 'count': len(paths)}
+    return {'ok': True, 'count': len(paths), 'batch': tag}
 
 
 @app.get('/api/status')
@@ -145,7 +200,7 @@ def run_batch(paths):
         for i, path in enumerate(paths, 1):
             name = os.path.basename(path)
             step('[{}/{}] 正在处理 {} …'.format(i, len(paths), name))
-            case_rel = case_dir_name(i, name)
+            case_rel = case_dir_name(name)
             case_abs = os.path.join(config.OUTPUT_DIR, case_rel)
             os.makedirs(case_abs, exist_ok=True)
             rec = pipeline.extract_one(path, case_abs, case_rel)

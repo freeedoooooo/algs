@@ -36,9 +36,20 @@
 - 同一方法遇「一页多张表」只写第一张并打 warning，会悄悄丢数据。
 - 统一做法：先判 `res.html` → 空则从 `parsing_res_list` 的 `[table]` 块 `block_content` 兜底 → 仍空就跳过该页并打印序号；多表按 key 拆文件。week-01 `d_table_ocr.py` 的 `export_html()` 已实现，`weekend_pipeline.table_ocr_page()` 已加判空守卫。
 
+## mvp 独立部署与模型加载（2026-11-16 实测）
+- **模型默认全程懒加载**：`import app` 实测 0.53s，连 `paddleocr` 库都不 import（只 FastAPI+config）；`import pipeline` 在后台处理线程里才发生；`pipeline/engines.py` 的 `_OCR/_STRUCT` 单例在首次 `ocr()`/`structure()` 才构造；表格模型更懒 —— `grid_score()` 长直线预筛命中才加载 PPStructureV3，纯文字图/CSV/文本层 PDF 完全不加载。按进程缓存，重启即失效，故 `--workers 1`。`CV_MVP_WARMUP=1` 可改成启动时经 FastAPI lifespan 同步预热（默认关）。
+- **依赖坑（写 requirements.txt 必须记住）**：① `paddleocr 3.7.0` 只声明 `paddlex[ocr-core]>=3.7.0,<3.8.0`，**不装 paddlepaddle**，必须单列 `paddlepaddle==3.2.0`（GPU 换 paddlepaddle-gpu）；② `cv2` 来自 `opencv-contrib-python==4.10.0.84`（paddlex ocr-core extra 指定），**不是 opencv-python**，两个都装会冲突；③ `pdfplumber` / `PyMuPDF` 是本项目自己用的，paddle 不带；④ 上传走 base64 JSON，不需要 `python-multipart`；Starlette 1.x 静态文件不需要 `aiofiles`。
+- `PADDLE_PDX_CACHE_HOME` 控制官方模型缓存根（默认 `~/.paddlex`，模型在 `official_models/`），离线部署要预置并指向其上级目录。`config.py` 用 `os.environ.setdefault` 不覆盖外部设置。
+- `app.py` / `config.py` 顶部都把 `ROOT` 插入 `sys.path`，否则 `uvicorn mvp.app:app` 从仓库根启动会因顶层 `import config` 失败；已加 `mvp/__init__.py`。配置可用 `CV_MVP_HOST/PORT/MAX_FILE_MB/WARMUP` 覆盖。
+- 新增 `requirements.txt`（10 条实测锁定版本）、`check_env.py`（依赖/目录/模型缓存自检，退出码可当 CI 门禁）、`.gitignore`（input/output/__pycache__ 不入库；已跟踪过的文件需 `git rm -r --cached` 才生效）。
+
 ## week-02 表格单元格坐标回溯（2026-11-16 定稿，用户选「矫正图视图」）
 - **不要为了拿坐标而关 UVDoc**：实测 107 关闭后 50 个单元格有 12 个内容退化（序号列塌成空值、0/O 混淆、数字错），换 `PP-OCRv4_server_rec` / `PP-OCRv5_server_rec` 也补不回来（差异 13 / 10 个）。UVDoc 无条件执行、只输出 `doctr_img` 不暴露变换场，其非线性形变无法精确逆变换。
 - **正确做法 = 换坐标宿主，不做逆变换**：`cell_box_list` 本就基于 `doc_preprocessor_res["output_img"]`（转正 + 去扭曲图），把它另存 `<case>/pages/rectified.png`，框 1:1 叠上去；报告提供「原图 / 矫正图」切换。文本链路完全不动、零额外推理。
 - 103 有文本层 PDF 走另一套空间：`page.find_tables()`（**不要用 `extract_tables()`，它丢坐标**）→ `Table.rows[i].cells` → 乘 `PDF_RENDER_DPI/72` 换到预览图像素；`clean_table()` 删空行空列时必须**同步删/补 bbox 网格**，否则从第 2 行起整体错位。
 - 结构化表的 `cells[r][c]` 必须与「表头 1 行 + 数据 n 行」严格同形状，报告 `<td data-cell="r_c">` 才能直接索引。`split_header()` 多返回 `header_idx` 用于同步切网格；`colspan` 展开格共享同一个框序号（`_TableParser.box_tables` 记原始 `<td>` 序号）。CSV 无图 → `coord.space='none'`。
+## mvp/ 命名约定（2026-11-16 用户定稿）
+- 上传批次前缀 = `YYYYMMDDHHmmss`（**含时分秒**，14 位），`input/` 与 `output/` 共用；例 `20261116160643_103_real_bank_statement_textlayer.pdf` → `output/20261116160643_103_real_bank_statement_textlayer/`。输出目录 = 带戳输入名去掉后缀，一一对应、字典序即时间序。
+- **只加前缀，不改原文件名**：源文件自带的 `103_` 这类数字编号必须完整保留（用户明确「不需要去掉」）。剥前缀只发生在 `pipeline/pdf.py::template_lines()` 查 `config.TABLE_COLUMN_LINES` 时，且只剥时间戳那一段（`^\d{12,14}_`），再依次试「带编号原名 / 去编号语义名」两个键，后者兼容 week-02 旧写法与换编号。
+- 重复上传不覆盖：同一秒内再次上传加 `-2/-3`；同批内重名文件也加 `-2`。批次号在 `/api/status` 的 `batch` 与上传响应里。`output/index.html` 只是最近一次批次的汇总，历史批次目录保留供对比。
 - 报告交互定稿（11-16 二次精进）：**单格定位** —— 所有 `.cellbox` 默认 `display:none`，悬停表格格只给该格加 `.hv`、点击加 `.pin`（再点取消），点击时 `ensureView()` 自动切到坐标宿主视图；「一次铺满整表网格」被用户否定（看不出定位到哪一格），降级为默认关闭的调试开关 `.all`。表格预览**默认收起**、多表 tab 只激活当前表的框（用 `.off` class，**禁止 inline style**，否则压住 `.hv`/`.pin`）、两套高亮 class 分开（OCR `.hl` / 单元格 `.hv`+`.pin`）、每个 `.view` 各自一个 `.imgwrap` 保 1:1。**点击图片全屏放大**（11-16）：`LIGHTBOX_HTML` 克隆整个 `.imgwrap`（含 svg 框），滚轮以光标为中心缩放 + 拖拽平移 + 1:1 原像素 + 适应窗口 + Esc 关闭 + 叠加框开关 + 「新窗口打开原图」绕过 iframe；缩放统一用 wrapper 的 `translate() scale()`，img 设原始像素宽高、svg 100%/100% 才不会错位。
