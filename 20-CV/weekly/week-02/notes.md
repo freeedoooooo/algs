@@ -368,3 +368,20 @@ viewBox 仍用原图像素 → 拉伸恒 1.00×。校验 24/24 组 viewBox 与�
 105 `space=none` 无坐标；`rectified.png` 只在 107 生成（1696×1200），104/106 未误生成；
 报告 25 个视图的 `viewBox` 与图片真实像素 **0 不匹配**，109 个引用 **0 失效**；
 合成双表 rec 验证 tab / pane / data-space 分支正常。
+
+---
+
+## 11-16 追加：点击图片全屏放大
+
+左栏只有半屏宽，103 的 910×1287 竖图看不清。加 `LIGHTBOX_HTML` + `.lightbox` CSS + IIFE：
+点击任意 `.stage .imgwrap img` 打开全屏层，**克隆整个 `.imgwrap`**（img + 所有 svg），
+所以 OCR 框和刚做好的单格定位框都按同一 viewBox 1:1 跟随，钉住的那一格放大后仍可见。
+交互：滚轮以光标为中心缩放（`setScale()` 保持光标下的点不动）、按住拖拽平移、
+「± / 适应窗口 / 1:1 原始像素」、双击切换、`Esc` 关闭、叠加框一键隐藏。
+「新窗口打开原图」用 `target="_blank"` 绕开预览面板 iframe 的尺寸限制。
+缩放用 `transform: translate(tx,ty) scale(s)` 统一作用于 wrapper，
+img 显式设成原始像素宽高，svg 100%/100% 铺满 → 任意缩放下框仍贴合。
+
+只改 `vis_ocr_result.py`，数据层未动，秒级重画。验证：`node --check`（用
+`new Function` 读回 script）语法通过；25 个静态 `title`、6 个工具栏按钮、
+25 组视图 viewBox 0 不匹配、110 个引用 0 失效、单格定位默认激活框仍为 0。

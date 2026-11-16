@@ -349,8 +349,55 @@ td.cell.pin,th.cell.pin{background:#fff0d9!important;
   outline:2px solid #d8610a;outline-offset:-2px}
 .tbltabs{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 12px}
 .coordnote{font-size:12px;color:var(--muted);margin:0 0 8px}
+/* ★ 点击图片放大（11-16）：全屏查看器，滚轮缩放 / 拖拽平移 / 1:1 原像素。
+   把当前视图的 .imgwrap 整块克隆进去，svg 框沿用同一 viewBox 保持 1:1；
+   预览面板（iframe）尺寸受限时还能「新窗口打开原图」看真正的全屏。 */
+.stage img{cursor:zoom-in}
+.lightbox{position:fixed;inset:0;z-index:9999;background:rgba(18,22,30,.95);
+  display:flex;flex-direction:column}
+.lightbox[hidden]{display:none}
+.lb-bar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;
+  padding:10px 14px;background:#1d2330;color:#e8ecf4;font-size:12px}
+.lb-bar button,.lb-bar a{font:inherit;font-size:12px;cursor:pointer;padding:5px 12px;
+  border-radius:7px;border:1px solid #46506a;background:#2a3245;color:#e8ecf4;
+  text-decoration:none}
+.lb-bar button:hover,.lb-bar a:hover{background:#3a4560}
+.lb-bar button.on{background:var(--accent);border-color:var(--accent)}
+.lb-title{font-size:13px;font-weight:500;margin-right:6px;max-width:34vw;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lb-scale{min-width:54px;text-align:center;font-variant-numeric:tabular-nums}
+.lb-stage{flex:1;min-height:0;overflow:hidden;position:relative;cursor:grab;
+  display:flex;align-items:center;justify-content:center}
+.lb-stage.dragging{cursor:grabbing}
+.lb-content{position:relative;line-height:0;flex:none;
+  transform-origin:center center;will-change:transform}
+.lb-content img{display:block;max-width:none;height:auto;user-select:none}
+.lb-content svg{position:absolute;left:0;top:0;width:100%;height:100%;
+  pointer-events:none}
+.lb-noboxes .lb-content svg{display:none!important}
+.lb-hint{padding:8px 14px;background:#1d2330;color:#9aa6bd;font-size:12px;
+  text-align:center}
 @media(max-width:900px){.grid{grid-template-columns:1fr}.stage{border-right:0}}
 """
+
+LIGHTBOX_HTML = """
+<div class="lightbox" id="lightbox" hidden>
+  <div class="lb-bar">
+    <span class="lb-title" id="lbTitle">图片查看</span>
+    <button type="button" data-lb="out">− 缩小</button>
+    <span class="lb-scale" id="lbScale">100%</span>
+    <button type="button" data-lb="in">＋ 放大</button>
+    <button type="button" data-lb="fit">适应窗口</button>
+    <button type="button" data-lb="one">1:1 原始像素</button>
+    <button type="button" data-lb="boxes" id="lbBoxes">隐藏叠加框</button>
+    <a id="lbOpen" href="#" target="_blank">新窗口打开原图</a>
+    <button type="button" data-lb="close">关闭 (Esc)</button>
+  </div>
+  <div class="lb-stage" id="lbStage"><div class="lb-content" id="lbContent"></div></div>
+  <div class="lb-hint">滚轮缩放 · 按住拖拽平移 · 双击切换 1:1 / 适应窗口 · Esc 关闭 · 可放大到原始像素以上</div>
+</div>
+"""
+
 
 JS = """
 function cardOf(el){ return el.closest('.card'); }
@@ -496,6 +543,133 @@ document.getElementById('filterBtn').addEventListener('click', function(){
                          ? 'none' : '';
   });
 });
+
+// ★ 点击图片放大：克隆当前视图的 img+svg，叠加框沿用同一 viewBox 保持 1:1，
+//   所以钉住的那一格在放大视图里也看得见。滚轮以光标为中心缩放、拖拽平移。
+(function(){
+  var lb = document.getElementById('lightbox');
+  var stage = document.getElementById('lbStage');
+  var content = document.getElementById('lbContent');
+  var scaleEl = document.getElementById('lbScale');
+  var titleEl = document.getElementById('lbTitle');
+  var openBtn = document.getElementById('lbOpen');
+  var boxesBtn = document.getElementById('lbBoxes');
+  if(!lb || !stage || !content) return;
+  var scale = 1, fit = 1, tx = 0, ty = 0, imgW = 0, imgH = 0, drag = null;
+
+  function apply(){
+    content.style.transform = 'translate('+tx+'px,'+ty+'px) scale('+scale+')';
+    scaleEl.textContent = Math.round(scale*100)+'%';
+  }
+  function clamp(v){ return Math.max(fit*0.3, Math.min(12, v)); }
+  function setScale(v, mx, my){
+    var old = scale;
+    scale = clamp(v);
+    if(mx !== undefined){
+      tx = mx - (mx - tx) * (scale/old);
+      ty = my - (my - ty) * (scale/old);
+    }
+    apply();
+  }
+  function fitWindow(){
+    var r = stage.getBoundingClientRect();
+    fit = Math.min(r.width/imgW, r.height/imgH) * 0.94;
+    if(!isFinite(fit) || fit <= 0) fit = 1;
+    scale = fit; tx = 0; ty = 0; apply();
+  }
+  function open(img){
+    var wrap = img.closest('.imgwrap');
+    if(!wrap) return;
+    var view = img.closest('.view');
+    var label = (view && view.getAttribute('data-view') === 'rect') ? '矫正图' : '原图';
+    var card = cardOf(img), h2 = card ? card.querySelector('h2') : null;
+    titleEl.textContent = (h2 ? h2.textContent : '图片') + ' · ' + label;
+    openBtn.href = img.getAttribute('src');
+
+    var clone = wrap.cloneNode(true);
+    clone.className = 'lb-content';
+    clone.id = 'lbContent';
+    content.parentNode.replaceChild(clone, content);
+    content = clone;
+    var ci = clone.querySelector('img');
+    ci.removeAttribute('width'); ci.removeAttribute('height');
+    ci.style.width = ''; ci.style.height = '';
+    imgW = img.naturalWidth || ci.naturalWidth || 1000;
+    imgH = img.naturalHeight || ci.naturalHeight || 700;
+    ci.style.width = imgW+'px';
+    ci.style.height = imgH+'px';
+    lb.hidden = false;
+    document.body.style.overflow = 'hidden';
+    fitWindow();
+    if(!ci.complete){
+      ci.addEventListener('load', function(){
+        imgW = ci.naturalWidth; imgH = ci.naturalHeight;
+        ci.style.width = imgW+'px'; ci.style.height = imgH+'px';
+        fitWindow();
+      });
+    }
+  }
+  function close(){
+    lb.hidden = true;
+    document.body.style.overflow = '';
+    drag = null;
+    stage.classList.remove('dragging');
+  }
+
+  document.querySelectorAll('.stage .imgwrap img').forEach(function(img){
+    img.setAttribute('title', '点击放大查看');
+    img.addEventListener('click', function(e){ e.stopPropagation(); open(img); });
+  });
+  document.querySelectorAll('[data-lb]').forEach(function(btn){
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      var a = btn.getAttribute('data-lb');
+      if(a === 'close'){ close(); return; }
+      if(a === 'fit'){ fitWindow(); return; }
+      if(a === 'one'){ scale = 1; tx = 0; ty = 0; apply(); return; }
+      if(a === 'in'){ setScale(scale*1.25); return; }
+      if(a === 'out'){ setScale(scale/1.25); return; }
+      if(a === 'boxes'){
+        var hidden = !lb.classList.contains('lb-noboxes');
+        lb.classList.toggle('lb-noboxes', hidden);
+        boxesBtn.textContent = hidden ? '显示叠加框' : '隐藏叠加框';
+      }
+    });
+  });
+  stage.addEventListener('wheel', function(e){
+    e.preventDefault();
+    var r = stage.getBoundingClientRect();
+    setScale(scale * (e.deltaY < 0 ? 1.15 : 1/1.15),
+             e.clientX - r.left - r.width/2,
+             e.clientY - r.top - r.height/2);
+  }, {passive:false});
+  stage.addEventListener('mousedown', function(e){
+    if(e.button !== 0) return;
+    drag = {x:e.clientX, y:e.clientY, tx:tx, ty:ty};
+    stage.classList.add('dragging');
+  });
+  window.addEventListener('mousemove', function(e){
+    if(!drag) return;
+    tx = drag.tx + (e.clientX - drag.x);
+    ty = drag.ty + (e.clientY - drag.y);
+    apply();
+  });
+  window.addEventListener('mouseup', function(){
+    drag = null; stage.classList.remove('dragging');
+  });
+  stage.addEventListener('dblclick', function(e){
+    e.preventDefault();
+    if(Math.abs(scale-1) < 0.01) fitWindow();
+    else { scale = 1; tx = 0; ty = 0; apply(); }
+  });
+  document.addEventListener('keydown', function(e){
+    if(lb.hidden) return;
+    if(e.key === 'Escape') close();
+    else if(e.key === '+' || e.key === '=') setScale(scale*1.25);
+    else if(e.key === '-') setScale(scale/1.25);
+    else if(e.key === '0') fitWindow();
+  });
+})();
 """
 
 
@@ -800,7 +974,7 @@ def build_card(rec, card_no, image_dir, out_root, manifest_map):
             rect_view = (
                 f'<div class="view" data-card="{card_no}" data-view="rect" hidden>'
                 f'<div class="imgwrap"><img src="{rect_src}" '
-                f'alt="{esc(name)}（矫正图）">'
+                f'alt="{esc(name)}（矫正图）" title="点击放大查看">'
                 f'<svg class="cellsvg" viewBox="0 0 {rw} {rh}" '
                 f'preserveAspectRatio="none">{rect_cells}</svg>'
                 f'</div></div>')
@@ -821,7 +995,8 @@ def build_card(rec, card_no, image_dir, out_root, manifest_map):
         left = (
             f'<div class="stage">{viewbar}<div class="views">'
             f'<div class="view" data-card="{card_no}" data-view="orig">'
-            f'<div class="imgwrap"><img src="{src}" alt="{esc(name)}">'
+            f'<div class="imgwrap"><img src="{src}" alt="{esc(name)}" '
+            f'title="点击放大查看">'
             f'<svg viewBox="0 0 {w} {h}" preserveAspectRatio="none">'
             f'{"".join(polys)}</svg>{cell_svg}</div></div>'
             f'{rect_view}</div></div>'
@@ -829,7 +1004,7 @@ def build_card(rec, card_no, image_dir, out_root, manifest_map):
         extra = (
             f'<a href="{src}" target="_blank">查看原图副本</a> · '
             f'<a href="{png_href}" target="_blank">查看带框 PNG</a>'
-            f'{rect_link}'
+            f'{rect_link}　·　<b>点击图片可全屏放大</b>'
         )
     else:
         left = f'<div class="stage empty">找不到预览图：{esc(display_image)}</div>'
@@ -996,7 +1171,8 @@ def build_report(records, image_dir=IMAGE_DIR, out_root=OUT_ROOT,
         f'<div class="sub">模型：{esc(model.get("det", "?"))} + '
         f'{esc(model.get("rec", "?"))}　·　'
         '左图彩色框 = OCR 检测到的文字行（绿=正常，橙红=低置信度），'
-        '鼠标移到右侧任意一行，左图对应框会高亮。'
+        '鼠标移到右侧任意一行，左图对应框会高亮；'
+        '点击左图可全屏放大（滚轮缩放 / 拖拽平移 / 1:1 原始像素）。'
         '检测到表格的 case 在卡片下方有整行宽度的「提取到的表格」：'
         '直接渲染成带表头的表格供预览，并配「下载 CSV」与「打开 CSV 文件」两个入口；'
         '未检测到表格的 case 只留一行诊断。卡片标题上的绿色徽标可一键跳转。'
@@ -1007,7 +1183,7 @@ def build_report(records, image_dir=IMAGE_DIR, out_root=OUT_ROOT,
         '<button id="filterBtn" type="button">只看有问题的图</button>\n'
         '</header>\n'
         + '\n'.join(cards) +
-        f'\n<script>{JS}</script>\n</body>\n</html>\n'
+        f'{LIGHTBOX_HTML}\n<script>{JS}</script>\n</body>\n</html>\n'
     )
 
     out_html = os.path.join(out_root, REPORT_NAME)
