@@ -17,7 +17,6 @@ DET_DEFAULT = 0.3
 BOX_DEFAULT = 0.6
 
 # ---- 参数 schema：order 即页面优先级顺序 ----
-# type: int / float / str / select；select 必须有 options。
 SCHEMA = [
     dict(key='page', label='PDF 页码', type='int', default=1, min=1, max=500,
          order=1, group='① 先看哪一页',
