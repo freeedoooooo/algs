@@ -42,6 +42,7 @@
 - `PADDLE_PDX_CACHE_HOME` 控制官方模型缓存根（默认 `~/.paddlex`，模型在 `official_models/`），离线部署要预置并指向其上级目录。`config.py` 用 `os.environ.setdefault` 不覆盖外部设置。
 - `app.py` / `config.py` 顶部都把 `ROOT` 插入 `sys.path`，否则 `uvicorn mvp.app:app` 从仓库根启动会因顶层 `import config` 失败；已加 `mvp/__init__.py`。配置可用 `CV_MVP_HOST/PORT/MAX_FILE_MB/WARMUP` 覆盖。
 - 新增 `requirements.txt`（10 条实测锁定版本）、`check_env.py`（依赖/目录/模型缓存自检，退出码可当 CI 门禁）、`.gitignore`（input/output/__pycache__ 不入库；已跟踪过的文件需 `git rm -r --cached` 才生效）。
+- **IDE 报 `No module named 'config'` 已用「零 IDE 配置」方案根治（2026-11-16 定稿，用户明确不要改 .idea）**：根因是顶层绝对导入 + 静态分析器不执行 `sys.path.insert`。最终方案 = **内部模块一律以包方式加载**：`pipeline/*.py` / `report/*.py` 用 `from .. import config`；`app.py` / `check_env.py` 用 `importlib.import_module(PKG + '.xxx')` 动态加载（`PKG = os.path.basename(ROOT)`，父目录插入 sys.path）。代码里 **0 处**顶层绝对导入，IDE 无需 Sources Root / extraPaths / 任何配置；四种启动方式实测通过（`python mvp/app.py`、`cd mvp && python app.py`、`uvicorn app:app`、`uvicorn mvp.app:app`），目录改名也能跑，懒加载不变。**曾临时改过 `algs/algs.iml` 与两处 `pyrightconfig.json`，已全部回退；不要再动 IDE 配置**。
 
 ## week-02 表格单元格坐标回溯（2026-11-16 定稿，用户选「矫正图视图」）
 - **不要为了拿坐标而关 UVDoc**：实测 107 关闭后 50 个单元格有 12 个内容退化（序号列塌成空值、0/O 混淆、数字错），换 `PP-OCRv4_server_rec` / `PP-OCRv5_server_rec` 也补不回来（差异 13 / 10 个）。UVDoc 无条件执行、只输出 `doctr_img` 不暴露变换场，其非线性形变无法精确逆变换。

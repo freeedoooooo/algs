@@ -17,8 +17,13 @@ import importlib
 from importlib.metadata import version, PackageNotFoundError
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-if ROOT not in sys.path:
-    sys.path.insert(0, ROOT)
+PARENT = os.path.dirname(ROOT)
+PKG = os.path.basename(ROOT)
+for _p in (PARENT, ROOT):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+# 与 app.py 一致：以包方式加载，静态分析器无需任何 IDE 配置
+config = importlib.import_module(PKG + '.config')
 
 # (pip 发行包名, import 名, 用途)
 PACKAGES = [
@@ -53,7 +58,6 @@ def check_packages():
 
 
 def check_dirs():
-    import config
     bad = []
     for label, path in (('input', config.INPUT_DIR),
                         ('output', config.OUTPUT_DIR),

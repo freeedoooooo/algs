@@ -10,7 +10,7 @@ import os
 import pdfplumber
 import pymupdf
 
-import config
+from .. import config
 
 
 def render_first_page(pdf_path, out_png):

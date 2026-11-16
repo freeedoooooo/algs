@@ -9,7 +9,7 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-# 让 config 自身也能在任意启动方式下被找到（app.py 里同样做了兜底）
+# 兜底：即使有旧脚本用顶层 `import config` 也能找到（新代码统一走包相对导入）
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 INPUT_DIR = os.path.join(ROOT, 'input')

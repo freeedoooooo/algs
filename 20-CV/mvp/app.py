@@ -21,17 +21,30 @@ import re
 import sys
 import time
 import base64
+import importlib
 import threading
 import traceback
 from contextlib import asynccontextmanager
 
-# 无论 `python mvp/app.py`（从仓库根）还是 `uvicorn mvp.app:app`（包方式），
-# 都保证 mvp/ 在 sys.path 里，顶层模块 config / pipeline / report 才找得到。
+# ★ 零 IDE 配置的关键：mvp 内部模块一律以「包」方式加载。
+# 静态分析器能直接解析包内相对导入（from .. import config），不需要标记
+# Sources Root / extraPaths；同时下面四种启动方式都成立：
+#   python app.py · python mvp/app.py · uvicorn app:app · uvicorn mvp.app:app
+# 包名从目录名动态取，整个目录拷走改名也照样能跑。
 ROOT = os.path.dirname(os.path.abspath(__file__))
-if ROOT not in sys.path:
-    sys.path.insert(0, ROOT)
+PARENT = os.path.dirname(ROOT)
+PKG = os.path.basename(ROOT)
+for _p in (PARENT, ROOT):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
-import config                      # 必须在 paddle 相关导入之前：设置模型源环境变量
+
+def _load(name):
+    """以 <包名>.<name> 加载 mvp 内部模块，保证包内相对导入始终有效。"""
+    return importlib.import_module(PKG + '.' + name)
+
+
+config = _load('config')           # 必须在 paddle 相关导入之前：设置模型源环境变量
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -45,7 +58,7 @@ async def lifespan(_app):
     代价是启动变慢、内存常驻。两种启动方式（app.py / uvicorn app:app）都生效。
     """
     if config.WARMUP_ON_START:
-        from pipeline import engines
+        engines = _load('pipeline.engines')
         engines.ocr()
         engines.structure()
         print('>> 模型预热完成（PaddleOCR + PPStructureV3）')
@@ -194,8 +207,8 @@ def report():
 def run_batch(paths):
     """后台线程：逐个提取 → 落 result.json → 生成汇总报告。"""
     try:
-        import pipeline
-        import report as report_mod
+        pipeline = _load('pipeline')
+        report_mod = _load('report')
         records = []
         for i, path in enumerate(paths, 1):
             name = os.path.basename(path)

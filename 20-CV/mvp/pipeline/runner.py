@@ -14,7 +14,7 @@ import shutil
 
 from PIL import Image
 
-import config
+from .. import config
 from . import ocr as ocr_mod
 from . import pdf as pdf_mod
 from . import plain as plain_mod

@@ -8,7 +8,7 @@ import time
 
 from PIL import Image, ImageDraw
 
-import config
+from .. import config
 from . import engines
 
 

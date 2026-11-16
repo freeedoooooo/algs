@@ -18,7 +18,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
-import config
+from .. import config
 from . import engines
 
 

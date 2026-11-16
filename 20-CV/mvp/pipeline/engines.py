@@ -4,7 +4,7 @@ pipeline/engines.py — 模型单例（懒加载）。
 上传页不需要模型，只有真正处理文件时才加载；同一进程内复用，
 避免每个文件都重建十来个模型（首次约 20~40s，之后每张图几秒）。
 """
-import config
+from .. import config
 
 _OCR = None
 _STRUCT = None

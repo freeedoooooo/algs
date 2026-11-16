@@ -11,7 +11,7 @@ import html
 import base64
 from urllib.parse import quote
 
-import config
+from .. import config
 
 
 def esc(v):

@@ -63,7 +63,7 @@ uvicorn app:app --host 0.0.0.0 --port 8765 --workers 1    # 生产式
 | 阶段 | 发生了什么 | 耗时 |
 |---|---|---|
 | 服务启动 `import app` | 只有 FastAPI + config，**连 paddleocr 库都不 import**（实测 0.53s） | ~0.5s |
-| 首次上传 → 后台线程 `import pipeline` | 才 import cv2 / pdfplumber / pymupdf / PIL，仍不碰模型权重 | 1~3s |
+| 首次上传 → 后台线程动态加载 `pipeline` 包 | 才 import cv2 / pdfplumber / pymupdf / PIL，仍不碰模型权重 | 1~3s |
 | 首次 OCR `engines.ocr()` | 构造 PaddleOCR，加载检测 / 识别 / 方向分类模型 | 20~40s |
 | 首次表格 `engines.structure()` | **先跑 `grid_score()` 长直线预筛**，命中网格才构造 PPStructureV3 | 20~40s |
 | 后续文件 | `_OCR` / `_STRUCT` 模块级单例复用 | 每张几秒 |
@@ -80,7 +80,7 @@ mvp/
 ├── requirements.txt           独立部署依赖（实测版本锁定）
 ├── check_env.py               部署自检：缺包 / 目录 / 模型缓存
 ├── config.py                  唯一配置源：模型 / DPI / 阈值 / 路径 / 环境变量
-├── app.py                     FastAPI 路由 + 后台任务编排（约 200 行）
+├── app.py                     FastAPI 路由 + 后台任务编排 + 包自举（约 240 行）
 ├── __init__.py                支持 uvicorn mvp.app:app 包方式启动
 ├── .gitignore                 input/output/__pycache__ 不入库
 ├── pipeline/                  提取层
@@ -153,6 +153,35 @@ output/20261116160231_103_real_bank_statement_textlayer/
 - **算法自包含复制**，没有 import week-02，满足「week 目录不动」。代价是存在**逻辑漂移风险**：以后改了 week-02 的提取逻辑，mvp 不会自动同步。稳定后建议把公共部分抽成单一真相源供两边复用（那一步需要动 week 目录，需另行确认）。
 - **定位不同**：week-02 是 25 个 case 的批量回归 + 汇总指标 + 标准答案对照 + bad case 库；mvp 是单文件即时预览。新来一张图先看效果用 mvp，改完算法验证没跑偏仍要跑 `weekly/week-02/a_batch_ocr.py`。
 - 有文本层 PDF 的人工列边界模板放在 `config.TABLE_COLUMN_LINES`，键是「剥掉批次时间戳后的原文件名」（**保留 `103_` 这类数字编号**）；查表时还会兜底试一次去掉编号的语义名，所以换编号仍命中。剥前缀只发生在查模板键时，不影响任何落盘文件名。未登记文件走 `auto_column_lines()` 自动推断。
+
+## FAQ：IDE 报 `No module named 'config'`（已解决，零 IDE 配置）
+
+早期版本内部用**顶层绝对导入**（`import config` / `pipeline` / `report`）。运行时靠
+`sys.path` 兜底没问题，但 PyCharm / Pylance 的静态分析**不会执行** `sys.path.insert(...)`，
+它默认把工作区根（`algs/`）当模块搜索起点，那里没有 `config.py`，于是 9 个文件一起标红。
+
+**现在改成代码自洽的方案，不需要改任何 IDE 配置**（`.idea` / `.vscode` / `pyrightconfig` 都不用动）：
+
+| 位置 | 写法 | 作用 |
+|---|---|---|
+| `pipeline/*.py`、`report/*.py` | `from .. import config` | 包内相对导入，静态分析器按目录层级就能解析 |
+| `app.py`、`check_env.py` | `importlib.import_module(PKG + '.config')` 等动态加载 | 入口文件不再有静态的顶层绝对导入；`PKG` 取 `os.path.basename(ROOT)` |
+
+关键是让所有内部模块**始终以「包」方式加载**：相对导入才成立，静态分析器也无需把 `mvp/`
+标成 Sources Root / extraPaths。下面四种启动方式都实测通过：
+
+```bash
+python mvp/app.py                                # 从 20-CV/，脚本方式
+cd mvp && python app.py                          # 从 mvp/，脚本方式
+cd mvp  && uvicorn app:app --workers 1
+cd 20-CV && uvicorn mvp.app:app --workers 1
+```
+
+整个 `mvp/` 拷走、甚至改目录名也能跑（包名动态取）。**模型仍然懒加载**：`pipeline` / `report`
+只在后台处理线程里动态导入，`import app` 依旧 0.5s、连 paddleocr 库都不碰。
+
+如果 IDE 还显示旧报错，刷新一下语言服务缓存（PyCharm: File → Reload All from Disk；
+VS Code: Reload Window）即可 —— 代码里已经没有任何顶层绝对导入了。
 
 ## 已知限制 / 下一步
 

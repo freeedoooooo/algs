@@ -4,7 +4,7 @@ pipeline/plain.py — CSV / TXT / MD 纯文本直读，不加载任何模型。
 import io
 import csv
 
-import config
+from .. import config
 
 
 def read_text(path):

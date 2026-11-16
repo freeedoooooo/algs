@@ -7,7 +7,7 @@ report/builder.py — 组装最终 index.html。
 """
 import os
 
-import config
+from .. import config
 from . import cards
 
 
