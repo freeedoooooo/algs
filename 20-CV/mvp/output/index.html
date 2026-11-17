@@ -3,31 +3,42 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CV 提取 MVP · 对照报告</title>
 <style>
+/* report/assets/hint.css — 共享「?」悬浮说明组件（上传页 + 报告页同一套）。
+   气泡 fixed 定位挂 body，不被 console / tablewrap 等 overflow 容器裁剪。 */
+.hint{display:inline-flex;align-items:center;justify-content:center;flex:none;
+  width:16px;height:16px;border-radius:50%;border:1px solid #cbd5e1;
+  color:#8a94a6;font-size:11px;line-height:1;cursor:help;user-select:none;
+  vertical-align:middle}
+.hint:hover,.hint:focus{border-color:#2563eb;color:#2563eb;outline:none}
+#hinttip{position:fixed;z-index:100000;max-width:260px;padding:7px 10px;
+  border-radius:7px;background:#1d2330;color:#e8ecf4;font-size:12px;line-height:1.55;
+  box-shadow:0 4px 16px rgba(0,0,0,.3);pointer-events:none}
+#hinttip[hidden]{display:none}
 /* report/assets/report.css — 对照报告样式（生成时内联进 index.html） */
 *{box-sizing:border-box}
 body{margin:0;background:#f4f6fa;color:#1f2738;
   font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
-header{background:#fff;border-bottom:1px solid #e2e7f0;padding:20px 26px}
-header h1{font-size:20px;font-weight:500;margin:0 0 4px}
-header .sub{color:#6b7688;font-size:13px}
-.nav{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;font-size:12px}
+header{background:#fff;border-bottom:1px solid #e2e7f0;padding:12px 18px}
+header h1{font-size:18px;font-weight:500;margin:0 0 3px}
+header .sub{color:#6b7688;font-size:12px;display:flex;align-items:center;gap:6px}
+.nav{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;font-size:12px}
 .nav a{padding:4px 11px;border:1px solid #d8e0ed;border-radius:20px;
   background:#f7f9fd;color:#33507f;text-decoration:none}
 .nav a:hover{background:#e7f0ff}
-.wrap{max-width:1500px;margin:0 auto;padding:20px}
+.wrap{max-width:1500px;margin:0 auto;padding:14px}
 .card{background:#fff;border:1px solid #e2e7f0;border-radius:12px;
-  margin:0 0 22px;overflow:hidden;box-shadow:0 1px 3px rgba(20,30,60,.04)}
-.card-head{padding:16px 20px;border-bottom:1px solid #edf0f6}
-.card-head h2{font-size:16px;font-weight:500;margin:0 0 6px;word-break:break-all}
+  margin:0 0 14px;overflow:hidden;box-shadow:0 1px 3px rgba(20,30,60,.04)}
+.card-head{padding:10px 16px;border-bottom:1px solid #edf0f6}
+.card-head h2{font-size:15px;font-weight:500;margin:0 0 4px;word-break:break-all}
 .tag{display:inline-block;background:#eef2f8;color:#5a6a85;border-radius:5px;
   padding:1px 8px;font-size:12px;margin-right:6px}
-.metrics{display:flex;flex-wrap:wrap;gap:16px;margin-top:10px;font-size:12px;color:#6b7688}
-.metrics b{color:#1f2738;font-size:14px;font-weight:500}
-.desc{font-size:12px;color:#6b7688;margin-top:6px}
+.metrics{display:flex;flex-wrap:wrap;gap:14px;margin-top:8px;font-size:12px;color:#6b7688}
+.metrics b{color:#1f2738;font-size:13px;font-weight:500}
+.desc{font-size:12px;color:#6b7688;margin-top:4px}
 .desc a{color:#2563eb;text-decoration:none}
 .grid{display:grid;grid-template-columns:minmax(300px,44%) minmax(0,1fr);
   align-items:start}
-.stage{position:sticky;top:12px;background:#eceff3;padding:14px;
+.stage{position:sticky;top:12px;background:#eceff3;padding:10px;
   border-right:1px solid #e2e7f0}
 .imgwrap{position:relative;line-height:0;
   max-width:min(100%,calc((100vh - 180px) * var(--ar,1.5)))}
@@ -44,9 +55,9 @@ header .sub{color:#6b7688;font-size:13px}
 .viewbtn.on,.allcells.on{background:#2563eb;border-color:#2563eb;color:#fff}
 .view[hidden]{display:none}
 /* 右栏：文字行 / 表格 / JSON 切 tab；图在左栏吸顶，切到表格悬停单元格即时可见高亮 */
-.contentcol{min-width:0;padding:14px 16px}
+.contentcol{min-width:0;padding:10px 14px}
 .ctabs{display:flex;gap:6px;flex-wrap:wrap;position:sticky;top:0;z-index:3;
-  background:#fff;padding:0 0 10px;margin-bottom:6px;border-bottom:1px solid #edf0f6}
+  background:#fff;padding:0 0 8px;margin-bottom:5px;border-bottom:1px solid #edf0f6}
 .ctab{font:inherit;font-size:13px;cursor:pointer;padding:5px 14px;border-radius:7px;
   border:1px solid #d8e0ed;background:#fff;color:#1f2738}
 .ctab.on{background:#2563eb;border-color:#2563eb;color:#fff}
@@ -167,10 +178,10 @@ body.picking .lb-stage{cursor:crosshair}
 
 </style>
 </head><body>
-<header><h1>CV 提取 MVP · 对照报告</h1><div class="sub">共 1 个文件 · 53 行识别文字 · 2 张结构化表格　|　左图识别框 ↔ 右侧文字行双向高亮；表格单元格可单格定位；点击图片全屏放大；右下角「取 x 坐标」可量人工列边界（点图取 x、复制填 column_lines）</div><div class="nav"><a href="/">← 继续上传</a><a href="#case-0">20261117144821_21_two_tables_1page.pdf</a></div><details class="paramsnap"><summary>本次参数快照（9 项，按优先级）</summary><table><thead><tr><th>参数</th><th>本次值</th><th>说明</th></tr></thead><tbody><tr><td>PDF 页码</td><td><code>第 1 页</code></td><td class="ph">多页 PDF 只处理这一页（渲染 + OCR + 表格都取它）。跨页 badcase 用它逐页定位，不用一次跑完整份。</td></tr><tr><td>表格策略首选</td><td><code>auto（自动回退）</code></td><td class="ph">auto=按优先级自动回退；text=强制按文字对齐（无线框表）；lines=按矢量线；default=pdfplumber 默认。</td></tr><tr><td>人工列边界（x 坐标）</td><td><code>496</code></td><td class="ph">逗号/空格分隔的竖线 x 坐标（例：x1,x2,x3,…，需 ≥1 个且递增）。坐标空间随路线：文本层 PDF 用 PDF 点（像素×72/DPI，单条不成列、自动回退）；图片/扫描件用原图像素（报告左图可直接量），单条即可切开黏连格并重 OCR 归位，仅 doc_unwarp=off 生效。留空则 PDF 自动从横线端点推断、图片不重切。</td></tr><tr><td>预筛·最少横线</td><td><code>5</code></td><td class="ph">扫描图的长直线预筛门槛。该进表格模型却没进，就调低；误把证件框当表格就调高。</td></tr><tr><td>预筛·最少竖线</td><td><code>4</code></td><td class="ph">同上，竖线数门槛。两个都调 0 = 跳过预筛、强制走表格模型。</td></tr><tr><td>文字检测阈值</td><td><code>0.3</code></td><td class="ph">调低救漏检但可能引入误检（PaddleOCR 3.x 默认 0.3）。predict 时按次覆盖，不重建模型。</td></tr><tr><td>文字框阈值</td><td><code>0.6</code></td><td class="ph">与检测阈值配合，默认 0.6。漏检严重时试 0.4。</td></tr><tr><td>PDF 渲染 DPI</td><td><code>110</code></td><td class="ph">小字 / 密集表格调高到 150~200 更清晰；越高图越大、OCR 越慢。</td></tr><tr><td>文档矫正(UVDoc)</td><td><code>on（矫正图坐标，适合扫描件）</code></td><td class="ph">on=方向分类+UVDoc 去扭曲，适合旋转/弯曲扫描件（框叠矫正图）。off=关闭预处理，适合电子版平整截图（108 这类）：矫正图与原图逐像素一致，单元格框直接叠原图、1:1 精确，无 UVDoc 形变误差。仅影响表格模型。</td></tr></tbody></table></details>
+<header><h1>CV 提取 MVP · 对照报告</h1><div class="sub">共 1 个文件 · 53 行识别文字 · 1 张结构化表格<span class="hint" tabindex="0" data-tip="左图吸顶，右侧「文字行 / 表格 / JSON」页签切换；悬停/点击表格单元格单格定位（图始终可见）；点击图片全屏放大；右下角「取 x 坐标」量人工列边界（点图取 x、复制填 column_lines）。">?</span></div><div class="nav"><a href="#case-0">20261117150808_21_two_tables_1page.pdf</a></div><details class="paramsnap"><summary>本次参数快照（9 项，按优先级）</summary><table><thead><tr><th>参数</th><th>本次值</th></tr></thead><tbody><tr><td>PDF 页码 <span class="hint" tabindex="0" data-tip="多页 PDF 只处理这一页（渲染 + OCR + 表格都取它）。跨页 badcase 用它逐页定位，不用一次跑完整份。">?</span></td><td><code>第 1 页</code></td></tr><tr><td>表格策略首选 <span class="hint" tabindex="0" data-tip="auto=按优先级自动回退；text=强制按文字对齐（无线框表）；lines=按矢量线；default=pdfplumber 默认。">?</span></td><td><code>text（强制文字对齐）</code></td></tr><tr><td>人工列边界（x 坐标） <span class="hint" tabindex="0" data-tip="逗号/空格分隔的竖线 x 坐标（例：x1,x2,x3,…，需 ≥1 个且递增）。坐标空间随路线：文本层 PDF 用 PDF 点（像素×72/DPI，单条不成列、自动回退）；图片/扫描件用原图像素（报告左图可直接量），单条即可切开黏连格并重 OCR 归位，仅 doc_unwarp=off 生效。留空则 PDF 自动从横线端点推断、图片不重切。">?</span></td><td><code>（留空：PDF 自动推断 / 图片不重切）</code></td></tr><tr><td>预筛·最少横线 <span class="hint" tabindex="0" data-tip="扫描图的长直线预筛门槛。该进表格模型却没进，就调低；误把证件框当表格就调高。">?</span></td><td><code>5</code></td></tr><tr><td>预筛·最少竖线 <span class="hint" tabindex="0" data-tip="同上，竖线数门槛。两个都调 0 = 跳过预筛、强制走表格模型。">?</span></td><td><code>4</code></td></tr><tr><td>文字检测阈值 <span class="hint" tabindex="0" data-tip="调低救漏检但可能引入误检（PaddleOCR 3.x 默认 0.3）。predict 时按次覆盖，不重建模型。">?</span></td><td><code>0.3</code></td></tr><tr><td>文字框阈值 <span class="hint" tabindex="0" data-tip="与检测阈值配合，默认 0.6。漏检严重时试 0.4。">?</span></td><td><code>0.6</code></td></tr><tr><td>PDF 渲染 DPI <span class="hint" tabindex="0" data-tip="小字 / 密集表格调高到 150~200 更清晰；越高图越大、OCR 越慢。">?</span></td><td><code>110</code></td></tr><tr><td>文档矫正(UVDoc) <span class="hint" tabindex="0" data-tip="on=方向分类+UVDoc 去扭曲，适合旋转/弯曲扫描件（框叠矫正图）。off=关闭预处理，适合电子版平整截图（108 这类）：矫正图与原图逐像素一致，单元格框直接叠原图、1:1 精确，无 UVDoc 形变误差。仅影响表格模型。">?</span></td><td><code>on（矫正图坐标，适合扫描件）</code></td></tr></tbody></table></details>
 </header>
 <div class="wrap">
-<section class="card" data-card="0"><div class="card-head"><h2 id="case-0">20261117144821_21_two_tables_1page.pdf</h2><span class="tag">PDF</span><span class="tag">路线 text_layer</span><div class="desc"><a href="/files/20261117144821_21_two_tables_1page/source.png" target="_blank">原图副本</a> · <a href="/files/20261117144821_21_two_tables_1page/boxes.png" target="_blank">带框 PNG</a> · <a href="/files/20261117144821_21_two_tables_1page/result.json" target="_blank">result.json</a>　·　<b>点击图片可全屏放大</b></div><div class="metrics"><span>识别行数 <b>53</b></span><span>平均置信度 <b>0.95</b></span><span>可疑行 <b>3</b></span><span>结构化表格 <b>2</b></span><span>耗时 <b>3.44s</b></span></div></div><div class="grid"><div class="stage"><div class="views"><div class="view" data-card="0" data-view="orig"><div class="imgwrap"><img src="/files/20261117144821_21_two_tables_1page/source.png" alt="原图" title="点击放大查看"><svg viewBox="0 0 910 1287" preserveAspectRatio="none"><polygon class="box" data-card="0" data-idx="0" points="78.0,44.0 370.0,44.0 370.0,64.0 78.0,64.0"><title>#1 月度结算单（一页两张独立表格） (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="1" points="64.0,126.0 126.0,126.0 126.0,147.0 64.0,147.0"><title>#2 交易日期 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="2" points="190.0,126.0 251.0,126.0 251.0,147.0 190.0,147.0"><title>#3 订单编号 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="3" points="309.0,126.0 372.0,126.0 372.0,147.0 309.0,147.0"><title>#4 客户名称 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="4" points="460.0,127.0 496.0,127.0 496.0,146.0 460.0,146.0"><title>#5 摘要 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="5" points="601.0,127.0 636.0,127.0 636.0,147.0 601.0,147.0"><title>#6 收入 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="6" points="727.0,127.0 761.0,127.0 761.0,147.0 727.0,147.0"><title>#7 余额 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="7" points="64.0,172.0 285.0,173.0 285.0,190.0 64.0,189.0"><title>#8 2026-10-0CK-2601 (score=0.96)</title></polygon><polygon class="box" data-card="0" data-idx="8" points="310.0,171.0 370.0,171.0 370.0,192.0 310.0,192.0"><title>#9 宁波远景 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="9" points="463.0,173.0 522.0,173.0 522.0,191.0 463.0,191.0"><title>#10 模块采购 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="10" points="602.0,174.0 861.0,174.0 861.0,188.0 602.0,188.0"><title>#11 12,800.00128.000.0p (score=0.91)</title></polygon><polygon class="box" data-card="0" data-idx="11" points="65.0,219.0 284.0,220.0 284.0,235.0 65.0,234.0"><title>#12 2026-10-0K-2602 (score=0.99)</title></polygon><polygon class="box" data-card="0" data-idx="12" points="310.0,217.0 369.0,219.0 368.0,239.0 310.0,236.0"><title>#13 上海和裕 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="13" points="463.0,219.0 536.0,219.0 536.0,236.0 463.0,236.0"><title>#14 年度服务费 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="14" points="603.0,221.0 712.0,221.0 712.0,235.0 603.0,235.0"><title>#15 9，600.00 (score=0.93)</title></polygon><polygon class="box" data-card="0" data-idx="15" points="728.0,221.0 852.0,221.0 852.0,235.0 728.0,235.0"><title>#16 137,600.0 (score=0.96)</title></polygon><polygon class="box low" data-card="0" data-idx="16" points="851.0,223.0 860.0,223.0 860.0,232.0 851.0,232.0"><title>#17 0 (score=0.38)</title></polygon><polygon class="box" data-card="0" data-idx="17" points="65.0,265.0 286.0,265.0 286.0,283.0 65.0,283.0"><title>#18 2026-10-0K-2603 (score=0.99)</title></polygon><polygon class="box" data-card="0" data-idx="18" points="310.0,264.0 370.0,264.0 370.0,283.0 310.0,283.0"><title>#19 杭州启明 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="19" points="463.0,264.0 522.0,264.0 522.0,283.0 463.0,283.0"><title>#20 设备租赁 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="20" points="601.0,265.0 853.0,264.0 853.0,282.0 601.0,283.0"><title>#21 24.000.00161.600.0 (score=0.95)</title></polygon><polygon class="box" data-card="0" data-idx="21" points="851.0,268.0 861.0,268.0 861.0,279.0 851.0,279.0"><title>#22 p (score=0.89)</title></polygon><polygon class="box" data-card="0" data-idx="22" points="66.0,313.0 285.0,313.0 285.0,327.0 66.0,327.0"><title>#23 2026-10-04K-2604 (score=0.99)</title></polygon><polygon class="box" data-card="0" data-idx="23" points="310.0,311.0 370.0,311.0 370.0,329.0 310.0,329.0"><title>#24 深圳恒达 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="24" points="461.0,312.0 522.0,312.0 522.0,329.0 461.0,329.0"><title>#25 耗材补货 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="25" points="603.0,312.0 712.0,312.0 712.0,329.0 603.0,329.0"><title>#26 3，450.00 (score=0.94)</title></polygon><polygon class="box" data-card="0" data-idx="26" points="727.0,312.0 851.0,312.0 851.0,326.0 727.0,326.0"><title>#27 165,050.0 (score=0.95)</title></polygon><polygon class="box low" data-card="0" data-idx="27" points="851.0,315.0 860.0,315.0 860.0,325.0 851.0,325.0"><title>#28 P (score=0.53)</title></polygon><polygon class="box" data-card="0" data-idx="28" points="65.0,356.0 285.0,356.0 285.0,373.0 65.0,373.0"><title>#29 2026-10-0K-2605 (score=0.99)</title></polygon><polygon class="box" data-card="0" data-idx="29" points="310.0,357.0 396.0,357.0 396.0,375.0 310.0,375.0"><title>#30 苏州工业园区 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="30" points="461.0,357.0 522.0,357.0 522.0,375.0 461.0,375.0"><title>#31 技术咨询 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="31" points="601.0,356.0 855.0,355.0 855.0,375.0 601.0,376.0"><title>#32 18,200.00183,250.0 (score=0.95)</title></polygon><polygon class="box low" data-card="0" data-idx="32" points="852.0,363.0 859.0,363.0 859.0,370.0 852.0,370.0"><title>#33 L (score=0.18)</title></polygon><polygon class="box" data-card="0" data-idx="33" points="64.0,403.0 284.0,403.0 284.0,420.0 64.0,420.0"><title>#34 2026-10-06K-2606 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="34" points="308.0,401.0 369.0,403.0 368.0,423.0 307.0,420.0"><title>#35 广州白云 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="35" points="463.0,403.0 521.0,403.0 521.0,421.0 463.0,421.0"><title>#36 培训服务 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="36" points="603.0,404.0 712.0,404.0 712.0,421.0 603.0,421.0"><title>#37 7，800.00 (score=0.93)</title></polygon><polygon class="box" data-card="0" data-idx="37" points="727.0,403.0 852.0,403.0 852.0,420.0 727.0,420.0"><title>#38 191，050.0 (score=0.94)</title></polygon><polygon class="box" data-card="0" data-idx="38" points="65.0,525.0 98.0,525.0 98.0,544.0 65.0,544.0"><title>#39 项目 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="39" points="248.0,524.0 281.0,524.0 281.0,544.0 248.0,544.0"><title>#40 笔数 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="40" points="415.0,524.0 449.0,524.0 449.0,544.0 415.0,544.0"><title>#41 金额 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="41" points="583.0,524.0 618.0,524.0 618.0,543.0 583.0,543.0"><title>#42 状态 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="42" points="65.0,568.0 125.0,570.0 124.0,591.0 64.0,589.0"><title>#43 收入合计 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="43" points="415.0,571.0 539.0,571.0 539.0,588.0 415.0,588.0"><title>#44 75,850.00 (score=0.94)</title></polygon><polygon class="box" data-card="0" data-idx="44" points="585.0,571.0 631.0,571.0 631.0,589.0 585.0,589.0"><title>#45 已核对 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="45" points="66.0,616.0 124.0,616.0 124.0,634.0 66.0,634.0"><title>#46 支出合计 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="46" points="414.0,616.0 539.0,615.0 539.0,633.0 414.0,635.0"><title>#47 11.200.00 (score=0.92)</title></polygon><polygon class="box" data-card="0" data-idx="47" points="586.0,615.0 631.0,615.0 631.0,634.0 586.0,634.0"><title>#48 已核对 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="48" points="65.0,659.0 98.0,662.0 96.0,682.0 63.0,679.0"><title>#49 净额 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="49" points="248.0,665.0 261.0,665.0 261.0,679.0 248.0,679.0"><title>#50 4 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="50" points="416.0,660.0 538.0,663.0 538.0,681.0 415.0,679.0"><title>#51 64,650.00 (score=0.94)</title></polygon><polygon class="box" data-card="0" data-idx="51" points="585.0,662.0 631.0,662.0 631.0,681.0 585.0,681.0"><title>#52 待复核 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="52" points="63.0,753.0 437.0,753.0 437.0,767.0 63.0,767.0"><title>#53 两张表列数不同，用来验证多表切换与tab只叠当前表。 (score=1.00)</title></polygon></svg><svg class="cellsvg" viewBox="0 0 910 1287" preserveAspectRatio="none"><rect class="cellbox" data-card="0" data-tbl="0" data-cell="0_0" x="61.1" y="122.2" width="125.3" height="45.9"><title>表 1 · 行 0 列 1 · 交易日期</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="0_1" x="186.4" y="122.2" width="119.2" height="45.9"><title>表 1 · 行 0 列 2 · 订单编号</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="0_2" x="305.6" y="122.2" width="152.7" height="45.9"><title>表 1 · 行 0 列 3 · 客户名称</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="0_3" x="458.3" y="122.2" width="140.6" height="45.9"><title>表 1 · 行 0 列 4 · 摘要</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="0_4" x="598.9" y="122.2" width="125.3" height="45.9"><title>表 1 · 行 0 列 5 · 收入</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="0_5" x="724.2" y="122.2" width="131.4" height="45.9"><title>表 1 · 行 0 列 6 · 余额</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="1_0" x="61.1" y="168.1" width="125.3" height="45.8"><title>表 1 · 行 1 列 1 · 2026-10-0</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="1_1" x="186.4" y="168.1" width="119.2" height="45.8"><title>表 1 · 行 1 列 2 · 1CK-2601</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="1_2" x="305.6" y="168.1" width="152.7" height="45.8"><title>表 1 · 行 1 列 3 · 宁波远景</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="1_3" x="458.3" y="168.1" width="140.6" height="45.8"><title>表 1 · 行 1 列 4 · 模块采购</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="1_4" x="598.9" y="168.1" width="125.3" height="45.8"><title>表 1 · 行 1 列 5 · 12,800.00</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="1_5" x="724.2" y="168.1" width="131.4" height="45.8"><title>表 1 · 行 1 列 6 · 128,000.0</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="2_0" x="61.1" y="213.9" width="125.3" height="45.8"><title>表 1 · 行 2 列 1 · 2026-10-0</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="2_1" x="186.4" y="213.9" width="119.2" height="45.8"><title>表 1 · 行 2 列 2 · 2CK-2602</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="2_2" x="305.6" y="213.9" width="152.7" height="45.8"><title>表 1 · 行 2 列 3 · 上海和裕</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="2_3" x="458.3" y="213.9" width="140.6" height="45.8"><title>表 1 · 行 2 列 4 · 年度服务费</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="2_4" x="598.9" y="213.9" width="125.3" height="45.8"><title>表 1 · 行 2 列 5 · 9,600.00</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="2_5" x="724.2" y="213.9" width="131.4" height="45.8"><title>表 1 · 行 2 列 6 · 137,600.0</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="3_0" x="61.1" y="259.7" width="125.3" height="45.9"><title>表 1 · 行 3 列 1 · 2026-10-0</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="3_1" x="186.4" y="259.7" width="119.2" height="45.9"><title>表 1 · 行 3 列 2 · 3CK-2603</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="3_2" x="305.6" y="259.7" width="152.7" height="45.9"><title>表 1 · 行 3 列 3 · 杭州启明</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="3_3" x="458.3" y="259.7" width="140.6" height="45.9"><title>表 1 · 行 3 列 4 · 设备租赁</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="3_4" x="598.9" y="259.7" width="125.3" height="45.9"><title>表 1 · 行 3 列 5 · 24,000.00</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="3_5" x="724.2" y="259.7" width="131.4" height="45.9"><title>表 1 · 行 3 列 6 · 161,600.0</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="4_0" x="61.1" y="305.6" width="125.3" height="45.8"><title>表 1 · 行 4 列 1 · 2026-10-0</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="4_1" x="186.4" y="305.6" width="119.2" height="45.8"><title>表 1 · 行 4 列 2 · 4CK-2604</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="4_2" x="305.6" y="305.6" width="152.7" height="45.8"><title>表 1 · 行 4 列 3 · 深圳恒达</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="4_3" x="458.3" y="305.6" width="140.6" height="45.8"><title>表 1 · 行 4 列 4 · 耗材补货</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="4_4" x="598.9" y="305.6" width="125.3" height="45.8"><title>表 1 · 行 4 列 5 · 3,450.00</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="4_5" x="724.2" y="305.6" width="131.4" height="45.8"><title>表 1 · 行 4 列 6 · 165,050.0</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="5_0" x="61.1" y="351.4" width="125.3" height="45.8"><title>表 1 · 行 5 列 1 · 2026-10-0</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="5_1" x="186.4" y="351.4" width="119.2" height="45.8"><title>表 1 · 行 5 列 2 · 5CK-2605</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="5_2" x="305.6" y="351.4" width="152.7" height="45.8"><title>表 1 · 行 5 列 3 · 苏州工业园区</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="5_3" x="458.3" y="351.4" width="140.6" height="45.8"><title>表 1 · 行 5 列 4 · 技术咨询</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="5_4" x="598.9" y="351.4" width="125.3" height="45.8"><title>表 1 · 行 5 列 5 · 18,200.00</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="5_5" x="724.2" y="351.4" width="131.4" height="45.8"><title>表 1 · 行 5 列 6 · 183,250.0</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="6_0" x="61.1" y="397.2" width="125.3" height="45.9"><title>表 1 · 行 6 列 1 · 2026-10-0</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="6_1" x="186.4" y="397.2" width="119.2" height="45.9"><title>表 1 · 行 6 列 2 · 6CK-2606</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="6_2" x="305.6" y="397.2" width="152.7" height="45.9"><title>表 1 · 行 6 列 3 · 广州白云</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="6_3" x="458.3" y="397.2" width="140.6" height="45.9"><title>表 1 · 行 6 列 4 · 培训服务</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="6_4" x="598.9" y="397.2" width="125.3" height="45.9"><title>表 1 · 行 6 列 5 · 7,800.00</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="6_5" x="724.2" y="397.2" width="131.4" height="45.9"><title>表 1 · 行 6 列 6 · 191,050.0</title></rect><rect class="cellbox off" data-card="0" data-tbl="1" data-cell="0_0" x="61.1" y="519.4" width="183.3" height="45.9"><title>表 2 · 行 0 列 1 · 项目</title></rect><rect class="cellbox off" data-card="0" data-tbl="1" data-cell="0_1" x="244.4" y="519.4" width="168.1" height="45.9"><title>表 2 · 行 0 列 2 · 笔数</title></rect><rect class="cellbox off" data-card="0" data-tbl="1" data-cell="0_2" x="412.5" y="519.4" width="168.1" height="45.9"><title>表 2 · 行 0 列 3 · 金额</title></rect><rect class="cellbox off" data-card="0" data-tbl="1" data-cell="0_3" x="580.6" y="519.4" width="168.0" height="45.9"><title>表 2 · 行 0 列 4 · 状态</title></rect><rect class="cellbox off" data-card="0" data-tbl="1" data-cell="1_0" x="61.1" y="565.3" width="183.3" height="45.8"><title>表 2 · 行 1 列 1 · 收入合计</title></rect><rect class="cellbox off" data-card="0" data-tbl="1" data-cell="1_1" x="244.4" y="565.3" width="168.1" height="45.8"><title>表 2 · 行 1 列 2 · 6</title></rect><rect class="cellbox off" data-card="0" data-tbl="1" data-cell="1_2" x="412.5" y="565.3" width="168.1" height="45.8"><title>表 2 · 行 1 列 3 · 75,850.00</title></rect><rect class="cellbox off" data-card="0" data-tbl="1" data-cell="1_3" x="580.6" y="565.3" width="168.0" height="45.8"><title>表 2 · 行 1 列 4 · 已核对</title></rect><rect class="cellbox off" data-card="0" data-tbl="1" data-cell="2_0" x="61.1" y="611.1" width="183.3" height="45.8"><title>表 2 · 行 2 列 1 · 支出合计</title></rect><rect class="cellbox off" data-card="0" data-tbl="1" data-cell="2_1" x="244.4" y="611.1" width="168.1" height="45.8"><title>表 2 · 行 2 列 2 · 2</title></rect><rect class="cellbox off" data-card="0" data-tbl="1" data-cell="2_2" x="412.5" y="611.1" width="168.1" height="45.8"><title>表 2 · 行 2 列 3 · 11,200.00</title></rect><rect class="cellbox off" data-card="0" data-tbl="1" data-cell="2_3" x="580.6" y="611.1" width="168.0" height="45.8"><title>表 2 · 行 2 列 4 · 已核对</title></rect><rect class="cellbox off" data-card="0" data-tbl="1" data-cell="3_0" x="61.1" y="656.9" width="183.3" height="45.9"><title>表 2 · 行 3 列 1 · 净额</title></rect><rect class="cellbox off" data-card="0" data-tbl="1" data-cell="3_1" x="244.4" y="656.9" width="168.1" height="45.9"><title>表 2 · 行 3 列 2 · 4</title></rect><rect class="cellbox off" data-card="0" data-tbl="1" data-cell="3_2" x="412.5" y="656.9" width="168.1" height="45.9"><title>表 2 · 行 3 列 3 · 64,650.00</title></rect><rect class="cellbox off" data-card="0" data-tbl="1" data-cell="3_3" x="580.6" y="656.9" width="168.0" height="45.9"><title>表 2 · 行 3 列 4 · 待复核</title></rect></svg></div></div></div></div><div class="pane"><h3 class="pane-title">提取内容</h3><table><thead><tr><th>#</th><th>识别文字</th><th>置信度</th></tr></thead><tbody><tr data-card="0" data-idx="0" class=""><td class="num">1</td><td class="txt">月度结算单（一页两张独立表格）</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="1" class=""><td class="num">2</td><td class="txt">交易日期</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="2" class=""><td class="num">3</td><td class="txt">订单编号</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="3" class=""><td class="num">4</td><td class="txt">客户名称</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="4" class=""><td class="num">5</td><td class="txt">摘要</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="5" class=""><td class="num">6</td><td class="txt">收入</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="6" class=""><td class="num">7</td><td class="txt">余额</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="7" class=""><td class="num">8</td><td class="txt">2026-10-0CK-2601</td><td class="score"><span class="bar"><i style="width:96%"></i></span>0.96</td></tr><tr data-card="0" data-idx="8" class=""><td class="num">9</td><td class="txt">宁波远景</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="9" class=""><td class="num">10</td><td class="txt">模块采购</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="10" class=""><td class="num">11</td><td class="txt">12,800.00128.000.0p</td><td class="score"><span class="bar"><i style="width:91%"></i></span>0.91</td></tr><tr data-card="0" data-idx="11" class=""><td class="num">12</td><td class="txt">2026-10-0K-2602</td><td class="score"><span class="bar"><i style="width:99%"></i></span>0.99</td></tr><tr data-card="0" data-idx="12" class=""><td class="num">13</td><td class="txt">上海和裕</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="13" class=""><td class="num">14</td><td class="txt">年度服务费</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="14" class=""><td class="num">15</td><td class="txt">9，600.00</td><td class="score"><span class="bar"><i style="width:93%"></i></span>0.93</td></tr><tr data-card="0" data-idx="15" class=""><td class="num">16</td><td class="txt">137,600.0</td><td class="score"><span class="bar"><i style="width:96%"></i></span>0.96</td></tr><tr data-card="0" data-idx="16" class="low"><td class="num">17</td><td class="txt">0</td><td class="score"><span class="bar"><i style="width:38%"></i></span>0.38</td></tr><tr data-card="0" data-idx="17" class=""><td class="num">18</td><td class="txt">2026-10-0K-2603</td><td class="score"><span class="bar"><i style="width:99%"></i></span>0.99</td></tr><tr data-card="0" data-idx="18" class=""><td class="num">19</td><td class="txt">杭州启明</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="19" class=""><td class="num">20</td><td class="txt">设备租赁</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="20" class=""><td class="num">21</td><td class="txt">24.000.00161.600.0</td><td class="score"><span class="bar"><i style="width:95%"></i></span>0.95</td></tr><tr data-card="0" data-idx="21" class=""><td class="num">22</td><td class="txt">p</td><td class="score"><span class="bar"><i style="width:89%"></i></span>0.89</td></tr><tr data-card="0" data-idx="22" class=""><td class="num">23</td><td class="txt">2026-10-04K-2604</td><td class="score"><span class="bar"><i style="width:99%"></i></span>0.99</td></tr><tr data-card="0" data-idx="23" class=""><td class="num">24</td><td class="txt">深圳恒达</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="24" class=""><td class="num">25</td><td class="txt">耗材补货</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="25" class=""><td class="num">26</td><td class="txt">3，450.00</td><td class="score"><span class="bar"><i style="width:94%"></i></span>0.94</td></tr><tr data-card="0" data-idx="26" class=""><td class="num">27</td><td class="txt">165,050.0</td><td class="score"><span class="bar"><i style="width:95%"></i></span>0.95</td></tr><tr data-card="0" data-idx="27" class="low"><td class="num">28</td><td class="txt">P</td><td class="score"><span class="bar"><i style="width:53%"></i></span>0.53</td></tr><tr data-card="0" data-idx="28" class=""><td class="num">29</td><td class="txt">2026-10-0K-2605</td><td class="score"><span class="bar"><i style="width:99%"></i></span>0.99</td></tr><tr data-card="0" data-idx="29" class=""><td class="num">30</td><td class="txt">苏州工业园区</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="30" class=""><td class="num">31</td><td class="txt">技术咨询</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="31" class=""><td class="num">32</td><td class="txt">18,200.00183,250.0</td><td class="score"><span class="bar"><i style="width:95%"></i></span>0.95</td></tr><tr data-card="0" data-idx="32" class="low"><td class="num">33</td><td class="txt">L</td><td class="score"><span class="bar"><i style="width:18%"></i></span>0.18</td></tr><tr data-card="0" data-idx="33" class=""><td class="num">34</td><td class="txt">2026-10-06K-2606</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="34" class=""><td class="num">35</td><td class="txt">广州白云</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="35" class=""><td class="num">36</td><td class="txt">培训服务</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="36" class=""><td class="num">37</td><td class="txt">7，800.00</td><td class="score"><span class="bar"><i style="width:93%"></i></span>0.93</td></tr><tr data-card="0" data-idx="37" class=""><td class="num">38</td><td class="txt">191，050.0</td><td class="score"><span class="bar"><i style="width:94%"></i></span>0.94</td></tr><tr data-card="0" data-idx="38" class=""><td class="num">39</td><td class="txt">项目</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="39" class=""><td class="num">40</td><td class="txt">笔数</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="40" class=""><td class="num">41</td><td class="txt">金额</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="41" class=""><td class="num">42</td><td class="txt">状态</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="42" class=""><td class="num">43</td><td class="txt">收入合计</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="43" class=""><td class="num">44</td><td class="txt">75,850.00</td><td class="score"><span class="bar"><i style="width:94%"></i></span>0.94</td></tr><tr data-card="0" data-idx="44" class=""><td class="num">45</td><td class="txt">已核对</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="45" class=""><td class="num">46</td><td class="txt">支出合计</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="46" class=""><td class="num">47</td><td class="txt">11.200.00</td><td class="score"><span class="bar"><i style="width:92%"></i></span>0.92</td></tr><tr data-card="0" data-idx="47" class=""><td class="num">48</td><td class="txt">已核对</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="48" class=""><td class="num">49</td><td class="txt">净额</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="49" class=""><td class="num">50</td><td class="txt">4</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="50" class=""><td class="num">51</td><td class="txt">64,650.00</td><td class="score"><span class="bar"><i style="width:94%"></i></span>0.94</td></tr><tr data-card="0" data-idx="51" class=""><td class="num">52</td><td class="txt">待复核</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="52" class=""><td class="num">53</td><td class="txt">两张表列数不同，用来验证多表切换与tab只叠当前表。</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr></tbody></table><details><summary>文本层原文 / 纯文本全文（432 字符）</summary><pre>月度结算单（一页两张独立表格）
+<section class="card" data-card="0"><div class="card-head"><h2 id="case-0">20261117150808_21_two_tables_1page.pdf</h2><span class="tag">PDF</span><span class="tag">路线 text_layer</span><div class="desc"><a href="/files/20261117150808_21_two_tables_1page/source.png" target="_blank">原图副本</a> · <a href="/files/20261117150808_21_two_tables_1page/boxes.png" target="_blank">带框 PNG</a> · <a href="/files/20261117150808_21_two_tables_1page/result.json" target="_blank">result.json</a></div><div class="metrics"><span>识别行数 <b>53</b></span><span>平均置信度 <b>0.95</b></span><span>可疑行 <b>3</b></span><span>结构化表格 <b>1</b></span><span>耗时 <b>9.21s</b></span></div></div><div class="grid"><div class="stage"><div class="views"><div class="view" data-card="0" data-view="orig"><div class="imgwrap" style="--ar:0.7071"><img src="/files/20261117150808_21_two_tables_1page/source.png" alt="原图" title="点击放大查看"><svg viewBox="0 0 910 1287" preserveAspectRatio="none"><polygon class="box" data-card="0" data-idx="0" points="78.0,44.0 370.0,44.0 370.0,64.0 78.0,64.0"><title>#1 月度结算单（一页两张独立表格） (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="1" points="64.0,126.0 126.0,126.0 126.0,147.0 64.0,147.0"><title>#2 交易日期 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="2" points="190.0,126.0 251.0,126.0 251.0,147.0 190.0,147.0"><title>#3 订单编号 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="3" points="309.0,126.0 372.0,126.0 372.0,147.0 309.0,147.0"><title>#4 客户名称 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="4" points="460.0,127.0 496.0,127.0 496.0,146.0 460.0,146.0"><title>#5 摘要 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="5" points="601.0,127.0 636.0,127.0 636.0,147.0 601.0,147.0"><title>#6 收入 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="6" points="727.0,127.0 761.0,127.0 761.0,147.0 727.0,147.0"><title>#7 余额 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="7" points="64.0,172.0 285.0,173.0 285.0,190.0 64.0,189.0"><title>#8 2026-10-0CK-2601 (score=0.96)</title></polygon><polygon class="box" data-card="0" data-idx="8" points="310.0,171.0 370.0,171.0 370.0,192.0 310.0,192.0"><title>#9 宁波远景 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="9" points="463.0,173.0 522.0,173.0 522.0,191.0 463.0,191.0"><title>#10 模块采购 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="10" points="602.0,174.0 861.0,174.0 861.0,188.0 602.0,188.0"><title>#11 12,800.00128.000.0p (score=0.91)</title></polygon><polygon class="box" data-card="0" data-idx="11" points="65.0,219.0 284.0,220.0 284.0,235.0 65.0,234.0"><title>#12 2026-10-0K-2602 (score=0.99)</title></polygon><polygon class="box" data-card="0" data-idx="12" points="310.0,217.0 369.0,219.0 368.0,239.0 310.0,236.0"><title>#13 上海和裕 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="13" points="463.0,219.0 536.0,219.0 536.0,236.0 463.0,236.0"><title>#14 年度服务费 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="14" points="603.0,221.0 712.0,221.0 712.0,235.0 603.0,235.0"><title>#15 9，600.00 (score=0.93)</title></polygon><polygon class="box" data-card="0" data-idx="15" points="728.0,221.0 852.0,221.0 852.0,235.0 728.0,235.0"><title>#16 137,600.0 (score=0.96)</title></polygon><polygon class="box low" data-card="0" data-idx="16" points="851.0,223.0 860.0,223.0 860.0,232.0 851.0,232.0"><title>#17 0 (score=0.38)</title></polygon><polygon class="box" data-card="0" data-idx="17" points="65.0,265.0 286.0,265.0 286.0,283.0 65.0,283.0"><title>#18 2026-10-0K-2603 (score=0.99)</title></polygon><polygon class="box" data-card="0" data-idx="18" points="310.0,264.0 370.0,264.0 370.0,283.0 310.0,283.0"><title>#19 杭州启明 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="19" points="463.0,264.0 522.0,264.0 522.0,283.0 463.0,283.0"><title>#20 设备租赁 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="20" points="601.0,265.0 853.0,264.0 853.0,282.0 601.0,283.0"><title>#21 24.000.00161.600.0 (score=0.95)</title></polygon><polygon class="box" data-card="0" data-idx="21" points="851.0,268.0 861.0,268.0 861.0,279.0 851.0,279.0"><title>#22 p (score=0.89)</title></polygon><polygon class="box" data-card="0" data-idx="22" points="66.0,313.0 285.0,313.0 285.0,327.0 66.0,327.0"><title>#23 2026-10-04K-2604 (score=0.99)</title></polygon><polygon class="box" data-card="0" data-idx="23" points="310.0,311.0 370.0,311.0 370.0,329.0 310.0,329.0"><title>#24 深圳恒达 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="24" points="461.0,312.0 522.0,312.0 522.0,329.0 461.0,329.0"><title>#25 耗材补货 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="25" points="603.0,312.0 712.0,312.0 712.0,329.0 603.0,329.0"><title>#26 3，450.00 (score=0.94)</title></polygon><polygon class="box" data-card="0" data-idx="26" points="727.0,312.0 851.0,312.0 851.0,326.0 727.0,326.0"><title>#27 165,050.0 (score=0.95)</title></polygon><polygon class="box low" data-card="0" data-idx="27" points="851.0,315.0 860.0,315.0 860.0,325.0 851.0,325.0"><title>#28 P (score=0.53)</title></polygon><polygon class="box" data-card="0" data-idx="28" points="65.0,356.0 285.0,356.0 285.0,373.0 65.0,373.0"><title>#29 2026-10-0K-2605 (score=0.99)</title></polygon><polygon class="box" data-card="0" data-idx="29" points="310.0,357.0 396.0,357.0 396.0,375.0 310.0,375.0"><title>#30 苏州工业园区 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="30" points="461.0,357.0 522.0,357.0 522.0,375.0 461.0,375.0"><title>#31 技术咨询 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="31" points="601.0,356.0 855.0,355.0 855.0,375.0 601.0,376.0"><title>#32 18,200.00183,250.0 (score=0.95)</title></polygon><polygon class="box low" data-card="0" data-idx="32" points="852.0,363.0 859.0,363.0 859.0,370.0 852.0,370.0"><title>#33 L (score=0.18)</title></polygon><polygon class="box" data-card="0" data-idx="33" points="64.0,403.0 284.0,403.0 284.0,420.0 64.0,420.0"><title>#34 2026-10-06K-2606 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="34" points="308.0,401.0 369.0,403.0 368.0,423.0 307.0,420.0"><title>#35 广州白云 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="35" points="463.0,403.0 521.0,403.0 521.0,421.0 463.0,421.0"><title>#36 培训服务 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="36" points="603.0,404.0 712.0,404.0 712.0,421.0 603.0,421.0"><title>#37 7，800.00 (score=0.93)</title></polygon><polygon class="box" data-card="0" data-idx="37" points="727.0,403.0 852.0,403.0 852.0,420.0 727.0,420.0"><title>#38 191，050.0 (score=0.94)</title></polygon><polygon class="box" data-card="0" data-idx="38" points="65.0,525.0 98.0,525.0 98.0,544.0 65.0,544.0"><title>#39 项目 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="39" points="248.0,524.0 281.0,524.0 281.0,544.0 248.0,544.0"><title>#40 笔数 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="40" points="415.0,524.0 449.0,524.0 449.0,544.0 415.0,544.0"><title>#41 金额 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="41" points="583.0,524.0 618.0,524.0 618.0,543.0 583.0,543.0"><title>#42 状态 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="42" points="65.0,568.0 125.0,570.0 124.0,591.0 64.0,589.0"><title>#43 收入合计 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="43" points="415.0,571.0 539.0,571.0 539.0,588.0 415.0,588.0"><title>#44 75,850.00 (score=0.94)</title></polygon><polygon class="box" data-card="0" data-idx="44" points="585.0,571.0 631.0,571.0 631.0,589.0 585.0,589.0"><title>#45 已核对 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="45" points="66.0,616.0 124.0,616.0 124.0,634.0 66.0,634.0"><title>#46 支出合计 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="46" points="414.0,616.0 539.0,615.0 539.0,633.0 414.0,635.0"><title>#47 11.200.00 (score=0.92)</title></polygon><polygon class="box" data-card="0" data-idx="47" points="586.0,615.0 631.0,615.0 631.0,634.0 586.0,634.0"><title>#48 已核对 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="48" points="65.0,659.0 98.0,662.0 96.0,682.0 63.0,679.0"><title>#49 净额 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="49" points="248.0,665.0 261.0,665.0 261.0,679.0 248.0,679.0"><title>#50 4 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="50" points="416.0,660.0 538.0,663.0 538.0,681.0 415.0,679.0"><title>#51 64,650.00 (score=0.94)</title></polygon><polygon class="box" data-card="0" data-idx="51" points="585.0,662.0 631.0,662.0 631.0,681.0 585.0,681.0"><title>#52 待复核 (score=1.00)</title></polygon><polygon class="box" data-card="0" data-idx="52" points="63.0,753.0 437.0,753.0 437.0,767.0 63.0,767.0"><title>#53 两张表列数不同，用来验证多表切换与tab只叠当前表。 (score=1.00)</title></polygon></svg><svg class="cellsvg" viewBox="0 0 910 1287" preserveAspectRatio="none"><rect class="cellbox" data-card="0" data-tbl="0" data-cell="0_0" x="67.2" y="129.6" width="244.5" height="13.7"><title>表 1 · 行 0 列 1 · 交易日期 订单编号</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="0_1" x="311.7" y="129.6" width="106.9" height="13.7"><title>表 1 · 行 0 列 2 · 客户名称</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="0_2" x="418.6" y="129.6" width="45.8" height="13.7"><title>表 1 · 行 0 列 3 · </title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="0_3" x="464.4" y="129.6" width="122.3" height="13.7"><title>表 1 · 行 0 列 4 · 摘要</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="0_4" x="586.7" y="129.6" width="18.3" height="13.7"><title>表 1 · 行 0 列 5 · </title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="0_5" x="605.0" y="129.6" width="262.8" height="13.7"><title>表 1 · 行 0 列 6 · 收入 余额</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="1_0" x="67.2" y="175.4" width="244.5" height="13.7"><title>表 1 · 行 1 列 1 · 2026-10-01CK-2601</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="1_1" x="311.7" y="175.4" width="106.9" height="13.7"><title>表 1 · 行 1 列 2 · 宁波远景</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="1_2" x="418.6" y="175.4" width="45.8" height="13.7"><title>表 1 · 行 1 列 3 · </title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="1_3" x="464.4" y="175.4" width="122.3" height="13.7"><title>表 1 · 行 1 列 4 · 模块采购</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="1_4" x="586.7" y="175.4" width="18.3" height="13.7"><title>表 1 · 行 1 列 5 · </title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="1_5" x="605.0" y="175.4" width="262.8" height="13.7"><title>表 1 · 行 1 列 6 · 12,800.00128,000.00</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="2_0" x="67.2" y="221.2" width="244.5" height="13.8"><title>表 1 · 行 2 列 1 · 2026-10-02CK-2602</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="2_1" x="311.7" y="221.2" width="106.9" height="13.8"><title>表 1 · 行 2 列 2 · 上海和裕</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="2_2" x="418.6" y="221.2" width="45.8" height="13.8"><title>表 1 · 行 2 列 3 · </title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="2_3" x="464.4" y="221.2" width="122.3" height="13.8"><title>表 1 · 行 2 列 4 · 年度服务费</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="2_4" x="586.7" y="221.2" width="18.3" height="13.8"><title>表 1 · 行 2 列 5 · </title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="2_5" x="605.0" y="221.2" width="262.8" height="13.8"><title>表 1 · 行 2 列 6 · 9,600.00 137,600.00</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="3_0" x="67.2" y="267.1" width="244.5" height="13.7"><title>表 1 · 行 3 列 1 · 2026-10-03CK-2603</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="3_1" x="311.7" y="267.1" width="106.9" height="13.7"><title>表 1 · 行 3 列 2 · 杭州启明</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="3_2" x="418.6" y="267.1" width="45.8" height="13.7"><title>表 1 · 行 3 列 3 · </title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="3_3" x="464.4" y="267.1" width="122.3" height="13.7"><title>表 1 · 行 3 列 4 · 设备租赁</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="3_4" x="586.7" y="267.1" width="18.3" height="13.7"><title>表 1 · 行 3 列 5 · </title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="3_5" x="605.0" y="267.1" width="262.8" height="13.7"><title>表 1 · 行 3 列 6 · 24,000.00161,600.00</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="4_0" x="67.2" y="312.9" width="244.5" height="13.7"><title>表 1 · 行 4 列 1 · 2026-10-04CK-2604</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="4_1" x="311.7" y="312.9" width="106.9" height="13.7"><title>表 1 · 行 4 列 2 · 深圳恒达</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="4_2" x="418.6" y="312.9" width="45.8" height="13.7"><title>表 1 · 行 4 列 3 · </title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="4_3" x="464.4" y="312.9" width="122.3" height="13.7"><title>表 1 · 行 4 列 4 · 耗材补货</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="4_4" x="586.7" y="312.9" width="18.3" height="13.7"><title>表 1 · 行 4 列 5 · </title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="4_5" x="605.0" y="312.9" width="262.8" height="13.7"><title>表 1 · 行 4 列 6 · 3,450.00 165,050.00</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="5_0" x="67.2" y="358.7" width="244.5" height="13.8"><title>表 1 · 行 5 列 1 · 2026-10-05CK-2605</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="5_1" x="311.7" y="358.7" width="106.9" height="13.8"><title>表 1 · 行 5 列 2 · 苏州工业园区</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="5_2" x="418.6" y="358.7" width="45.8" height="13.8"><title>表 1 · 行 5 列 3 · </title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="5_3" x="464.4" y="358.7" width="122.3" height="13.8"><title>表 1 · 行 5 列 4 · 技术咨询</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="5_4" x="586.7" y="358.7" width="18.3" height="13.8"><title>表 1 · 行 5 列 5 · </title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="5_5" x="605.0" y="358.7" width="262.8" height="13.8"><title>表 1 · 行 5 列 6 · 18,200.00183,250.00</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="6_0" x="67.2" y="404.6" width="244.5" height="13.7"><title>表 1 · 行 6 列 1 · 2026-10-06CK-2606</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="6_1" x="311.7" y="404.6" width="106.9" height="13.7"><title>表 1 · 行 6 列 2 · 广州白云</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="6_2" x="418.6" y="404.6" width="45.8" height="13.7"><title>表 1 · 行 6 列 3 · </title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="6_3" x="464.4" y="404.6" width="122.3" height="13.7"><title>表 1 · 行 6 列 4 · 培训服务</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="6_4" x="586.7" y="404.6" width="18.3" height="13.7"><title>表 1 · 行 6 列 5 · </title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="6_5" x="605.0" y="404.6" width="262.8" height="13.7"><title>表 1 · 行 6 列 6 · 7,800.00 191,050.00</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="7_0" x="67.2" y="526.8" width="244.5" height="13.7"><title>表 1 · 行 7 列 1 · 项目 笔数</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="7_1" x="311.7" y="526.8" width="106.9" height="13.7"><title>表 1 · 行 7 列 2 · </title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="7_2" x="418.6" y="526.8" width="45.8" height="13.7"><title>表 1 · 行 7 列 3 · 金额</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="7_3" x="464.4" y="526.8" width="122.3" height="13.7"><title>表 1 · 行 7 列 4 · </title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="7_4" x="586.7" y="526.8" width="18.3" height="13.7"><title>表 1 · 行 7 列 5 · 状</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="7_5" x="605.0" y="526.8" width="262.8" height="13.7"><title>表 1 · 行 7 列 6 · 态</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="8_0" x="67.2" y="572.6" width="244.5" height="13.8"><title>表 1 · 行 8 列 1 · 收入合计 6</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="8_1" x="311.7" y="572.6" width="106.9" height="13.8"><title>表 1 · 行 8 列 2 · </title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="8_2" x="418.6" y="572.6" width="45.8" height="13.8"><title>表 1 · 行 8 列 3 · 75,</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="8_3" x="464.4" y="572.6" width="122.3" height="13.8"><title>表 1 · 行 8 列 4 · 850.00</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="8_4" x="586.7" y="572.6" width="18.3" height="13.8"><title>表 1 · 行 8 列 5 · 已</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="8_5" x="605.0" y="572.6" width="262.8" height="13.8"><title>表 1 · 行 8 列 6 · 核对</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="9_0" x="67.2" y="618.4" width="244.5" height="13.8"><title>表 1 · 行 9 列 1 · 支出合计 2</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="9_1" x="311.7" y="618.4" width="106.9" height="13.8"><title>表 1 · 行 9 列 2 · </title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="9_2" x="418.6" y="618.4" width="45.8" height="13.8"><title>表 1 · 行 9 列 3 · 11,</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="9_3" x="464.4" y="618.4" width="122.3" height="13.8"><title>表 1 · 行 9 列 4 · 200.00</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="9_4" x="586.7" y="618.4" width="18.3" height="13.8"><title>表 1 · 行 9 列 5 · 已</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="9_5" x="605.0" y="618.4" width="262.8" height="13.8"><title>表 1 · 行 9 列 6 · 核对</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="10_0" x="67.2" y="664.3" width="244.5" height="13.7"><title>表 1 · 行 10 列 1 · 净额 4</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="10_1" x="311.7" y="664.3" width="106.9" height="13.7"><title>表 1 · 行 10 列 2 · </title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="10_2" x="418.6" y="664.3" width="45.8" height="13.7"><title>表 1 · 行 10 列 3 · 64,</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="10_3" x="464.4" y="664.3" width="122.3" height="13.7"><title>表 1 · 行 10 列 4 · 650.00</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="10_4" x="586.7" y="664.3" width="18.3" height="13.7"><title>表 1 · 行 10 列 5 · 待</title></rect><rect class="cellbox" data-card="0" data-tbl="0" data-cell="10_5" x="605.0" y="664.3" width="262.8" height="13.7"><title>表 1 · 行 10 列 6 · 复核</title></rect></svg></div></div></div></div><div class="contentcol"><div class="ctabs" data-card="0"><button type="button" class="ctab on" data-card="0" data-tab="text">文字行 53</button><button type="button" class="ctab" data-card="0" data-tab="tables">表格 1</button><button type="button" class="ctab" data-card="0" data-tab="json">JSON</button></div><div class="tabpanel" data-card="0" data-tab="text"><div class="pane"><h3 class="pane-title">提取内容</h3><table><thead><tr><th>#</th><th>识别文字</th><th>置信度</th></tr></thead><tbody><tr data-card="0" data-idx="0" class=""><td class="num">1</td><td class="txt">月度结算单（一页两张独立表格）</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="1" class=""><td class="num">2</td><td class="txt">交易日期</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="2" class=""><td class="num">3</td><td class="txt">订单编号</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="3" class=""><td class="num">4</td><td class="txt">客户名称</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="4" class=""><td class="num">5</td><td class="txt">摘要</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="5" class=""><td class="num">6</td><td class="txt">收入</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="6" class=""><td class="num">7</td><td class="txt">余额</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="7" class=""><td class="num">8</td><td class="txt">2026-10-0CK-2601</td><td class="score"><span class="bar"><i style="width:96%"></i></span>0.96</td></tr><tr data-card="0" data-idx="8" class=""><td class="num">9</td><td class="txt">宁波远景</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="9" class=""><td class="num">10</td><td class="txt">模块采购</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="10" class=""><td class="num">11</td><td class="txt">12,800.00128.000.0p</td><td class="score"><span class="bar"><i style="width:91%"></i></span>0.91</td></tr><tr data-card="0" data-idx="11" class=""><td class="num">12</td><td class="txt">2026-10-0K-2602</td><td class="score"><span class="bar"><i style="width:99%"></i></span>0.99</td></tr><tr data-card="0" data-idx="12" class=""><td class="num">13</td><td class="txt">上海和裕</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="13" class=""><td class="num">14</td><td class="txt">年度服务费</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="14" class=""><td class="num">15</td><td class="txt">9，600.00</td><td class="score"><span class="bar"><i style="width:93%"></i></span>0.93</td></tr><tr data-card="0" data-idx="15" class=""><td class="num">16</td><td class="txt">137,600.0</td><td class="score"><span class="bar"><i style="width:96%"></i></span>0.96</td></tr><tr data-card="0" data-idx="16" class="low"><td class="num">17</td><td class="txt">0</td><td class="score"><span class="bar"><i style="width:38%"></i></span>0.38</td></tr><tr data-card="0" data-idx="17" class=""><td class="num">18</td><td class="txt">2026-10-0K-2603</td><td class="score"><span class="bar"><i style="width:99%"></i></span>0.99</td></tr><tr data-card="0" data-idx="18" class=""><td class="num">19</td><td class="txt">杭州启明</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="19" class=""><td class="num">20</td><td class="txt">设备租赁</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="20" class=""><td class="num">21</td><td class="txt">24.000.00161.600.0</td><td class="score"><span class="bar"><i style="width:95%"></i></span>0.95</td></tr><tr data-card="0" data-idx="21" class=""><td class="num">22</td><td class="txt">p</td><td class="score"><span class="bar"><i style="width:89%"></i></span>0.89</td></tr><tr data-card="0" data-idx="22" class=""><td class="num">23</td><td class="txt">2026-10-04K-2604</td><td class="score"><span class="bar"><i style="width:99%"></i></span>0.99</td></tr><tr data-card="0" data-idx="23" class=""><td class="num">24</td><td class="txt">深圳恒达</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="24" class=""><td class="num">25</td><td class="txt">耗材补货</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="25" class=""><td class="num">26</td><td class="txt">3，450.00</td><td class="score"><span class="bar"><i style="width:94%"></i></span>0.94</td></tr><tr data-card="0" data-idx="26" class=""><td class="num">27</td><td class="txt">165,050.0</td><td class="score"><span class="bar"><i style="width:95%"></i></span>0.95</td></tr><tr data-card="0" data-idx="27" class="low"><td class="num">28</td><td class="txt">P</td><td class="score"><span class="bar"><i style="width:53%"></i></span>0.53</td></tr><tr data-card="0" data-idx="28" class=""><td class="num">29</td><td class="txt">2026-10-0K-2605</td><td class="score"><span class="bar"><i style="width:99%"></i></span>0.99</td></tr><tr data-card="0" data-idx="29" class=""><td class="num">30</td><td class="txt">苏州工业园区</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="30" class=""><td class="num">31</td><td class="txt">技术咨询</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="31" class=""><td class="num">32</td><td class="txt">18,200.00183,250.0</td><td class="score"><span class="bar"><i style="width:95%"></i></span>0.95</td></tr><tr data-card="0" data-idx="32" class="low"><td class="num">33</td><td class="txt">L</td><td class="score"><span class="bar"><i style="width:18%"></i></span>0.18</td></tr><tr data-card="0" data-idx="33" class=""><td class="num">34</td><td class="txt">2026-10-06K-2606</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="34" class=""><td class="num">35</td><td class="txt">广州白云</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="35" class=""><td class="num">36</td><td class="txt">培训服务</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="36" class=""><td class="num">37</td><td class="txt">7，800.00</td><td class="score"><span class="bar"><i style="width:93%"></i></span>0.93</td></tr><tr data-card="0" data-idx="37" class=""><td class="num">38</td><td class="txt">191，050.0</td><td class="score"><span class="bar"><i style="width:94%"></i></span>0.94</td></tr><tr data-card="0" data-idx="38" class=""><td class="num">39</td><td class="txt">项目</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="39" class=""><td class="num">40</td><td class="txt">笔数</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="40" class=""><td class="num">41</td><td class="txt">金额</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="41" class=""><td class="num">42</td><td class="txt">状态</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="42" class=""><td class="num">43</td><td class="txt">收入合计</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="43" class=""><td class="num">44</td><td class="txt">75,850.00</td><td class="score"><span class="bar"><i style="width:94%"></i></span>0.94</td></tr><tr data-card="0" data-idx="44" class=""><td class="num">45</td><td class="txt">已核对</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="45" class=""><td class="num">46</td><td class="txt">支出合计</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="46" class=""><td class="num">47</td><td class="txt">11.200.00</td><td class="score"><span class="bar"><i style="width:92%"></i></span>0.92</td></tr><tr data-card="0" data-idx="47" class=""><td class="num">48</td><td class="txt">已核对</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="48" class=""><td class="num">49</td><td class="txt">净额</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="49" class=""><td class="num">50</td><td class="txt">4</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="50" class=""><td class="num">51</td><td class="txt">64,650.00</td><td class="score"><span class="bar"><i style="width:94%"></i></span>0.94</td></tr><tr data-card="0" data-idx="51" class=""><td class="num">52</td><td class="txt">待复核</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr><tr data-card="0" data-idx="52" class=""><td class="num">53</td><td class="txt">两张表列数不同，用来验证多表切换与tab只叠当前表。</td><td class="score"><span class="bar"><i style="width:100%"></i></span>1.00</td></tr></tbody></table><details><summary>文本层原文 / 纯文本全文（432 字符）</summary><pre>月度结算单（一页两张独立表格）
 交易日期 订单编号 客户名称 摘要 收入 余额
 2026-10-01CK-2601 宁波远景 模块采购 12,800.00128,000.00
 2026-10-02CK-2602 上海和裕 年度服务费 9,600.00 137,600.00
@@ -182,9 +193,9 @@ body.picking .lb-stage{cursor:crosshair}
 收入合计 6 75,850.00 已核对
 支出合计 2 11,200.00 已核对
 净额 4 64,650.00 待复核
-两张表列数不同，用来验证多表切换与 tab 只叠当前表。</pre></details></div></div><div class="sec"><div class="sec-head"><h3>表格内容</h3><span class="cnt">2 张</span><span class="note">路线：text_layer</span><span class="spacer"></span><button type="button" class="allcells" data-card="0">显示整表网格</button></div><p class="note">坐标宿主：预览图（PDF 文本层字符 bbox，精确）　·　悬停表格单元格：图上只高亮这一格；点击：钉住该格（再点取消）；旋转扫描件点击时会自动切到矫正图。</p><div class="tbltabs"><button type="button" class="tbltab on" data-card="0" data-tbl="0">表 1 · 6×6</button><button type="button" class="tbltab" data-card="0" data-tbl="1">表 2 · 3×4</button></div><div class="tblpane" data-card="0" data-tbl="0" data-space="source"><div class="tbl-bar"><b>表 1</b><span class="meta">第 1 页 · pdfplumber · default · 6 行 × 6 列 · 填充率 1.0</span><a class="btn" href="data:text/csv;charset=utf-8;base64,77u/5Lqk5piT5pel5pyfLOiuouWNlee8luWPtyzlrqLmiLflkI3np7As5pGY6KaBLOaUtuWFpSzkvZnpop0NCjIwMjYtMTAtMCwxQ0stMjYwMSzlroHms6Lov5zmma8s5qih5Z2X6YeH6LStLCIxMiw4MDAuMDAiLCIxMjgsMDAwLjAiDQoyMDI2LTEwLTAsMkNLLTI2MDIs5LiK5rW35ZKM6KOVLOW5tOW6puacjeWKoei0uSwiOSw2MDAuMDAiLCIxMzcsNjAwLjAiDQoyMDI2LTEwLTAsM0NLLTI2MDMs5p2t5bee5ZCv5piOLOiuvuWkh+enn+i1gSwiMjQsMDAwLjAwIiwiMTYxLDYwMC4wIg0KMjAyNi0xMC0wLDRDSy0yNjA0LOa3seWcs+aBkui+vizogJfmnZDooaXotKcsIjMsNDUwLjAwIiwiMTY1LDA1MC4wIg0KMjAyNi0xMC0wLDVDSy0yNjA1LOiLj+W3nuW3peS4muWbreWMuizmioDmnK/lkqjor6IsIjE4LDIwMC4wMCIsIjE4MywyNTAuMCINCjIwMjYtMTAtMCw2Q0stMjYwNizlub/lt57nmb3kupEs5Z+56K6t5pyN5YqhLCI3LDgwMC4wMCIsIjE5MSwwNTAuMCINCg==" download="table_1.csv">下载 CSV</a><a class="btn ghost" href="/files/20261117144821_21_two_tables_1page/table_1.csv" target="_blank">打开 table_1.csv</a></div><div class="tablewrap"><table><thead><tr><th class="cell" data-card="0" data-tbl="0" data-cell="0_0">交易日期</th><th class="cell" data-card="0" data-tbl="0" data-cell="0_1">订单编号</th><th class="cell" data-card="0" data-tbl="0" data-cell="0_2">客户名称</th><th class="cell" data-card="0" data-tbl="0" data-cell="0_3">摘要</th><th class="cell" data-card="0" data-tbl="0" data-cell="0_4">收入</th><th class="cell" data-card="0" data-tbl="0" data-cell="0_5">余额</th></tr></thead><tbody><tr><td class="cell" data-card="0" data-tbl="0" data-cell="1_0">2026-10-0</td><td class="cell" data-card="0" data-tbl="0" data-cell="1_1">1CK-2601</td><td class="cell" data-card="0" data-tbl="0" data-cell="1_2">宁波远景</td><td class="cell" data-card="0" data-tbl="0" data-cell="1_3">模块采购</td><td class="cell" data-card="0" data-tbl="0" data-cell="1_4">12,800.00</td><td class="cell" data-card="0" data-tbl="0" data-cell="1_5">128,000.0</td></tr><tr><td class="cell" data-card="0" data-tbl="0" data-cell="2_0">2026-10-0</td><td class="cell" data-card="0" data-tbl="0" data-cell="2_1">2CK-2602</td><td class="cell" data-card="0" data-tbl="0" data-cell="2_2">上海和裕</td><td class="cell" data-card="0" data-tbl="0" data-cell="2_3">年度服务费</td><td class="cell" data-card="0" data-tbl="0" data-cell="2_4">9,600.00</td><td class="cell" data-card="0" data-tbl="0" data-cell="2_5">137,600.0</td></tr><tr><td class="cell" data-card="0" data-tbl="0" data-cell="3_0">2026-10-0</td><td class="cell" data-card="0" data-tbl="0" data-cell="3_1">3CK-2603</td><td class="cell" data-card="0" data-tbl="0" data-cell="3_2">杭州启明</td><td class="cell" data-card="0" data-tbl="0" data-cell="3_3">设备租赁</td><td class="cell" data-card="0" data-tbl="0" data-cell="3_4">24,000.00</td><td class="cell" data-card="0" data-tbl="0" data-cell="3_5">161,600.0</td></tr><tr><td class="cell" data-card="0" data-tbl="0" data-cell="4_0">2026-10-0</td><td class="cell" data-card="0" data-tbl="0" data-cell="4_1">4CK-2604</td><td class="cell" data-card="0" data-tbl="0" data-cell="4_2">深圳恒达</td><td class="cell" data-card="0" data-tbl="0" data-cell="4_3">耗材补货</td><td class="cell" data-card="0" data-tbl="0" data-cell="4_4">3,450.00</td><td class="cell" data-card="0" data-tbl="0" data-cell="4_5">165,050.0</td></tr><tr><td class="cell" data-card="0" data-tbl="0" data-cell="5_0">2026-10-0</td><td class="cell" data-card="0" data-tbl="0" data-cell="5_1">5CK-2605</td><td class="cell" data-card="0" data-tbl="0" data-cell="5_2">苏州工业园区</td><td class="cell" data-card="0" data-tbl="0" data-cell="5_3">技术咨询</td><td class="cell" data-card="0" data-tbl="0" data-cell="5_4">18,200.00</td><td class="cell" data-card="0" data-tbl="0" data-cell="5_5">183,250.0</td></tr><tr><td class="cell" data-card="0" data-tbl="0" data-cell="6_0">2026-10-0</td><td class="cell" data-card="0" data-tbl="0" data-cell="6_1">6CK-2606</td><td class="cell" data-card="0" data-tbl="0" data-cell="6_2">广州白云</td><td class="cell" data-card="0" data-tbl="0" data-cell="6_3">培训服务</td><td class="cell" data-card="0" data-tbl="0" data-cell="6_4">7,800.00</td><td class="cell" data-card="0" data-tbl="0" data-cell="6_5">191,050.0</td></tr></tbody></table></div></div><div class="tblpane" data-card="0" data-tbl="1" data-space="source" hidden><div class="tbl-bar"><b>表 2</b><span class="meta">第 1 页 · pdfplumber · default · 3 行 × 4 列 · 填充率 1.0</span><a class="btn" href="data:text/csv;charset=utf-8;base64,77u/6aG555uuLOeslOaVsCzph5Hpop0s54q25oCBDQrmlLblhaXlkIjorqEsNiwiNzUsODUwLjAwIizlt7LmoLjlr7kNCuaUr+WHuuWQiOiuoSwyLCIxMSwyMDAuMDAiLOW3suaguOWvuQ0K5YeA6aKdLDQsIjY0LDY1MC4wMCIs5b6F5aSN5qC4DQo=" download="table_2.csv">下载 CSV</a><a class="btn ghost" href="/files/20261117144821_21_two_tables_1page/table_2.csv" target="_blank">打开 table_2.csv</a></div><div class="tablewrap"><table><thead><tr><th class="cell" data-card="0" data-tbl="1" data-cell="0_0">项目</th><th class="cell" data-card="0" data-tbl="1" data-cell="0_1">笔数</th><th class="cell" data-card="0" data-tbl="1" data-cell="0_2">金额</th><th class="cell" data-card="0" data-tbl="1" data-cell="0_3">状态</th></tr></thead><tbody><tr><td class="cell" data-card="0" data-tbl="1" data-cell="1_0">收入合计</td><td class="cell" data-card="0" data-tbl="1" data-cell="1_1">6</td><td class="cell" data-card="0" data-tbl="1" data-cell="1_2">75,850.00</td><td class="cell" data-card="0" data-tbl="1" data-cell="1_3">已核对</td></tr><tr><td class="cell" data-card="0" data-tbl="1" data-cell="2_0">支出合计</td><td class="cell" data-card="0" data-tbl="1" data-cell="2_1">2</td><td class="cell" data-card="0" data-tbl="1" data-cell="2_2">11,200.00</td><td class="cell" data-card="0" data-tbl="1" data-cell="2_3">已核对</td></tr><tr><td class="cell" data-card="0" data-tbl="1" data-cell="3_0">净额</td><td class="cell" data-card="0" data-tbl="1" data-cell="3_1">4</td><td class="cell" data-card="0" data-tbl="1" data-cell="3_2">64,650.00</td><td class="cell" data-card="0" data-tbl="1" data-cell="3_3">待复核</td></tr></tbody></table></div></div><details><summary>提取诊断（1 条）</summary><ul><li>第 1 页 default 策略 → 2 张表</li></ul></details></div><div class="sec"><details><summary>完整 JSON（result.json）　·　<a href="/files/20261117144821_21_two_tables_1page/result.json" target="_blank" onclick="event.stopPropagation()">下载</a>　·　<button type="button" class="copyjson jsontoggle" onclick="event.stopPropagation()">复制 JSON</button></summary><pre class="jsonpre">{
-  &quot;file&quot;: &quot;20261117144821_21_two_tables_1page.pdf&quot;,
-  &quot;case&quot;: &quot;20261117144821_21_two_tables_1page&quot;,
+两张表列数不同，用来验证多表切换与 tab 只叠当前表。</pre></details></div></div><div class="tabpanel" data-card="0" data-tab="tables" hidden><div class="sec"><div class="sec-head"><h3>表格内容</h3><span class="cnt">1 张</span><span class="note">路线：text_layer</span><span class="spacer"></span><button type="button" class="allcells" data-card="0">显示整表网格</button></div><p class="note">坐标宿主：预览图（PDF 文本层字符 bbox，精确） <span class="hint" tabindex="0" data-tip="悬停表格单元格：图上只高亮这一格；点击：钉住该格（再点取消）；旋转扫描件点击时会自动切到矫正图。">?</span></p><div class="tblpane" data-card="0" data-tbl="0" data-space="source"><div class="tbl-bar"><b>表 1</b><span class="meta">第 1 页 · pdfplumber · text · 10 行 × 6 列 · 填充率 0.717</span><a class="btn" href="data:text/csv;charset=utf-8;base64,77u/5Lqk5piT5pel5pyfIOiuouWNlee8luWPtyzlrqLmiLflkI3np7AsLOaRmOimgSws5pS25YWlIOS9meminQ0KMjAyNi0xMC0wMUNLLTI2MDEs5a6B5rOi6L+c5pmvLCzmqKHlnZfph4fotK0sLCIxMiw4MDAuMDAxMjgsMDAwLjAwIg0KMjAyNi0xMC0wMkNLLTI2MDIs5LiK5rW35ZKM6KOVLCzlubTluqbmnI3liqHotLksLCI5LDYwMC4wMCAxMzcsNjAwLjAwIg0KMjAyNi0xMC0wM0NLLTI2MDMs5p2t5bee5ZCv5piOLCzorr7lpIfnp5/otYEsLCIyNCwwMDAuMDAxNjEsNjAwLjAwIg0KMjAyNi0xMC0wNENLLTI2MDQs5rex5Zyz5oGS6L6+LCzogJfmnZDooaXotKcsLCIzLDQ1MC4wMCAxNjUsMDUwLjAwIg0KMjAyNi0xMC0wNUNLLTI2MDUs6IuP5bee5bel5Lia5Zut5Yy6LCzmioDmnK/lkqjor6IsLCIxOCwyMDAuMDAxODMsMjUwLjAwIg0KMjAyNi0xMC0wNkNLLTI2MDYs5bm/5bee55m95LqRLCzln7norq3mnI3liqEsLCI3LDgwMC4wMCAxOTEsMDUwLjAwIg0K6aG555uuIOeslOaVsCws6YeR6aKdLCznirYs5oCBDQrmlLblhaXlkIjorqEgNiwsIjc1LCIsODUwLjAwLOW3sizmoLjlr7kNCuaUr+WHuuWQiOiuoSAyLCwiMTEsIiwyMDAuMDAs5beyLOaguOWvuQ0K5YeA6aKdIDQsLCI2NCwiLDY1MC4wMCzlvoUs5aSN5qC4DQo=" download="table_1.csv">下载 CSV</a><a class="btn ghost" href="/files/20261117150808_21_two_tables_1page/table_1.csv" target="_blank">打开 table_1.csv</a></div><div class="tablewrap"><table><thead><tr><th class="cell" data-card="0" data-tbl="0" data-cell="0_0">交易日期 订单编号</th><th class="cell" data-card="0" data-tbl="0" data-cell="0_1">客户名称</th><th class="cell" data-card="0" data-tbl="0" data-cell="0_2"></th><th class="cell" data-card="0" data-tbl="0" data-cell="0_3">摘要</th><th class="cell" data-card="0" data-tbl="0" data-cell="0_4"></th><th class="cell" data-card="0" data-tbl="0" data-cell="0_5">收入 余额</th></tr></thead><tbody><tr><td class="cell" data-card="0" data-tbl="0" data-cell="1_0">2026-10-01CK-2601</td><td class="cell" data-card="0" data-tbl="0" data-cell="1_1">宁波远景</td><td class="cell" data-card="0" data-tbl="0" data-cell="1_2"></td><td class="cell" data-card="0" data-tbl="0" data-cell="1_3">模块采购</td><td class="cell" data-card="0" data-tbl="0" data-cell="1_4"></td><td class="cell" data-card="0" data-tbl="0" data-cell="1_5">12,800.00128,000.00</td></tr><tr><td class="cell" data-card="0" data-tbl="0" data-cell="2_0">2026-10-02CK-2602</td><td class="cell" data-card="0" data-tbl="0" data-cell="2_1">上海和裕</td><td class="cell" data-card="0" data-tbl="0" data-cell="2_2"></td><td class="cell" data-card="0" data-tbl="0" data-cell="2_3">年度服务费</td><td class="cell" data-card="0" data-tbl="0" data-cell="2_4"></td><td class="cell" data-card="0" data-tbl="0" data-cell="2_5">9,600.00 137,600.00</td></tr><tr><td class="cell" data-card="0" data-tbl="0" data-cell="3_0">2026-10-03CK-2603</td><td class="cell" data-card="0" data-tbl="0" data-cell="3_1">杭州启明</td><td class="cell" data-card="0" data-tbl="0" data-cell="3_2"></td><td class="cell" data-card="0" data-tbl="0" data-cell="3_3">设备租赁</td><td class="cell" data-card="0" data-tbl="0" data-cell="3_4"></td><td class="cell" data-card="0" data-tbl="0" data-cell="3_5">24,000.00161,600.00</td></tr><tr><td class="cell" data-card="0" data-tbl="0" data-cell="4_0">2026-10-04CK-2604</td><td class="cell" data-card="0" data-tbl="0" data-cell="4_1">深圳恒达</td><td class="cell" data-card="0" data-tbl="0" data-cell="4_2"></td><td class="cell" data-card="0" data-tbl="0" data-cell="4_3">耗材补货</td><td class="cell" data-card="0" data-tbl="0" data-cell="4_4"></td><td class="cell" data-card="0" data-tbl="0" data-cell="4_5">3,450.00 165,050.00</td></tr><tr><td class="cell" data-card="0" data-tbl="0" data-cell="5_0">2026-10-05CK-2605</td><td class="cell" data-card="0" data-tbl="0" data-cell="5_1">苏州工业园区</td><td class="cell" data-card="0" data-tbl="0" data-cell="5_2"></td><td class="cell" data-card="0" data-tbl="0" data-cell="5_3">技术咨询</td><td class="cell" data-card="0" data-tbl="0" data-cell="5_4"></td><td class="cell" data-card="0" data-tbl="0" data-cell="5_5">18,200.00183,250.00</td></tr><tr><td class="cell" data-card="0" data-tbl="0" data-cell="6_0">2026-10-06CK-2606</td><td class="cell" data-card="0" data-tbl="0" data-cell="6_1">广州白云</td><td class="cell" data-card="0" data-tbl="0" data-cell="6_2"></td><td class="cell" data-card="0" data-tbl="0" data-cell="6_3">培训服务</td><td class="cell" data-card="0" data-tbl="0" data-cell="6_4"></td><td class="cell" data-card="0" data-tbl="0" data-cell="6_5">7,800.00 191,050.00</td></tr><tr><td class="cell" data-card="0" data-tbl="0" data-cell="7_0">项目 笔数</td><td class="cell" data-card="0" data-tbl="0" data-cell="7_1"></td><td class="cell" data-card="0" data-tbl="0" data-cell="7_2">金额</td><td class="cell" data-card="0" data-tbl="0" data-cell="7_3"></td><td class="cell" data-card="0" data-tbl="0" data-cell="7_4">状</td><td class="cell" data-card="0" data-tbl="0" data-cell="7_5">态</td></tr><tr><td class="cell" data-card="0" data-tbl="0" data-cell="8_0">收入合计 6</td><td class="cell" data-card="0" data-tbl="0" data-cell="8_1"></td><td class="cell" data-card="0" data-tbl="0" data-cell="8_2">75,</td><td class="cell" data-card="0" data-tbl="0" data-cell="8_3">850.00</td><td class="cell" data-card="0" data-tbl="0" data-cell="8_4">已</td><td class="cell" data-card="0" data-tbl="0" data-cell="8_5">核对</td></tr><tr><td class="cell" data-card="0" data-tbl="0" data-cell="9_0">支出合计 2</td><td class="cell" data-card="0" data-tbl="0" data-cell="9_1"></td><td class="cell" data-card="0" data-tbl="0" data-cell="9_2">11,</td><td class="cell" data-card="0" data-tbl="0" data-cell="9_3">200.00</td><td class="cell" data-card="0" data-tbl="0" data-cell="9_4">已</td><td class="cell" data-card="0" data-tbl="0" data-cell="9_5">核对</td></tr><tr><td class="cell" data-card="0" data-tbl="0" data-cell="10_0">净额 4</td><td class="cell" data-card="0" data-tbl="0" data-cell="10_1"></td><td class="cell" data-card="0" data-tbl="0" data-cell="10_2">64,</td><td class="cell" data-card="0" data-tbl="0" data-cell="10_3">650.00</td><td class="cell" data-card="0" data-tbl="0" data-cell="10_4">待</td><td class="cell" data-card="0" data-tbl="0" data-cell="10_5">复核</td></tr></tbody></table></div></div><details><summary>提取诊断（2 条）</summary><ul><li>第 1 页：表格策略首选 = text</li><li>第 1 页 text 策略 → 1 张表</li></ul></details></div></div><div class="tabpanel" data-card="0" data-tab="json" hidden><div class="sec"><details><summary>完整 JSON（result.json）　·　<a href="/files/20261117150808_21_two_tables_1page/result.json" target="_blank" onclick="event.stopPropagation()">下载</a>　·　<button type="button" class="copyjson jsontoggle" onclick="event.stopPropagation()">复制 JSON</button></summary><pre class="jsonpre">{
+  &quot;file&quot;: &quot;20261117150808_21_two_tables_1page.pdf&quot;,
+  &quot;case&quot;: &quot;20261117150808_21_two_tables_1page&quot;,
   &quot;kind&quot;: &quot;pdf&quot;,
   &quot;source&quot;: &quot;source.png&quot;,
   &quot;rectified&quot;: null,
@@ -1268,480 +1279,521 @@ body.picking .lb-stage{cursor:crosshair}
   &quot;lines&quot;: 53,
   &quot;avg_score&quot;: 0.9459,
   &quot;low_score_lines&quot;: 3,
-  &quot;elapsed&quot;: 3.44,
+  &quot;elapsed&quot;: 9.21,
   &quot;tables&quot;: [
     {
       &quot;page&quot;: 1,
       &quot;rows&quot;: [
         [
-          &quot;交易日期&quot;,
-          &quot;订单编号&quot;,
+          &quot;交易日期 订单编号&quot;,
           &quot;客户名称&quot;,
+          &quot;&quot;,
           &quot;摘要&quot;,
-          &quot;收入&quot;,
-          &quot;余额&quot;
+          &quot;&quot;,
+          &quot;收入 余额&quot;
         ],
         [
-          &quot;2026-10-0&quot;,
-          &quot;1CK-2601&quot;,
+          &quot;2026-10-01CK-2601&quot;,
           &quot;宁波远景&quot;,
+          &quot;&quot;,
           &quot;模块采购&quot;,
-          &quot;12,800.00&quot;,
-          &quot;128,000.0&quot;
+          &quot;&quot;,
+          &quot;12,800.00128,000.00&quot;
         ],
         [
-          &quot;2026-10-0&quot;,
-          &quot;2CK-2602&quot;,
+          &quot;2026-10-02CK-2602&quot;,
           &quot;上海和裕&quot;,
+          &quot;&quot;,
           &quot;年度服务费&quot;,
-          &quot;9,600.00&quot;,
-          &quot;137,600.0&quot;
+          &quot;&quot;,
+          &quot;9,600.00 137,600.00&quot;
         ],
         [
-          &quot;2026-10-0&quot;,
-          &quot;3CK-2603&quot;,
+          &quot;2026-10-03CK-2603&quot;,
           &quot;杭州启明&quot;,
+          &quot;&quot;,
           &quot;设备租赁&quot;,
-          &quot;24,000.00&quot;,
-          &quot;161,600.0&quot;
+          &quot;&quot;,
+          &quot;24,000.00161,600.00&quot;
         ],
         [
-          &quot;2026-10-0&quot;,
-          &quot;4CK-2604&quot;,
+          &quot;2026-10-04CK-2604&quot;,
           &quot;深圳恒达&quot;,
+          &quot;&quot;,
           &quot;耗材补货&quot;,
-          &quot;3,450.00&quot;,
-          &quot;165,050.0&quot;
+          &quot;&quot;,
+          &quot;3,450.00 165,050.00&quot;
         ],
         [
-          &quot;2026-10-0&quot;,
-          &quot;5CK-2605&quot;,
+          &quot;2026-10-05CK-2605&quot;,
           &quot;苏州工业园区&quot;,
+          &quot;&quot;,
           &quot;技术咨询&quot;,
-          &quot;18,200.00&quot;,
-          &quot;183,250.0&quot;
+          &quot;&quot;,
+          &quot;18,200.00183,250.00&quot;
         ],
         [
-          &quot;2026-10-0&quot;,
-          &quot;6CK-2606&quot;,
+          &quot;2026-10-06CK-2606&quot;,
           &quot;广州白云&quot;,
+          &quot;&quot;,
           &quot;培训服务&quot;,
-          &quot;7,800.00&quot;,
-          &quot;191,050.0&quot;
-        ]
-      ],
-      &quot;cell_grid&quot;: [
-        [
-          [
-            61.1,
-            122.2,
-            186.4,
-            168.1
-          ],
-          [
-            186.4,
-            122.2,
-            305.6,
-            168.1
-          ],
-          [
-            305.6,
-            122.2,
-            458.3,
-            168.1
-          ],
-          [
-            458.3,
-            122.2,
-            598.9,
-            168.1
-          ],
-          [
-            598.9,
-            122.2,
-            724.2,
-            168.1
-          ],
-          [
-            724.2,
-            122.2,
-            855.6,
-            168.1
-          ]
+          &quot;&quot;,
+          &quot;7,800.00 191,050.00&quot;
         ],
         [
-          [
-            61.1,
-            168.1,
-            186.4,
-            213.9
-          ],
-          [
-            186.4,
-            168.1,
-            305.6,
-            213.9
-          ],
-          [
-            305.6,
-            168.1,
-            458.3,
-            213.9
-          ],
-          [
-            458.3,
-            168.1,
-            598.9,
-            213.9
-          ],
-          [
-            598.9,
-            168.1,
-            724.2,
-            213.9
-          ],
-          [
-            724.2,
-            168.1,
-            855.6,
-            213.9
-          ]
-        ],
-        [
-          [
-            61.1,
-            213.9,
-            186.4,
-            259.7
-          ],
-          [
-            186.4,
-            213.9,
-            305.6,
-            259.7
-          ],
-          [
-            305.6,
-            213.9,
-            458.3,
-            259.7
-          ],
-          [
-            458.3,
-            213.9,
-            598.9,
-            259.7
-          ],
-          [
-            598.9,
-            213.9,
-            724.2,
-            259.7
-          ],
-          [
-            724.2,
-            213.9,
-            855.6,
-            259.7
-          ]
-        ],
-        [
-          [
-            61.1,
-            259.7,
-            186.4,
-            305.6
-          ],
-          [
-            186.4,
-            259.7,
-            305.6,
-            305.6
-          ],
-          [
-            305.6,
-            259.7,
-            458.3,
-            305.6
-          ],
-          [
-            458.3,
-            259.7,
-            598.9,
-            305.6
-          ],
-          [
-            598.9,
-            259.7,
-            724.2,
-            305.6
-          ],
-          [
-            724.2,
-            259.7,
-            855.6,
-            305.6
-          ]
-        ],
-        [
-          [
-            61.1,
-            305.6,
-            186.4,
-            351.4
-          ],
-          [
-            186.4,
-            305.6,
-            305.6,
-            351.4
-          ],
-          [
-            305.6,
-            305.6,
-            458.3,
-            351.4
-          ],
-          [
-            458.3,
-            305.6,
-            598.9,
-            351.4
-          ],
-          [
-            598.9,
-            305.6,
-            724.2,
-            351.4
-          ],
-          [
-            724.2,
-            305.6,
-            855.6,
-            351.4
-          ]
-        ],
-        [
-          [
-            61.1,
-            351.4,
-            186.4,
-            397.2
-          ],
-          [
-            186.4,
-            351.4,
-            305.6,
-            397.2
-          ],
-          [
-            305.6,
-            351.4,
-            458.3,
-            397.2
-          ],
-          [
-            458.3,
-            351.4,
-            598.9,
-            397.2
-          ],
-          [
-            598.9,
-            351.4,
-            724.2,
-            397.2
-          ],
-          [
-            724.2,
-            351.4,
-            855.6,
-            397.2
-          ]
-        ],
-        [
-          [
-            61.1,
-            397.2,
-            186.4,
-            443.1
-          ],
-          [
-            186.4,
-            397.2,
-            305.6,
-            443.1
-          ],
-          [
-            305.6,
-            397.2,
-            458.3,
-            443.1
-          ],
-          [
-            458.3,
-            397.2,
-            598.9,
-            443.1
-          ],
-          [
-            598.9,
-            397.2,
-            724.2,
-            443.1
-          ],
-          [
-            724.2,
-            397.2,
-            855.6,
-            443.1
-          ]
-        ]
-      ],
-      &quot;strategy&quot;: &quot;default&quot;,
-      &quot;source&quot;: &quot;pdfplumber&quot;,
-      &quot;coord&quot;: {
-        &quot;space&quot;: &quot;source&quot;,
-        &quot;origin&quot;: &quot;pdfplumber&quot;,
-        &quot;exact&quot;: true,
-        &quot;note&quot;: &quot;PDF 文本层单元格 bbox × DPI/72 换算到预览图像素&quot;
-      }
-    },
-    {
-      &quot;page&quot;: 1,
-      &quot;rows&quot;: [
-        [
-          &quot;项目&quot;,
-          &quot;笔数&quot;,
+          &quot;项目 笔数&quot;,
+          &quot;&quot;,
           &quot;金额&quot;,
-          &quot;状态&quot;
+          &quot;&quot;,
+          &quot;状&quot;,
+          &quot;态&quot;
         ],
         [
-          &quot;收入合计&quot;,
-          &quot;6&quot;,
-          &quot;75,850.00&quot;,
-          &quot;已核对&quot;
+          &quot;收入合计 6&quot;,
+          &quot;&quot;,
+          &quot;75,&quot;,
+          &quot;850.00&quot;,
+          &quot;已&quot;,
+          &quot;核对&quot;
         ],
         [
-          &quot;支出合计&quot;,
-          &quot;2&quot;,
-          &quot;11,200.00&quot;,
-          &quot;已核对&quot;
+          &quot;支出合计 2&quot;,
+          &quot;&quot;,
+          &quot;11,&quot;,
+          &quot;200.00&quot;,
+          &quot;已&quot;,
+          &quot;核对&quot;
         ],
         [
-          &quot;净额&quot;,
-          &quot;4&quot;,
-          &quot;64,650.00&quot;,
-          &quot;待复核&quot;
+          &quot;净额 4&quot;,
+          &quot;&quot;,
+          &quot;64,&quot;,
+          &quot;650.00&quot;,
+          &quot;待&quot;,
+          &quot;复核&quot;
         ]
       ],
       &quot;cell_grid&quot;: [
         [
           [
-            61.1,
-            519.4,
-            244.4,
-            565.3
+            67.2,
+            129.6,
+            311.7,
+            143.3
           ],
           [
-            244.4,
-            519.4,
-            412.5,
-            565.3
+            311.7,
+            129.6,
+            418.6,
+            143.3
           ],
           [
-            412.5,
-            519.4,
-            580.6,
-            565.3
+            418.6,
+            129.6,
+            464.4,
+            143.3
           ],
           [
-            580.6,
-            519.4,
-            748.6,
-            565.3
+            464.4,
+            129.6,
+            586.7,
+            143.3
+          ],
+          [
+            586.7,
+            129.6,
+            605.0,
+            143.3
+          ],
+          [
+            605.0,
+            129.6,
+            867.8,
+            143.3
           ]
         ],
         [
           [
-            61.1,
-            565.3,
-            244.4,
-            611.1
+            67.2,
+            175.4,
+            311.7,
+            189.1
           ],
           [
-            244.4,
-            565.3,
-            412.5,
-            611.1
+            311.7,
+            175.4,
+            418.6,
+            189.1
           ],
           [
-            412.5,
-            565.3,
-            580.6,
-            611.1
+            418.6,
+            175.4,
+            464.4,
+            189.1
           ],
           [
-            580.6,
-            565.3,
-            748.6,
-            611.1
+            464.4,
+            175.4,
+            586.7,
+            189.1
+          ],
+          [
+            586.7,
+            175.4,
+            605.0,
+            189.1
+          ],
+          [
+            605.0,
+            175.4,
+            867.8,
+            189.1
           ]
         ],
         [
           [
-            61.1,
-            611.1,
-            244.4,
-            656.9
+            67.2,
+            221.2,
+            311.7,
+            235.0
           ],
           [
-            244.4,
-            611.1,
-            412.5,
-            656.9
+            311.7,
+            221.2,
+            418.6,
+            235.0
           ],
           [
-            412.5,
-            611.1,
-            580.6,
-            656.9
+            418.6,
+            221.2,
+            464.4,
+            235.0
           ],
           [
-            580.6,
-            611.1,
-            748.6,
-            656.9
+            464.4,
+            221.2,
+            586.7,
+            235.0
+          ],
+          [
+            586.7,
+            221.2,
+            605.0,
+            235.0
+          ],
+          [
+            605.0,
+            221.2,
+            867.8,
+            235.0
           ]
         ],
         [
           [
-            61.1,
-            656.9,
-            244.4,
-            702.8
+            67.2,
+            267.1,
+            311.7,
+            280.8
           ],
           [
-            244.4,
-            656.9,
-            412.5,
-            702.8
+            311.7,
+            267.1,
+            418.6,
+            280.8
           ],
           [
-            412.5,
-            656.9,
-            580.6,
-            702.8
+            418.6,
+            267.1,
+            464.4,
+            280.8
           ],
           [
-            580.6,
-            656.9,
-            748.6,
-            702.8
+            464.4,
+            267.1,
+            586.7,
+            280.8
+          ],
+          [
+            586.7,
+            267.1,
+            605.0,
+            280.8
+          ],
+          [
+            605.0,
+            267.1,
+            867.8,
+            280.8
+          ]
+        ],
+        [
+          [
+            67.2,
+            312.9,
+            311.7,
+            326.6
+          ],
+          [
+            311.7,
+            312.9,
+            418.6,
+            326.6
+          ],
+          [
+            418.6,
+            312.9,
+            464.4,
+            326.6
+          ],
+          [
+            464.4,
+            312.9,
+            586.7,
+            326.6
+          ],
+          [
+            586.7,
+            312.9,
+            605.0,
+            326.6
+          ],
+          [
+            605.0,
+            312.9,
+            867.8,
+            326.6
+          ]
+        ],
+        [
+          [
+            67.2,
+            358.7,
+            311.7,
+            372.5
+          ],
+          [
+            311.7,
+            358.7,
+            418.6,
+            372.5
+          ],
+          [
+            418.6,
+            358.7,
+            464.4,
+            372.5
+          ],
+          [
+            464.4,
+            358.7,
+            586.7,
+            372.5
+          ],
+          [
+            586.7,
+            358.7,
+            605.0,
+            372.5
+          ],
+          [
+            605.0,
+            358.7,
+            867.8,
+            372.5
+          ]
+        ],
+        [
+          [
+            67.2,
+            404.6,
+            311.7,
+            418.3
+          ],
+          [
+            311.7,
+            404.6,
+            418.6,
+            418.3
+          ],
+          [
+            418.6,
+            404.6,
+            464.4,
+            418.3
+          ],
+          [
+            464.4,
+            404.6,
+            586.7,
+            418.3
+          ],
+          [
+            586.7,
+            404.6,
+            605.0,
+            418.3
+          ],
+          [
+            605.0,
+            404.6,
+            867.8,
+            418.3
+          ]
+        ],
+        [
+          [
+            67.2,
+            526.8,
+            311.7,
+            540.5
+          ],
+          [
+            311.7,
+            526.8,
+            418.6,
+            540.5
+          ],
+          [
+            418.6,
+            526.8,
+            464.4,
+            540.5
+          ],
+          [
+            464.4,
+            526.8,
+            586.7,
+            540.5
+          ],
+          [
+            586.7,
+            526.8,
+            605.0,
+            540.5
+          ],
+          [
+            605.0,
+            526.8,
+            867.8,
+            540.5
+          ]
+        ],
+        [
+          [
+            67.2,
+            572.6,
+            311.7,
+            586.4
+          ],
+          [
+            311.7,
+            572.6,
+            418.6,
+            586.4
+          ],
+          [
+            418.6,
+            572.6,
+            464.4,
+            586.4
+          ],
+          [
+            464.4,
+            572.6,
+            586.7,
+            586.4
+          ],
+          [
+            586.7,
+            572.6,
+            605.0,
+            586.4
+          ],
+          [
+            605.0,
+            572.6,
+            867.8,
+            586.4
+          ]
+        ],
+        [
+          [
+            67.2,
+            618.4,
+            311.7,
+            632.2
+          ],
+          [
+            311.7,
+            618.4,
+            418.6,
+            632.2
+          ],
+          [
+            418.6,
+            618.4,
+            464.4,
+            632.2
+          ],
+          [
+            464.4,
+            618.4,
+            586.7,
+            632.2
+          ],
+          [
+            586.7,
+            618.4,
+            605.0,
+            632.2
+          ],
+          [
+            605.0,
+            618.4,
+            867.8,
+            632.2
+          ]
+        ],
+        [
+          [
+            67.2,
+            664.3,
+            311.7,
+            678.0
+          ],
+          [
+            311.7,
+            664.3,
+            418.6,
+            678.0
+          ],
+          [
+            418.6,
+            664.3,
+            464.4,
+            678.0
+          ],
+          [
+            464.4,
+            664.3,
+            586.7,
+            678.0
+          ],
+          [
+            586.7,
+            664.3,
+            605.0,
+            678.0
+          ],
+          [
+            605.0,
+            664.3,
+            867.8,
+            678.0
           ]
         ]
       ],
-      &quot;strategy&quot;: &quot;default&quot;,
+      &quot;strategy&quot;: &quot;text&quot;,
       &quot;source&quot;: &quot;pdfplumber&quot;,
       &quot;coord&quot;: {
         &quot;space&quot;: &quot;source&quot;,
@@ -1755,331 +1807,515 @@ body.picking .lb-stage{cursor:crosshair}
     {
       &quot;page&quot;: 1,
       &quot;source&quot;: &quot;pdfplumber&quot;,
-      &quot;strategy&quot;: &quot;default&quot;,
+      &quot;strategy&quot;: &quot;text&quot;,
       &quot;title&quot;: &quot;&quot;,
       &quot;headers&quot;: [
-        &quot;交易日期&quot;,
-        &quot;订单编号&quot;,
+        &quot;交易日期 订单编号&quot;,
         &quot;客户名称&quot;,
+        &quot;&quot;,
         &quot;摘要&quot;,
-        &quot;收入&quot;,
-        &quot;余额&quot;
+        &quot;&quot;,
+        &quot;收入 余额&quot;
       ],
       &quot;rows&quot;: [
         [
-          &quot;2026-10-0&quot;,
-          &quot;1CK-2601&quot;,
+          &quot;2026-10-01CK-2601&quot;,
           &quot;宁波远景&quot;,
+          &quot;&quot;,
           &quot;模块采购&quot;,
-          &quot;12,800.00&quot;,
-          &quot;128,000.0&quot;
+          &quot;&quot;,
+          &quot;12,800.00128,000.00&quot;
         ],
         [
-          &quot;2026-10-0&quot;,
-          &quot;2CK-2602&quot;,
+          &quot;2026-10-02CK-2602&quot;,
           &quot;上海和裕&quot;,
+          &quot;&quot;,
           &quot;年度服务费&quot;,
-          &quot;9,600.00&quot;,
-          &quot;137,600.0&quot;
+          &quot;&quot;,
+          &quot;9,600.00 137,600.00&quot;
         ],
         [
-          &quot;2026-10-0&quot;,
-          &quot;3CK-2603&quot;,
+          &quot;2026-10-03CK-2603&quot;,
           &quot;杭州启明&quot;,
+          &quot;&quot;,
           &quot;设备租赁&quot;,
-          &quot;24,000.00&quot;,
-          &quot;161,600.0&quot;
+          &quot;&quot;,
+          &quot;24,000.00161,600.00&quot;
         ],
         [
-          &quot;2026-10-0&quot;,
-          &quot;4CK-2604&quot;,
+          &quot;2026-10-04CK-2604&quot;,
           &quot;深圳恒达&quot;,
+          &quot;&quot;,
           &quot;耗材补货&quot;,
-          &quot;3,450.00&quot;,
-          &quot;165,050.0&quot;
+          &quot;&quot;,
+          &quot;3,450.00 165,050.00&quot;
         ],
         [
-          &quot;2026-10-0&quot;,
-          &quot;5CK-2605&quot;,
+          &quot;2026-10-05CK-2605&quot;,
           &quot;苏州工业园区&quot;,
+          &quot;&quot;,
           &quot;技术咨询&quot;,
-          &quot;18,200.00&quot;,
-          &quot;183,250.0&quot;
+          &quot;&quot;,
+          &quot;18,200.00183,250.00&quot;
         ],
         [
-          &quot;2026-10-0&quot;,
-          &quot;6CK-2606&quot;,
+          &quot;2026-10-06CK-2606&quot;,
           &quot;广州白云&quot;,
+          &quot;&quot;,
           &quot;培训服务&quot;,
-          &quot;7,800.00&quot;,
-          &quot;191,050.0&quot;
+          &quot;&quot;,
+          &quot;7,800.00 191,050.00&quot;
+        ],
+        [
+          &quot;项目 笔数&quot;,
+          &quot;&quot;,
+          &quot;金额&quot;,
+          &quot;&quot;,
+          &quot;状&quot;,
+          &quot;态&quot;
+        ],
+        [
+          &quot;收入合计 6&quot;,
+          &quot;&quot;,
+          &quot;75,&quot;,
+          &quot;850.00&quot;,
+          &quot;已&quot;,
+          &quot;核对&quot;
+        ],
+        [
+          &quot;支出合计 2&quot;,
+          &quot;&quot;,
+          &quot;11,&quot;,
+          &quot;200.00&quot;,
+          &quot;已&quot;,
+          &quot;核对&quot;
+        ],
+        [
+          &quot;净额 4&quot;,
+          &quot;&quot;,
+          &quot;64,&quot;,
+          &quot;650.00&quot;,
+          &quot;待&quot;,
+          &quot;复核&quot;
         ]
       ],
       &quot;cells&quot;: [
         [
           [
-            61.1,
-            122.2,
-            186.4,
-            168.1
+            67.2,
+            129.6,
+            311.7,
+            143.3
           ],
           [
-            186.4,
-            122.2,
-            305.6,
-            168.1
+            311.7,
+            129.6,
+            418.6,
+            143.3
           ],
           [
-            305.6,
-            122.2,
-            458.3,
-            168.1
+            418.6,
+            129.6,
+            464.4,
+            143.3
           ],
           [
-            458.3,
-            122.2,
-            598.9,
-            168.1
+            464.4,
+            129.6,
+            586.7,
+            143.3
           ],
           [
-            598.9,
-            122.2,
-            724.2,
-            168.1
+            586.7,
+            129.6,
+            605.0,
+            143.3
           ],
           [
-            724.2,
-            122.2,
-            855.6,
-            168.1
+            605.0,
+            129.6,
+            867.8,
+            143.3
           ]
         ],
         [
           [
-            61.1,
-            168.1,
-            186.4,
-            213.9
+            67.2,
+            175.4,
+            311.7,
+            189.1
           ],
           [
-            186.4,
-            168.1,
-            305.6,
-            213.9
+            311.7,
+            175.4,
+            418.6,
+            189.1
           ],
           [
-            305.6,
-            168.1,
-            458.3,
-            213.9
+            418.6,
+            175.4,
+            464.4,
+            189.1
           ],
           [
-            458.3,
-            168.1,
-            598.9,
-            213.9
+            464.4,
+            175.4,
+            586.7,
+            189.1
           ],
           [
-            598.9,
-            168.1,
-            724.2,
-            213.9
+            586.7,
+            175.4,
+            605.0,
+            189.1
           ],
           [
-            724.2,
-            168.1,
-            855.6,
-            213.9
+            605.0,
+            175.4,
+            867.8,
+            189.1
           ]
         ],
         [
           [
-            61.1,
-            213.9,
-            186.4,
-            259.7
+            67.2,
+            221.2,
+            311.7,
+            235.0
           ],
           [
-            186.4,
-            213.9,
-            305.6,
-            259.7
+            311.7,
+            221.2,
+            418.6,
+            235.0
           ],
           [
-            305.6,
-            213.9,
-            458.3,
-            259.7
+            418.6,
+            221.2,
+            464.4,
+            235.0
           ],
           [
-            458.3,
-            213.9,
-            598.9,
-            259.7
+            464.4,
+            221.2,
+            586.7,
+            235.0
           ],
           [
-            598.9,
-            213.9,
-            724.2,
-            259.7
+            586.7,
+            221.2,
+            605.0,
+            235.0
           ],
           [
-            724.2,
-            213.9,
-            855.6,
-            259.7
+            605.0,
+            221.2,
+            867.8,
+            235.0
           ]
         ],
         [
           [
-            61.1,
-            259.7,
-            186.4,
-            305.6
+            67.2,
+            267.1,
+            311.7,
+            280.8
           ],
           [
-            186.4,
-            259.7,
-            305.6,
-            305.6
+            311.7,
+            267.1,
+            418.6,
+            280.8
           ],
           [
-            305.6,
-            259.7,
-            458.3,
-            305.6
+            418.6,
+            267.1,
+            464.4,
+            280.8
           ],
           [
-            458.3,
-            259.7,
-            598.9,
-            305.6
+            464.4,
+            267.1,
+            586.7,
+            280.8
           ],
           [
-            598.9,
-            259.7,
-            724.2,
-            305.6
+            586.7,
+            267.1,
+            605.0,
+            280.8
           ],
           [
-            724.2,
-            259.7,
-            855.6,
-            305.6
+            605.0,
+            267.1,
+            867.8,
+            280.8
           ]
         ],
         [
           [
-            61.1,
-            305.6,
-            186.4,
-            351.4
+            67.2,
+            312.9,
+            311.7,
+            326.6
           ],
           [
-            186.4,
-            305.6,
-            305.6,
-            351.4
+            311.7,
+            312.9,
+            418.6,
+            326.6
           ],
           [
-            305.6,
-            305.6,
-            458.3,
-            351.4
+            418.6,
+            312.9,
+            464.4,
+            326.6
           ],
           [
-            458.3,
-            305.6,
-            598.9,
-            351.4
+            464.4,
+            312.9,
+            586.7,
+            326.6
           ],
           [
-            598.9,
-            305.6,
-            724.2,
-            351.4
+            586.7,
+            312.9,
+            605.0,
+            326.6
           ],
           [
-            724.2,
-            305.6,
-            855.6,
-            351.4
+            605.0,
+            312.9,
+            867.8,
+            326.6
           ]
         ],
         [
           [
-            61.1,
-            351.4,
-            186.4,
-            397.2
+            67.2,
+            358.7,
+            311.7,
+            372.5
           ],
           [
-            186.4,
-            351.4,
-            305.6,
-            397.2
+            311.7,
+            358.7,
+            418.6,
+            372.5
           ],
           [
-            305.6,
-            351.4,
-            458.3,
-            397.2
+            418.6,
+            358.7,
+            464.4,
+            372.5
           ],
           [
-            458.3,
-            351.4,
-            598.9,
-            397.2
+            464.4,
+            358.7,
+            586.7,
+            372.5
           ],
           [
-            598.9,
-            351.4,
-            724.2,
-            397.2
+            586.7,
+            358.7,
+            605.0,
+            372.5
           ],
           [
-            724.2,
-            351.4,
-            855.6,
-            397.2
+            605.0,
+            358.7,
+            867.8,
+            372.5
           ]
         ],
         [
           [
-            61.1,
-            397.2,
-            186.4,
-            443.1
+            67.2,
+            404.6,
+            311.7,
+            418.3
           ],
           [
-            186.4,
-            397.2,
-            305.6,
-            443.1
+            311.7,
+            404.6,
+            418.6,
+            418.3
           ],
           [
-            305.6,
-            397.2,
-            458.3,
-            443.1
+            418.6,
+            404.6,
+            464.4,
+            418.3
           ],
           [
-            458.3,
-            397.2,
-            598.9,
-            443.1
+            464.4,
+            404.6,
+            586.7,
+            418.3
           ],
           [
-            598.9,
-            397.2,
-            724.2,
-            443.1
+            586.7,
+            404.6,
+            605.0,
+            418.3
           ],
           [
-            724.2,
-            397.2,
-            855.6,
-            443.1
+            605.0,
+            404.6,
+            867.8,
+            418.3
+          ]
+        ],
+        [
+          [
+            67.2,
+            526.8,
+            311.7,
+            540.5
+          ],
+          [
+            311.7,
+            526.8,
+            418.6,
+            540.5
+          ],
+          [
+            418.6,
+            526.8,
+            464.4,
+            540.5
+          ],
+          [
+            464.4,
+            526.8,
+            586.7,
+            540.5
+          ],
+          [
+            586.7,
+            526.8,
+            605.0,
+            540.5
+          ],
+          [
+            605.0,
+            526.8,
+            867.8,
+            540.5
+          ]
+        ],
+        [
+          [
+            67.2,
+            572.6,
+            311.7,
+            586.4
+          ],
+          [
+            311.7,
+            572.6,
+            418.6,
+            586.4
+          ],
+          [
+            418.6,
+            572.6,
+            464.4,
+            586.4
+          ],
+          [
+            464.4,
+            572.6,
+            586.7,
+            586.4
+          ],
+          [
+            586.7,
+            572.6,
+            605.0,
+            586.4
+          ],
+          [
+            605.0,
+            572.6,
+            867.8,
+            586.4
+          ]
+        ],
+        [
+          [
+            67.2,
+            618.4,
+            311.7,
+            632.2
+          ],
+          [
+            311.7,
+            618.4,
+            418.6,
+            632.2
+          ],
+          [
+            418.6,
+            618.4,
+            464.4,
+            632.2
+          ],
+          [
+            464.4,
+            618.4,
+            586.7,
+            632.2
+          ],
+          [
+            586.7,
+            618.4,
+            605.0,
+            632.2
+          ],
+          [
+            605.0,
+            618.4,
+            867.8,
+            632.2
+          ]
+        ],
+        [
+          [
+            67.2,
+            664.3,
+            311.7,
+            678.0
+          ],
+          [
+            311.7,
+            664.3,
+            418.6,
+            678.0
+          ],
+          [
+            418.6,
+            664.3,
+            464.4,
+            678.0
+          ],
+          [
+            464.4,
+            664.3,
+            586.7,
+            678.0
+          ],
+          [
+            586.7,
+            664.3,
+            605.0,
+            678.0
+          ],
+          [
+            605.0,
+            664.3,
+            867.8,
+            678.0
           ]
         ]
       ],
@@ -2088,176 +2324,26 @@ body.picking .lb-stage{cursor:crosshair}
         &quot;origin&quot;: &quot;pdfplumber&quot;,
         &quot;exact&quot;: true,
         &quot;note&quot;: &quot;PDF 文本层单元格 bbox × DPI/72 换算到预览图像素&quot;,
-        &quot;grid_rows&quot;: 7,
+        &quot;grid_rows&quot;: 11,
         &quot;grid_cols&quot;: 6
       },
-      &quot;n_rows&quot;: 6,
+      &quot;n_rows&quot;: 10,
       &quot;n_cols&quot;: 6,
-      &quot;fill_ratio&quot;: 1.0,
+      &quot;fill_ratio&quot;: 0.717,
       &quot;low_confidence&quot;: false,
       &quot;csv_file&quot;: &quot;table_1.csv&quot;
-    },
-    {
-      &quot;page&quot;: 1,
-      &quot;source&quot;: &quot;pdfplumber&quot;,
-      &quot;strategy&quot;: &quot;default&quot;,
-      &quot;title&quot;: &quot;&quot;,
-      &quot;headers&quot;: [
-        &quot;项目&quot;,
-        &quot;笔数&quot;,
-        &quot;金额&quot;,
-        &quot;状态&quot;
-      ],
-      &quot;rows&quot;: [
-        [
-          &quot;收入合计&quot;,
-          &quot;6&quot;,
-          &quot;75,850.00&quot;,
-          &quot;已核对&quot;
-        ],
-        [
-          &quot;支出合计&quot;,
-          &quot;2&quot;,
-          &quot;11,200.00&quot;,
-          &quot;已核对&quot;
-        ],
-        [
-          &quot;净额&quot;,
-          &quot;4&quot;,
-          &quot;64,650.00&quot;,
-          &quot;待复核&quot;
-        ]
-      ],
-      &quot;cells&quot;: [
-        [
-          [
-            61.1,
-            519.4,
-            244.4,
-            565.3
-          ],
-          [
-            244.4,
-            519.4,
-            412.5,
-            565.3
-          ],
-          [
-            412.5,
-            519.4,
-            580.6,
-            565.3
-          ],
-          [
-            580.6,
-            519.4,
-            748.6,
-            565.3
-          ]
-        ],
-        [
-          [
-            61.1,
-            565.3,
-            244.4,
-            611.1
-          ],
-          [
-            244.4,
-            565.3,
-            412.5,
-            611.1
-          ],
-          [
-            412.5,
-            565.3,
-            580.6,
-            611.1
-          ],
-          [
-            580.6,
-            565.3,
-            748.6,
-            611.1
-          ]
-        ],
-        [
-          [
-            61.1,
-            611.1,
-            244.4,
-            656.9
-          ],
-          [
-            244.4,
-            611.1,
-            412.5,
-            656.9
-          ],
-          [
-            412.5,
-            611.1,
-            580.6,
-            656.9
-          ],
-          [
-            580.6,
-            611.1,
-            748.6,
-            656.9
-          ]
-        ],
-        [
-          [
-            61.1,
-            656.9,
-            244.4,
-            702.8
-          ],
-          [
-            244.4,
-            656.9,
-            412.5,
-            702.8
-          ],
-          [
-            412.5,
-            656.9,
-            580.6,
-            702.8
-          ],
-          [
-            580.6,
-            656.9,
-            748.6,
-            702.8
-          ]
-        ]
-      ],
-      &quot;coord&quot;: {
-        &quot;space&quot;: &quot;source&quot;,
-        &quot;origin&quot;: &quot;pdfplumber&quot;,
-        &quot;exact&quot;: true,
-        &quot;note&quot;: &quot;PDF 文本层单元格 bbox × DPI/72 换算到预览图像素&quot;,
-        &quot;grid_rows&quot;: 4,
-        &quot;grid_cols&quot;: 4
-      },
-      &quot;n_rows&quot;: 3,
-      &quot;n_cols&quot;: 4,
-      &quot;fill_ratio&quot;: 1.0,
-      &quot;low_confidence&quot;: false,
-      &quot;csv_file&quot;: &quot;table_2.csv&quot;
     }
   ],
   &quot;table_route&quot;: &quot;text_layer&quot;,
   &quot;notes&quot;: [
-    &quot;第 1 页 default 策略 → 2 张表&quot;
+    &quot;第 1 页：表格策略首选 = text&quot;,
+    &quot;第 1 页 text 策略 → 1 张表&quot;
   ],
   &quot;page&quot;: 1,
   &quot;params_snapshot&quot;: {
     &quot;page&quot;: 1,
-    &quot;table_strategy&quot;: &quot;auto&quot;,
-    &quot;column_lines&quot;: &quot;496&quot;,
+    &quot;table_strategy&quot;: &quot;text&quot;,
+    &quot;column_lines&quot;: &quot;&quot;,
     &quot;grid_min_h&quot;: 5,
     &quot;grid_min_v&quot;: 4,
     &quot;det_thresh&quot;: 0.3,
@@ -2265,7 +2351,7 @@ body.picking .lb-stage{cursor:crosshair}
     &quot;dpi&quot;: 110,
     &quot;doc_unwarp&quot;: &quot;on&quot;
   }
-}</pre></details></div></section>
+}</pre></details></div></div></div></div></section>
 </div>
 <div class="lightbox" id="lightbox" hidden>
   <div class="lb-bar">
@@ -2285,6 +2371,36 @@ body.picking .lb-stage{cursor:crosshair}
 </div>
 
 <script>
+/* report/assets/hint.js — 共享「?」悬浮说明：.hint[data-tip] 悬停/聚焦显示气泡。
+   事件委托，动态渲染的参数项也生效；fixed 定位 + 视口内收敛，滚动时隐藏。 */
+(function(){
+  var tip=document.createElement('div');
+  tip.id='hinttip'; tip.hidden=true; document.body.appendChild(tip);
+  function show(el){
+    var t=el.getAttribute('data-tip'); if(!t) return;
+    tip.textContent=t; tip.hidden=false;
+    var r=el.getBoundingClientRect();
+    var tw=tip.offsetWidth, th=tip.offsetHeight;
+    var left=Math.max(8,Math.min(r.left, innerWidth-tw-8));
+    var top=r.bottom+6;
+    if(top+th>innerHeight-8) top=Math.max(8,r.top-th-6);
+    tip.style.left=left+'px'; tip.style.top=top+'px';
+  }
+  function hide(){ tip.hidden=true; }
+  document.addEventListener('mouseover',function(e){
+    var el=e.target.closest?e.target.closest('.hint'):null;
+    if(el) show(el); else hide();
+  });
+  document.addEventListener('focusin',function(e){
+    var el=e.target.closest?e.target.closest('.hint'):null;
+    if(el) show(el);
+  });
+  document.addEventListener('focusout',function(e){
+    var el=e.target.closest?e.target.closest('.hint'):null;
+    if(el) hide();
+  });
+  window.addEventListener('scroll',hide,true);
+})();
 /* report/assets/report.js — 对照报告交互（生成时内联进 index.html） */
 function cardOf(el){ return el.closest('.card'); }
 function activeSpace(card){

@@ -11,10 +11,10 @@
 <div class="app">
   <aside class="console">
     <h1>CV 提取 MVP</h1>
-    <p class="sub">上传图片 / PDF / CSV → 本地提取 OCR 文字、结构化表格与单元格坐标 → 右侧生成对照报告</p>
+    <p class="sub">图片 / PDF / CSV → OCR 文字 · 结构化表格 · 单元格坐标，右侧生成对照报告</p>
     <div id="drop">
       <b>点击选择，或把文件拖到这里</b>
-      支持 png / jpg / bmp / webp / tif、pdf、csv / txt / md；可多选，单个不超过 20MB
+      png/jpg/bmp/webp/tif · pdf · csv/txt/md，可多选，单个 ≤ 20MB
     </div>
     <input type="file" id="picker" multiple
       accept=".png,.jpg,.jpeg,.bmp,.webp,.tif,.tiff,.pdf,.csv,.txt,.md">
@@ -37,11 +37,7 @@
       </div>
       <div class="param-groups" id="paramgroups"></div>
     </div>
-    <p class="tip">
-      首次处理会加载 PaddleOCR / 表格结构模型，约需 20~40 秒；之后同一进程内复用模型会快很多。<br>
-      每次上传生成 <code>YYYYMMDDHHmmss</code> 批次前缀，输入存 <code>mvp/input/&lt;时间戳_原文件名&gt;</code>，
-      产物写同名 <code>mvp/output/&lt;时间戳_原文件名&gt;/</code>；重复上传不覆盖上一次；报告为 <code>mvp/output/index.html</code>。
-    </p>
+    <p class="tip">首次处理会加载 PaddleOCR / 表格结构模型，约需 20~40 秒；之后同一进程内复用会快很多。</p>
   </aside>
   <main class="reportcol">
     <div class="reportempty" id="reportempty">

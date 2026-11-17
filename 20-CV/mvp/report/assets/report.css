@@ -2,27 +2,27 @@
 *{box-sizing:border-box}
 body{margin:0;background:#f4f6fa;color:#1f2738;
   font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
-header{background:#fff;border-bottom:1px solid #e2e7f0;padding:20px 26px}
-header h1{font-size:20px;font-weight:500;margin:0 0 4px}
-header .sub{color:#6b7688;font-size:13px}
-.nav{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;font-size:12px}
+header{background:#fff;border-bottom:1px solid #e2e7f0;padding:12px 18px}
+header h1{font-size:18px;font-weight:500;margin:0 0 3px}
+header .sub{color:#6b7688;font-size:12px;display:flex;align-items:center;gap:6px}
+.nav{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;font-size:12px}
 .nav a{padding:4px 11px;border:1px solid #d8e0ed;border-radius:20px;
   background:#f7f9fd;color:#33507f;text-decoration:none}
 .nav a:hover{background:#e7f0ff}
-.wrap{max-width:1500px;margin:0 auto;padding:20px}
+.wrap{max-width:1500px;margin:0 auto;padding:14px}
 .card{background:#fff;border:1px solid #e2e7f0;border-radius:12px;
-  margin:0 0 22px;overflow:hidden;box-shadow:0 1px 3px rgba(20,30,60,.04)}
-.card-head{padding:16px 20px;border-bottom:1px solid #edf0f6}
-.card-head h2{font-size:16px;font-weight:500;margin:0 0 6px;word-break:break-all}
+  margin:0 0 14px;overflow:hidden;box-shadow:0 1px 3px rgba(20,30,60,.04)}
+.card-head{padding:10px 16px;border-bottom:1px solid #edf0f6}
+.card-head h2{font-size:15px;font-weight:500;margin:0 0 4px;word-break:break-all}
 .tag{display:inline-block;background:#eef2f8;color:#5a6a85;border-radius:5px;
   padding:1px 8px;font-size:12px;margin-right:6px}
-.metrics{display:flex;flex-wrap:wrap;gap:16px;margin-top:10px;font-size:12px;color:#6b7688}
-.metrics b{color:#1f2738;font-size:14px;font-weight:500}
-.desc{font-size:12px;color:#6b7688;margin-top:6px}
+.metrics{display:flex;flex-wrap:wrap;gap:14px;margin-top:8px;font-size:12px;color:#6b7688}
+.metrics b{color:#1f2738;font-size:13px;font-weight:500}
+.desc{font-size:12px;color:#6b7688;margin-top:4px}
 .desc a{color:#2563eb;text-decoration:none}
 .grid{display:grid;grid-template-columns:minmax(300px,44%) minmax(0,1fr);
   align-items:start}
-.stage{position:sticky;top:12px;background:#eceff3;padding:14px;
+.stage{position:sticky;top:12px;background:#eceff3;padding:10px;
   border-right:1px solid #e2e7f0}
 .imgwrap{position:relative;line-height:0;
   max-width:min(100%,calc((100vh - 180px) * var(--ar,1.5)))}
@@ -39,9 +39,9 @@ header .sub{color:#6b7688;font-size:13px}
 .viewbtn.on,.allcells.on{background:#2563eb;border-color:#2563eb;color:#fff}
 .view[hidden]{display:none}
 /* 右栏：文字行 / 表格 / JSON 切 tab；图在左栏吸顶，切到表格悬停单元格即时可见高亮 */
-.contentcol{min-width:0;padding:14px 16px}
+.contentcol{min-width:0;padding:10px 14px}
 .ctabs{display:flex;gap:6px;flex-wrap:wrap;position:sticky;top:0;z-index:3;
-  background:#fff;padding:0 0 10px;margin-bottom:6px;border-bottom:1px solid #edf0f6}
+  background:#fff;padding:0 0 8px;margin-bottom:5px;border-bottom:1px solid #edf0f6}
 .ctab{font:inherit;font-size:13px;cursor:pointer;padding:5px 14px;border-radius:7px;
   border:1px solid #d8e0ed;background:#fff;color:#1f2738}
 .ctab.on{background:#2563eb;border-color:#2563eb;color:#fff}

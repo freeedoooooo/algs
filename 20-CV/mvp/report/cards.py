@@ -277,7 +277,7 @@ def card(rec, card_no):
     head = (
         '<div class="card-head"><h2 id="case-{}">{}</h2>'
         '<span class="tag">{}</span><span class="tag">路线 {}</span>'
-        '<div class="desc">{}　·　<b>点击图片可全屏放大</b></div>'
+        '<div class="desc">{}</div>'
         '<div class="metrics">'
         '<span>识别行数 <b>{}</b></span>'
         '<span>平均置信度 <b>{:.2f}</b></span>'
