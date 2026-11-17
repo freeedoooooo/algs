@@ -366,3 +366,36 @@ fetch('/api/status').then(function(r){return r.json();}).then(function(s){
   if(s.running){ rightState('run'); say(s.logs,s.steps); progress(s); poll(); }
   else if(s.ready){ showResult(); }
 });
+
+/* ---- 左栏宽度拖拽：gutter 拖动改 .console 宽，存 localStorage，双击复位 ----
+   拖拽时把 iframe pointer-events 关掉，否则鼠标移进报告区事件被 iframe 吞掉。 */
+(function(){
+  var g=document.getElementById('gutter'),col=document.querySelector('.console');
+  var frame=document.getElementById('reportFrame');
+  if(!g||!col) return;
+  var WKEY='cv_mvp_console_w',MIN=220;
+  function maxW(){ return Math.max(MIN,Math.min(640,window.innerWidth-360)); }
+  function apply(w){ col.style.width=Math.round(Math.max(MIN,Math.min(maxW(),w)))+'px'; }
+  var saved=parseInt(localStorage.getItem(WKEY),10);
+  if(saved) apply(saved);
+  var dragging=false;
+  g.addEventListener('mousedown',function(e){
+    e.preventDefault(); dragging=true; g.classList.add('on');
+    document.body.style.userSelect='none'; document.body.style.cursor='col-resize';
+    if(frame) frame.style.pointerEvents='none';
+  });
+  window.addEventListener('mousemove',function(e){ if(dragging) apply(e.clientX); });
+  window.addEventListener('mouseup',function(){
+    if(!dragging) return;
+    dragging=false; g.classList.remove('on');
+    document.body.style.userSelect=''; document.body.style.cursor='';
+    if(frame) frame.style.pointerEvents='';
+    try{ localStorage.setItem(WKEY,parseInt(col.style.width,10)); }catch(e){}
+  });
+  g.addEventListener('dblclick',function(){
+    col.style.width=''; try{ localStorage.removeItem(WKEY); }catch(e){}
+  });
+  window.addEventListener('resize',function(){
+    if(col.style.width) apply(parseInt(col.style.width,10));
+  });
+})();
