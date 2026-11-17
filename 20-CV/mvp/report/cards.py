@@ -92,7 +92,7 @@ def image_views(rec, card_no):
                 'preserveAspectRatio="none">{}</svg>'.format(w, h, cell_src)
                 ) if cell_src else ''
 
-    rect_view, viewbar = '', ''
+    rect_view, viewbtns = '', ''
     if rec.get('rectified'):
         rsrc = file_url(rec['case'], rec['rectified'])
         rw, rh = rec.get('rectified_size') or [0, 0]
@@ -104,23 +104,26 @@ def image_views(rec, card_no):
             'title="点击放大查看"><svg class="cellsvg" viewBox="0 0 {} {}" '
             'preserveAspectRatio="none">{}</svg></div></div>'.format(
                 card_no, rar, rsrc, rw, rh, rect_cells))
-        viewbar = (
-            '<div class="viewbar">'
+        viewbtns = (
             '<button type="button" class="viewbtn on" data-card="{}" '
             'data-view="orig">原图</button>'
             '<button type="button" class="viewbtn" data-card="{}" '
-            'data-view="rect">矫正图（单元格坐标基准）</button></div>'.format(
+            'data-view="rect">矫正图（单元格坐标基准）</button>'.format(
                 card_no, card_no))
+    boxbtn = ('<button type="button" class="boxtoggle" data-card="{}">'
+              '隐藏叠加框</button>'.format(card_no))
+    viewbar = ('<div class="viewbar">{}</div>'.format(viewbtns)
+               if viewbtns else '')
     ar = (w / h) if h else 1.5
     return (
         '<div class="stage">{}<div class="views">{}'
         '<div class="view" data-card="{}" data-view="orig">'
         '<div class="imgwrap" style="--ar:{:.4f}"><img src="{}" alt="原图" '
         'title="点击放大查看">'
-        '<svg viewBox="0 0 {} {}" preserveAspectRatio="none">{}</svg>{}'
+        '<svg viewBox="0 0 {} {}" preserveAspectRatio="none">{}</svg>{}{}'
         '</div></div>{}</div></div>'.format(
             viewbar, '', card_no, ar, src, w, h,
-            ''.join(polys), cell_svg, rect_view))
+            ''.join(polys), cell_svg, boxbtn, rect_view))
 
 
 def text_pane(rec, card_no):

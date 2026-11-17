@@ -34,10 +34,19 @@ header .sub{color:#6b7688;font-size:12px;display:flex;align-items:center;gap:6px
 .box.low{fill:rgba(222,92,40,.10);stroke:#de5c28}
 .box.hl{fill:rgba(37,99,235,.30);stroke-width:4}
 .viewbar{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin:0 0 10px}
-.viewbtn,.allcells{font:inherit;font-size:12px;cursor:pointer;
+.viewbtn,.allcells,.boxtoggle{font:inherit;font-size:12px;cursor:pointer;
   padding:4px 11px;border-radius:7px;border:1px solid #d8e0ed;
   background:#fff;color:#1f2738}
-.viewbtn.on,.allcells.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.viewbtn.on,.allcells.on,.boxtoggle.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.stage.noboxes .box{display:none}
+/* 叠加框开关：半透明角标叠在原图右上角，不单独占行（imgwrap line-height:0 需复位） */
+.imgwrap .boxtoggle{position:absolute;top:6px;right:6px;z-index:3;
+  padding:3px 9px;font-size:11px;line-height:1.4;border-radius:6px;
+  background:rgba(15,23,38,.55);color:#fff;border:1px solid rgba(255,255,255,.35);
+  backdrop-filter:blur(2px)}
+.imgwrap .boxtoggle:hover{background:rgba(15,23,38,.78)}
+.imgwrap .boxtoggle.on{background:rgba(37,99,235,.8);border-color:rgba(255,255,255,.5)}
+.lb-content .boxtoggle{display:none}
 .view[hidden]{display:none}
 /* 右栏：文字行 / 表格 / JSON 切 tab；图在左栏吸顶，切到表格悬停单元格即时可见高亮 */
 .contentcol{min-width:0;padding:10px 14px}

@@ -54,6 +54,16 @@ document.querySelectorAll('.viewbtn').forEach(function(btn){
   });
 });
 
+/* 内联图叠加框开关：不开 lightbox 也能看干净原图（只藏 OCR 识别框，单格高亮保留） */
+document.querySelectorAll('.boxtoggle').forEach(function(btn){
+  btn.addEventListener('click',function(){
+    var stage=cardOf(btn).querySelector('.stage');
+    var off=stage.classList.toggle('noboxes');
+    btn.classList.toggle('on',off);
+    btn.textContent=off?'显示叠加框':'隐藏叠加框';
+  });
+});
+
 /* 右栏 tab：文字行 / 表格 / JSON 切换；左图吸顶始终可见，切 tab 后视图跟随坐标空间 */
 document.querySelectorAll('.ctab').forEach(function(btn){
   btn.addEventListener('click',function(){
