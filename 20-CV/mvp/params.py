@@ -15,6 +15,10 @@ from . import config
 # ---- 文字检测阈值：PaddleOCR 3.x 的 predict() 默认值（c_try_params.py 实测）----
 DET_DEFAULT = 0.3
 BOX_DEFAULT = 0.6
+# ---- 检测框外扩 / 检测分辨率：3.7 paddlex configs/pipelines/OCR.yaml 默认 ----
+UNCLIP_DEFAULT = 1.5
+LIMIT_SIDE_DEFAULT = 64
+LIMIT_TYPE_DEFAULT = 'min'
 
 # ---- 参数 schema：order 即页面优先级顺序 ----
 SCHEMA = [
@@ -47,13 +51,25 @@ SCHEMA = [
          default=BOX_DEFAULT, min=0.05, max=0.95, step=0.05,
          order=7, group='④ 文字识别',
          help='默认 0.6，漏检严重试 0.4。'),
+    dict(key='det_unclip', label='检测框外扩比例', type='float',
+         default=UNCLIP_DEFAULT, min=1.0, max=3.0, step=0.1,
+         order=8, group='④ 文字识别',
+         help='DBNet 框外扩系数。调大救被切边的字，但易把相邻字并进同框。默认 1.5。'),
+    dict(key='det_limit_side_len', label='检测分辨率边长', type='int',
+         default=LIMIT_SIDE_DEFAULT, min=32, max=4000, step=32,
+         order=9, group='④ 文字识别',
+         help='配合下一项：min 时调大=放大图救小字；max 时调小=缩小提速。默认 64。'),
+    dict(key='det_limit_type', label='检测分辨率方向', type='select',
+         default=LIMIT_TYPE_DEFAULT, options=['min', 'max'],
+         order=10, group='④ 文字识别',
+         help='min=短边不低于边长（放大）；max=长边不超过边长（缩小）。默认 min。'),
     dict(key='dpi', label='PDF 渲染 DPI', type='int',
          default=config.PDF_DPI, min=72, max=400, step=10,
-         order=8, group='⑤ 渲染精度',
+         order=11, group='⑤ 渲染精度',
          help='小字/密集表调高到 150~200；越高越慢。'),
     dict(key='doc_unwarp', label='文档矫正(UVDoc)', type='select',
          default='on', options=['on', 'off'],
-         order=9, group='⑥ 坐标回溯',
+         order=12, group='⑥ 坐标回溯',
          help='on=方向分类+UVDoc 去扭曲，适合旋转/弯曲扫描件（框叠矫正图）；'
               'off=关闭预处理，适合平整电子截图，框 1:1 叠原图。仅影响表格模型。'),
 ]

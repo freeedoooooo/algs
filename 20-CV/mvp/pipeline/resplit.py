@@ -19,6 +19,7 @@ pipeline/resplit.py — 图片路线的「人工列边界」后处理（确定�
 import cv2
 
 from . import engines
+from .ocr import det_kwargs
 
 _MARGIN = 2          # 竖线须严格穿过格子内部（离边 >2px）才切，避免擦边误切
 
@@ -47,7 +48,7 @@ def _sub_boxes(box, cuts):
     return [[edges[i], y0, edges[i + 1], y1] for i in range(len(edges) - 1)]
 
 
-def _ocr_crop(img, box, det_thresh, box_thresh):
+def _ocr_crop(img, box, params):
     """crop 子格单独识别，返回按 y 排序拼接的文字。"""
     x0, y0, x1, y1 = [int(round(v)) for v in box]
     h, w = img.shape[:2]
@@ -56,11 +57,7 @@ def _ocr_crop(img, box, det_thresh, box_thresh):
     if x1 - x0 < 2 or y1 - y0 < 2:
         return ''
     crop = img[y0:y1, x0:x1]
-    kw = {}
-    if det_thresh is not None:
-        kw['text_det_thresh'] = float(det_thresh)
-    if box_thresh is not None:
-        kw['text_det_box_thresh'] = float(box_thresh)
+    kw = det_kwargs(params)
     lines = []
     for res in engines.ocr().predict(crop, **kw):
         texts = res.get('rec_texts') or []
@@ -74,7 +71,7 @@ def _ocr_crop(img, box, det_thresh, box_thresh):
     return ' '.join(t for _, t in lines).strip()
 
 
-def _resplit_table(table, lines, img, det_thresh, box_thresh, emit, idx):
+def _resplit_table(table, lines, img, params, emit, idx):
     rng = _table_x_range(table)
     if not rng:
         _log(emit, 'warn', '表 {} 无单元格坐标，跳过人工列边界重切'.format(idx))
@@ -99,7 +96,7 @@ def _resplit_table(table, lines, img, det_thresh, box_thresh, emit, idx):
                 continue
             n_split += 1
             for sb in _sub_boxes(box, cuts):
-                txt = _ocr_crop(img, sb, det_thresh, box_thresh)
+                txt = _ocr_crop(img, sb, params)
                 out_row.append(txt)
                 out_grid.append(sb)
                 n_sub += 1
@@ -121,8 +118,7 @@ def _resplit_table(table, lines, img, det_thresh, box_thresh, emit, idx):
     return out
 
 
-def resplit(raw_tables, lines, img_path, det_thresh=None, box_thresh=None,
-            emit=None):
+def resplit(raw_tables, lines, img_path, params=None, emit=None):
     """入口：返回重切后的 raw_tables（不改动入参）。lines 为空原样返回。"""
     if not lines or not raw_tables:
         return raw_tables
@@ -131,6 +127,6 @@ def resplit(raw_tables, lines, img_path, det_thresh=None, box_thresh=None,
         _log(emit, 'warn', '读不到原图，跳过人工列边界重切')
         return raw_tables
     return [
-        _resplit_table(t, lines, img, det_thresh, box_thresh, emit, i)
+        _resplit_table(t, lines, img, params, emit, i)
         for i, t in enumerate(raw_tables, 1)
     ]

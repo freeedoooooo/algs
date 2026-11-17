@@ -46,10 +46,7 @@ def _maybe_resplit(raw, img_path, params, use_unwarp, log):
         log('warn', 'table', '人工列边界仅支持 doc_unwarp=off'
             '（单元格框须与原图同空间），本次已跳过重切')
         return raw
-    return resplit_mod.resplit(
-        raw, lines, img_path,
-        det_thresh=params.get('det_thresh'),
-        box_thresh=params.get('box_thresh'), emit=log)
+    return resplit_mod.resplit(raw, lines, img_path, params=params, emit=log)
 
 
 def extract_one(src_path, case_abs, case_rel, params=None, emit=None):
@@ -129,7 +126,7 @@ def extract_one(src_path, case_abs, case_rel, params=None, emit=None):
             raw, notes, rect = model_mod.tables(
                 img_path, case_abs,
                 min_h=params.get('grid_min_h'), min_v=params.get('grid_min_v'),
-                use_unwarp=use_unwarp, emit=emit)
+                use_unwarp=use_unwarp, emit=emit, params=params)
             raw = _maybe_resplit(raw, img_path, params, use_unwarp, log)
             rec['table_route'] = 'table_model' if raw else 'skipped'
             rec['rectified_size'] = rect
@@ -155,7 +152,7 @@ def extract_one(src_path, case_abs, case_rel, params=None, emit=None):
         raw, notes, rect = model_mod.tables(
             img_path, case_abs,
             min_h=params.get('grid_min_h'), min_v=params.get('grid_min_v'),
-            use_unwarp=use_unwarp, emit=emit)
+            use_unwarp=use_unwarp, emit=emit, params=params)
         raw = _maybe_resplit(raw, img_path, params, use_unwarp, log)
         rec['table_route'] = 'table_model' if raw else 'skipped'
         rec['rectified_size'] = rect
@@ -168,11 +165,11 @@ def extract_one(src_path, case_abs, case_rel, params=None, emit=None):
 
     # OCR：有图就跑（PDF 用首页渲染图，坐标正好对应预览图）
     if img_path and os.path.isfile(img_path):
-        log('info', 'ocr', 'OCR 文字识别中（det={}, box={}）…'.format(
-            params.get('det_thresh'), params.get('box_thresh')))
-        rec.update(ocr_mod.recognize(
-            img_path, det_thresh=params.get('det_thresh'),
-            box_thresh=params.get('box_thresh')))
+        log('info', 'ocr', 'OCR 文字识别中（det={}, box={}, unclip={}, limit={}/{}）…'
+            .format(params.get('det_thresh'), params.get('box_thresh'),
+                    params.get('det_unclip'), params.get('det_limit_side_len'),
+                    params.get('det_limit_type')))
+        rec.update(ocr_mod.recognize(img_path, params=params))
         ocr_mod.draw_boxes_png(
             img_path, rec, os.path.join(case_abs, config.BOXES_NAME))
         rec['boxes_png'] = config.BOXES_NAME

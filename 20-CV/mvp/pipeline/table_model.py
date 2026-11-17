@@ -20,6 +20,7 @@ from PIL import Image
 
 from .. import config
 from . import engines
+from .ocr import det_kwargs
 
 
 class _TableParser(HTMLParser):
@@ -151,8 +152,8 @@ def _save_rectified(res, case_abs):
 
 
 def tables(image_path, case_abs, min_h=None, min_v=None,
-           use_unwarp=True, emit=None):
-    """返回 (raw_tables, notes, rectified_size)；门槛与文档矫正由页面参数控制。"""
+           use_unwarp=True, emit=None, params=None):
+    """返回 (raw_tables, notes, rectified_size)；门槛/文档矫正/检测参数由页面控制。"""
     mh = config.GRID_MIN_H if min_h is None else int(min_h)
     mv = config.GRID_MIN_V if min_v is None else int(min_v)
     nh, nv = grid_score(image_path)
@@ -173,7 +174,9 @@ def tables(image_path, case_abs, min_h=None, min_v=None,
     note('info', '加载 PPStructureV3 并推理（文档矫正={}，首次约 20~40s）…'
          .format('开' if use_unwarp else '关'))
     raw, rect_size = [], None
-    for pno, res in enumerate(engines.structure(use_unwarp).predict(image_path), 1):
+    for pno, res in enumerate(
+            engines.structure(use_unwarp).predict(
+                image_path, **det_kwargs(params)), 1):
         htmls = _html_blocks(res)
         boxes_by_table = _cell_boxes(res)
         parsed = []
