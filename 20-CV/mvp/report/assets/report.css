@@ -124,3 +124,24 @@ a{color:#2563eb}
 .paramsnap code{background:#eef4ff;color:var(--accent);padding:1px 6px;
   border-radius:4px;white-space:nowrap}
 .paramsnap .ph{color:var(--muted)}
+/* 取 x 坐标工具：浮动入口 + 收集条（z 高于 lightbox，全屏取数时也可见） */
+.picktoggle{position:fixed;right:16px;bottom:16px;z-index:10000;font:inherit;
+  font-size:13px;cursor:pointer;padding:8px 16px;border-radius:20px;
+  border:1px solid #2563eb;background:#2563eb;color:#fff;
+  box-shadow:0 2px 10px rgba(20,30,60,.2)}
+.picktoggle[hidden]{display:none}
+.pickbar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);
+  z-index:10000;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  max-width:92vw;padding:9px 14px;border-radius:10px;background:#1d2330;
+  color:#e8ecf4;font-size:12px;box-shadow:0 4px 20px rgba(0,0,0,.35)}
+.pickbar[hidden]{display:none}
+.pickbar .picklabel{color:#9aa6bd}
+.pickbar .pickvals{font-family:Consolas,Monaco,monospace;color:#7dd3fc;
+  font-weight:600;word-break:break-all}
+.pickbar button{font:inherit;font-size:12px;cursor:pointer;padding:4px 11px;
+  border-radius:6px;border:1px solid #46506a;background:#2a3245;color:#e8ecf4}
+.pickbar button:hover{background:#3a4560}
+#lbPick.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.pickline{stroke:#ff3b30;stroke-width:2;vector-effect:non-scaling-stroke}
+body.picking .stage img{cursor:crosshair}
+body.picking .lb-stage{cursor:crosshair}

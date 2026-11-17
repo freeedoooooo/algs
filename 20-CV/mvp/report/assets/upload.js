@@ -86,8 +86,18 @@ drop.ondrop=function(e){
 };
 picker.onchange=function(){add(picker.files);};
 
+var ALLOWED=['png','jpg','jpeg','bmp','webp','tif','tiff','pdf','csv','txt','md'];
 function add(fs){
-  for(var i=0;i<fs.length;i++) picked.push(fs[i]);
+  var rejected=[];
+  for(var i=0;i<fs.length;i++){
+    var f=fs[i];
+    var e=(f.name.split('.').pop()||'').toLowerCase();
+    if(ALLOWED.indexOf(e)<0){ rejected.push(f.name); continue; }
+    if(picked.some(function(p){return p.name===f.name&&p.size===f.size;})) continue;
+    picked.push(f);
+  }
+  if(rejected.length)
+    msg.innerHTML='<span class="err">不支持的格式已忽略：'+escHtml(rejected.join('、'))+'</span>';
   render();
 }
 function fileRow(name,size,url){
@@ -97,14 +107,31 @@ function fileRow(name,size,url){
 }
 function render(){
   list.innerHTML='';
-  picked.forEach(function(f){
+  picked.forEach(function(f,i){
     var li=document.createElement('li');
     var url=f._url||(f._url=URL.createObjectURL(f));
-    li.innerHTML=fileRow(f.name,f.size,url);
+    li.innerHTML=fileRow(f.name,f.size,url)+
+      '<button type="button" class="fdel" data-i="'+i+'" title="移除该文件">×</button>';
     list.appendChild(li);
   });
+  document.getElementById('filebar').hidden=picked.length===0;
+  document.getElementById('filecount').textContent='已选 '+picked.length+' 个文件';
   go.disabled=picked.length===0;
 }
+list.addEventListener('click',function(e){
+  var b=e.target.closest?e.target.closest('.fdel'):null;
+  if(!b) return;
+  var i=+b.getAttribute('data-i');
+  var f=picked[i];
+  picked.splice(i,1);
+  render();                       // 先移除 DOM 里的 <img>，再释放 blob，避免引用已失效 URL
+  if(f&&f._url) URL.revokeObjectURL(f._url);
+});
+document.getElementById('clearfiles').onclick=function(){
+  var urls=picked.map(function(f){return f._url;});
+  picked=[]; render();
+  urls.forEach(function(u){ if(u) URL.revokeObjectURL(u); });
+};
 function kindOf(name){
   var e=(name.split('.').pop()||'').toLowerCase();
   if(['png','jpg','jpeg','bmp','webp','tif','tiff'].indexOf(e)>=0) return 'image';
@@ -118,8 +145,87 @@ function thumbHtml(name,url){
   var label=(k==='pdf'?'PDF':(name.split('.').pop()||'FILE').toUpperCase());
   return '<a class="thumb file" href="'+url+'" target="_blank" title="'+escHtml(name)+'"><span>'+escHtml(label)+'</span></a>';
 }
-function openLb(url){ lbimg.src=url; lb.hidden=false; }
-lb.onclick=function(){ lb.hidden=true; lbimg.removeAttribute('src'); };
+/* ---- 上传页取 x 坐标：提取前在原图预览上量列边界，直接填进 column_lines ----
+   坐标=原图像素，与 doc_unwarp=off 的重切空间一致；on 的矫正图坐标需提取后在报告页取。 */
+var SVGNS='http://www.w3.org/2000/svg';
+var pickMode=false, pickVals=[];
+var lbStage=document.getElementById('lbStage'),lbsvg=document.getElementById('lbsvg');
+var pickbar=document.getElementById('pickbar');
+function syncSvg(){
+  var nw=lbimg.naturalWidth,nh=lbimg.naturalHeight;
+  if(nw) lbsvg.setAttribute('viewBox','0 0 '+nw+' '+nh);
+}
+lbimg.addEventListener('load',syncSvg);
+function openLb(url){
+  lbsvg.innerHTML='';
+  lbimg.src=url; lb.hidden=false;
+  if(lbimg.complete) syncSvg();
+}
+function closeLb(){
+  lb.hidden=true; lbimg.removeAttribute('src'); lbsvg.innerHTML='';
+  setPickMode(false);
+}
+document.getElementById('lbClose').onclick=closeLb;
+lbStage.addEventListener('click',function(e){ if(e.target===lbStage) closeLb(); });
+document.addEventListener('keydown',function(e){
+  if(!lb.hidden&&e.key==='Escape') closeLb();
+});
+document.getElementById('lbZoom').onclick=function(){
+  var z=lbStage.classList.toggle('zoom');
+  this.classList.toggle('on',z);
+  this.textContent=z?'适应窗口':'1:1 像素';
+};
+function setPickMode(on){
+  pickMode=on;
+  pickbar.hidden=!on;
+  document.body.classList.toggle('picking',on);
+  var b=document.getElementById('lbPick');
+  b.classList.toggle('on',on); b.textContent=on?'退出取数':'取 x 坐标';
+  renderPickVals();
+}
+document.getElementById('lbPick').onclick=function(){ setPickMode(!pickMode); };
+function renderPickVals(){
+  var el=document.getElementById('pickvals');
+  if(el) el.textContent=pickVals.length?pickVals.join(', '):'（尚未取点）';
+}
+function naturalX(img,clientX){
+  var r=img.getBoundingClientRect();
+  var nw=img.naturalWidth||1000;
+  return Math.max(0,Math.min(nw,Math.round((clientX-r.left)*nw/(r.width||1))));
+}
+lbimg.addEventListener('click',function(e){
+  e.stopPropagation();
+  if(!pickMode) return;
+  var x=naturalX(lbimg,e.clientX);
+  pickVals.push(x);
+  var ln=document.createElementNS(SVGNS,'line');
+  ln.setAttribute('class','pickline');
+  ln.setAttribute('x1',x); ln.setAttribute('x2',x);
+  ln.setAttribute('y1',0); ln.setAttribute('y2',lbimg.naturalHeight||0);
+  lbsvg.appendChild(ln);
+  renderPickVals();
+});
+pickbar.addEventListener('click',function(e){
+  var b=e.target.closest?e.target.closest('[data-pick]'):null;
+  if(!b) return;
+  var a=b.getAttribute('data-pick');
+  if(a==='fill'){
+    var el=document.getElementById('pf_column_lines');
+    if(el&&pickVals.length){
+      el.value=pickVals.join(',');
+      el.dispatchEvent(new Event('input',{bubbles:true}));
+      document.getElementById('parampanel').open=true;
+      b.textContent='已填入'; setTimeout(function(){b.textContent='填入列边界';},1500);
+    }
+  }else if(a==='copy'){
+    if(pickVals.length) navigator.clipboard.writeText(pickVals.join(',')).then(function(){
+      b.textContent='已复制'; setTimeout(function(){b.textContent='复制';},1500);
+    });
+  }else if(a==='clear'){
+    pickVals=[]; lbsvg.querySelectorAll('.pickline').forEach(function(x){x.remove();});
+    renderPickVals();
+  }else if(a==='exit'){ setPickMode(false); }
+});
 function bindThumbs(el){
   el.addEventListener('click',function(e){
     var t=e.target.closest?e.target.closest('img.thumb'):null;
@@ -207,11 +313,25 @@ function poll(){
     }
     if(s.running){timer=setTimeout(poll,800);return;}
     if(s.ready){
-      msg.textContent='完成，正在打开报告…';
-      setTimeout(function(){location.href='/report';},600);
+      msg.textContent='完成。文件已保留，改参数后直接再点「开始提取」即可重测。';
+      go.disabled=false;
+      showResult();
     }
   }).catch(function(){timer=setTimeout(poll,1200);});
 }
+var resultbar=document.getElementById('resultbar'),
+    reportFrame=document.getElementById('reportFrame');
+function showResult(){
+  resultbar.hidden=false;
+  reportFrame.hidden=false;
+  reportFrame.src='/report?t='+Date.now();
+  document.getElementById('toggleReport').textContent='收起报告';
+}
+document.getElementById('toggleReport').onclick=function(){
+  var h=!reportFrame.hidden;
+  reportFrame.hidden=h;
+  this.textContent=h?'展开报告':'收起报告';
+};
 
 go.onclick=async function(){
   go.disabled=true;msg.textContent='读取文件…';
