@@ -1,0 +1,11 @@
+/* report/assets/hint.css — 共享「?」悬浮说明组件（上传页 + 报告页同一套）。
+   气泡 fixed 定位挂 body，不被 console / tablewrap 等 overflow 容器裁剪。 */
+.hint{display:inline-flex;align-items:center;justify-content:center;flex:none;
+  width:16px;height:16px;border-radius:50%;border:1px solid #cbd5e1;
+  color:#8a94a6;font-size:11px;line-height:1;cursor:help;user-select:none;
+  vertical-align:middle}
+.hint:hover,.hint:focus{border-color:#2563eb;color:#2563eb;outline:none}
+#hinttip{position:fixed;z-index:100000;max-width:260px;padding:7px 10px;
+  border-radius:7px;background:#1d2330;color:#e8ecf4;font-size:12px;line-height:1.55;
+  box-shadow:0 4px 16px rgba(0,0,0,.3);pointer-events:none}
+#hinttip[hidden]{display:none}

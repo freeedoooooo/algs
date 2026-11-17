@@ -189,8 +189,9 @@ def tables_section(rec, card_no):
         parts.append('<button type="button" class="allcells" data-card="{}">'
                      '显示整表网格</button>'.format(card_no))
     parts.append('</div>')
-    parts.append('<p class="note">坐标宿主：{}　·　悬停表格单元格：图上只高亮这一格；'
-                 '点击：钉住该格（再点取消）；旋转扫描件点击时会自动切到矫正图。'
+    parts.append('<p class="note">坐标宿主：{} '
+                 '<span class="hint" tabindex="0" data-tip="悬停表格单元格：图上只高亮这一格；'
+                 '点击：钉住该格（再点取消）；旋转扫描件点击时会自动切到矫正图。">?</span>'
                  '</p>'.format(esc(' / '.join(spaces))))
     if len(tables) > 1:
         tabs = ''.join(

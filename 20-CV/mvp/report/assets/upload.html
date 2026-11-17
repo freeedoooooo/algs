@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CV 提取 MVP · 上传</title>
 <link rel="stylesheet" href="/static/upload.css">
+<link rel="stylesheet" href="/static/hint.css">
 </head>
 <body>
 <div class="app">
@@ -24,31 +25,17 @@
     </div>
     <div class="row">
       <button id="go" disabled>开始提取</button>
-      <a class="ghost" id="last" href="/report" target="_blank" style="display:none">新窗口报告</a>
       <span id="msg"></span>
     </div>
-    <details class="param-panel" id="parampanel">
-      <summary>调试参数<span class="pbadge" id="parambadge">默认</span></summary>
-      <div class="param-groups" id="paramgroups"></div>
-      <div class="param-actions">
-        <button type="button" class="mini" id="resetparams">恢复默认</button>
-        <span class="param-hint">改参数只影响本次上传；结果写进每份 result.json 与报告页头，方便对比 badcase。</span>
-      </div>
-    </details>
-    <div class="runpanel" id="runpanel" hidden>
-      <div class="runbar">
-        <span id="runstage">准备中…</span>
+    <div class="params" id="parampanel">
+      <div class="params-head">
+        <span class="params-title">参数</span>
+        <span class="pbadge" id="parambadge">默认</span>
+        <span class="hint" tabindex="0" data-tip="按优先级排；留默认即日常用法。改参数只影响本次上传，结果写进每份 result.json 与报告页头，方便对比 badcase。">?</span>
         <span class="spacer"></span>
-        <span id="runpct">0%</span>
-        <a class="mini-link" id="dlLog" href="/api/logs" target="_blank">下载日志</a>
+        <button type="button" class="mini" id="resetparams">恢复默认</button>
       </div>
-      <div class="track"><div class="fill" id="runfill"></div></div>
-      <div class="logbox" id="log"></div>
-    </div>
-    <div class="resultbar" id="resultbar" hidden>
-      <button type="button" class="ghost" id="toggleReport">收起报告</button>
-      <a class="ghost" href="/report" target="_blank">新窗口打开</a>
-      <span class="param-hint">报告在右侧；文件已保留，改参数后再点「开始提取」即用同一批文件重测。</span>
+      <div class="param-groups" id="paramgroups"></div>
     </div>
     <p class="tip">
       首次处理会加载 PaddleOCR / 表格结构模型，约需 20~40 秒；之后同一进程内复用模型会快很多。<br>
@@ -60,10 +47,24 @@
     <div class="reportempty" id="reportempty">
       <div class="re-inner">
         <b>报告将显示在这里</b>
-        <span>在左侧选择文件并点「开始提取」，完成后右侧即时呈现对照报告；改参数重测无需重新上传。</span>
+        <span>在左侧选择文件并点「开始提取」，进度与报告都在右侧呈现；改参数重测无需重新上传。</span>
+      </div>
+    </div>
+    <div class="runpanel" id="runpanel" hidden>
+      <div class="runcard">
+        <div class="runbar">
+          <span id="runstage">准备中…</span>
+          <span class="spacer"></span>
+          <span id="runpct">0%</span>
+          <a class="mini-link" id="dlLog" href="/api/logs" target="_blank">下载日志</a>
+          <button type="button" class="mini-link" id="logclose" hidden>关闭</button>
+        </div>
+        <div class="track"><div class="fill" id="runfill"></div></div>
+        <div class="logbox" id="log"></div>
       </div>
     </div>
     <iframe id="reportFrame" class="reportframe" hidden title="提取报告"></iframe>
+    <button type="button" class="logbtn" id="logbtn" hidden>查看日志</button>
   </main>
 </div>
 <div class="lightbox" id="lightbox" hidden>
@@ -89,6 +90,7 @@
     <button type="button" data-pick="exit">退出取数</button>
   </div>
 </div>
+<script src="/static/hint.js"></script>
 <script src="/static/upload.js"></script>
 </body>
 </html>

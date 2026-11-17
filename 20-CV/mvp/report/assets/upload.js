@@ -31,11 +31,12 @@ function fieldHtml(p){
     if(p.min!==undefined) extra+=' min="'+p.min+'"';
     if(p.max!==undefined) extra+=' max="'+p.max+'"';
     if(p.step!==undefined) extra+=' step="'+p.step+'"';
-    if(p.type==='str') extra=' value="'+v+'" placeholder="'+(p.help||'').slice(0,28)+'…"';
     input='<input type="'+t+'" id="'+id+'"'+extra+'>';
   }
-  return '<div class="field"><label for="'+id+'">'+p.label+'</label>'+
-    input+'<span class="fhelp">'+p.help+'</span></div>';
+  return '<div class="field"><label for="'+id+'">'+escHtml(p.label)+'</label>'+
+    '<span class="finput">'+input+
+    '<span class="hint" tabindex="0" data-tip="'+escHtml(p.help)+'">?</span>'+
+    '</span></div>';
 }
 function renderParams(schema){
   paramSchema=schema;
@@ -226,7 +227,7 @@ pickbar.addEventListener('click',function(e){
     if(el&&pickVals.length){
       el.value=pickVals.join(',');
       el.dispatchEvent(new Event('input',{bubbles:true}));
-      document.getElementById('parampanel').open=true;
+      el.scrollIntoView({block:'nearest',behavior:'smooth'});
       b.textContent='已填入'; setTimeout(function(){b.textContent='填入列边界';},1500);
     }
   }else if(a==='copy'){
@@ -260,7 +261,6 @@ function escHtml(s){
   });
 }
 function say(rows,fallback){
-  document.getElementById('runpanel').hidden=false;
   if(!rows||!rows.length){
     log.textContent=(fallback||[]).join('\n')||'等待日志…';
     return;
@@ -300,26 +300,43 @@ function poll(){
     }
   }).catch(function(){timer=setTimeout(poll,1200);});
 }
-var resultbar=document.getElementById('resultbar'),
-    reportFrame=document.getElementById('reportFrame'),
-    reportempty=document.getElementById('reportempty');
-function showResult(){
-  resultbar.hidden=false;
-  reportempty.hidden=true;
-  reportFrame.hidden=false;
-  reportFrame.src='/report?t='+Date.now();
-  document.getElementById('toggleReport').textContent='收起报告';
+var reportFrame=document.getElementById('reportFrame'),
+    reportempty=document.getElementById('reportempty'),
+    runpanel=document.getElementById('runpanel'),
+    logbtn=document.getElementById('logbtn'),
+    logclose=document.getElementById('logclose');
+/* 右侧报告区三态：idle 占位 / run 进度 / done 报告（+「查看日志」浮钮） */
+function rightState(st){
+  reportempty.hidden=(st!=='idle');
+  runpanel.hidden=(st!=='run');
+  runpanel.classList.remove('drawer');
+  logclose.hidden=true;
+  reportFrame.hidden=(st!=='done');
+  logbtn.hidden=(st!=='done');
 }
-document.getElementById('toggleReport').onclick=function(){
-  var h=!reportFrame.hidden;
-  reportFrame.hidden=h;
-  reportempty.hidden=!h;
-  this.textContent=h?'展开报告':'收起报告';
+function showResult(){
+  rightState('done');
+  reportFrame.src='/report?t='+Date.now();
+}
+/* 完成后点「查看日志」：进度卡作为抽屉叠加在报告上，「关闭」收回 */
+logbtn.onclick=function(){
+  runpanel.hidden=false;
+  runpanel.classList.add('drawer');
+  logclose.hidden=false;
+};
+logclose.onclick=function(){
+  runpanel.hidden=true;
+  runpanel.classList.remove('drawer');
+  logclose.hidden=true;
 };
 
 go.onclick=async function(){
   go.disabled=true;msg.textContent='读取文件…';
-  document.getElementById('runpanel').hidden=false;
+  rightState('run');
+  log.innerHTML='';
+  document.getElementById('runfill').style.width='0%';
+  document.getElementById('runpct').textContent='0%';
+  document.getElementById('runstage').textContent='准备中…';
   try{
     var files=[];
     for(var i=0;i<picked.length;i++){
@@ -346,5 +363,6 @@ go.onclick=async function(){
 };
 
 fetch('/api/status').then(function(r){return r.json();}).then(function(s){
-  if(s.ready){ document.getElementById('last').style.display='inline'; showResult(); }
+  if(s.running){ rightState('run'); say(s.logs,s.steps); progress(s); poll(); }
+  else if(s.ready){ showResult(); }
 });

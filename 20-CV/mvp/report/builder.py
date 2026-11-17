@@ -18,13 +18,14 @@ def _param_block(params):
         return ''
     rows = params_mod.describe(params)
     trs = ''.join(
-        '<tr><td>{}</td><td><code>{}</code></td><td class="ph">{}</td></tr>'
-        .format(cards.esc(r['label']), cards.esc(r['value']),
-                cards.esc(r['help']))
+        '<tr><td>{} <span class="hint" tabindex="0" data-tip="{}">?</span></td>'
+        '<td><code>{}</code></td></tr>'
+        .format(cards.esc(r['label']), cards.esc(r['help']),
+                cards.esc(r['value']))
         for r in rows)
     return (
         '<details class="paramsnap"><summary>本次参数快照（{} 项，按优先级）'
-        '</summary><table><thead><tr><th>参数</th><th>本次值</th><th>说明</th>'
+        '</summary><table><thead><tr><th>参数</th><th>本次值</th>'
         '</tr></thead><tbody>{}</tbody></table></details>\n'
         .format(len(rows), trs))
 
@@ -57,11 +58,13 @@ def build(records, out_path, params=None):
         '<!DOCTYPE html>\n<html lang="zh-CN"><head><meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         '<title>CV 提取 MVP · 对照报告</title>\n'
-        '<style>\n' + _asset('report.css') + '\n</style>\n</head><body>\n'
+        '<style>\n' + _asset('hint.css') + '\n' + _asset('report.css')
+        + '\n</style>\n</head><body>\n'
         + header
         + '<div class="wrap">\n' + body + '\n</div>\n'
         + _asset('lightbox.html') + '\n'
-        + '<script>\n' + _asset('report.js') + '\n</script>\n'
+        + '<script>\n' + _asset('hint.js') + '\n' + _asset('report.js')
+        + '\n</script>\n'
         + '</body></html>\n')
 
     os.makedirs(os.path.dirname(out_path) or '.', exist_ok=True)
