@@ -96,13 +96,14 @@ def image_views(rec, card_no):
     if rec.get('rectified'):
         rsrc = file_url(rec['case'], rec['rectified'])
         rw, rh = rec.get('rectified_size') or [0, 0]
+        rar = (rw / rh) if rh else 1.5
         rect_cells = build_cell_rects(rec, card_no, 'rectified')
         rect_view = (
             '<div class="view" data-card="{}" data-view="rect" hidden>'
-            '<div class="imgwrap"><img src="{}" alt="矫正图" '
+            '<div class="imgwrap" style="--ar:{:.4f}"><img src="{}" alt="矫正图" '
             'title="点击放大查看"><svg class="cellsvg" viewBox="0 0 {} {}" '
             'preserveAspectRatio="none">{}</svg></div></div>'.format(
-                card_no, rsrc, rw, rh, rect_cells))
+                card_no, rar, rsrc, rw, rh, rect_cells))
         viewbar = (
             '<div class="viewbar">'
             '<button type="button" class="viewbtn on" data-card="{}" '
@@ -110,13 +111,15 @@ def image_views(rec, card_no):
             '<button type="button" class="viewbtn" data-card="{}" '
             'data-view="rect">矫正图（单元格坐标基准）</button></div>'.format(
                 card_no, card_no))
+    ar = (w / h) if h else 1.5
     return (
         '<div class="stage">{}<div class="views">{}'
         '<div class="view" data-card="{}" data-view="orig">'
-        '<div class="imgwrap"><img src="{}" alt="原图" title="点击放大查看">'
+        '<div class="imgwrap" style="--ar:{:.4f}"><img src="{}" alt="原图" '
+        'title="点击放大查看">'
         '<svg viewBox="0 0 {} {}" preserveAspectRatio="none">{}</svg>{}'
         '</div></div>{}</div></div>'.format(
-            viewbar, '', card_no, src, w, h,
+            viewbar, '', card_no, ar, src, w, h,
             ''.join(polys), cell_svg, rect_view))
 
 
@@ -286,9 +289,27 @@ def card(rec, card_no):
             rec.get('lines', 0), rec.get('avg_score', 0),
             rec.get('low_score_lines', 0),
             len(rec.get('structured_tables') or []), rec.get('elapsed', 0)))
+    n_text = rec.get('lines', 0)
+    n_tbl = len(rec.get('structured_tables') or [])
+    tabs = (
+        '<div class="ctabs" data-card="{}">'
+        '<button type="button" class="ctab on" data-card="{}" data-tab="text">'
+        '文字行 {}</button>'
+        '<button type="button" class="ctab" data-card="{}" data-tab="tables">'
+        '表格 {}</button>'
+        '<button type="button" class="ctab" data-card="{}" data-tab="json">'
+        'JSON</button></div>'.format(
+            card_no, card_no, n_text, card_no, n_tbl, card_no))
+    content = (
+        '<div class="contentcol">{}'
+        '<div class="tabpanel" data-card="{}" data-tab="text">{}</div>'
+        '<div class="tabpanel" data-card="{}" data-tab="tables" hidden>{}</div>'
+        '<div class="tabpanel" data-card="{}" data-tab="json" hidden>{}</div>'
+        '</div>'.format(
+            tabs, card_no, text_pane(rec, card_no),
+            card_no, tables_section(rec, card_no),
+            card_no, json_section(rec)))
     return (
-        '<section class="card" data-card="{}">{}{}{}{}</section>'.format(
-            card_no, head,
-            '<div class="grid">{}{}</div>'.format(
-                image_views(rec, card_no), text_pane(rec, card_no)),
-            tables_section(rec, card_no), json_section(rec)))
+        '<section class="card" data-card="{}">{}'
+        '<div class="grid">{}{}</div></section>'.format(
+            card_no, head, image_views(rec, card_no), content))

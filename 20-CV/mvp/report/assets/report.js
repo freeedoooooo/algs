@@ -1,6 +1,8 @@
 /* report/assets/report.js — 对照报告交互（生成时内联进 index.html） */
 function cardOf(el){ return el.closest('.card'); }
 function activeSpace(card){
+  var tp=card.querySelector('.tabpanel[data-tab="tables"]');
+  if(tp && tp.hidden) return '';
   var p=card.querySelector('.tblpane:not([hidden])');
   return p ? p.getAttribute('data-space') : '';
 }
@@ -129,6 +131,19 @@ document.querySelectorAll('.viewbtn').forEach(function(btn){
     card.querySelectorAll('.view').forEach(function(p){
       p.hidden=(p.getAttribute('data-view')!==v);
     });
+  });
+});
+
+/* 右栏 tab：文字行 / 表格 / JSON 切换；左图吸顶始终可见，切 tab 后视图跟随坐标空间 */
+document.querySelectorAll('.ctab').forEach(function(btn){
+  btn.addEventListener('click',function(){
+    var card=cardOf(btn),t=btn.getAttribute('data-tab');
+    clearPin(card);clearHover(card);
+    card.querySelectorAll('.ctab').forEach(function(b){b.classList.toggle('on',b===btn);});
+    card.querySelectorAll('.tabpanel').forEach(function(p){
+      p.hidden=(p.getAttribute('data-tab')!==t);
+    });
+    ensureView(card);
   });
 });
 

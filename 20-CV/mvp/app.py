@@ -21,7 +21,6 @@ import re
 import sys
 import time
 import base64
-import shutil
 import importlib
 import threading
 import traceback
@@ -69,7 +68,6 @@ async def lifespan(_app):
 
 app = FastAPI(title='CV 提取 MVP', version='0.1', lifespan=lifespan)
 app.mount('/files', StaticFiles(directory=config.OUTPUT_DIR), name='files')
-app.mount('/inputs', StaticFiles(directory=config.INPUT_DIR), name='inputs')
 app.mount('/static', StaticFiles(directory=config.ASSETS_DIR), name='static')
 
 # 单任务串行：模型单例不是线程安全的，也没必要并发加载第二份大模型
@@ -80,7 +78,6 @@ STATE = {
     'params': {}, 'warnings': [],
     'logs': [], 'progress': 0, 'stage': '',
     'log_file': None,
-    'last_paths': [], 'last_names': [],
 }
 LOCK = threading.Lock()
 
@@ -177,7 +174,7 @@ async def upload(request: Request):
     params, warns = params_mod.normalize(body.get('params'))
 
     tag = batch_tag()
-    paths, names, used = [], [], set()
+    paths, used = [], set()
     for item in files:
         name = safe_name(item.get('name', ''))
         ext = os.path.splitext(name)[1].lower()
@@ -193,7 +190,6 @@ async def upload(request: Request):
                 k += 1
             name = '{}-{}{}'.format(stem, k, e)
         used.add(name)
-        names.append(name)
         try:
             data = base64.b64decode(str(item.get('data', '')).split(',')[-1])
         except Exception:
@@ -210,11 +206,11 @@ async def upload(request: Request):
             f.write(data)
         paths.append(path)
 
-    return _launch(tag, paths, names, params, warns)
+    return _launch(tag, paths, params, warns)
 
 
-def _launch(tag, paths, names, params, warns):
-    """建日志 → 重置 STATE → 起后台线程。upload 与 rerun 共用，保证行为一致。"""
+def _launch(tag, paths, params, warns):
+    """建日志 → 重置 STATE → 起后台线程。"""
     runlog = _load('runlog')
     log = runlog.RunLog(tag, log_path=os.path.join(config.LOG_DIR,
                                                    tag + '.log'),
@@ -225,8 +221,7 @@ def _launch(tag, paths, names, params, warns):
                      params={k: v for k, v in params.items()
                              if not k.startswith('_')}, warnings=warns,
                      logs=[], progress=0, stage='batch',
-                     log_file='{}.log'.format(tag),
-                     last_paths=list(paths), last_names=list(names))
+                     log_file='{}.log'.format(tag))
     log.stage('batch', '批次 {} · 收到 {} 个文件'.format(tag, len(paths)))
     log.info('params', '生效参数：{}'.format(
         ', '.join('{}={}'.format(k, v) for k, v in params.items()
@@ -237,81 +232,6 @@ def _launch(tag, paths, names, params, warns):
                      daemon=True).start()
     return {'ok': True, 'count': len(paths), 'batch': tag,
             'warnings': warns}
-
-
-def _last_inputs():
-    """上一批的 (输入文件绝对路径, 原始文件名) 列表。
-
-    优先用 STATE 里记的本次进程上传记录；进程重启后 STATE 清空，则回退扫描
-    input/ 取最新批次（文件名形如 <批次戳>_<原名>，按第一个下划线切分）。
-    """
-    pairs = [(p, n) for p, n in zip(STATE.get('last_paths') or [],
-                                    STATE.get('last_names') or [])
-             if os.path.isfile(p)]
-    if pairs:
-        return pairs
-    by_tag = {}
-    for f in os.listdir(config.INPUT_DIR):
-        tag, sep, nm = f.partition('_')
-        if sep:
-            by_tag.setdefault(tag, []).append((f, nm))
-    if not by_tag:
-        return []
-    newest = max(by_tag)
-    return [(os.path.join(config.INPUT_DIR, f), nm)
-            for f, nm in sorted(by_tag[newest])]
-
-
-@app.get('/api/last')
-def api_last():
-    """上传页据此列出「上次文件」并预览，调参后可一键重跑，无需重新上传。"""
-    files = []
-    for p, nm in _last_inputs():
-        ext = os.path.splitext(nm)[1].lower()
-        kind = ('image' if ext in config.IMAGE_EXTS else
-                'pdf' if ext in config.PDF_EXTS else 'text')
-        try:
-            size = os.path.getsize(p)
-        except OSError:
-            size = 0
-        files.append({'name': nm, 'size': size, 'kind': kind,
-                      'url': '/inputs/' + os.path.basename(p)})
-    return {'files': files}
-
-
-@app.post('/api/rerun')
-async def rerun(request: Request):
-    """复用上次输入文件、只换参数重跑。复制到新批次戳下，产物不覆盖旧结果。"""
-    if STATE['running']:
-        return JSONResponse(
-            {'ok': False, 'error': '已有任务正在处理，请等它完成'},
-            status_code=409)
-    try:
-        body = await request.json()
-    except Exception:
-        body = {}
-    last = _last_inputs()
-    if not last:
-        return JSONResponse(
-            {'ok': False, 'error': '没有可复用的上次文件，请先上传'},
-            status_code=400)
-    params, warns = params_mod.normalize(body.get('params'))
-    tag = batch_tag()
-    paths, names, used = [], [], set()
-    for oldpath, origname in last:
-        name = safe_name(origname)
-        if name in used:
-            stem, e = os.path.splitext(name)
-            k = 2
-            while '{}-{}{}'.format(stem, k, e) in used:
-                k += 1
-            name = '{}-{}{}'.format(stem, k, e)
-        used.add(name)
-        names.append(name)
-        newpath = os.path.join(config.INPUT_DIR, '{}_{}'.format(tag, name))
-        shutil.copyfile(oldpath, newpath)
-        paths.append(newpath)
-    return _launch(tag, paths, names, params, warns)
 
 
 @app.get('/api/status')

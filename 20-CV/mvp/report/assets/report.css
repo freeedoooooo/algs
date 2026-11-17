@@ -20,9 +20,12 @@ header .sub{color:#6b7688;font-size:13px}
 .metrics b{color:#1f2738;font-size:14px;font-weight:500}
 .desc{font-size:12px;color:#6b7688;margin-top:6px}
 .desc a{color:#2563eb;text-decoration:none}
-.grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(300px,.85fr)}
-.stage{position:relative;background:#eceff3;padding:14px;border-right:1px solid #e2e7f0}
-.imgwrap{position:relative;line-height:0}
+.grid{display:grid;grid-template-columns:minmax(300px,44%) minmax(0,1fr);
+  align-items:start}
+.stage{position:sticky;top:12px;background:#eceff3;padding:14px;
+  border-right:1px solid #e2e7f0}
+.imgwrap{position:relative;line-height:0;
+  max-width:min(100%,calc((100vh - 180px) * var(--ar,1.5)))}
 .stage img{display:block;width:100%;height:auto;cursor:zoom-in}
 .stage svg{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
 .box{fill:rgba(37,99,235,.06);stroke:#2563eb;stroke-width:2;
@@ -35,6 +38,14 @@ header .sub{color:#6b7688;font-size:13px}
   background:#fff;color:#1f2738}
 .viewbtn.on,.allcells.on{background:#2563eb;border-color:#2563eb;color:#fff}
 .view[hidden]{display:none}
+/* 右栏：文字行 / 表格 / JSON 切 tab；图在左栏吸顶，切到表格悬停单元格即时可见高亮 */
+.contentcol{min-width:0;padding:14px 16px}
+.ctabs{display:flex;gap:6px;flex-wrap:wrap;position:sticky;top:0;z-index:3;
+  background:#fff;padding:0 0 10px;margin-bottom:6px;border-bottom:1px solid #edf0f6}
+.ctab{font:inherit;font-size:13px;cursor:pointer;padding:5px 14px;border-radius:7px;
+  border:1px solid #d8e0ed;background:#fff;color:#1f2738}
+.ctab.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.tabpanel[hidden]{display:none}
 .cellsvg{display:block}
 .cellbox{display:none;fill:rgba(15,157,110,.10);stroke:#0f9d6e;stroke-width:3;
   vector-effect:non-scaling-stroke}
@@ -47,7 +58,8 @@ td.cell,th.cell{cursor:crosshair}
 td.cell:hover,th.cell:hover,td.cell.hv,th.cell.hv{background:#e3f7ee!important}
 td.cell.pin,th.cell.pin{background:#fff0d9!important;
   outline:2px solid #d8610a;outline-offset:-2px}
-.pane{padding:14px 16px;max-height:520px;overflow:auto}
+.pane{padding:0}
+.tabpanel>.pane,.tabpanel>.sec{padding:0;border-top:0;margin:0}
 .pane-title{font-size:13px;font-weight:500;margin:0 0 8px}
 table{border-collapse:collapse;width:100%;font-size:13px}
 th{text-align:left;color:#6b7688;font-weight:500;border-bottom:1px solid #e2e7f0;
@@ -79,7 +91,7 @@ tr.low .bar i{background:#de5c28}
 .btn{display:inline-block;padding:4px 12px;border-radius:7px;background:#2563eb;
   color:#fff;text-decoration:none;font-size:12px;border:1px solid #2563eb}
 .btn.ghost{background:#fff;color:#2563eb}
-.tablewrap{max-height:420px;overflow:auto;border:1px solid #e2e7f0;border-radius:8px}
+.tablewrap{overflow:auto;border:1px solid #e2e7f0;border-radius:8px}
 .tablewrap table{font-size:12px;width:auto;min-width:100%}
 .tablewrap th,.tablewrap td{border:1px solid #e2e7f0;padding:5px 9px;
   white-space:nowrap;position:static;background:none;color:#1f2738;font-weight:400}
@@ -112,7 +124,9 @@ a{color:#2563eb}
 .lb-content svg{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
 .lb-noboxes .lb-content svg{display:none!important}
 .lb-hint{padding:8px 14px;background:#1d2330;color:#9aa6bd;font-size:12px;text-align:center}
-@media(max-width:900px){.grid{grid-template-columns:1fr}.stage{border-right:0}}
+@media(max-width:900px){.grid{grid-template-columns:1fr}
+  .stage{position:static;border-right:0;border-bottom:1px solid #e2e7f0}
+  .ctabs{position:static}}
 /* 参数快照：每个批次自解释「当时用了什么参数」，默认收起不占版面 */
 .paramsnap{margin-top:14px;border:1px solid var(--line);border-radius:8px;
   background:#fff;padding:8px 12px;font-size:12px}

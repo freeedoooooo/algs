@@ -4,7 +4,6 @@ var drop=document.getElementById('drop'),picker=document.getElementById('picker'
 var list=document.getElementById('filelist'),go=document.getElementById('go');
 var log=document.getElementById('log'),msg=document.getElementById('msg');
 var paramgroups=document.getElementById('paramgroups');
-var lastpanel=document.getElementById('lastpanel'),lastthumbs=document.getElementById('lastthumbs');
 var lb=document.getElementById('lightbox'),lbimg=document.getElementById('lbimg');
 
 /* 参数持久化：上传完跳 /report 再回来不丢已填值。存浏览器 localStorage，
@@ -54,9 +53,10 @@ function renderParams(schema){
     var el=document.getElementById('pf_'+p.key);
     if(el && saved[p.key]!==undefined && saved[p.key]!==null) el.value=saved[p.key];
   });
+  updateBadge();
 }
-paramgroups.addEventListener('input',function(){ saveParams(collectParams()); });
-paramgroups.addEventListener('change',function(){ saveParams(collectParams()); });
+paramgroups.addEventListener('input',function(){ saveParams(collectParams()); updateBadge(); });
+paramgroups.addEventListener('change',function(){ saveParams(collectParams()); updateBadge(); });
 function collectParams(){
   var out={};
   paramSchema.forEach(function(p){
@@ -65,6 +65,17 @@ function collectParams(){
     out[p.key]=el.value;
   });
   return out;
+}
+function updateBadge(){
+  var b=document.getElementById('parambadge');
+  if(!b) return;
+  var n=0;
+  paramSchema.forEach(function(p){
+    var el=document.getElementById('pf_'+p.key);
+    if(el && String(el.value)!==String(p.default)) n++;
+  });
+  b.textContent=n?('已改 '+n+' 项'):'默认';
+  b.classList.toggle('on',n>0);
 }
 fetch('/api/params').then(function(r){return r.json();}).then(function(j){
   if(j.schema) renderParams(j.schema);
@@ -76,6 +87,7 @@ document.getElementById('resetparams').onclick=function(){
     if(el) el.value=p.default;
   });
   try{ localStorage.removeItem(PKEY); }catch(e){}
+  updateBadge();
 };
 
 drop.onclick=function(){picker.click();};
@@ -232,38 +244,7 @@ function bindThumbs(el){
     if(t){ e.preventDefault(); openLb(t.getAttribute('data-full')); }
   });
 }
-bindThumbs(list); bindThumbs(lastthumbs);
-function loadLast(){
-  fetch('/api/last').then(function(r){return r.json();}).then(function(j){
-    var fs=j.files||[];
-    if(!fs.length){ lastpanel.hidden=true; return; }
-    lastpanel.hidden=false;
-    lastthumbs.innerHTML=fs.map(function(f){
-      return '<li>'+fileRow(f.name,f.size,encodeURI(f.url))+'</li>';
-    }).join('');
-  }).catch(function(){});
-}
-loadLast();
-document.getElementById('rerun').onclick=async function(){
-  var btn=this; btn.disabled=true;
-  msg.textContent='复用上次文件…';
-  document.getElementById('runpanel').hidden=false;
-  saveParams(collectParams());
-  try{
-    var res=await fetch('/api/rerun',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({params:collectParams()})
-    });
-    var j=await res.json();
-    if(!j.ok) throw new Error(j.error||'重跑失败');
-    msg.textContent='处理中…';
-    poll();
-  }catch(e){
-    msg.innerHTML='<span class="err">'+escHtml(e.message)+'</span>';
-    btn.disabled=false;
-  }
-};
+bindThumbs(list);
 function b64(file){
   return new Promise(function(ok,no){
     var r=new FileReader();
@@ -356,7 +337,7 @@ go.onclick=async function(){
     msg.textContent='处理中…';
     poll();
   }catch(e){
-    msg.innerHTML='<span class="err">'+e.message+'</span>';
+    msg.innerHTML='<span class="err">'+escHtml(e.message)+'</span>';
     go.disabled=false;
   }
 };
