@@ -31,86 +31,6 @@ function clearPin(card){
   card.querySelectorAll('.pin').forEach(function(x){x.classList.remove('pin');});
 }
 
-/* ---- 取 x 坐标工具：点图读自然像素 x，画竖线预览，收集后复制填 column_lines ----
-   坐标空间跟随所点视图：doc_unwarp=off 点原图、on 点矫正图，与重切所用空间一致。
-   用 img.getBoundingClientRect() 换算，内联图与全屏缩放/平移下都准确。 */
-var SVGNS='http://www.w3.org/2000/svg';
-var pickMode=false, pickVals=[];
-(function(){
-  var tog=document.createElement('button');
-  tog.type='button'; tog.id='picktoggle'; tog.className='picktoggle';
-  tog.textContent='取 x 坐标';
-  var bar=document.createElement('div');
-  bar.id='pickbar'; bar.className='pickbar'; bar.hidden=true;
-  bar.innerHTML='<span class="picklabel">点图取 x（复制填 column_lines）</span>'+
-    '<span class="pickvals" id="pickvals"></span>'+
-    '<button type="button" data-pick="copy">复制</button>'+
-    '<button type="button" data-pick="clear">清空</button>'+
-    '<button type="button" data-pick="exit">退出</button>';
-  document.body.appendChild(tog); document.body.appendChild(bar);
-  tog.addEventListener('click',function(){ setPickMode(!pickMode); });
-  bar.addEventListener('click',function(e){
-    var b=e.target.closest?e.target.closest('[data-pick]'):null;
-    if(!b) return;
-    var a=b.getAttribute('data-pick');
-    if(a==='copy'){
-      if(!pickVals.length) return;
-      navigator.clipboard.writeText(pickVals.join(',')).then(function(){
-        b.textContent='已复制'; setTimeout(function(){b.textContent='复制';},1500);
-      });
-    }else if(a==='clear'){ clearPick(); }
-    else if(a==='exit'){ setPickMode(false); }
-  });
-})();
-function setPickMode(on){
-  pickMode=on;
-  document.body.classList.toggle('picking',on);
-  document.getElementById('pickbar').hidden=!on;
-  var tog=document.getElementById('picktoggle');
-  tog.hidden=on;
-  tog.classList.toggle('on',on);
-  tog.textContent=on?'退出取数':'取 x 坐标';
-  var lp=document.getElementById('lbPick');
-  if(lp){ lp.classList.toggle('on',on); lp.textContent=on?'退出取数':'取 x 坐标'; }
-  renderPickBar();
-}
-function renderPickBar(){
-  var el=document.getElementById('pickvals');
-  if(el) el.textContent=pickVals.length?pickVals.join(', '):'（尚未取点）';
-}
-function clearPickLines(){
-  document.querySelectorAll('.pickline').forEach(function(x){x.remove();});
-}
-function clearPick(){ pickVals=[]; clearPickLines(); renderPickBar(); }
-function naturalX(img,clientX){
-  var r=img.getBoundingClientRect();
-  var nw=img.naturalWidth||1000;
-  var x=(clientX-r.left)*nw/(r.width||1);
-  return Math.max(0,Math.min(nw,Math.round(x)));
-}
-function addPoint(img,e){
-  var x=naturalX(img,e.clientX);
-  pickVals.push(x);
-  var wrap=img.closest('.imgwrap')||img.parentElement;
-  if(wrap){
-    var svg=wrap.querySelector('svg');
-    if(!svg){
-      svg=document.createElementNS(SVGNS,'svg');
-      svg.setAttribute('class','cellsvg');
-      svg.setAttribute('preserveAspectRatio','none');
-      svg.setAttribute('viewBox','0 0 '+(img.naturalWidth||1000)+' '+(img.naturalHeight||700));
-      wrap.appendChild(svg);
-    }
-    var vb=svg.viewBox.baseVal;
-    var ln=document.createElementNS(SVGNS,'line');
-    ln.setAttribute('class','pickline');
-    ln.setAttribute('x1',x); ln.setAttribute('x2',x);
-    ln.setAttribute('y1',0); ln.setAttribute('y2',vb.height);
-    svg.appendChild(ln);
-  }
-  renderPickBar();
-}
-
 /* OCR 文字行 <-> 原图识别框 双向高亮 */
 document.querySelectorAll('[data-card][data-idx]').forEach(function(el){
   el.addEventListener('mouseenter',function(){
@@ -149,7 +69,8 @@ document.querySelectorAll('.ctab').forEach(function(btn){
 
 /* 次要调试开关：默认关闭，正常单格定位不需要 */
 document.querySelectorAll('.allcells').forEach(function(btn){
-  btn.addEventListener('click',function(){
+  btn.addEventListener('click',function(e){
+    e.stopPropagation();
     var card=cardOf(btn),on=!btn.classList.contains('on');
     btn.classList.toggle('on',on);
     btn.textContent=on?'隐藏整表网格':'显示整表网格';
@@ -215,7 +136,7 @@ document.querySelectorAll('.copyjson').forEach(function(btn){
   var openBtn=document.getElementById('lbOpen');
   var boxesBtn=document.getElementById('lbBoxes');
   if(!lb||!stage||!content) return;
-  var scale=1,fit=1,tx=0,ty=0,imgW=0,imgH=0,drag=null,moved=0;
+  var scale=1,fit=1,tx=0,ty=0,imgW=0,imgH=0,drag=null;
   function apply(){
     content.style.transform='translate('+tx+'px,'+ty+'px) scale('+scale+')';
     scaleEl.textContent=Math.round(scale*100)+'%';
@@ -255,12 +176,6 @@ document.querySelectorAll('.copyjson').forEach(function(btn){
     ci.style.width=imgW+'px';ci.style.height=imgH+'px';
     lb.hidden=false;document.body.style.overflow='hidden';
     fitWindow();
-    ci.addEventListener('click',function(e){
-      if(!pickMode) return;
-      e.stopPropagation();
-      if(moved>5) return;          // 刚才是拖拽平移，不是取点
-      addPoint(ci,e);
-    });
     if(!ci.complete){
       ci.addEventListener('load',function(){
         imgW=ci.naturalWidth;imgH=ci.naturalHeight;
@@ -276,7 +191,6 @@ document.querySelectorAll('.copyjson').forEach(function(btn){
     img.setAttribute('title','点击放大查看');
     img.addEventListener('click',function(e){
       e.stopPropagation();
-      if(pickMode){ addPoint(img,e); return; }
       open(img);
     });
   });
@@ -294,7 +208,6 @@ document.querySelectorAll('.copyjson').forEach(function(btn){
         lb.classList.toggle('lb-noboxes',h);
         boxesBtn.textContent=h?'显示叠加框':'隐藏叠加框';
       }
-      if(a==='pick'){ setPickMode(!pickMode); }
     });
   });
   stage.addEventListener('wheel',function(e){
@@ -305,12 +218,11 @@ document.querySelectorAll('.copyjson').forEach(function(btn){
   },{passive:false});
   stage.addEventListener('mousedown',function(e){
     if(e.button!==0) return;
-    drag={x:e.clientX,y:e.clientY,tx:tx,ty:ty};moved=0;
+    drag={x:e.clientX,y:e.clientY,tx:tx,ty:ty};
     stage.classList.add('dragging');
   });
   window.addEventListener('mousemove',function(e){
     if(!drag) return;
-    moved=Math.abs(e.clientX-drag.x)+Math.abs(e.clientY-drag.y);
     tx=drag.tx+(e.clientX-drag.x);ty=drag.ty+(e.clientY-drag.y);apply();
   });
   window.addEventListener('mouseup',function(){drag=null;stage.classList.remove('dragging');});
@@ -325,5 +237,34 @@ document.querySelectorAll('.copyjson').forEach(function(btn){
     else if(e.key==='+'||e.key==='=') setScale(scale*1.25);
     else if(e.key==='-') setScale(scale/1.25);
     else if(e.key==='0') fitWindow();
+  });
+})();
+
+/* 辅助内容弹窗：文本原文 / 提取诊断点按钮弹出，不占版面 */
+(function(){
+  var m=document.createElement('div');
+  m.id='auxmodal'; m.hidden=true;
+  m.innerHTML='<div class="aux-card"><div class="aux-head">'+
+    '<span class="aux-title"></span>'+
+    '<button type="button" class="aux-close">关闭 (Esc)</button></div>'+
+    '<div class="aux-body"></div></div>';
+  document.body.appendChild(m);
+  var title=m.querySelector('.aux-title'),body=m.querySelector('.aux-body');
+  function close(){ m.hidden=true; document.body.style.overflow=''; body.innerHTML=''; }
+  document.querySelectorAll('.auxbtn').forEach(function(btn){
+    btn.addEventListener('click',function(e){
+      e.stopPropagation();                 // 不触发所在 details 收起
+      var src=document.getElementById(btn.getAttribute('data-aux'));
+      if(!src) return;
+      title.textContent=btn.getAttribute('data-title')||'详情';
+      body.innerHTML=src.innerHTML;
+      m.hidden=false; document.body.style.overflow='hidden';
+    });
+  });
+  m.addEventListener('click',function(e){
+    if(e.target===m||(e.target.closest&&e.target.closest('.aux-close'))) close();
+  });
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape'&&!m.hidden) close();
   });
 })();

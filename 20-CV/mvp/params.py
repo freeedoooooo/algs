@@ -20,48 +20,42 @@ BOX_DEFAULT = 0.6
 SCHEMA = [
     dict(key='page', label='PDF 页码', type='int', default=1, min=1, max=500,
          order=1, group='① 先看哪一页',
-         help='多页 PDF 只处理这一页（渲染 + OCR + 表格都取它）。'
-              '跨页 badcase 用它逐页定位，不用一次跑完整份。'),
+         help='多页 PDF 只处理这一页。'),
     dict(key='table_strategy', label='表格策略首选', type='select',
          default='auto', options=['auto', 'explicit', 'lines', 'default', 'text'],
          order=2, group='② 表格能不能抽到',
-         help='auto=按优先级自动回退；text=强制按文字对齐（无线框表）；'
-              'lines=按矢量线；default=pdfplumber 默认。'),
+         help='auto=自动回退；text=文字对齐（无线框表）；'
+              'lines=矢量线；default=pdfplumber 默认。'),
     dict(key='column_lines', label='人工列边界（x 坐标）', type='str', default='',
          order=3, group='② 表格能不能抽到',
-         help='逗号/空格分隔的竖线 x 坐标（例：x1,x2,x3,…，需 ≥1 个且递增）。'
-              '坐标空间随路线：文本层 PDF 用 PDF 点（像素×72/DPI，单条不成列、'
-              '自动回退）；图片/扫描件用原图像素（报告左图可直接量），单条即可'
-              '切开黏连格并重 OCR 归位，仅 doc_unwarp=off 生效。'
-              '留空则 PDF 自动从横线端点推断、图片不重切。'),
+         help='竖线 x 坐标，逗号/空格分隔，需 ≥1 个且递增。'
+              '图片/扫描件用原图像素（仅 doc_unwarp=off 生效），单条即可切开黏连格；'
+              '文本层 PDF 用点坐标。留空则 PDF 自动推断、图片不重切。'),
     dict(key='grid_min_h', label='预筛·最少横线', type='int',
          default=config.GRID_MIN_H, min=0, max=200,
          order=4, group='③ 扫描件进不进模型',
-         help='扫描图的长直线预筛门槛。该进表格模型却没进，就调低；'
-              '误把证件框当表格就调高。'),
+         help='长直线预筛门槛：漏检表格调低，误检调高。'),
     dict(key='grid_min_v', label='预筛·最少竖线', type='int',
          default=config.GRID_MIN_V, min=0, max=200,
          order=5, group='③ 扫描件进不进模型',
-         help='同上，竖线数门槛。两个都调 0 = 跳过预筛、强制走表格模型。'),
+         help='竖线数门槛。两者都 0 = 跳过预筛、强制走表格模型。'),
     dict(key='det_thresh', label='文字检测阈值', type='float',
          default=DET_DEFAULT, min=0.05, max=0.95, step=0.05,
          order=6, group='④ 文字识别',
-         help='调低救漏检但可能引入误检（PaddleOCR 3.x 默认 0.3）。'
-              'predict 时按次覆盖，不重建模型。'),
+         help='调低救漏检、可能增误检。默认 0.3，按次覆盖不重建模型。'),
     dict(key='box_thresh', label='文字框阈值', type='float',
          default=BOX_DEFAULT, min=0.05, max=0.95, step=0.05,
          order=7, group='④ 文字识别',
-         help='与检测阈值配合，默认 0.6。漏检严重时试 0.4。'),
+         help='默认 0.6，漏检严重试 0.4。'),
     dict(key='dpi', label='PDF 渲染 DPI', type='int',
          default=config.PDF_DPI, min=72, max=400, step=10,
          order=8, group='⑤ 渲染精度',
-         help='小字 / 密集表格调高到 150~200 更清晰；越高图越大、OCR 越慢。'),
+         help='小字/密集表调高到 150~200；越高越慢。'),
     dict(key='doc_unwarp', label='文档矫正(UVDoc)', type='select',
          default='on', options=['on', 'off'],
          order=9, group='⑥ 坐标回溯',
-         help='on=方向分类+UVDoc 去扭曲，适合旋转/弯曲扫描件（框叠矫正图）。'
-              'off=关闭预处理，适合电子版平整截图（108 这类）：矫正图与原图逐像素一致，'
-              '单元格框直接叠原图、1:1 精确，无 UVDoc 形变误差。仅影响表格模型。'),
+         help='on=方向分类+UVDoc 去扭曲，适合旋转/弯曲扫描件（框叠矫正图）；'
+              'off=关闭预处理，适合平整电子截图，框 1:1 叠原图。仅影响表格模型。'),
 ]
 
 _BY_KEY = {p['key']: p for p in SCHEMA}
@@ -146,14 +140,14 @@ def describe(params):
         elif p['key'] == 'column_lines':
             lines = params.get('_column_lines') or []
             shown = (', '.join('{:g}'.format(x) for x in lines)
-                     if lines else '（留空：PDF 自动推断 / 图片不重切）')
+                     if lines else '（留空）')
         elif p['key'] == 'table_strategy':
-            shown = {'auto': 'auto（自动回退）', 'explicit': 'explicit',
+            shown = {'auto': 'auto', 'explicit': 'explicit',
                      'lines': 'lines', 'default': 'default',
-                     'text': 'text（强制文字对齐）'}.get(val, str(val))
+                     'text': 'text'}.get(val, str(val))
         elif p['key'] == 'doc_unwarp':
-            shown = ('on（矫正图坐标，适合扫描件）' if val == 'on'
-                     else 'off（原图坐标，适合电子版截图）')
+            shown = ('on' if val == 'on'
+                     else 'off')
         else:
             shown = str(val)
         rows.append({'label': p['label'], 'value': shown,

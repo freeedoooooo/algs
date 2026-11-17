@@ -46,9 +46,7 @@ def build(records, out_path, params=None):
     header = (
         '<header><h1>CV 提取 MVP · 对照报告</h1>'
         '<div class="sub">共 {} 个文件 · {} 行识别文字 · {} 张结构化表格'
-        '<span class="hint" tabindex="0" data-tip="左图吸顶，右侧「文字行 / 表格 / JSON」页签切换；'
-        '悬停/点击表格单元格单格定位（图始终可见）；点击图片全屏放大；'
-        '右下角「取 x 坐标」量人工列边界（点图取 x、复制填 column_lines）。">?</span>'
+        '<span class="hint" tabindex="0" data-tip="左图吸顶，右侧页签切换；悬停/点击表格单元格定位；点击图片放大。">?</span>'
         '</div><div class="nav">{}</div>'
         '{}</header>\n'
         .format(len(records), total_lines, total_tables, nav,

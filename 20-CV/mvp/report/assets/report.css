@@ -1,4 +1,5 @@
 /* report/assets/report.css — 对照报告样式（生成时内联进 index.html） */
+:root{--line:#e2e7f0;--accent:#2563eb;--muted:#6b7688}
 *{box-sizing:border-box}
 body{margin:0;background:#f4f6fa;color:#1f2738;
   font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
@@ -33,7 +34,7 @@ header .sub{color:#6b7688;font-size:12px;display:flex;align-items:center;gap:6px
 .box.low{fill:rgba(222,92,40,.10);stroke:#de5c28}
 .box.hl{fill:rgba(37,99,235,.30);stroke-width:4}
 .viewbar{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin:0 0 10px}
-.viewbtn,.allcells,.jsontoggle{font:inherit;font-size:12px;cursor:pointer;
+.viewbtn,.allcells{font:inherit;font-size:12px;cursor:pointer;
   padding:4px 11px;border-radius:7px;border:1px solid #d8e0ed;
   background:#fff;color:#1f2738}
 .viewbtn.on,.allcells.on{background:#2563eb;border-color:#2563eb;color:#fff}
@@ -58,9 +59,40 @@ td.cell,th.cell{cursor:crosshair}
 td.cell:hover,th.cell:hover,td.cell.hv,th.cell.hv{background:#e3f7ee!important}
 td.cell.pin,th.cell.pin{background:#fff0d9!important;
   outline:2px solid #d8610a;outline-offset:-2px}
-.pane{padding:0}
-.tabpanel>.pane,.tabpanel>.sec{padding:0;border-top:0;margin:0}
-.pane-title{font-size:13px;font-weight:500;margin:0 0 8px}
+/* 统一页签面板：可收起 details + 对齐标题栏 + 滚动盒；辅助内容走弹窗不占版面 */
+.tabpanel>.panel{margin:0}
+.panel{border:1px solid #e2e7f0;border-radius:8px;background:#fff}
+.panel-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:8px 12px;cursor:pointer;list-style:none;font-size:13px;
+  border-bottom:1px solid #edf0f6}
+.panel-head::-webkit-details-marker{display:none}
+.panel-head::before{content:'\25BE';font-size:10px;color:#8a94a6}
+.panel:not([open])>.panel-head::before{content:'\25B8'}
+.panel:not([open])>.panel-head{border-bottom:0}
+.panel-title{font-size:13px;font-weight:500;color:#25324a}
+.meta{font-size:12px;color:#6b7688;margin:0}
+.panel-body{padding:10px 12px}
+.scrollbox{max-height:420px;overflow:auto}
+.auxbtn{font:inherit;font-size:12px;cursor:pointer;padding:4px 12px;
+  border-radius:7px;border:1px solid #2563eb;background:#fff;color:#2563eb}
+.auxbtn:hover{background:#e7f0ff}
+.aux-src[hidden]{display:none}
+.panel-body ul{margin:0;padding-left:18px;font-size:12px;color:#6b7688;line-height:1.7}
+/* 辅助内容弹窗：文本原文 / 提取诊断 */
+#auxmodal{position:fixed;inset:0;z-index:10001;background:rgba(15,23,38,.55);
+  display:flex;align-items:center;justify-content:center;padding:24px}
+#auxmodal[hidden]{display:none}
+.aux-card{width:min(720px,100%);max-height:82vh;background:#fff;border-radius:12px;
+  display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,.35)}
+.aux-head{display:flex;align-items:center;gap:10px;padding:12px 16px;
+  border-bottom:1px solid #e2e7f0}
+.aux-title{flex:1;font-size:14px;font-weight:500;color:#25324a}
+.aux-close{font:inherit;font-size:12px;cursor:pointer;padding:5px 12px;
+  border-radius:7px;border:1px solid #cbd5e1;background:#fff;color:#2563eb}
+.aux-close:hover{border-color:#2563eb}
+.aux-body{padding:14px 16px;overflow:auto}
+.aux-body pre{max-height:none;margin:0}
+.aux-body ul{margin:0;padding-left:18px;font-size:13px;color:#4a5568;line-height:1.8}
 table{border-collapse:collapse;width:100%;font-size:13px}
 th{text-align:left;color:#6b7688;font-weight:500;border-bottom:1px solid #e2e7f0;
   padding:6px;position:sticky;top:0;background:#fff}
@@ -74,10 +106,6 @@ tr.low td.txt{color:#de5c28}
   overflow:hidden;vertical-align:middle;margin-right:5px}
 .bar i{display:block;height:100%;background:#22965a}
 tr.low .bar i{background:#de5c28}
-.sec{border-top:1px solid #e2e7f0;padding:16px 20px}
-.sec h3{font-size:14px;font-weight:500;margin:0 0 10px}
-.sec-head{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px}
-.sec-head h3{margin:0}
 .cnt{background:#2563eb;color:#fff;border-radius:20px;padding:1px 9px;font-size:12px}
 .spacer{flex:1}
 .note{font-size:12px;color:#6b7688;margin:0 0 8px;line-height:1.6}
@@ -95,9 +123,9 @@ tr.low .bar i{background:#de5c28}
 .tablewrap table{font-size:12px;width:auto;min-width:100%}
 .tablewrap th,.tablewrap td{border:1px solid #e2e7f0;padding:5px 9px;
   white-space:nowrap;position:static;background:none;color:#1f2738;font-weight:400}
-.tablewrap thead th{background:#eef3fb;font-weight:500;color:#25324a}
+.tablewrap thead th{background:#eef3fb;font-weight:500;color:#25324a;
+  position:sticky;top:0;z-index:1}
 .tablewrap tbody tr:nth-child(even) td{background:#fafbfd}
-details{border-top:1px dashed #e2e7f0;margin-top:12px;padding-top:8px}
 summary{cursor:pointer;color:#2563eb;font-size:13px}
 pre{white-space:pre-wrap;word-break:break-all;font:12px/1.6 Consolas,Monaco,monospace;
   background:#0f1726;color:#c8d4e8;padding:14px;border-radius:8px;
@@ -138,24 +166,3 @@ a{color:#2563eb}
 .paramsnap code{background:#eef4ff;color:var(--accent);padding:1px 6px;
   border-radius:4px;white-space:nowrap}
 .paramsnap .ph{color:var(--muted)}
-/* 取 x 坐标工具：浮动入口 + 收集条（z 高于 lightbox，全屏取数时也可见） */
-.picktoggle{position:fixed;right:16px;bottom:16px;z-index:10000;font:inherit;
-  font-size:13px;cursor:pointer;padding:8px 16px;border-radius:20px;
-  border:1px solid #2563eb;background:#2563eb;color:#fff;
-  box-shadow:0 2px 10px rgba(20,30,60,.2)}
-.picktoggle[hidden]{display:none}
-.pickbar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);
-  z-index:10000;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-  max-width:92vw;padding:9px 14px;border-radius:10px;background:#1d2330;
-  color:#e8ecf4;font-size:12px;box-shadow:0 4px 20px rgba(0,0,0,.35)}
-.pickbar[hidden]{display:none}
-.pickbar .picklabel{color:#9aa6bd}
-.pickbar .pickvals{font-family:Consolas,Monaco,monospace;color:#7dd3fc;
-  font-weight:600;word-break:break-all}
-.pickbar button{font:inherit;font-size:12px;cursor:pointer;padding:4px 11px;
-  border-radius:6px;border:1px solid #46506a;background:#2a3245;color:#e8ecf4}
-.pickbar button:hover{background:#3a4560}
-#lbPick.on{background:#2563eb;border-color:#2563eb;color:#fff}
-.pickline{stroke:#ff3b30;stroke-width:2;vector-effect:non-scaling-stroke}
-body.picking .stage img{cursor:crosshair}
-body.picking .lb-stage{cursor:crosshair}

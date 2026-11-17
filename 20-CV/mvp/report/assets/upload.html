@@ -11,9 +11,9 @@
 <div class="app">
   <aside class="console">
     <h1>CV 提取 MVP</h1>
-    <p class="sub">图片 / PDF / CSV → OCR 文字 · 结构化表格 · 单元格坐标，右侧生成对照报告</p>
+    <p class="sub">图片 / PDF / CSV → 文字 · 表格 · 坐标</p>
     <div id="drop">
-      <b>点击选择，或把文件拖到这里</b>
+      <b>点击或拖拽文件到此处</b>
       png/jpg/bmp/webp/tif · pdf · csv/txt/md，可多选，单个 ≤ 20MB
     </div>
     <input type="file" id="picker" multiple
@@ -31,19 +31,19 @@
       <div class="params-head">
         <span class="params-title">参数</span>
         <span class="pbadge" id="parambadge">默认</span>
-        <span class="hint" tabindex="0" data-tip="按优先级排；留默认即日常用法。改参数只影响本次上传，结果写进每份 result.json 与报告页头，方便对比 badcase。">?</span>
+        <span class="hint" tabindex="0" data-tip="按优先级排，留默认即可；仅影响本次上传。">?</span>
         <span class="spacer"></span>
         <button type="button" class="mini" id="resetparams">恢复默认</button>
       </div>
       <div class="param-groups" id="paramgroups"></div>
     </div>
-    <p class="tip">首次处理会加载 PaddleOCR / 表格结构模型，约需 20~40 秒；之后同一进程内复用会快很多。</p>
+    <p class="tip">首次加载模型约 20~40 秒，之后复用更快。</p>
   </aside>
   <main class="reportcol">
     <div class="reportempty" id="reportempty">
       <div class="re-inner">
         <b>报告将显示在这里</b>
-        <span>在左侧选择文件并点「开始提取」，进度与报告都在右侧呈现；改参数重测无需重新上传。</span>
+        <span>选择文件后点「开始提取」。</span>
       </div>
     </div>
     <div class="runpanel" id="runpanel" hidden>
@@ -67,7 +67,7 @@
   <div class="lbtop">
     <button type="button" id="lbPick">取 x 坐标</button>
     <button type="button" id="lbZoom">1:1 像素</button>
-    <span class="lbnote">取数=原图像素，适用 doc_unwarp=off（on 请在报告页矫正图取）</span>
+    <span class="lbnote">取数=原图像素，适用 doc_unwarp=off</span>
     <span class="spacer"></span>
     <button type="button" id="lbClose">关闭 (Esc)</button>
   </div>

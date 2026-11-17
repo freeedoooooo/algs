@@ -138,61 +138,78 @@ def text_pane(rec, card_no):
                 '</span>{:.2f}</td></tr>'.format(
                     card_no, i, 'low' if low else '', i + 1, esc(text),
                     max(0, min(100, s * 100)), s))
-        body = ('<table><thead><tr><th>#</th><th>识别文字</th>'
-                '<th>置信度</th></tr></thead><tbody>{}</tbody></table>'
-                .format(''.join(rows)))
+        main = ('<div class="scrollbox"><table><thead><tr><th>#</th>'
+                '<th>识别文字</th><th>置信度</th></tr></thead>'
+                '<tbody>{}</tbody></table></div>'.format(''.join(rows)))
     else:
-        body = '<div class="empty">没有 OCR 文字行（纯文本输入或未检测到文字）</div>'
+        main = '<div class="empty">无 OCR 文字行</div>'
     plain = rec.get('plain_text') or ''
-    extra = ''
+    aux_btn = aux_src = ''
     if plain:
-        extra = ('<details><summary>文本层原文 / 纯文本全文（{} 字符）</summary>'
-                 '<pre>{}</pre></details>'.format(len(plain),
-                                                  esc(plain[:20000])))
-    return ('<div class="pane"><h3 class="pane-title">提取内容</h3>{}{}</div>'
-            .format(body, extra))
+        aid = 'aux-plain-{}'.format(card_no)
+        aux_btn = ('<button type="button" class="auxbtn" data-aux="{}" '
+                   'data-title="纯文本原文（{} 字符）">文本原文</button>'
+                   .format(aid, len(plain)))
+        aux_src = ('<div class="aux-src" id="{}" hidden><pre>{}</pre></div>'
+                   .format(aid, esc(plain[:20000])))
+    return (
+        '<details class="panel" open>'
+        '<summary class="panel-head"><span class="panel-title">提取内容</span>'
+        '<span class="cnt">{} 行</span><span class="spacer"></span>{}</summary>'
+        '<div class="panel-body">{}{}</div></details>'.format(
+            len(texts), aux_btn, main, aux_src))
 
 
 def tables_section(rec, card_no):
     tables = rec.get('structured_tables') or []
     notes = rec.get('notes') or []
+    route = esc(rec.get('table_route', '-'))
+    aux_btn = aux_src = ''
+    if notes:
+        aid = 'aux-diag-{}'.format(card_no)
+        aux_btn = ('<button type="button" class="auxbtn" data-aux="{}" '
+                   'data-title="提取诊断（{} 条）">提取诊断 {}</button>'
+                   .format(aid, len(notes), len(notes)))
+        aux_src = ('<div class="aux-src" id="{}" hidden><ul>{}</ul></div>'
+                   .format(aid, ''.join('<li>{}</li>'.format(esc(n))
+                                        for n in notes)))
     if not tables:
-        diag = ''
-        if notes:
-            diag = ('<details><summary>提取诊断（{} 条）</summary><ul>{}</ul>'
-                    '</details>'.format(
-                        len(notes),
-                        ''.join('<li>{}</li>'.format(esc(n)) for n in notes)))
-        return ('<div class="sec"><h3>表格内容</h3>'
-                '<p class="note">本文件未检测到结构化表格。提取路线：{}</p>'
-                '{}</div>'.format(esc(rec.get('table_route', '-')), diag))
+        return (
+            '<details class="panel" open>'
+            '<summary class="panel-head">'
+            '<span class="panel-title">表格内容</span>'
+            '<span class="cnt">0 张</span><span class="meta">路线：{}</span>'
+            '<span class="spacer"></span>{}</summary>'
+            '<div class="panel-body"><div class="empty">'
+            '未检测到表格，路线 {}</div>{}</div></details>'
+            .format(route, aux_btn, route, aux_src))
 
     has_coord = any((t.get('coord') or {}).get('exact') for t in tables)
     # 同为 space='source'，文本层 PDF 与「关闭矫正的表格模型」来源不同，
     # 标签要说清是字符 bbox 还是模型框，别让用户把近似坐标当精确看。
-    src_label = ('预览图（PDF 文本层字符 bbox，精确）'
+    src_label = ('预览图（字符 bbox）'
                  if rec.get('table_route') == 'text_layer'
-                 else '原图（矫正关闭，模型单元格框 1:1 精确）')
+                 else '原图（模型框）')
     spaces = []
     for t in tables:
-        s = (t.get('coord') or {}).get('space', 'none')
+        sp = (t.get('coord') or {}).get('space', 'none')
         label = {'source': src_label,
-                 'rectified': '矫正图（转正 + 去扭曲，1:1 精确）',
-                 'none': '无图像载体'}.get(s, s)
+                 'rectified': '矫正图',
+                 'none': '无图像载体'}.get(sp, sp)
         if label not in spaces:
             spaces.append(label)
-    parts = ['<div class="sec"><div class="sec-head"><h3>表格内容</h3>',
-             '<span class="cnt">{} 张</span>'.format(len(tables)),
-             '<span class="note">路线：{}</span><span class="spacer"></span>'
-             .format(esc(rec.get('table_route', '-')))]
+    head = ('<summary class="panel-head">'
+            '<span class="panel-title">表格内容</span>'
+            '<span class="cnt">{} 张</span><span class="meta">路线：{}</span>'
+            '<span class="spacer"></span>'.format(len(tables), route))
     if has_coord:
-        parts.append('<button type="button" class="allcells" data-card="{}">'
-                     '显示整表网格</button>'.format(card_no))
-    parts.append('</div>')
-    parts.append('<p class="note">坐标宿主：{} '
-                 '<span class="hint" tabindex="0" data-tip="悬停表格单元格：图上只高亮这一格；'
-                 '点击：钉住该格（再点取消）；旋转扫描件点击时会自动切到矫正图。">?</span>'
-                 '</p>'.format(esc(' / '.join(spaces))))
+        head += ('<button type="button" class="allcells" data-card="{}">'
+                 '显示整表网格</button>'.format(card_no))
+    head += aux_btn + '</summary>'
+    parts = ['<div class="panel-body">',
+             '<p class="note">坐标宿主：{} '
+             '<span class="hint" tabindex="0" data-tip="悬停高亮单格，点击钉住（再点取消）。">?</span>'
+             '</p>'.format(esc(' / '.join(spaces)))]
     if len(tables) > 1:
         tabs = ''.join(
             '<button type="button" class="tbltab{}" data-card="{}" '
@@ -236,27 +253,26 @@ def tables_section(rec, card_no):
                     card_no, ti, r, c, esc(v))
                 for c, v in enumerate(row)))
             for r, row in enumerate(rows, 1))
-        parts.append('<div class="tablewrap"><table>{0}<tbody>{1}</tbody>'
+        parts.append('<div class="tablewrap scrollbox"><table>{0}<tbody>{1}</tbody>'
                      '</table></div></div>'.format(thead, body))
-    if notes:
-        parts.append('<details><summary>提取诊断（{} 条）</summary><ul>{}</ul>'
-                     '</details>'.format(
-                         len(notes),
-                         ''.join('<li>{}</li>'.format(esc(n)) for n in notes)))
+    parts.append(aux_src)
     parts.append('</div>')
-    return ''.join(parts)
+    return '<details class="panel" open>' + head + ''.join(parts) + '</details>'
 
 
 def json_section(rec):
     text = json.dumps(rec, ensure_ascii=False, indent=2)
     href = file_url(rec['case'], config.RESULT_JSON)
     return (
-        '<div class="sec"><details><summary>完整 JSON（result.json）　·　'
-        '<a href="{}" target="_blank" onclick="event.stopPropagation()">下载</a>'
-        '　·　<button type="button" class="copyjson jsontoggle" '
+        '<details class="panel" open>'
+        '<summary class="panel-head"><span class="panel-title">完整 JSON</span>'
+        '<span class="meta">result.json</span><span class="spacer"></span>'
+        '<a class="btn ghost" href="{}" target="_blank" '
+        'onclick="event.stopPropagation()">下载</a>'
+        '<button type="button" class="copyjson btn ghost" '
         'onclick="event.stopPropagation()">复制 JSON</button></summary>'
-        '<pre class="jsonpre">{}</pre></details></div>'.format(
-            href, esc(text)))
+        '<div class="panel-body"><pre class="jsonpre">{}</pre></div>'
+        '</details>'.format(href, esc(text)))
 
 
 def card(rec, card_no):

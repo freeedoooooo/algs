@@ -294,7 +294,7 @@ function poll(){
     }
     if(s.running){timer=setTimeout(poll,800);return;}
     if(s.ready){
-      msg.textContent='完成。文件已保留，改参数后直接再点「开始提取」即可重测。';
+      msg.textContent='完成。改参数后直接重测。';
       go.disabled=false;
       showResult();
     }
