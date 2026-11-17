@@ -165,10 +165,15 @@ def tables_section(rec, card_no):
                 '{}</div>'.format(esc(rec.get('table_route', '-')), diag))
 
     has_coord = any((t.get('coord') or {}).get('exact') for t in tables)
+    # 同为 space='source'，文本层 PDF 与「关闭矫正的表格模型」来源不同，
+    # 标签要说清是字符 bbox 还是模型框，别让用户把近似坐标当精确看。
+    src_label = ('预览图（PDF 文本层字符 bbox，精确）'
+                 if rec.get('table_route') == 'text_layer'
+                 else '原图（矫正关闭，模型单元格框 1:1 精确）')
     spaces = []
     for t in tables:
         s = (t.get('coord') or {}).get('space', 'none')
-        label = {'source': '预览图（文本层坐标，精确）',
+        label = {'source': src_label,
                  'rectified': '矫正图（转正 + 去扭曲，1:1 精确）',
                  'none': '无图像载体'}.get(s, s)
         if label not in spaces:

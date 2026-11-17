@@ -30,7 +30,16 @@
       <a class="ghost" id="last" href="/report" style="display:none">查看上次报告 →</a>
       <span id="msg"></span>
     </div>
-    <div id="log"></div>
+    <div class="runpanel" id="runpanel" hidden>
+      <div class="runbar">
+        <span id="runstage">准备中…</span>
+        <span class="spacer"></span>
+        <span id="runpct">0%</span>
+        <a class="mini-link" id="dlLog" href="/api/logs" target="_blank">下载日志</a>
+      </div>
+      <div class="track"><div class="fill" id="runfill"></div></div>
+      <div class="logbox" id="log"></div>
+    </div>
   </div>
   <p class="tip">
     首次处理会加载 PaddleOCR / 表格结构模型，约需 20~40 秒；之后同一进程内复用模型会快很多。<br>

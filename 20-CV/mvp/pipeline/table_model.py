@@ -150,18 +150,30 @@ def _save_rectified(res, case_abs):
         return None
 
 
-def tables(image_path, case_abs, min_h=None, min_v=None):
-    """返回 (raw_tables, notes, rectified_size)；预筛门槛可由页面参数覆盖。"""
+def tables(image_path, case_abs, min_h=None, min_v=None,
+           use_unwarp=True, emit=None):
+    """返回 (raw_tables, notes, rectified_size)；门槛与文档矫正由页面参数控制。"""
     mh = config.GRID_MIN_H if min_h is None else int(min_h)
     mv = config.GRID_MIN_V if min_v is None else int(min_v)
     nh, nv = grid_score(image_path)
+
+    def note(level, msg):
+        notes.append(msg)
+        if emit:
+            emit(level, 'model', msg)
+
     if nh < mh or nv < mv:
-        return [], ['长直线预筛未命中（横 {} / 竖 {}，门槛 {}/{}），跳过表格模型'
-                    .format(nh, nv, mh, mv)], None
-    notes = ['长直线预筛命中（横 {} / 竖 {}，门槛 {}/{}），启用 PPStructureV3'
-             .format(nh, nv, mh, mv)]
+        msg = ('长直线预筛未命中（横 {} / 竖 {}，门槛 {}/{}），跳过表格模型'
+               .format(nh, nv, mh, mv))
+        if emit:
+            emit('warn', 'model', msg)
+        return [], [msg], None
+    notes = []
+    note('info', '长直线预筛命中（横 {} / 竖 {}，门槛 {}/{}）'.format(nh, nv, mh, mv))
+    note('info', '加载 PPStructureV3 并推理（文档矫正={}，首次约 20~40s）…'
+         .format('开' if use_unwarp else '关'))
     raw, rect_size = [], None
-    for pno, res in enumerate(engines.structure().predict(image_path), 1):
+    for pno, res in enumerate(engines.structure(use_unwarp).predict(image_path), 1):
         htmls = _html_blocks(res)
         boxes_by_table = _cell_boxes(res)
         parsed = []
@@ -173,28 +185,41 @@ def tables(image_path, case_abs, min_h=None, min_v=None):
                     parsed.append((rows, brows, boxes))
         if not parsed:
             continue
-        # 只有真的抽到表才落盘矫正图
-        rect_size = _save_rectified(res, case_abs)
-        if rect_size:
-            notes.append('第 {} 页：已保存矫正图 pages/{}（{}×{}），单元格框 1:1 叠加'
-                         .format(pno, config.RECTIFIED_NAME,
-                                 rect_size[0], rect_size[1]))
+        # 只有「开了矫正」才落盘矫正图；关矫正时 output_img 与原图逐像素一致，
+        # cell_box_list 本就是原图坐标，直接标 space='source' 叠在 source 图上。
+        if use_unwarp:
+            rect_size = _save_rectified(res, case_abs)
+            if rect_size:
+                note('ok', '第 {} 页：已保存矫正图 pages/{}（{}×{}），单元格框 1:1 叠加'
+                     .format(pno, config.RECTIFIED_NAME,
+                             rect_size[0], rect_size[1]))
+        else:
+            note('ok', '第 {} 页：文档矫正已关闭，单元格框基于原图（space=source），'
+                 '无需矫正图，坐标 1:1 精确'.format(pno))
         for rows, brows, boxes in parsed:
             grid = [[
                 [round(float(v), 1) for v in list(boxes[bi])[:4]]
                 if bi is not None and bi < len(boxes) and len(boxes[bi]) >= 4
                 else None for bi in br
             ] for br in brows]
+            coord = ({
+                'space': 'rectified',
+                'image': 'pages/' + config.RECTIFIED_NAME,
+                'origin': 'PPStructureV3', 'exact': bool(rect_size),
+                'note': '单元格框取自模型矫正图，1:1 叠加；UVDoc 保持开启',
+            } if use_unwarp else {
+                'space': 'source',
+                'origin': 'PPStructureV3', 'exact': True,
+                'note': '文档矫正关闭（电子版平整截图），矫正图与原图逐像素一致，'
+                        '单元格框直接叠在 source 图上',
+            })
             raw.append({
                 'page': pno, 'rows': rows, 'cell_grid': grid,
                 'strategy': 'table_model', 'source': 'PPStructureV3',
-                'coord': {
-                    'space': 'rectified',
-                    'image': 'pages/' + config.RECTIFIED_NAME,
-                    'origin': 'PPStructureV3', 'exact': bool(rect_size),
-                    'note': '单元格框取自模型矫正图，1:1 叠加；UVDoc 保持开启',
-                },
+                'coord': coord,
             })
     if not raw:
-        notes.append('表格模型未还原出表格（有网格线但不是标准表格）')
+        note('warn', '表格模型未还原出表格（有网格线但不是标准表格）')
+    else:
+        note('ok', '表格模型还原出 {} 张表'.format(len(raw)))
     return raw, notes, rect_size

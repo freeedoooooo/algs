@@ -89,28 +89,56 @@ function b64(file){
     r.readAsDataURL(file);
   });
 }
-function say(steps){
-  log.style.display='block';
-  log.textContent=steps.join('\n');
+var LV={info:'INFO',ok:' OK ',stage:'STEP',warn:'WARN',error:'ERR '};
+function escHtml(s){
+  return String(s==null?'':s).replace(/[&<>"]/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+  });
+}
+function say(rows,fallback){
+  document.getElementById('runpanel').hidden=false;
+  if(!rows||!rows.length){
+    log.textContent=(fallback||[]).join('\n')||'等待日志…';
+    return;
+  }
+  var html=rows.map(function(r){
+    var lv=LV[r.level]?'lv-'+r.level:'lv-info';
+    return '<div class="logrow '+lv+'">'+
+      '<span class="t">'+escHtml((r.t||0).toFixed(1))+'s</span>'+
+      '<span class="lv">'+escHtml(LV[r.level]||'INFO')+'</span>'+
+      '<span class="st">'+escHtml(r.stage||'-')+'</span>'+
+      '<span class="ms">+'+escHtml(r.ms==null?0:r.ms)+'ms</span>'+
+      '<span class="tx">'+escHtml(r.msg)+'</span></div>';
+  }).join('');
+  log.innerHTML=html;
   log.scrollTop=log.scrollHeight;
+}
+function progress(s){
+  var pct=Math.max(0,Math.min(100,Number(s.progress)||0));
+  document.getElementById('runfill').style.width=pct+'%';
+  document.getElementById('runpct').textContent=pct+'%';
+  document.getElementById('runstage').textContent=
+    (s.stage==='done'?'完成':(s.stage==='error'?'出错':('阶段：'+(s.stage||'准备中'))));
 }
 function poll(){
   fetch('/api/status').then(function(r){return r.json();}).then(function(s){
-    say(s.steps);
+    say(s.logs,s.steps);
+    progress(s);
     if(s.error){
-      msg.innerHTML='<span class="err">出错：'+s.error+'</span>';
+      msg.innerHTML='<span class="err">出错：'+escHtml(s.error)+'</span>';
       go.disabled=false;return;
     }
     if(s.running){timer=setTimeout(poll,800);return;}
     if(s.ready){
       msg.textContent='完成，正在打开报告…';
-      location.href='/report';
+      setTimeout(function(){location.href='/report';},600);
     }
   }).catch(function(){timer=setTimeout(poll,1200);});
 }
 
 go.onclick=async function(){
-  go.disabled=true;msg.textContent='读取文件…';log.style.display='block';
+  go.disabled=true;msg.textContent='读取文件…';
+  document.getElementById('runpanel').hidden=false;
   try{
     var files=[];
     for(var i=0;i<picked.length;i++){
@@ -126,10 +154,7 @@ go.onclick=async function(){
     });
     var j=await res.json();
     if(!j.ok) throw new Error(j.error||'上传失败');
-    if(j.warnings&&j.warnings.length){
-      log.textContent=j.warnings.map(function(w){return '⚠ '+w;}).join('\n');
-      log.style.display='block';
-    }
+    // 参数警告会由后端以 warn 级日志发出，poll() 拉到后统一渲染，这里不覆写日志容器
     msg.textContent='处理中…';
     poll();
   }catch(e){

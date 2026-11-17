@@ -54,6 +54,12 @@ SCHEMA = [
          default=config.PDF_DPI, min=72, max=400, step=10,
          order=8, group='⑤ 渲染精度',
          help='小字 / 密集表格调高到 150~200 更清晰；越高图越大、OCR 越慢。'),
+    dict(key='doc_unwarp', label='文档矫正(UVDoc)', type='select',
+         default='on', options=['on', 'off'],
+         order=9, group='⑥ 坐标回溯',
+         help='on=方向分类+UVDoc 去扭曲，适合旋转/弯曲扫描件（框叠矫正图）。'
+              'off=关闭预处理，适合电子版平整截图（108 这类）：矫正图与原图逐像素一致，'
+              '单元格框直接叠原图、1:1 精确，无 UVDoc 形变误差。仅影响表格模型。'),
 ]
 
 _BY_KEY = {p['key']: p for p in SCHEMA}
@@ -143,6 +149,9 @@ def describe(params):
             shown = {'auto': 'auto（自动回退）', 'explicit': 'explicit',
                      'lines': 'lines', 'default': 'default',
                      'text': 'text（强制文字对齐）'}.get(val, str(val))
+        elif p['key'] == 'doc_unwarp':
+            shown = ('on（矫正图坐标，适合扫描件）' if val == 'on'
+                     else 'off（原图坐标，适合电子版截图）')
         else:
             shown = str(val)
         rows.append({'label': p['label'], 'value': shown,

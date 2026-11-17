@@ -76,13 +76,27 @@ STATE = {
     'steps': [], 'cases': [], 'batch': None,
     'started': None, 'elapsed': 0,
     'params': {}, 'warnings': [],
+    'logs': [], 'progress': 0, 'stage': '',
+    'log_file': None,
 }
 LOCK = threading.Lock()
 
 
-def step(msg):
+def step(msg, level='info', stage='batch'):
+    """兼容旧调用：纯文本 steps 仍保留，同时生成一条结构化日志。"""
     with LOCK:
         STATE['steps'].append(msg)
+        STATE['logs'].append({
+            't': round(time.time() - (STATE['started'] or time.time()), 2),
+            'ms': 0, 'level': level, 'stage': stage, 'msg': msg,
+        })
+
+
+def _on_log(row):
+    """RunLog 每条日志同步进 STATE，页面轮询 /api/status 即可看到。"""
+    with LOCK:
+        STATE['logs'].append(row)
+        STATE['stage'] = row['stage']
 
 
 def safe_name(name):
@@ -192,15 +206,24 @@ async def upload(request: Request):
             f.write(data)
         paths.append(path)
 
+    # 日志放在「批次专属目录」而非 output/ 根，历史批次各留各的 run.log
+    batch_dir = os.path.join(config.OUTPUT_DIR, tag)
+    runlog = _load('runlog')
+    log = runlog.RunLog(tag, out_dir=batch_dir, on_emit=_on_log)
     with LOCK:
         STATE.update(running=True, ready=False, error=None, steps=[],
                      cases=[], batch=tag, started=time.time(), elapsed=0,
                      params={k: v for k, v in params.items()
-                             if not k.startswith('_')}, warnings=warns)
-    step('批次 {} · 收到 {} 个文件'.format(tag, len(paths)))
+                             if not k.startswith('_')}, warnings=warns,
+                     logs=[], progress=0, stage='batch',
+                     log_file='{}/run.log'.format(tag))
+    log.stage('batch', '批次 {} · 收到 {} 个文件'.format(tag, len(paths)))
+    log.info('params', '生效参数：{}'.format(
+        ', '.join('{}={}'.format(k, v) for k, v in params.items()
+                  if not k.startswith('_'))))
     for w in warns:
-        step('  ⚠ ' + w)
-    threading.Thread(target=run_batch, args=(paths, params),
+        log.warn('params', w)
+    threading.Thread(target=run_batch, args=(paths, params, log),
                      daemon=True).start()
     return {'ok': True, 'count': len(paths), 'batch': tag,
             'warnings': warns}
@@ -212,6 +235,17 @@ def status():
         return dict(STATE)
 
 
+@app.get('/api/logs')
+def api_logs():
+    """下载当前批次的纯文本运行日志（结构化日志在 /api/status 的 logs 里）。"""
+    rel = STATE.get('log_file')
+    path = os.path.join(config.OUTPUT_DIR, rel) if rel else None
+    if not path or not os.path.isfile(path):
+        return JSONResponse({'ok': False, 'error': '暂无日志'}, status_code=404)
+    return FileResponse(path, media_type='text/plain; charset=utf-8',
+                        filename='{}.log'.format(STATE.get('batch') or 'run'))
+
+
 @app.get('/report')
 def report():
     path = os.path.join(config.OUTPUT_DIR, config.REPORT_NAME)
@@ -221,24 +255,34 @@ def report():
     return FileResponse(path, media_type='text/html; charset=utf-8')
 
 
-def run_batch(paths, params=None):
+def run_batch(paths, params=None, log=None):
     """后台线程：逐个提取 → 落 result.json → 生成汇总报告。"""
     try:
+        def progress(v):
+            with LOCK:
+                STATE['progress'] = v
+
+        log.stage('load', '加载提取流水线（首次会导入 cv2 / pdfplumber）…')
         pipeline = _load('pipeline')
         report_mod = _load('report')
         records = []
+        total = len(paths)
         for i, path in enumerate(paths, 1):
             name = os.path.basename(path)
-            step('[{}/{}] 正在处理 {} …'.format(i, len(paths), name))
+            log.stage('case', '[{}/{}] 开始处理 {}'.format(i, total, name))
+            progress(int((i - 1) / total * 100))
             case_rel = case_dir_name(name)
             case_abs = os.path.join(config.OUTPUT_DIR, case_rel)
             os.makedirs(case_abs, exist_ok=True)
-            rec = pipeline.extract_one(path, case_abs, case_rel, params)
+            rec = pipeline.extract_one(path, case_abs, case_rel, params,
+                                       emit=(log.make_emit() if log else None))
             records.append(rec)
-            step('  ✓ 识别 {} 行文字 · 结构化表格 {} 张 · 路线 {} · 第 {} 页'.format(
-                rec['lines'], len(rec['structured_tables']),
-                rec['table_route'], rec.get('page', 1)))
-        step('正在生成报告 …')
+            log.ok('case', '识别 {} 行文字 · 表格 {} 张 · 路线 {} · 第 {} 页'
+                   .format(rec['lines'], len(rec['structured_tables']),
+                           rec['table_route'], rec.get('page', 1)),
+                   case=name)
+            progress(int(i / total * 100))
+        log.stage('report', '正在生成汇总报告 …')
         report_mod.build(
             records, os.path.join(config.OUTPUT_DIR, config.REPORT_NAME),
             params=params)
@@ -246,13 +290,17 @@ def run_batch(paths, params=None):
             STATE.update(running=False, ready=True,
                          cases=[r['file'] for r in records],
                          elapsed=round(time.time()
-                                       - (STATE['started'] or time.time()), 1))
-        step('完成，共 {} 个文件，耗时 {}s'.format(
+                                       - (STATE['started'] or time.time()), 1),
+                         progress=100, stage='done')
+        log.ok('done', '完成，共 {} 个文件，耗时 {}s'.format(
             len(records), STATE['elapsed']))
     except Exception as e:
-        step('出错：' + str(e))
+        if log:
+            log.error('error', '出错：' + str(e))
+            log.error('error', traceback.format_exc(limit=3).strip())
         with LOCK:
-            STATE.update(running=False, ready=False, error=str(e))
+            STATE.update(running=False, ready=False, error=str(e),
+                         stage='error')
         print(traceback.format_exc(limit=3))
 
 

@@ -24,10 +24,28 @@ a{color:#2563eb;text-decoration:none}
 .ghost{background:#fff;color:#2563eb;padding:9px 16px;border:1px solid #2563eb;
   border-radius:8px;font-size:14px}
 #msg{font-size:13px;color:#6b7688}
-#log{margin-top:18px;background:#0f1726;color:#c8d4e8;border-radius:8px;
-  padding:14px;font:12px/1.7 Consolas,Monaco,monospace;white-space:pre-wrap;
-  max-height:300px;overflow:auto;display:none}
 .tip{margin-top:18px;color:#6b7688;font-size:12px;line-height:1.7}
+/* 运行日志面板：进度条 + 结构化日志（级别配色、阶段标签、耗时） */
+.runpanel{margin-top:18px;border:1px solid #e2e7f0;border-radius:10px;padding:12px 14px;
+  background:#fbfcfe}
+.runbar{display:flex;align-items:center;gap:10px;font-size:12px;color:#25324a}
+.runbar .spacer{flex:1}
+#runpct{font-variant-numeric:tabular-nums;color:#2563eb;font-weight:500}
+a.mini-link{font-size:12px;color:#2563eb;text-decoration:none;border:1px solid #cbd5e1;
+  padding:3px 9px;border-radius:6px}
+.track{height:6px;background:#e8edf5;border-radius:4px;overflow:hidden;margin:10px 0}
+.track .fill{height:100%;width:0;background:#2563eb;border-radius:4px;transition:width .3s}
+.logbox{background:#0f1726;color:#c8d4e8;border-radius:8px;padding:12px;
+  font:12px/1.7 Consolas,Monaco,monospace;max-height:320px;overflow:auto}
+.logrow{display:flex;gap:8px;white-space:pre-wrap;word-break:break-word}
+.logrow .t{color:#5f7391;min-width:56px;text-align:right}
+.logrow .lv{min-width:38px;font-weight:500}
+.logrow .st{min-width:62px;color:#7ea6d8}
+.logrow .ms{min-width:52px;text-align:right;color:#5f7391}
+.logrow .tx{flex:1}
+.lv-info .lv{color:#9fb3cf}.lv-ok .lv{color:#4ade80}.lv-stage .lv{color:#7dd3fc}
+.lv-warn .lv{color:#fbbf24}.lv-error .lv{color:#f87171}
+.lv-warn .tx{color:#fde68a}.lv-error .tx{color:#fecaca}.lv-ok .tx{color:#bbf7d0}
 code{background:#eef2f8;padding:1px 5px;border-radius:4px}
 .err{color:#b42318}
 /* 调试参数面板：按优先级分组，控件紧凑，说明用小字 */
