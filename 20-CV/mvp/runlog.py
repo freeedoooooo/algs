@@ -2,9 +2,10 @@
 mvp/runlog.py — 结构化运行日志（唯一真相源）。
 
 设计要点：
-  · 一个 RunLog 实例对应「一次上传批次」，同时服务两处消费方：
+  · 一个 RunLog 实例对应「一次上传批次」，同时服务三处消费方：
       - STATE['logs']：页面轮询 /api/status 时拿到结构化数组（带级别/阶段/耗时）
-      - output/<批次>/run.log：落盘纯文本，批次目录自解释，可拷走归档
+      - logs/<批次>.log：落盘纯文本，一个批次一份，可单独清理 / 归档
+      - 控制台：同格式实时打印，终端启动时也能直接看进度
   · pipeline 只认一个 emit(level, stage, msg) 回调，不 import app / runlog，
     避免提取层反向依赖 Web 层，也方便以后换成别的日志后端。
   · level: info / ok / warn / error / stage；stage 是短阶段名（ocr/table/…）。
@@ -22,7 +23,7 @@ _LEVEL_TAG = {'info': 'INFO', 'ok': ' OK ', 'stage': 'STAGE',
 class RunLog:
     """一次批次的日志收集器；线程安全（后台线程写、主线程读状态）。"""
 
-    def __init__(self, batch, out_dir=None, on_emit=None):
+    def __init__(self, batch, log_path=None, on_emit=None):
         self.batch = batch
         self.t0 = time.time()
         self._last = self.t0
@@ -30,9 +31,9 @@ class RunLog:
         self._rows = []
         self._on_emit = on_emit            # app 注入：同步更新 STATE
         self.path = None
-        if out_dir:
-            os.makedirs(out_dir, exist_ok=True)
-            self.path = os.path.join(out_dir, 'run.log')
+        if log_path:
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
+            self.path = log_path
             with open(self.path, 'w', encoding='utf-8') as f:
                 f.write('# batch {}\n'.format(batch))
 
@@ -52,6 +53,7 @@ class RunLog:
             line = '[{:>7}s +{:>5}ms] [{:<5}] [{:<9}] {}'.format(
                 row['t'], row['ms'], _LEVEL_TAG.get(row['level'], 'INFO'),
                 row['stage'], row['msg'])
+            print(line, flush=True)
             if self.path:
                 try:
                     with open(self.path, 'a', encoding='utf-8') as f:

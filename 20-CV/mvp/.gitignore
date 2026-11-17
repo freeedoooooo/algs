@@ -1,6 +1,7 @@
-# 运行产物：config.py 启动时会自动创建这两个目录，不必入库
+# 运行产物：config.py 启动时会自动创建这些目录，不必入库
 input/
 output/
+logs/
 
 # Python / 虚拟环境 / 本地环境变量
 __pycache__/

@@ -81,10 +81,10 @@ mvp/
 ├── check_env.py               部署自检：缺包 / 目录 / 模型缓存
 ├── config.py                  唯一配置源：模型 / DPI / 阈值 / 路径 / 环境变量
 ├── params.py                  调试参数 schema（顺序=优先级）+ 校验 + 快照
-├── runlog.py                  结构化运行日志（STATE + 批次 run.log）
+├── runlog.py                  结构化运行日志（STATE + logs/<批次>.log）
 ├── app.py                     FastAPI 路由 + 后台任务编排 + 包自举（约 270 行）
 ├── __init__.py                支持 uvicorn mvp.app:app 包方式启动
-├── .gitignore                 input/output/__pycache__ 不入库
+├── .gitignore                 input/output/logs/__pycache__ 不入库
 ├── pipeline/                  提取层
 │   ├── engines.py             模型单例（懒加载；表格模型按 doc_unwarp 分槽缓存）
 │   ├── ocr.py                 逐行文字 / 置信度 / 四点框 + 带框 PNG
@@ -100,9 +100,9 @@ mvp/
 │       ├── report.css / report.js / lightbox.html
 │       └── upload.html / upload.css / upload.js
 ├── input/                     上传文件落盘（运行时生成，带批次时间戳前缀）
+├── logs/                      运行日志（运行时生成，每批次一个 <批次戳>.log）
 └── output/                    产物（运行时生成，与 input 同名去后缀）
     ├── index.html             汇总报告（最近批次）
-    ├── <批次戳>/run.log       该批次的运行日志
     └── <时间戳_文件名>/       每个文件一个自包含目录
 ```
 
@@ -201,11 +201,11 @@ output/20261116160231_103_real_bank_statement_textlayer/
   （例：`+90640ms` 落在表格模型那条 = 首次加载十来个子模型）。
 - 记录了过去看不到的内部决策：载体判定、预筛横竖线数、模型加载开关、
   表格策略命中、坐标空间、OCR 行数/置信度、每张表行列数与填充率。
-- 日志同时落盘到 `output/<批次>/run.log`（每个批次各一份，历史可查），
+- 日志同时落盘到 `logs/<批次>.log`（每个批次各一份，历史可查），
   页面「下载日志」或 `GET /api/logs` 可取当前批次纯文本。
 
 实现在 `runlog.py`：一个 `RunLog` 实例对应一次批次，同时写 `STATE['logs']`
-（页面轮询 `/api/status` 拿结构化数组）和 `run.log`。**pipeline 只认一个
+（页面轮询 `/api/status` 拿结构化数组）、`logs/<批次>.log` 和控制台（同格式实时打印）。**pipeline 只认一个
 `emit(level, stage, msg)` 回调**，由 app 注入，提取层不 import Web 层，保持分层干净。
 
 ## 调试参数面板（badcase 用，按优先级排）

@@ -14,6 +14,7 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 INPUT_DIR = os.path.join(ROOT, 'input')
 OUTPUT_DIR = os.path.join(ROOT, 'output')
+LOG_DIR = os.path.join(ROOT, 'logs')
 ASSETS_DIR = os.path.join(ROOT, 'report', 'assets')
 
 # 官方模型首次推理时下载到 ${PADDLE_PDX_CACHE_HOME:-~/.paddlex}/official_models。
@@ -66,5 +67,5 @@ BOXES_NAME = 'boxes.png'
 RESULT_JSON = 'result.json'
 REPORT_NAME = 'index.html'
 
-for _d in (INPUT_DIR, OUTPUT_DIR):
+for _d in (INPUT_DIR, OUTPUT_DIR, LOG_DIR):
     os.makedirs(_d, exist_ok=True)

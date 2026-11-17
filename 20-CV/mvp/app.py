@@ -206,17 +206,18 @@ async def upload(request: Request):
             f.write(data)
         paths.append(path)
 
-    # 日志放在「批次专属目录」而非 output/ 根，历史批次各留各的 run.log
-    batch_dir = os.path.join(config.OUTPUT_DIR, tag)
+    # 日志独立放 logs/<批次>.log，output/ 只放产物，历史批次各留各的日志
     runlog = _load('runlog')
-    log = runlog.RunLog(tag, out_dir=batch_dir, on_emit=_on_log)
+    log = runlog.RunLog(tag, log_path=os.path.join(config.LOG_DIR,
+                                                   tag + '.log'),
+                        on_emit=_on_log)
     with LOCK:
         STATE.update(running=True, ready=False, error=None, steps=[],
                      cases=[], batch=tag, started=time.time(), elapsed=0,
                      params={k: v for k, v in params.items()
                              if not k.startswith('_')}, warnings=warns,
                      logs=[], progress=0, stage='batch',
-                     log_file='{}/run.log'.format(tag))
+                     log_file='{}.log'.format(tag))
     log.stage('batch', '批次 {} · 收到 {} 个文件'.format(tag, len(paths)))
     log.info('params', '生效参数：{}'.format(
         ', '.join('{}={}'.format(k, v) for k, v in params.items()
@@ -239,7 +240,7 @@ def status():
 def api_logs():
     """下载当前批次的纯文本运行日志（结构化日志在 /api/status 的 logs 里）。"""
     rel = STATE.get('log_file')
-    path = os.path.join(config.OUTPUT_DIR, rel) if rel else None
+    path = os.path.join(config.LOG_DIR, rel) if rel else None
     if not path or not os.path.isfile(path):
         return JSONResponse({'ok': False, 'error': '暂无日志'}, status_code=404)
     return FileResponse(path, media_type='text/plain; charset=utf-8',
@@ -255,6 +256,21 @@ def report():
     return FileResponse(path, media_type='text/html; charset=utf-8')
 
 
+# 阶段 → 单文件内的进度占比（只增不减）。长耗时的模型加载/推理与 OCR
+# 各占一段可见区间，进度条不再整个文件期间停在 0%。
+_STAGE_FRAC = {
+    ('split', 'info'): 0.05,
+    ('render', 'info'): 0.15,
+    ('model', 'info'): 0.30,
+    ('model', 'ok'): 0.60,
+    ('model', 'warn'): 0.60,
+    ('table', 'info'): 0.45,
+    ('ocr', 'info'): 0.70,
+    ('ocr', 'ok'): 0.90,
+    ('table', 'ok'): 0.95,
+}
+
+
 def run_batch(paths, params=None, log=None):
     """后台线程：逐个提取 → 落 result.json → 生成汇总报告。"""
     try:
@@ -263,6 +279,7 @@ def run_batch(paths, params=None, log=None):
                 STATE['progress'] = v
 
         log.stage('load', '加载提取流水线（首次会导入 cv2 / pdfplumber）…')
+        progress(1)
         pipeline = _load('pipeline')
         report_mod = _load('report')
         records = []
@@ -274,8 +291,18 @@ def run_batch(paths, params=None, log=None):
             case_rel = case_dir_name(name)
             case_abs = os.path.join(config.OUTPUT_DIR, case_rel)
             os.makedirs(case_abs, exist_ok=True)
+            frac = [0.0]
+
+            def emit(level, stage, msg, _i=i, _frac=frac, **kw):
+                f = _STAGE_FRAC.get((stage, level))
+                if f is not None and f > _frac[0]:
+                    _frac[0] = f
+                    with LOCK:
+                        STATE['progress'] = int((_i - 1 + f) / total * 100)
+                log.emit(level, stage, msg, **kw)
+
             rec = pipeline.extract_one(path, case_abs, case_rel, params,
-                                       emit=(log.make_emit() if log else None))
+                                       emit=emit)
             records.append(rec)
             log.ok('case', '识别 {} 行文字 · 表格 {} 张 · 路线 {} · 第 {} 页'
                    .format(rec['lines'], len(rec['structured_tables']),
@@ -283,6 +310,7 @@ def run_batch(paths, params=None, log=None):
                    case=name)
             progress(int(i / total * 100))
         log.stage('report', '正在生成汇总报告 …')
+        progress(99)
         report_mod.build(
             records, os.path.join(config.OUTPUT_DIR, config.REPORT_NAME),
             params=params)

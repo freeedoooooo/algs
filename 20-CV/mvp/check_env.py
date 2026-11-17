@@ -61,6 +61,7 @@ def check_dirs():
     bad = []
     for label, path in (('input', config.INPUT_DIR),
                         ('output', config.OUTPUT_DIR),
+                        ('logs', config.LOG_DIR),
                         ('assets', config.ASSETS_DIR)):
         ok = os.path.isdir(path) and (label == 'assets'
                                       or os.access(path, os.W_OK))
