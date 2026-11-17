@@ -147,7 +147,13 @@ def auto_column_lines(page, max_cols=14):
     粘成一个 word」造成的缺口（103 端点 9 / 文字 8，还原出被粘的 8 列）。
     其它情况回退文字法：20 两者相等（端点位置略偏，保持原有 7 列）；
     21/23/26 端点远多于文字（多表端点混叠），用端点会把列数虚高到 10。
+
+    前提：页面没有真实竖线才需要推断。有竖线时整页宽的 explicit 竖线会把
+    一页多表上下粘成一张（21 实测 2 表 → 1 表），而 lines/default 策略
+    本就能沿真实网格正确分表，直接让位给它们。
     """
+    if len(page.vertical_edges or []) >= 4:
+        return None
     edges = _lines_from_edges(page, max_cols)
     words = _lines_from_words(page, max_cols)
     if not edges:
