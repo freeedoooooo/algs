@@ -38,7 +38,8 @@ header .sub{color:#6b7688;font-size:12px;display:flex;align-items:center;gap:6px
   padding:4px 11px;border-radius:7px;border:1px solid #d8e0ed;
   background:#fff;color:#1f2738}
 .viewbtn.on,.allcells.on,.boxtoggle.on{background:#2563eb;border-color:#2563eb;color:#fff}
-.stage.noboxes .box{display:none}
+/* 只藏常显识别框；悬停文字行的回显高亮 .hl 仍要显示 */
+.stage.noboxes .box:not(.hl){display:none}
 /* 叠加框开关：半透明角标叠在原图右上角，不单独占行（imgwrap line-height:0 需复位） */
 .imgwrap .boxtoggle{position:absolute;top:6px;right:6px;z-index:3;
   padding:3px 9px;font-size:11px;line-height:1.4;border-radius:6px;
