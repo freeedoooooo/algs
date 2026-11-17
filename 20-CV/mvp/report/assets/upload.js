@@ -301,9 +301,11 @@ function poll(){
   }).catch(function(){timer=setTimeout(poll,1200);});
 }
 var resultbar=document.getElementById('resultbar'),
-    reportFrame=document.getElementById('reportFrame');
+    reportFrame=document.getElementById('reportFrame'),
+    reportempty=document.getElementById('reportempty');
 function showResult(){
   resultbar.hidden=false;
+  reportempty.hidden=true;
   reportFrame.hidden=false;
   reportFrame.src='/report?t='+Date.now();
   document.getElementById('toggleReport').textContent='收起报告';
@@ -311,6 +313,7 @@ function showResult(){
 document.getElementById('toggleReport').onclick=function(){
   var h=!reportFrame.hidden;
   reportFrame.hidden=h;
+  reportempty.hidden=!h;
   this.textContent=h?'展开报告':'收起报告';
 };
 
@@ -343,5 +346,5 @@ go.onclick=async function(){
 };
 
 fetch('/api/status').then(function(r){return r.json();}).then(function(s){
-  if(s.ready) document.getElementById('last').style.display='inline';
+  if(s.ready){ document.getElementById('last').style.display='inline'; showResult(); }
 });

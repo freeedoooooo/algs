@@ -2,13 +2,15 @@
 *{box-sizing:border-box}
 body{margin:0;background:#f4f6fa;color:#1f2738;
   font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
-.wrap{max-width:1180px;margin:32px auto;padding:0 20px}
-h1{font-size:22px;font-weight:500;margin:0 0 6px}
-.sub{color:#6b7688;font-size:13px;margin:0 0 24px}
-.card{background:#fff;border:1px solid #e2e7f0;border-radius:12px;padding:22px;
-  box-shadow:0 1px 3px rgba(20,30,60,.04)}
-#drop{border:2px dashed #b9c6dd;border-radius:10px;padding:34px 18px;
-  text-align:center;color:#6b7688;cursor:pointer;transition:.15s}
+html,body{height:100%}
+.app{display:flex;height:100vh;overflow:hidden}
+.console{width:400px;flex:none;height:100vh;overflow:auto;padding:18px 18px 28px;
+  background:#fff;border-right:1px solid #e2e7f0}
+.reportcol{flex:1;min-width:0;height:100vh;position:relative;background:#f4f6fa}
+h1{font-size:19px;font-weight:500;margin:0 0 4px}
+.sub{color:#6b7688;font-size:12px;margin:0 0 16px;line-height:1.5}
+#drop{border:2px dashed #b9c6dd;border-radius:10px;padding:20px 14px;
+  text-align:center;color:#6b7688;cursor:pointer;transition:.15s;font-size:12px}
 #drop.on{border-color:#2563eb;background:#f0f6ff;color:#2563eb}
 #drop b{display:block;color:#25324a;font-size:15px;font-weight:500;margin-bottom:6px}
 input[type=file]{display:none}
@@ -117,9 +119,25 @@ body.picking .lbwrap img{cursor:crosshair}
 .pickbar button{font:inherit;font-size:12px;cursor:pointer;padding:4px 11px;
   border-radius:6px;border:1px solid #46506a;background:#2a3245;color:#e8ecf4}
 .pickbar button:hover{background:#3a4560}
-/* 提取完成后：报告内嵌上传页下方，不跳转，文件保留可改参重测 */
-.resultbar{display:flex;align-items:center;gap:12px;margin-top:16px;flex-wrap:wrap}
+/* 提取完成后：报告占满右侧整屏，左侧控制台独立滚动，调参重测零滚动 */
+.resultbar{display:flex;align-items:center;gap:10px;margin-top:16px;flex-wrap:wrap}
 .resultbar[hidden]{display:none}
-.reportframe{width:100%;height:88vh;border:1px solid #e2e7f0;border-radius:10px;
-  margin-top:12px;background:#fff}
+.reportframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#fff}
 .reportframe[hidden]{display:none}
+.reportempty{position:absolute;inset:0;display:flex;align-items:center;
+  justify-content:center;padding:24px}
+.reportempty[hidden]{display:none}
+.re-inner{max-width:420px;text-align:center;color:#8a94a6;font-size:13px;line-height:1.8}
+.re-inner b{display:block;color:#5a6a85;font-size:15px;font-weight:500;margin-bottom:8px}
+/* 窄栏里参数控件竖排：label / 控件 / 说明 各占一行 */
+.console .field{flex-direction:column;align-items:stretch;gap:4px;margin:10px 0}
+.console .field label{min-width:0}
+.console .field input,.console .field select{width:100%}
+.console .field .fhelp{min-width:0}
+.console .logbox{max-height:240px}
+@media(max-width:900px){
+  .app{flex-direction:column;height:auto;overflow:visible}
+  .console{width:auto;height:auto;overflow:visible;border-right:0;
+    border-bottom:1px solid #e2e7f0}
+  .reportcol{height:80vh}
+}

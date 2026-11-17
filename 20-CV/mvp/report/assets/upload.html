@@ -7,10 +7,10 @@
 <link rel="stylesheet" href="/static/upload.css">
 </head>
 <body>
-<div class="wrap">
-  <h1>CV 提取 MVP</h1>
-  <p class="sub">上传图片 / PDF / CSV → 本地提取 OCR 文字、结构化表格与单元格坐标 → 生成对照报告</p>
-  <div class="card">
+<div class="app">
+  <aside class="console">
+    <h1>CV 提取 MVP</h1>
+    <p class="sub">上传图片 / PDF / CSV → 本地提取 OCR 文字、结构化表格与单元格坐标 → 右侧生成对照报告</p>
     <div id="drop">
       <b>点击选择，或把文件拖到这里</b>
       支持 png / jpg / bmp / webp / tif、pdf、csv / txt / md；可多选，单个不超过 20MB
@@ -24,15 +24,15 @@
     </div>
     <div class="row">
       <button id="go" disabled>开始提取</button>
-      <a class="ghost" id="last" href="/report" target="_blank" style="display:none">查看上次报告 →</a>
+      <a class="ghost" id="last" href="/report" target="_blank" style="display:none">新窗口报告</a>
       <span id="msg"></span>
     </div>
     <details class="param-panel" id="parampanel">
-      <summary>调试参数（按优先级排；留默认即日常用法）<span class="pbadge" id="parambadge">默认</span></summary>
+      <summary>调试参数<span class="pbadge" id="parambadge">默认</span></summary>
       <div class="param-groups" id="paramgroups"></div>
       <div class="param-actions">
         <button type="button" class="mini" id="resetparams">恢复默认</button>
-        <span class="param-hint">改参数只影响本次上传；结果会写进每份 result.json 与报告页头，方便对比 badcase。</span>
+        <span class="param-hint">改参数只影响本次上传；结果写进每份 result.json 与报告页头，方便对比 badcase。</span>
       </div>
     </details>
     <div class="runpanel" id="runpanel" hidden>
@@ -47,17 +47,24 @@
     </div>
     <div class="resultbar" id="resultbar" hidden>
       <button type="button" class="ghost" id="toggleReport">收起报告</button>
-      <a class="ghost" href="/report" target="_blank">新窗口打开报告</a>
-      <span class="param-hint">报告内嵌在下方；文件已保留，改参数后再点「开始提取」即用同一批文件重测。</span>
+      <a class="ghost" href="/report" target="_blank">新窗口打开</a>
+      <span class="param-hint">报告在右侧；文件已保留，改参数后再点「开始提取」即用同一批文件重测。</span>
+    </div>
+    <p class="tip">
+      首次处理会加载 PaddleOCR / 表格结构模型，约需 20~40 秒；之后同一进程内复用模型会快很多。<br>
+      每次上传生成 <code>YYYYMMDDHHmmss</code> 批次前缀，输入存 <code>mvp/input/&lt;时间戳_原文件名&gt;</code>，
+      产物写同名 <code>mvp/output/&lt;时间戳_原文件名&gt;/</code>；重复上传不覆盖上一次；报告为 <code>mvp/output/index.html</code>。
+    </p>
+  </aside>
+  <main class="reportcol">
+    <div class="reportempty" id="reportempty">
+      <div class="re-inner">
+        <b>报告将显示在这里</b>
+        <span>在左侧选择文件并点「开始提取」，完成后右侧即时呈现对照报告；改参数重测无需重新上传。</span>
+      </div>
     </div>
     <iframe id="reportFrame" class="reportframe" hidden title="提取报告"></iframe>
-  </div>
-  <p class="tip">
-    首次处理会加载 PaddleOCR / 表格结构模型，约需 20~40 秒；之后同一进程内复用模型会快很多。<br>
-    每次上传会生成 <code>YYYYMMDDHHmmss</code>（含时分秒）批次前缀，输入存为 <code>mvp/input/&lt;时间戳_原文件名&gt;</code>，
-    产物写在同名的 <code>mvp/output/&lt;时间戳_原文件名&gt;/</code>；原文件名里的数字编号保留，重复上传不会覆盖上一次；
-    报告为 <code>mvp/output/index.html</code>。
-  </p>
+  </main>
 </div>
 <div class="lightbox" id="lightbox" hidden>
   <div class="lbtop">
