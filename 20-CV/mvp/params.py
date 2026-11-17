@@ -29,9 +29,11 @@ SCHEMA = [
               'lines=按矢量线；default=pdfplumber 默认。'),
     dict(key='column_lines', label='人工列边界（x 坐标）', type='str', default='',
          order=3, group='② 表格能不能抽到',
-         help='逗号/空格分隔的竖线 x 坐标（例：x1,x2,x3,…，需 ≥2 个且递增）。'
-              '这里是临时覆盖值，代码里没有任何写死的列边界；'
-              '留空则自动从 PDF 横线端点推断。仅「有横线没竖线」的流水表才可能需要填。'),
+         help='逗号/空格分隔的竖线 x 坐标（例：x1,x2,x3,…，需 ≥1 个且递增）。'
+              '坐标空间随路线：文本层 PDF 用 PDF 点（像素×72/DPI，单条不成列、'
+              '自动回退）；图片/扫描件用原图像素（报告左图可直接量），单条即可'
+              '切开黏连格并重 OCR 归位，仅 doc_unwarp=off 生效。'
+              '留空则 PDF 自动从横线端点推断、图片不重切。'),
     dict(key='grid_min_h', label='预筛·最少横线', type='int',
          default=config.GRID_MIN_H, min=0, max=200,
          order=4, group='③ 扫描件进不进模型',
@@ -87,8 +89,8 @@ def parse_lines(value):
         nums = [float(t) for t in toks if t != '']
     except (TypeError, ValueError):
         return None
-    if len(nums) < 2 or any(nums[i] >= nums[i + 1] for i in range(len(nums) - 1)):
-        return None                      # 至少要 2 条且递增，否则不是合法列边界
+    if len(nums) < 1 or any(nums[i] >= nums[i + 1] for i in range(len(nums) - 1)):
+        return None                      # 至少 1 条且递增；图片切一刀只需单条 x
     return nums
 
 
@@ -128,7 +130,7 @@ def normalize(raw):
     lines_raw = out.get('column_lines', '')
     parsed = parse_lines(lines_raw)
     if lines_raw and parsed is None:
-        warns.append('人工列边界「{}」无法解析（需 ≥2 个递增数字），已忽略'
+        warns.append('人工列边界「{}」无法解析（需 ≥1 个递增数字），已忽略'
                      .format(lines_raw[:80]))
     out['_column_lines'] = parsed
     return out, warns
@@ -144,7 +146,7 @@ def describe(params):
         elif p['key'] == 'column_lines':
             lines = params.get('_column_lines') or []
             shown = (', '.join('{:g}'.format(x) for x in lines)
-                     if lines else '（留空：内置模板 / 自动推断）')
+                     if lines else '（留空：PDF 自动推断 / 图片不重切）')
         elif p['key'] == 'table_strategy':
             shown = {'auto': 'auto（自动回退）', 'explicit': 'explicit',
                      'lines': 'lines', 'default': 'default',

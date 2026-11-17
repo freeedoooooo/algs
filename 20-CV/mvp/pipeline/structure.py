@@ -32,7 +32,22 @@ def split_header(rows):
         if filled >= 3 and filled == width:
             idx = i
             break
-    return rows[:idx], rows[idx], rows[idx + 1:], idx
+    # 表头前的「碎片标签行」（如 108 单独一行的 余额/摘要）并入表头对应列，
+    # 而不是误当成表格标题。真实标题通常是单个跨列长单元格，不满足此条件。
+    headers = list(rows[idx])
+    title_rows = []
+    for r in rows[:idx]:
+        cells = [(c, str(v).strip()) for c, v in enumerate(r) if str(v).strip()]
+        label_like = (len(cells) >= 2 and
+                      all(len(v) <= 8 and not any(ch.isdigit() for ch in v)
+                          for _, v in cells))
+        if label_like:
+            for c, v in cells:
+                if c < len(headers):
+                    headers[c] = v
+        else:
+            title_rows.append(r)
+    return title_rows, headers, rows[idx + 1:], idx
 
 
 def structure_table(raw, index):

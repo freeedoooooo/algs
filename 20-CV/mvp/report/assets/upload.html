@@ -25,6 +25,14 @@
         <span class="param-hint">改参数只影响本次上传；结果会写进每份 result.json 与报告页头，方便对比 badcase。</span>
       </div>
     </details>
+    <div class="lastpanel" id="lastpanel" hidden>
+      <div class="lasthead">上次文件（调参后可直接重跑，无需重新上传）</div>
+      <ul class="files" id="lastthumbs"></ul>
+      <div class="row">
+        <button type="button" class="ghost" id="rerun">用这些文件重新提取</button>
+        <span class="param-hint">复用上次上传的文件，只改上方参数即可重跑；产物写入新批次，不覆盖旧结果。</span>
+      </div>
+    </div>
     <div class="row">
       <button id="go" disabled>开始提取</button>
       <a class="ghost" id="last" href="/report" style="display:none">查看上次报告 →</a>
@@ -48,6 +56,7 @@
     报告为 <code>mvp/output/index.html</code>。
   </p>
 </div>
+<div class="lightbox" id="lightbox" hidden><img id="lbimg" alt="预览"></div>
 <script src="/static/upload.js"></script>
 </body>
 </html>

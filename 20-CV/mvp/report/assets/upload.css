@@ -13,9 +13,13 @@ h1{font-size:22px;font-weight:500;margin:0 0 6px}
 #drop b{display:block;color:#25324a;font-size:15px;font-weight:500;margin-bottom:6px}
 input[type=file]{display:none}
 .files{margin:14px 0 0;padding:0;list-style:none;font-size:13px}
-.files li{padding:5px 0;border-bottom:1px solid #f0f2f6;
-  display:flex;justify-content:space-between;gap:12px}
-.files li span:last-child{color:#8a94a6;white-space:nowrap}
+.files li{padding:6px 0;border-bottom:1px solid #f0f2f6;
+  display:flex;align-items:center;gap:10px}
+.files .fname{flex:1;word-break:break-all}
+.files .fsize{color:#8a94a6;white-space:nowrap}
+.files .fthumb{flex:none;display:flex}
+.files .fthumb .thumb{width:40px;height:40px;border-radius:6px}
+.files .fthumb .thumb.file{font-size:10px}
 .row{display:flex;align-items:center;gap:12px;margin-top:18px;flex-wrap:wrap}
 button{font:inherit;font-size:14px;padding:9px 20px;border-radius:8px;
   border:1px solid #2563eb;background:#2563eb;color:#fff;cursor:pointer}
@@ -65,3 +69,20 @@ code{background:#eef2f8;padding:1px 5px;border-radius:4px}
 .param-hint{font-size:11px;color:#8a94a6}
 button.mini{font-size:12px;padding:5px 12px;background:#fff;color:#2563eb;
   border:1px solid #cbd5e1}
+/* 文件预览缩略图：行内小图，图片点击放大，PDF/文本角标点击新窗口打开 */
+.thumb{width:96px;height:96px;object-fit:cover;border:1px solid #e2e7f0;
+  border-radius:8px;cursor:pointer;background:#fff}
+.thumb.file{display:flex;align-items:center;justify-content:center;
+  text-decoration:none;color:#6b7688;font-size:13px;font-weight:600}
+.thumb.file:hover{border-color:#2563eb;color:#2563eb}
+img.thumb:hover{border-color:#2563eb}
+/* 上次文件面板：复用输入、调参重跑 */
+.lastpanel{margin-top:16px;border:1px solid #e2e7f0;border-radius:8px;
+  background:#fbfcfe;padding:10px 14px}
+.lasthead{font-size:13px;font-weight:500;color:#25324a}
+/* 全屏预览层：点缩略图放大，点任意处关闭 */
+.lightbox{position:fixed;inset:0;background:rgba(10,15,30,.85);
+  display:flex;align-items:center;justify-content:center;z-index:99;cursor:zoom-out}
+.lightbox[hidden]{display:none}
+.lightbox img{max-width:94vw;max-height:94vh;border-radius:6px;
+  box-shadow:0 8px 40px rgba(0,0,0,.5)}

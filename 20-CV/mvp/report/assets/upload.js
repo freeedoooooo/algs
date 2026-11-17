@@ -4,6 +4,18 @@ var drop=document.getElementById('drop'),picker=document.getElementById('picker'
 var list=document.getElementById('filelist'),go=document.getElementById('go');
 var log=document.getElementById('log'),msg=document.getElementById('msg');
 var paramgroups=document.getElementById('paramgroups');
+var lastpanel=document.getElementById('lastpanel'),lastthumbs=document.getElementById('lastthumbs');
+var lb=document.getElementById('lightbox'),lbimg=document.getElementById('lbimg');
+
+/* 参数持久化：上传完跳 /report 再回来不丢已填值。存浏览器 localStorage，
+   与后端默认值解耦（后端 schema 仍是唯一真相源，这里只记用户上次的选择）。 */
+var PKEY='cv_mvp_params';
+function loadSaved(){
+  try{ return JSON.parse(localStorage.getItem(PKEY)||'{}'); }catch(e){ return {}; }
+}
+function saveParams(obj){
+  try{ localStorage.setItem(PKEY, JSON.stringify(obj)); }catch(e){}
+}
 
 /* 从后端 /api/params 读 schema（顺序=优先级），动态生成参数控件。
    前端不写死任何默认值/范围 —— 全部跟着 params.py 走，避免两处漂移。 */
@@ -37,7 +49,14 @@ function renderParams(schema){
     return '<div class="pgroup"><h4>'+g+'</h4>'+
       groups[g].map(fieldHtml).join('')+'</div>';
   }).join('');
+  var saved=loadSaved();
+  schema.forEach(function(p){
+    var el=document.getElementById('pf_'+p.key);
+    if(el && saved[p.key]!==undefined && saved[p.key]!==null) el.value=saved[p.key];
+  });
 }
+paramgroups.addEventListener('input',function(){ saveParams(collectParams()); });
+paramgroups.addEventListener('change',function(){ saveParams(collectParams()); });
 function collectParams(){
   var out={};
   paramSchema.forEach(function(p){
@@ -56,6 +75,7 @@ document.getElementById('resetparams').onclick=function(){
     var el=document.getElementById('pf_'+p.key);
     if(el) el.value=p.default;
   });
+  try{ localStorage.removeItem(PKEY); }catch(e){}
 };
 
 drop.onclick=function(){picker.click();};
@@ -70,17 +90,74 @@ function add(fs){
   for(var i=0;i<fs.length;i++) picked.push(fs[i]);
   render();
 }
+function fileRow(name,size,url){
+  return '<span class="fthumb">'+thumbHtml(name,url)+'</span>'+
+    '<span class="fname">'+escHtml(name)+'</span>'+
+    '<span class="fsize">'+(size/1024).toFixed(0)+' KB</span>';
+}
 function render(){
   list.innerHTML='';
   picked.forEach(function(f){
     var li=document.createElement('li');
-    li.innerHTML='<span></span><span></span>';
-    li.firstChild.textContent=f.name;
-    li.lastChild.textContent=(f.size/1024).toFixed(0)+' KB';
+    var url=f._url||(f._url=URL.createObjectURL(f));
+    li.innerHTML=fileRow(f.name,f.size,url);
     list.appendChild(li);
   });
   go.disabled=picked.length===0;
 }
+function kindOf(name){
+  var e=(name.split('.').pop()||'').toLowerCase();
+  if(['png','jpg','jpeg','bmp','webp','tif','tiff'].indexOf(e)>=0) return 'image';
+  if(e==='pdf') return 'pdf';
+  return 'text';
+}
+function thumbHtml(name,url){
+  var k=kindOf(name);
+  if(k==='image')
+    return '<img class="thumb" src="'+url+'" data-full="'+url+'" alt="'+escHtml(name)+'" title="'+escHtml(name)+'">';
+  var label=(k==='pdf'?'PDF':(name.split('.').pop()||'FILE').toUpperCase());
+  return '<a class="thumb file" href="'+url+'" target="_blank" title="'+escHtml(name)+'"><span>'+escHtml(label)+'</span></a>';
+}
+function openLb(url){ lbimg.src=url; lb.hidden=false; }
+lb.onclick=function(){ lb.hidden=true; lbimg.removeAttribute('src'); };
+function bindThumbs(el){
+  el.addEventListener('click',function(e){
+    var t=e.target.closest?e.target.closest('img.thumb'):null;
+    if(t){ e.preventDefault(); openLb(t.getAttribute('data-full')); }
+  });
+}
+bindThumbs(list); bindThumbs(lastthumbs);
+function loadLast(){
+  fetch('/api/last').then(function(r){return r.json();}).then(function(j){
+    var fs=j.files||[];
+    if(!fs.length){ lastpanel.hidden=true; return; }
+    lastpanel.hidden=false;
+    lastthumbs.innerHTML=fs.map(function(f){
+      return '<li>'+fileRow(f.name,f.size,encodeURI(f.url))+'</li>';
+    }).join('');
+  }).catch(function(){});
+}
+loadLast();
+document.getElementById('rerun').onclick=async function(){
+  var btn=this; btn.disabled=true;
+  msg.textContent='复用上次文件…';
+  document.getElementById('runpanel').hidden=false;
+  saveParams(collectParams());
+  try{
+    var res=await fetch('/api/rerun',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({params:collectParams()})
+    });
+    var j=await res.json();
+    if(!j.ok) throw new Error(j.error||'重跑失败');
+    msg.textContent='处理中…';
+    poll();
+  }catch(e){
+    msg.innerHTML='<span class="err">'+escHtml(e.message)+'</span>';
+    btn.disabled=false;
+  }
+};
 function b64(file){
   return new Promise(function(ok,no){
     var r=new FileReader();
@@ -147,6 +224,7 @@ go.onclick=async function(){
       files.push({name:f.name,data:await b64(f)});
     }
     msg.textContent='上传中…';
+    saveParams(collectParams());
     var res=await fetch('/api/upload',{
       method:'POST',
       headers:{'Content-Type':'application/json'},

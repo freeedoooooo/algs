@@ -18,6 +18,7 @@ from .. import config
 from . import ocr as ocr_mod
 from . import pdf as pdf_mod
 from . import plain as plain_mod
+from . import resplit as resplit_mod
 from . import table_model as model_mod
 from . import structure as struct_mod
 
@@ -34,6 +35,21 @@ def _blank_rec(name, case_rel):
         'table_route': 'skipped', 'notes': [],
         'page': 1, 'params_snapshot': {},
     }
+
+
+def _maybe_resplit(raw, img_path, params, use_unwarp, log):
+    """图片/扫描路线：填了人工列边界才重切；on 时坐标空间不一致，warn 跳过。"""
+    lines = params.get('_column_lines')
+    if not lines or not raw:
+        return raw
+    if use_unwarp:
+        log('warn', 'table', '人工列边界仅支持 doc_unwarp=off'
+            '（单元格框须与原图同空间），本次已跳过重切')
+        return raw
+    return resplit_mod.resplit(
+        raw, lines, img_path,
+        det_thresh=params.get('det_thresh'),
+        box_thresh=params.get('box_thresh'), emit=log)
 
 
 def extract_one(src_path, case_abs, case_rel, params=None, emit=None):
@@ -114,6 +130,7 @@ def extract_one(src_path, case_abs, case_rel, params=None, emit=None):
                 img_path, case_abs,
                 min_h=params.get('grid_min_h'), min_v=params.get('grid_min_v'),
                 use_unwarp=use_unwarp, emit=emit)
+            raw = _maybe_resplit(raw, img_path, params, use_unwarp, log)
             rec['table_route'] = 'table_model' if raw else 'skipped'
             rec['rectified_size'] = rect
             # 只有「开了矫正」且真的落了矫正图，才需要原图/矫正图切换
@@ -139,6 +156,7 @@ def extract_one(src_path, case_abs, case_rel, params=None, emit=None):
             img_path, case_abs,
             min_h=params.get('grid_min_h'), min_v=params.get('grid_min_v'),
             use_unwarp=use_unwarp, emit=emit)
+        raw = _maybe_resplit(raw, img_path, params, use_unwarp, log)
         rec['table_route'] = 'table_model' if raw else 'skipped'
         rec['rectified_size'] = rect
         if rect and use_unwarp:

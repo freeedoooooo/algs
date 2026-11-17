@@ -174,6 +174,8 @@ def tables(pdf_path, column_lines=None, strategy='auto', dpi=None, page_no=1):
     found, notes = [], []
     scale = (dpi or config.PDF_DPI) / 72.0
     lines = list(column_lines) if column_lines else None
+    if lines and len(lines) < 2:
+        lines = None      # 单条竖线围不成列，PDF explicit 无意义，回退自动策略
     if lines:
         notes.append('使用页面人工列边界（{} 条竖线）→ explicit 策略优先'
                      .format(len(lines)))
