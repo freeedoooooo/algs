@@ -1,6 +1,7 @@
-# 第7周依赖（P1-C 上：CNN 原理 · numpy 手写卷积）
-numpy
-matplotlib
-torch
-torchvision   # 仅用于取一张样例图做可视化
-scipy         # 脚手架 d_conv_viz.py 用它跑边缘核做对比演示
+# 第7周依赖 —— 增量清单：只列相对前面各周新增的包，锁版本
+# 安装：python -m pip install -r requirements.txt
+#
+# torch/torchvision/numpy/matplotlib 已在 week-03 覆盖，不重复列。
+# scipy 是脚手架 d_conv_viz.py 的直接依赖（convolve2d 跑边缘核演示），
+# 锁 paddle 环境实测版本（可能已作为 paddlex 传递依赖存在，已满足时 pip 直接跳过）。
+scipy==1.15.3

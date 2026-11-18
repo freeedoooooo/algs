@@ -1,5 +1,12 @@
-# 第3周依赖（P1-A：numpy 手写线性/softmax 回归）
-numpy
-matplotlib
-torch          # 仅用 torchvision 下载 MNIST，模型仍手写
-torchvision
+# 第3周依赖 —— 增量清单：只列相对 week-01/02 新增的包，全部锁版本
+# 安装：python -m pip install -r requirements.txt
+#
+# numpy / matplotlib 已由 week-01/02 覆盖（matplotlib 锁 3.10.9；numpy 是
+# paddle 系列传递依赖，实测 2.2.6），此处不重复列，避免 pip 顺手升级。
+# torch/torchvision 装一次即覆盖 week-04~08（后面各周无新增，不再设本文件；
+# week-07 新增 scipy 见该周清单）。
+# 版本为 pip dry-run 对本环境（Python 3.10 / Windows，默认源即 CPU 版）解析的配套组合；
+# 装完用 python -c "import torch; print(torch.__version__)" 核对。
+# mpmath/sympy 是 torch 的传递依赖，会自动带上，不列。
+torch==2.14.1          # 仅用 torchvision 下载 MNIST，模型仍手写
+torchvision==0.29.2

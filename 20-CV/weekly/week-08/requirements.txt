@@ -1,5 +1,0 @@
-# 第8周依赖（P1-C 下：用 PyTorch 搭 CNN + 里程碑）
-torch
-torchvision
-numpy
-matplotlib
