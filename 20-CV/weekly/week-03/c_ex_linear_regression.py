@@ -79,7 +79,7 @@ def train(X, y, W, b, lr, epochs=100):
 if __name__ == '__main__':
     losses, W, b = train(X, y, W, b, lr)
     print(f'\n最终 W={W}（应≈2）  b={b}（应≈1）')
-    plot_curves(losses, save='linear_loss.png')
+    plot_curves(losses, save='output/linear_loss.png')
     # 加练：把 lr 改成 1.0 和 0.001 各跑一次，观察现象，记进 notes.md
     #   lr=1.0   → 步子太大跳过极值点，loss 震荡甚至越荡越大（发散）
     #   lr=0.001 → 100 轮几乎没动，W/b 离真值还很远（学不动）
