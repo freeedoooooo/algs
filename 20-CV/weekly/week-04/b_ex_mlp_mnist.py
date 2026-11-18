@@ -1,4 +1,11 @@
 """
+【导读】week-04 动手 1/1（P1-A 毕业作品）· 一个文件贯穿模块 A-D · 核心练习：TODO 自己填
+TODO 对照：1-3 初始化/激活/前向=模块 B（Day 2）｜4 交叉熵=模块 B/C｜5 backward=模块 C（Day 3，⭐最难）
+          6 训练循环=模块 D（Day 4）｜7 评估=周末达标
+先修：week-03 两个练习（softmax+交叉熵梯度结论这里复用）｜后续：week-05 b_ex_pytorch_fundamentals.py
+运行：python b_ex_mlp_mnist.py（week-04 目录下；首次会下载 MNIST 到 data/）
+观察：测试集准确率 ≥95%、生成 output/mlp_curve.png；达标后对着 backward() 逐行讲清（验收核心）
+
 第4周练习（P1-A 毕业作品）· 纯 numpy 手写 2 层神经网络训练 MNIST
 
 ⚠️⚠️ 学习规则（本周最重要，请遵守）：

@@ -1,4 +1,10 @@
 """
+【导读】week-08 动手 1/2 · TODO1-4 搭 LeNet=模块 B（Day 2）、TODO5-6+训练=模块 C（Day 3-4）· 核心练习：TODO 自己填
+先修：week-07 b_ex_conv2d.py（nn.Conv2d 内部就是你手写的滑窗加权求和）｜后续：d_feature_viz.py
+运行：python b_ex_cnn.py（week-08 目录下）
+观察：CNN 测试准确率应优于第6周 MLP、生成 output/week8_curve.png；逐层尺寸 28→24→12→8→4 自己推
+达标后：把"卷积在做什么/感受野/为什么 CNN 适合图像"三句话写顺（P1-C 验收核心）
+
 第8周练习 · 用 PyTorch 搭 CNN 并训练（自己填！）
 
 ⚠️ 学习规则：

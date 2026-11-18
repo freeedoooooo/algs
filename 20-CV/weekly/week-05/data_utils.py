@@ -1,8 +1,9 @@
 """
 第5周脚手架 · 数据与画图（可直接运行/导入）
+【导读】共享脚手架，不计入动手顺序；本周动手文件见 README「动手顺序表」
 
 这些是"boilerplate"——下载 FashionMNIST、画图、数参数量。敲它们学不到 PyTorch 的核心，
-所以替你写好。你的精力应全部放在 ex_pytorch_fundamentals.py / ex_train_loop.py 上。
+所以替你写好。你的精力应全部放在 b_ex_pytorch_fundamentals.py / d_ex_train_loop.py 上。
 """
 import numpy as np
 

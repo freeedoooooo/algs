@@ -1,10 +1,15 @@
 """
+【导读】week-07 动手 2/2 · 对应 README 模块 D（Day 4-5）· 脚手架：直接跑，不用写
+先修：b_ex_conv2d.py Part1（先手写再看演示，体会"我写的滑窗就是它在干的事"）
+运行：python d_conv_viz.py（week-07 目录下）
+观察：output/conv_edge_demo.png——3x3 小核从照片里抽出轮廓边缘 = "卷积核是特征探测器"
+
 第7周脚手架 · 卷积可视化（直接运行）
 
 用真实灰度图 + 边缘检测核（Sobel），直观感受"卷积 = 特征提取"：
 一个小小的 3x3 核，就能从一张鞋/包的照片里抽出轮廓边缘。
 
-手写卷积是 ex_conv2d.py 的事；这里用 scipy 跑同样的效果做"眼见为实"演示，
+手写卷积是 b_ex_conv2d.py 的事；这里用 scipy 跑同样的效果做"眼见为实"演示，
 帮你建立"卷积核在提取什么"的直觉（也可换成你自己的核试试）。
 """
 import numpy as np
@@ -15,12 +20,14 @@ from data_utils import load_sample_image
 
 img = load_sample_image()                 # (H, W) 0-1 灰度图
 
-# Sobel 边缘检测核（横/纵方向）
+# Sobel 边缘检测核（横/纵方向）：左右两列符号相反 → 平坦区域正负抵消≈0，
+# 灰度突变处（边缘）抵消不掉 → 响应大。这就是"一个核检测一种特征"的最简实例
 sobel_x = np.array([[-1, 0, 1],
                     [-2, 0, 2],
                    [-1, 0, 1]], dtype=float)
 sobel_y = sobel_x.T
 
+# mode='same' 输出与输入同尺寸（内部自动补边界）；两个方向的梯度取模长合成边缘强度
 edge_x = convolve2d(img, sobel_x, mode='same', boundary='symm')
 edge_y = convolve2d(img, sobel_y, mode='same', boundary='symm')
 edge = np.sqrt(edge_x**2 + edge_y**2)

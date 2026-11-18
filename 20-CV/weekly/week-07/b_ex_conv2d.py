@@ -1,4 +1,10 @@
 """
+【导读】week-07 动手 1/2 · Part1=模块 B（Day 2 单通道卷积）、Part2/3=模块 C（Day 3 池化+多通道）· 核心练习：TODO 自己填
+先修：week-06 b_ex_classifier.py｜后续：d_conv_viz.py（看你手写的卷积在真实图片上的效果）
+运行：python b_ex_conv2d.py（week-07 目录下）
+观察：三个自检与手算一致——单通道 2x2=[[6,8],[12,14]]、池化 [[5,6],[8,9]]、多通道 shape (3,6,6)
+尺寸公式 out = floor((in + 2*padding - kernel)/stride) + 1 务必自己算一遍，week-08 搭 LeNet 全靠它
+
 第7周练习① · 用 numpy 手写卷积 & 池化（自己填！）
 
 ⚠️ 学习规则：

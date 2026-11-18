@@ -1,4 +1,10 @@
 """
+【导读】week-05 动手 2/3 · Part1=模块 B（Day 2 autograd）、Part2=模块 C（Day 3 nn.Module）· 核心练习：TODO 自己填
+先修：a_env_check.py 跑通｜后续：d_ex_train_loop.py（本文件的 MLP 可复用过去）
+运行：python b_ex_pytorch_fundamentals.py（week-05 目录下）
+观察：x.grad=6.0、dz/dw=a、MLP 输出 shape (4,10)、参数量与第4周 numpy 版对得上
+关键对照：autograd 自动做的，就是你第4周手写的 backward()——能指出对应关系才算真懂
+
 第5周练习① · PyTorch 张量 / 自动求导 / nn.Module（自己填！）
 
 ⚠️ 学习规则（本周最重要，请遵守）：

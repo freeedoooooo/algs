@@ -1,4 +1,9 @@
 """
+【导读】week-03 动手 2/2 · 对应 README 模块 D 概念（Day 4-5）+ 周末实战 · 核心练习：TODO 自己填
+先修：c_ex_linear_regression.py（训练循环的套路直接复用）｜后续：week-04 b_ex_mlp_mnist.py
+运行：python weekend_ex_softmax_regression.py（week-03 目录下；首次会下载 MNIST 到 data/）
+观察：测试集准确率明显高于 10%（瞎猜线）、生成 output/softmax_curve.png（loss 降 + acc 升）
+
 第3周练习② · numpy 手写 softmax 回归（自己填！）
 
 ⚠️ 学习规则：

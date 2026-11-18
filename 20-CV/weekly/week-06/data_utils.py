@@ -1,5 +1,6 @@
 """
 第6周脚手架 · 数据加载器 / 模型保存 / 画图（可直接运行/导入）
+【导读】共享脚手架，不计入动手顺序；本周动手文件见 README「动手顺序表」
 
 boilerplate：把 FashionMNIST 切成 train/val/test，提供 TensorDataset+DataLoader，
 以及模型 state_dict 的保存/加载。敲这些学不到深度学习，替你写好。

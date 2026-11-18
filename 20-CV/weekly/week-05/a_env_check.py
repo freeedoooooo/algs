@@ -1,4 +1,9 @@
 """
+【导读】week-05 动手 1/3 · 对应 README 模块 A（Day 1）· 脚手架：直接跑，不用写
+先修：无（本周第一件事）｜后续：b_ex_pytorch_fundamentals.py
+运行：python a_env_check.py（week-05 目录下）
+观察：PyTorch 版本、CUDA 可用性、matmul 自检通过——三项全绿才往下做
+
 第5周脚手架 · 环境验证（直接运行）
 
 确认 PyTorch 装好、能否用 GPU、做一个最小的张量运算自检。

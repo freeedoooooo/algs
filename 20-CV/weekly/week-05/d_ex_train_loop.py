@@ -1,4 +1,10 @@
 """
+【导读】week-05 动手 3/3 · 对应 README 模块 D（Day 4-5）· 核心练习：TODO 自己填
+先修：b_ex_pytorch_fundamentals.py（MLP 可直接复用）｜后续：week-06 b_ex_classifier.py
+运行：python d_ex_train_loop.py（week-05 目录下；首次会下载 FashionMNIST 到 data/）
+观察：loss 下降、acc 上升、生成 output/week5_curve.png；先 5000 张跑通再上全量
+本周不强求 >90%（那是第6周里程碑）；重点是对照第4周 numpy train()，说清 PyTorch 自动化了哪几步
+
 第5周练习② · DataLoader + PyTorch 训练循环（自己填！）
 
 ⚠️ 学习规则：

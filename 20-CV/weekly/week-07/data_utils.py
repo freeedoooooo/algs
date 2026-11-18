@@ -1,8 +1,9 @@
 """
 第7周脚手架 · 样例图加载 / 画图（可直接运行/导入）
+【导读】共享脚手架，不计入动手顺序；本周动手文件见 README「动手顺序表」
 
 boilerplate：从 FashionMNIST 抽一张灰度图给你做卷积可视化演示，以及通用画图。
-手写卷积才是本周学习重点（见 ex_conv2d.py），这些替你写好。
+手写卷积才是本周学习重点（见 b_ex_conv2d.py），这些替你写好。
 """
 import numpy as np
 import matplotlib.pyplot as plt

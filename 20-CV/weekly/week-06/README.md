@@ -25,12 +25,23 @@
 
 ---
 
+## 动手顺序表（找文件照这里，目录排序 = 学习顺序）
+
+| 顺序 | 文件 | 对应模块·Day | 角色 |
+|---|---|---|---|
+| 1 | `b_ex_classifier.py` | 模块 B-D · Day 2-周末（一个文件贯穿） | 练习：TODO1-3 dropout/权重衰减（B）→ 4-5 训练/评估+GPU（C）→ 6-7 保存/载入（D）→ 周末冲 >90% |
+| — | `data_utils.py` | 共享 | 脚手架：train/val/test 拆分、模型保存/加载、画图 |
+
+> 模块 A（过拟合概念）无代码。每个 py 头部有导读块。
+
+---
+
 ## 逐日安排
 
 | 天 | 时长 | 任务 |
 |---|---|---|
 | Day 1（周一晚） | 1.5h | 读 d2l 第 4 章 权重衰减/dropout（概念）；理解过拟合 |
-| Day 2（周二晚） | 1.5h | 写 `ex_classifier.py`：MLP 加 dropout + 优化器加 weight_decay |
+| Day 2（周二晚） | 1.5h | 写 `b_ex_classifier.py`：MLP 加 dropout + 优化器加 weight_decay |
 | Day 3（周三晚） | 1.5h | 写 train/val 三件套 + GPU `.to(device)` |
 | Day 4（周四晚） | 1.5h | 模型保存/加载（state_dict），跑通小数据 |
 | Day 5（周五晚） | 1h | 上全量训练，观察 val 曲线，调超参 |
@@ -55,7 +66,7 @@
 
 ### 模块 B · 给网络加 Dropout + 权重衰减（Day 2）⭐核心动手
 
-**动手**：写 `ex_classifier.py` 的 `MLP`：
+**动手**：写 `b_ex_classifier.py` 的 `MLP`：
 - `TODO 1`：在隐藏层后加 `self.drop = nn.Dropout(0.2)`（注意：放在激活之后更常见）。
 - `TODO 2`：`forward` 里 `x = self.drop(x)`。
 - `TODO 3`：优化器改成 `torch.optim.SGD(..., weight_decay=1e-4)`。

@@ -1,11 +1,17 @@
 """
+【导读】week-08 动手 2/2 · 对应 README 模块 D（Day 5）· 脚手架：直接跑，不用写
+先修：b_ex_cnn.py（训完再跑本文件、换入你自己的权重，看到的核更有"语义"）
+运行：python d_feature_viz.py（week-08 目录下）
+观察：output/week8_kernels.png（6 个 5x5 核长什么样）+ week8_featuremaps.png（同一张图的 6 种特征响应）
+回看锚点：反光/模糊的 bad case，是否在浅层特征图里就"糊"掉了？
+
 第8周脚手架 · 第一层卷积核 & 特征图可视化（直接运行）
 
 帮你"看见" CNN 学到了什么：
   1) 第一层卷积核（权重）——它们长什么样（边缘？斑点？）
   2) 拿一张输入图喂进网络，看第一层卷积输出的特征图
 
-搭网络（ex_cnn.py）是你本周学习重点；这里只是把训好的/随机初始化的权重画出来，
+搭网络（b_ex_cnn.py）是你本周学习重点；这里只是把训好的/随机初始化的权重画出来，
 帮你在"数学"和"直觉"之间架桥。可在你训练完 LeNet 后 import 复用。
 """
 import os
@@ -18,7 +24,7 @@ from data_utils import make_cnn_dataloaders, load_fashion_mnist_image
 
 
 def build_lenet_for_viz():
-    """和 ex_cnn.py 同结构的 LeNet，仅用于可视化（权重可随机或加载你训好的）。"""
+    """和 b_ex_cnn.py 同结构的 LeNet，仅用于可视化（权重可随机或加载你训好的）。"""
     model = nn.Sequential(
         nn.Conv2d(1, 6, 5), nn.ReLU(),
         nn.MaxPool2d(2),
@@ -69,4 +75,4 @@ if __name__ == '__main__':
     model = build_lenet_for_viz()
     visualize_kernels(model)
     visualize_feature_maps(model)
-    print('（提示：用你自己 ex_cnn.py 训好的 LeNet 替换 model，看到的核会更有"语义"。）')
+    print('（提示：用你自己 b_ex_cnn.py 训好的 LeNet 替换 model，看到的核会更有"语义"。）')

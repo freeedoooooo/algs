@@ -30,14 +30,27 @@
 
 ---
 
+## 动手顺序表（找文件照这里，目录排序 = 学习顺序）
+
+| 顺序 | 文件 | 对应模块·Day | 角色 |
+|---|---|---|---|
+| 1 | `a_env_check.py` | 模块 A · Day 1 | 脚手架：直接跑，验证 PyTorch 环境 |
+| 2 | `b_ex_pytorch_fundamentals.py` | 模块 B（Day 2）+ C（Day 3） | 练习：Part1 autograd、Part2 nn.Module 搭 MLP |
+| 3 | `d_ex_train_loop.py` | 模块 D · Day 4-5 | 练习：DataLoader + 训练循环（练习②的 MLP 可复用） |
+| — | `data_utils.py` | 共享 | 脚手架：下 FashionMNIST/画图/数参数量 |
+
+> 每个 py 头部有导读块（先修/后续/运行/观察目标）。
+
+---
+
 ## 逐日安排
 
 | 天 | 时长 | 任务 |
 |---|---|---|
-| Day 1（周一晚） | 1.5h | 跑 `b_env_check.py` 确认环境；读 PyTorch "Learn the Basics: Tensors" |
-| Day 2（周二晚） | 1.5h | 写 `ex_pytorch_fundamentals.py` Part1：autograd 自动求梯度 |
+| Day 1（周一晚） | 1.5h | 跑 `a_env_check.py` 确认环境；读 PyTorch "Learn the Basics: Tensors" |
+| Day 2（周二晚） | 1.5h | 写 `b_ex_pytorch_fundamentals.py` Part1：autograd 自动求梯度 |
 | Day 3（周三晚） | 1.5h | 写 Part2：用 `nn.Module` 搭 MLP，前向出 `(B,10)` |
-| Day 4（周四晚） | 1.5h | 写 `ex_train_loop.py`：DataLoader + 训练循环（先小数据 5000 张跑通） |
+| Day 4（周四晚） | 1.5h | 写 `d_ex_train_loop.py`：DataLoader + 训练循环（先小数据 5000 张跑通） |
 | Day 5（周五晚） | 1h | 上全量 FashionMNIST，看 loss 下降、acc 上升 |
 | 周末（选一天） | 4-6h | 调通完整循环 + 画曲线 + 逐组件对照第 4 周 + bad case 回看 1h |
 
@@ -55,7 +68,7 @@
 **动手**：
 1. 直接运行脚手架验证环境（不学东西，但卡环境最浪费时间）：
    ```bash
-   python b_env_check.py
+   python a_env_check.py
    ```
    看到 PyTorch 版本 + "张量 matmul 自检通过" 即可。无 GPU 完全 OK。
 2. 读 PyTorch 官方 "Learn the Basics: Tensors"：https://pytorch.org/tutorials/beginner/basics/tensor_tutorial.html
@@ -76,7 +89,7 @@ y.backward()          # 反向传播
 print(x.grad)         # 应等于 6.0（dy/dx = 2x = 6）
 ```
 
-**动手**：写 `ex_pytorch_fundamentals.py` 的 Part1，分别实现标量版 `f(x)=x²` 和向量版 `z=sum(w*a)+b` 的自动求导，打印梯度并和手算核对。**重点体会：`requires_grad=True` 的 tensor，只要你碰了它，PyTorch 就记下怎么求导。**
+**动手**：写 `b_ex_pytorch_fundamentals.py` 的 Part1，分别实现标量版 `f(x)=x²` 和向量版 `z=sum(w*a)+b` 的自动求导，打印梯度并和手算核对。**重点体会：`requires_grad=True` 的 tensor，只要你碰了它，PyTorch 就记下怎么求导。**
 
 **产出**：能解释 `requires_grad / backward() / .grad` 三者关系，并能说清"它替代了我第 4 周的哪段代码"。
 
@@ -89,7 +102,7 @@ print(x.grad)         # 应等于 6.0（dy/dx = 2x = 6）
 - **`nn.Linear(in, out)`**：就是 `y = x @ W^T + b`，对应你第 4 周的 `W2 @ A1 + b2`。
 - **`nn.Flatten()`**：把 `(B,1,28,28)` 压成 `(B,784)`，连接"图像输入"和"全连接层"。
 
-**动手**：写 `ex_pytorch_fundamentals.py` 的 Part2，用 `nn.Module` 搭一个 `784→128(ReLU)→10` 的 MLP，`forward` 接一个 batch 看输出是不是 `(B,10)`。顺手数一下参数量，对比第 4 周 numpy 版的 `784*128 + 128*10 + 偏置`。
+**动手**：写 `b_ex_pytorch_fundamentals.py` 的 Part2，用 `nn.Module` 搭一个 `784→128(ReLU)→10` 的 MLP，`forward` 接一个 batch 看输出是不是 `(B,10)`。顺手数一下参数量，对比第 4 周 numpy 版的 `784*128 + 128*10 + 偏置`。
 
 **产出**：一个能前向出 `(B,10)` 的 MLP；参数量心里有数。
 
@@ -109,7 +122,7 @@ for xb, yb in loader:                 # DataLoader 自动切片+打乱
 ```
 
 **动手**：
-1. 写 `ex_train_loop.py` 的 `TODO 2`：把 numpy 的 `(X,y)` 用 `TensorDataset` + `DataLoader` 包起来，`batch_size=128, shuffle=True`。
+1. 写 `d_ex_train_loop.py` 的 `TODO 2`：把 numpy 的 `(X,y)` 用 `TensorDataset` + `DataLoader` 包起来，`batch_size=128, shuffle=True`。
 2. 写 `train_one_epoch` / `evaluate`（`TODO 3/4`）。**先取 5000 张小数据跑通**，确认 loss 下降、acc 上升，再上全量 60000。
 3. 用 `data_utils.plot_curves` 画曲线，存到 `output/week5_curve.png`。
 
@@ -151,10 +164,10 @@ for xb, yb in loader:                 # DataLoader 自动切片+打乱
 
 ## 验收清单（周末打勾）
 
-- [ ] `b_env_check.py` 跑通，PyTorch 可用（有无 GPU 均可）
+- [ ] `a_env_check.py` 跑通，PyTorch 可用（有无 GPU 均可）
 - [ ] Part1：autograd 标量/向量求导跑通，梯度与手算一致
 - [ ] Part2：用 `nn.Module` 搭出 MLP，前向出 `(B,10)`，参数量说得出
-- [ ] `ex_train_loop.py`：DataLoader + 训练循环跑通（先 5000 张后全量）
+- [ ] `d_ex_train_loop.py`：DataLoader + 训练循环跑通（先 5000 张后全量）
 - [ ] 画出 loss / acc 曲线（存 `output/week5_curve.png`）
 - [ ] **能逐组件讲清 PyTorch 对应第 4 周 numpy 的哪一步**（验收核心）
 - [ ] 完成一次 bad case 回看并记录（聚焦"输入预处理"）

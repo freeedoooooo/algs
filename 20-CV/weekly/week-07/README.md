@@ -25,14 +25,26 @@
 
 ---
 
+## 动手顺序表（找文件照这里，目录排序 = 学习顺序）
+
+| 顺序 | 文件 | 对应模块·Day | 角色 |
+|---|---|---|---|
+| 1 | `b_ex_conv2d.py` | 模块 B（Day 2）+ C（Day 3） | 练习：Part1 单通道卷积 → Part2 池化 → Part3 多通道，核对 shape |
+| 2 | `d_conv_viz.py` | 模块 D · Day 4-5 | 脚手架：直接跑，看 Sobel 核提取边缘 |
+| — | `data_utils.py` | 共享 | 脚手架：样例图加载/画图 |
+
+> 模块 A（为什么需要 CNN）无代码。每个 py 头部有导读块。
+
+---
+
 ## 逐日安排
 
 | 天 | 时长 | 任务 |
 |---|---|---|
 | Day 1（周一晚） | 1.5h | 读 d2l 第 6 章导言 + CNN Explainer 玩 20min，建立"卷积在干啥"直觉 |
-| Day 2（周二晚） | 1.5h | 写 `ex_conv2d.py` Part1：单通道卷积（stride/padding/shape） |
+| Day 2（周二晚） | 1.5h | 写 `b_ex_conv2d.py` Part1：单通道卷积（stride/padding/shape） |
 | Day 3（周三晚） | 1.5h | 写 Part2：最大池化 + Part3：多通道卷积 |
-| Day 4（周四晚） | 1.5h | 跑 `b_conv_viz.py` 看边缘检测，理解"卷积核=特征探测器" |
+| Day 4（周四晚） | 1.5h | 跑 `d_conv_viz.py` 看边缘检测，理解"卷积核=特征探测器" |
 | Day 5（周五晚） | 1h | 推感受野：两层 3×3 卷积叠加看原图多大区域 |
 | 周末（选一天） | 4-6h | 全部核对 shape + CNN Explainer 深度玩 + bad case 回看 1h |
 
@@ -66,7 +78,7 @@
 out_h = floor((in_h + 2*padding - kernel_h) / stride) + 1
 ```
 
-**动手**：写 `ex_conv2d.py` 的 `conv2d_single`：
+**动手**：写 `b_ex_conv2d.py` 的 `conv2d_single`：
 - `TODO 1.1`：用 `np.pad` 给输入四周补零
 - `TODO 1.2`：按公式算输出尺寸
 - `TODO 1.3`：滑窗逐位置算 `sum(窗口 * 核)`，步长 `stride`
@@ -84,7 +96,7 @@ out_h = floor((in_h + 2*padding - kernel_h) / stride) + 1
 - **多通道卷积**：输入有 `C_in` 个通道（RGB 是 3，特征图也是多通道）。**每个输出通道**由一组 `C_in` 个核分别卷后相加得来。核的形状是 `(C_out, C_in, kh, kw)`。
 
 **动手**：
-- `ex_conv2d.py` Part2 `max_pool2d`：`TODO 2` 滑窗取最大值。
+- `b_ex_conv2d.py` Part2 `max_pool2d`：`TODO 2` 滑窗取最大值。
 - Part3 `conv2d_multi`：`TODO 3.1/3.2` 对每个输出通道，把各输入通道卷完相加 + 加偏置；输出 shape 应为 `(C_out, out_h, out_w)`。自检：`(3,8,8)` 输入 + `(3,3,3,3)` 核 → 输出 `(3,6,6)`（因为 8-3+1=6）。
 
 **产出**：池化 + 多通道卷积手写通过；**理解"C_out 个核 → C_out 个输出通道"**。
@@ -96,7 +108,7 @@ out_h = floor((in_h + 2*padding - kernel_h) / stride) + 1
 **核心**：卷积核就是"特征探测器"。跑脚手架看效果：
 
 ```bash
-python b_conv_viz.py
+python d_conv_viz.py
 ```
 它会用 Sobel 边缘核在真实图上抽出轮廓，存 `output/conv_edge_demo.png`。**重点体会：一个 3×3 核，凭权重就定义了"什么是边缘"。** 训练 CNN 的本质，就是**学这些核的权重**。
 
@@ -138,7 +150,7 @@ python b_conv_viz.py
 - [ ] 手写单通道卷积（stride/padding/shape）通过小例子
 - [ ] 手写最大池化通过
 - [ ] 手写多通道卷积（理解 `(C_out,C_in,kh,kw)`）通过 `(3,6,6)` 自检
-- [ ] 跑通 `b_conv_viz.py`，看懂"卷积核=特征探测器"
+- [ ] 跑通 `d_conv_viz.py`，看懂"卷积核=特征探测器"
 - [ ] 能推算感受野（两层/三层 3×3）
 - [ ] 完成一次 bad case 回看并记录（聚焦"特征层丢信息"）
 

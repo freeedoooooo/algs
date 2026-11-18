@@ -1,4 +1,9 @@
 """
+【导读】week-03 动手 1/2 · 对应 README 模块 C（Day 3）· 核心练习：TODO 自己填
+先修：模块 A/B 概念+数学（无代码）｜后续：weekend_ex_softmax_regression.py（周末）
+运行：python c_ex_linear_regression.py（week-03 目录下，paddle 环境）
+观察：loss 一路下降、W→2、b→1、生成 linear_loss.png；加练 lr=1.0 看发散 / 0.001 看学不动
+
 第3周练习① · numpy 手写线性回归（自己填！）
 
 ⚠️ 学习规则：

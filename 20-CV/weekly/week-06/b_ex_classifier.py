@@ -1,4 +1,11 @@
 """
+【导读】week-06 动手 1/1 · 一个文件贯穿模块 B-D · 核心练习：TODO 自己填
+TODO 对照：1-3 dropout/weight_decay=模块 B（Day 2）｜4-5 训练/评估+GPU=模块 C（Day 3）
+          6-7 最佳模型保存/载入=模块 D（Day 4）+ 周末冲里程碑
+先修：week-05 d_ex_train_loop.py（训练循环这里巩固复用）｜后续：week-07 b_ex_conv2d.py
+运行：python b_ex_classifier.py（week-06 目录下）
+观察：测试集 >90%（里程碑）、生成 output/week6_curve.png；对比去掉 dropout/weight_decay 时 val 是否更早变差
+
 第6周练习 · 完整分类 pipeline + 里程碑（自己填！）
 
 ⚠️ 学习规则：

@@ -1,8 +1,9 @@
 """
 第8周脚手架 · CNN 数据加载 / 可视化 / 画图（可直接运行/导入）
+【导读】共享脚手架，不计入动手顺序；本周动手文件见 README「动手顺序表」
 
 boilerplate：把 FashionMNIST 当成 (B,1,28,28) 图像喂给 CNN（不展平！），
-并提供第一层卷积核/特征图可视化工具。搭 CNN 本身（ex_cnn.py）才是学习重点。
+并提供第一层卷积核/特征图可视化工具。搭 CNN 本身（b_ex_cnn.py）才是学习重点。
 """
 import os
 import numpy as np
