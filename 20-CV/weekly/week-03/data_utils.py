@@ -40,10 +40,27 @@ def load_mnist(flatten=True, data_root='./data'):
 
 
 def one_hot(y, num_cls=10):
-    """整数标签 → one-hot。y:(N,) → (N,num_cls)。"""
+    """整数标签 → one-hot。y:(N,) → (N,num_cls)。
+
+    【为什么要做这一步】
+    模型输出 probs 是 (N,10) 的「概率分布」——每行 10 个数、和为 1。
+    而原始标签 y 是 (N,) 的整数（比如 7），一个整数没法和 10 维向量做减法/乘法：
+      - 交叉熵 L = -Σ_k y_k·log(p_k) 需要「真实分布 y_k」逐类去乘
+      - 梯度 dZ = probs - Y_oh 需要两边同形状 (N,10) 才能对减
+    所以把整数标签「翻译」成和 probs 同形状的真实分布：
+      标签 7 → [0,0,0,0,0,0,0,1,0,0]
+    含义 = 「正确答案是第 7 类，置信度 100%」——一个不含任何不确定性的理想分布。
+    这样「预测分布 vs 真实分布」就能逐元素比较了，loss 和梯度公式才写得出来。
+
+    【代码怎么实现】
+    oh[np.arange(N), y] = 1 是 numpy 的「成对索引」：
+      np.arange(N) = [0,1,2,...,N-1] 提供行号，y = [7,2,0,...] 提供列号，
+      两两配对 → 第 0 行第 7 列、第 1 行第 2 列……各置 1，其余保持 0。
+      等价于 for i in range(N): oh[i, y[i]] = 1，但一行向量化写完。
+    """
     N = len(y)
-    oh = np.zeros((N, num_cls))
-    oh[np.arange(N), y] = 1
+    oh = np.zeros((N, num_cls))                   # 先全 0：默认「每个类都不是答案」
+    oh[np.arange(N), y] = 1                       # 每行只在正确类别那一列点亮 1
     return oh
 
 
