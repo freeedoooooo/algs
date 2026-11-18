@@ -35,7 +35,7 @@
 
 ## 卡住的点 & 解决
 - 「每个神经元负责检测什么特征是怎么确定的？」→ 30 秒版答案：随机初始化打破对称 + 各自按梯度分化 + 数据统计结构雕刻，没人指定。**留到 week-07/08 CNN Explainer 看特征图时回看**，现在不深挖。
-- 环境缺口：paddle 环境还没装 torch/torchvision（周末 softmax 练习下 MNIST 要用）。命令：`D:\miniforge3\envs\paddle\python.exe -m pip install torch torchvision`
+- 环境缺口：paddle 环境还没装 torch/torchvision（周末 softmax 练习下 MNIST 要用）。命令：`D:\miniforge3\envs\paddle\python.exe -m pip install -r weekly\week-03\requirements.txt`（已锁 torch==2.14.1 / torchvision==0.29.2）
 
 ## Day 1 日志（2026-11-18）
 - 3B1B 没看，改为私教问答建直觉：三问自测（神经元算什么/训练改什么/lr 太大为何发散）→ 补了「参数 vs 输出」「训练三件套」两个缺口 → 激活函数深挖（调音台开关 + 照片折叠）→ 9 概念自测判卷 7/9 打勾。
@@ -44,3 +44,10 @@
 ## Day 2 日志（2026-11-18，同日提前完成）
 - 私教循环 B 路线：导数=汇率 → 梯度=汇率清单 → 链式法则=沿调用链相乘 → 反向传播=逐站「收到的梯度×局部导数」。首轮小题 1/3 过，用两层数字网络（四站 28/168/112/224）重讲后通了「参数梯度就地消费 vs 中间结果梯度接力」的区分。概念 8/9，只剩过拟合。
 - 下一步：Day 3 填 c_ex_linear_regression.py 的 4 个 TODO（先自己推 dW，别翻 README 模块C 答案）；跑通后改 lr=1.0/0.001 看发散/学不动，画 loss 曲线，填本笔记「线性回归实验记录」。torch 仍未装。
+
+## Day 3-4 日志（2026-11-18，同日推进）
+- Day 3：4c 梯度手推判卷 4 步全对（dL/dy_pred=2e → ×x → dW → db）。多元梯度下降用「冻结其他旋钮的偏导」+ 2 样本数字表讲通；batch/SGD/mini-batch 区别（共识 vs 私人意见、更新频率/噪声/轨迹，不只是计算量）；epoch 级 loss = 全量读数。c_ex_linear_regression.py 已填详解参考版，**实跑 + lr=1.0/0.001 实验仍欠**。
+- Day 4：softmax/交叉熵概念判卷过关（平移约掉用指数性质 e^{z+c}=e^z·e^c 解释通；MSE 配 softmax 的 p(1-p) 梯度消失答对）。weekend_ex_softmax_regression.py 已填详解参考版（含 5c 完整梯度推导 + 逐段「为什么」注释；data_utils.one_hot 也补了详解）。
+- 卡点攻坚：one-hot（编号→同款答题卡，掩码/对减的格式翻译，非新数学）、「求和/取对数/取反」三动作分工、probs-Y_oh 为何是梯度（蛋糕零和 + 提升空间 + 2 类数字实测汇率）。
+- **整体串讲已整理成独立笔记 → [notes_softmax_串讲.md](notes_softmax_串讲.md)**（五站图 + 附录 A/B/C 卡点详解 + 9 题自测清单）。回家消化用；过关标准 = 合上代码能顺五站图讲清 one-hot 与 probs-Y 的位置和理由。
+- 待办：① 装 torch（锁版本命令见上）② 消化串讲笔记 + 自测 9 题 ③ 读完领 3 道代码理解题判卷 ④ 实跑 c_ex（补 Day 3）+ weekend 两份输出贴回代写实验记录 ⑤ 过拟合深学（第 9 概念）⑥ 周末 bad case 回看 + 验收清单。
