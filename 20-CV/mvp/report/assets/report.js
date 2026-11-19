@@ -202,8 +202,11 @@ document.querySelectorAll('.copyjson').forEach(function(btn){
     if(!wrap) return;
     var view=img.closest('.view');
     var label=(view&&view.getAttribute('data-view')==='rect')?'矫正图':'原图';
-    var h2=cardOf(img).querySelector('h2');
-    titleEl.textContent=(h2?h2.textContent:'图片')+' · '+label;
+    var card=cardOf(img);
+    var h2=card.querySelector('h2');
+    if(!h2){var fc=fileCardOf(img);h2=fc&&fc.querySelector('h2');}
+    var pg=card.getAttribute('data-page');
+    titleEl.textContent=(h2?h2.textContent:'图片')+(pg?' · 第 '+pg+' 页':'')+' · '+label;
     openBtn.href=img.getAttribute('src');
     var clone=wrap.cloneNode(true);
     clone.className='lb-content';clone.id='lbContent';
@@ -281,7 +284,7 @@ document.querySelectorAll('.copyjson').forEach(function(btn){
   });
 })();
 
-/* 多页文件：页签切换（只显示激活页卡片）；跨页合并表 / 整份 JSON 常驻下方 */
+/* 多页文件：页签切换（只显示激活页卡片）；跨页合并表收进各页卡片 tab，整份 JSON 常驻下方 */
 function fileCardOf(el){ return el.closest('.filecard'); }
 function showPage(fc,p){
   if(!fc) return false;
@@ -295,14 +298,53 @@ function showPage(fc,p){
   });
   return changed;
 }
-function activatePage(fc,p){
-  if(showPage(fc,p)){clearPin(fc);clearHover(fc);}
+function activeTabOf(fc){
+  var c=fc.querySelector('.card[data-page]:not([hidden])');
+  var b=c&&c.querySelector('.ctab.on');
+  return b?b.getAttribute('data-tab'):null;
 }
+function activeStitchOf(fc){
+  var c=fc.querySelector('.card[data-page]:not([hidden])');
+  var b=c&&c.querySelector('.stitchtab.on');
+  return b?b.getAttribute('data-stitch'):null;
+}
+/* 切页保留当前激活 tab：在「跨页合并」tab 翻页时合并表不丢；悬停合并格切页同理。
+   合并表内容渲染在每个页卡片的 stitch tab 里，切页后点亮新卡片的同一 tab 即可无缝衔接。
+   多条跨页链时一并保留选中的合并表子页签，避免切页后高亮落在隐藏链上。 */
+/* 单一整合页头：切页时把激活页的「页相关片段」模板注入文件级 .pagehead-slot，
+   文件级汇总不动，只有当前页码/路线/统计/链接随页更新（不再每页各一个可见页头）。 */
+function updatePageHead(fc){
+  if(!fc) return;
+  var slot=fc.querySelector('.pagehead-slot');
+  var c=fc.querySelector('.card[data-page]:not([hidden])');
+  var tpl=c&&c.querySelector('template.pagehead-tpl');
+  if(slot&&tpl) slot.innerHTML=tpl.innerHTML;
+}
+function switchPage(fc,p){
+  if(!fc) return false;
+  var tab=activeTabOf(fc),sub=activeStitchOf(fc);
+  var changed=showPage(fc,p);
+  if(changed){
+    clearPin(fc);clearHover(fc);
+    var nc=fc.querySelector('.card[data-page="'+p+'"]');
+    var b=tab&&nc&&nc.querySelector('.ctab[data-tab="'+tab+'"]');
+    if(b&&!b.classList.contains('on')) b.click();
+    if(tab==='stitch'&&sub!=null&&nc){
+      var sb=nc.querySelector('.stitchtab[data-stitch="'+sub+'"]');
+      if(sb&&!sb.classList.contains('on')) sb.click();
+    }
+    updatePageHead(fc);
+  }
+  return changed;
+}
+function activatePage(fc,p){ switchPage(fc,p); }
 document.querySelectorAll('.pagetab').forEach(function(btn){
   btn.addEventListener('click',function(){
     activatePage(fileCardOf(btn),btn.getAttribute('data-page'));
   });
 });
+/* 初始：每个多页文件把第 1 页片段注入整合页头 */
+document.querySelectorAll('.filecard').forEach(function(fc){ updatePageHead(fc); });
 
 /* 跨页合并表多表 tab */
 document.querySelectorAll('.stitchtab').forEach(function(btn){
@@ -332,7 +374,7 @@ document.querySelectorAll('.scell').forEach(function(el){
   }
   function reveal(){
     var f=fc(),pc=pageCard();if(!f||!pc)return null;
-    if(showPage(f,el.getAttribute('data-page'))){clearPin(f);clearHover(f);}
+    switchPage(f,el.getAttribute('data-page'));
     ensureViewFor(pc,el.getAttribute('data-space')||'source');
     return pc;
   }

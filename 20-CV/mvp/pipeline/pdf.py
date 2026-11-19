@@ -188,9 +188,10 @@ def tables(pdf_path, column_lines=None, strategy='auto', dpi=None, page_no=1):
     if lines:
         notes.append('使用页面人工列边界（{} 条竖线）→ explicit 策略优先'
                      .format(len(lines)))
-    # 固定优先级：人工/自动列边界 explicit → default → lines → text。
+    # 固定优先级：人工/自动列边界 explicit → lines（真实框线）→ text（文字对齐）。
     # 取第一个抽出表的结果，不按填充率打分 —— 少列碎表填充率反而更高
     # （实测 25×6 的 0.813 > 正确 25×8 的 0.74），打分会选进列拆错的表。
+    # （pdfplumber 默认即 lines/lines，故不再单列等价的 default 级。）
     with pdfplumber.open(pdf_path) as pdf:
         if page_no:
             idx = min(max(int(page_no) - 1, 0), len(pdf.pages) - 1)
@@ -201,7 +202,7 @@ def tables(pdf_path, column_lines=None, strategy='auto', dpi=None, page_no=1):
             picked = None
             auto_cols = None if lines else auto_column_lines(page)
             strategies = [('explicit', lines or auto_cols),
-                          ('default', None), ('lines', None), ('text', None)]
+                          ('lines', None), ('text', None)]
             if strategy and strategy != 'auto':
                 # 用户强制首选某策略：提到最前，其余仍保留回退
                 chosen = [x for x in strategies if x[0] == strategy]
@@ -214,8 +215,6 @@ def tables(pdf_path, column_lines=None, strategy='auto', dpi=None, page_no=1):
                     settings = {'vertical_strategy': 'explicit',
                                 'explicit_vertical_lines': cols,
                                 'horizontal_strategy': 'lines'}
-                elif label == 'default':
-                    settings = {}
                 elif label == 'lines':
                     settings = {'vertical_strategy': 'lines',
                                 'horizontal_strategy': 'lines'}
@@ -223,8 +222,7 @@ def tables(pdf_path, column_lines=None, strategy='auto', dpi=None, page_no=1):
                     settings = {'vertical_strategy': 'text',
                                 'horizontal_strategy': 'text'}
                 try:
-                    tabs = (page.find_tables(table_settings=settings)
-                            if settings else page.find_tables())
+                    tabs = page.find_tables(table_settings=settings)
                 except Exception as e:
                     notes.append('第 {} 页 {} 策略出错：{}'.format(
                         pno, label, e))

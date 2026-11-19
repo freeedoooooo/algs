@@ -74,9 +74,11 @@ extract_one(src) ── 按 page 参数决定 page_list（all → 全部页；�
 
 ### 1.2 多页产物命名与跨页拼接
 
-- **逐页产物加 `p{n}` 前缀**（仅多页 PDF）：`pages/p{n}.png`（渲染图）、`pages/p{n}_rectified.png`（矫正图）、`pages/p{n}_boxes.png`（带框图）、`p{n}_table_{i}.csv`。单页保持 `source.png` / `pages/rectified.png` / `boxes.png` / `table_{i}.csv`。
-- **拼接判据（保守，宁可不拼不误拼）**：只合并**相邻页**（p 末表 ↔ p+1 首表），且同时满足 ① 列数相同且非零 ② 坐标空间相同（`coord.space`）③ 来源精确（`coord.exact`）④ 列 x 边界对齐（≥2 对有效列、容差 12px）⑤ 表头空白归一化后相同（重复表头丢弃、行连续）。
+- **逐页产物加 `p{n}` 前缀**（仅多页 PDF）：`pages/p{n}.png`（渲染图）、`pages/p{n}_rectified.png`（矫正图）、`pages/p{n}_boxes.png`（带框图）、`p{n}_table_{i}.csv`（**仅未被合并的表**）。单页保持 `source.png` / `pages/rectified.png` / `boxes.png` / `table_{i}.csv`。
+- **拼接判据（保守，宁可不拼不误拼）**：只合并**相邻页**（p 末表 ↔ p+1 首表），且同时满足 ① 列数相同且非零 ② 坐标空间相同（`coord.space`）③ 来源精确（`coord.exact`）④ 列 x 边界对齐（≥2 对有效列、容差 12px）⑤ 表头空白归一化后相同（重复表头丢弃、行连续）。`used` 集防止重复起链，**一个文件可有多条独立跨页链**。
 - 合并表 `stitched_tables[i]`：`headers/rows/row_pages/cells/n_rows/n_cols/source_pages/parts/csv_file=stitched_{i}.csv`，`coord={mixed:true, space:'per-cell', exact:true}`；**每格 `cells[r][c]={bbox,page,space}`** 保留来源页与空间，报告据此做页感知回溯（悬停自动切页 + 高亮）。
+- **下载归一 + 碎片不落盘**：被并入合并表的逐页表（`parts` 里的 `(page,tbl)`），提取层**跳过其碎片 CSV 导出**，磁盘只留 `stitched_{i}.csv`；报告里这些表的下载按钮直接给完整合并表（带「跨页合并」徽标），未合并的表保持各自 `table_{i}.csv`。
+- **报告呈现**：合并表收进**每个页卡片的「跨页合并」tab**（非独立底部面板），多链以子页签区分；页签竖向悬浮在**源图 stage 右缘**，页头为**单一文件级整合头**（页相关片段切页时由 `<template>` 注入 `.pagehead-slot` 更新），切页保留激活 tab 与合并表子页签。`stitched_tables` 仍是文件信封的落盘字段（数据模型不变），只是 UI 不再单列面板。
 
 ---
 

@@ -22,15 +22,21 @@ LIMIT_TYPE_DEFAULT = 'min'
 
 # ---- 参数 schema：order 即页面优先级顺序 ----
 SCHEMA = [
-    dict(key='page', label='PDF 页码', type='str', default='1',
+    dict(key='page', label='PDF 页码', type='str', default='',
          order=1, group='① 先看哪一页',
-         help='填页码（1 起）只处理那一页；填 all（或「全部」）逐页处理整份 PDF。'
-              '默认单页，避免老 case 行为变化与推理耗时翻倍。图片/纯文本始终单页。'),
+         help='留空（默认）= 提取全部页，多页 PDF 自动启用分页与跨页合并。\n'
+              '填页码（1 起）= 只提取该页。\n'
+              'all / 全部 / * 等同留空。图片 / 纯文本始终单页。'),
     dict(key='table_strategy', label='表格策略首选', type='select',
-         default='auto', options=['auto', 'explicit', 'lines', 'default', 'text'],
+         default='auto', options=['auto', 'lines', 'text'],
          order=2, group='② 表格能不能抽到',
-         help='auto=自动回退；text=文字对齐（无线框表）；'
-              'lines=矢量线；default=pdfplumber 默认。'),
+         help='仅「有文本层的电子 PDF」生效；扫描件 / 图片走模型，不看此项。\n'
+              'auto：自动回退（推荐）。依次试 人工/自动列边界 → 真实框线 → '
+              '文字对齐，取第一个抽出表的。\n'
+              'lines：强制按 PDF 真实框线切。适合框线完整、或一页多表。\n'
+              'text：强制按文字列对齐切。适合无线框表（只有横线 / 空格对齐）。\n'
+              '人工列边界：填下方 column_lines 即可，auto 会自动优先用，'
+              '无需单独选策略。'),
     dict(key='column_lines', label='人工列边界（x 坐标）', type='str', default='',
          order=3, group='② 表格能不能抽到',
          help='竖线 x 坐标，逗号/空格分隔，需 ≥1 个且递增。'
@@ -55,7 +61,9 @@ SCHEMA = [
     dict(key='det_limit_type', label='检测分辨率方向', type='select',
          default=LIMIT_TYPE_DEFAULT, options=['min', 'max'],
          order=10, group='④ 文字识别',
-         help='min=短边不低于边长（放大）；max=长边不超过边长（缩小）。默认 min。'),
+         help='min：短边不低于边长（放大图，救小字）。\n'
+              'max：长边不超过边长（缩小图，提速）。\n'
+              '配合「检测分辨率边长」使用。默认 min。'),
     dict(key='dpi', label='PDF 渲染 DPI', type='int',
          default=config.PDF_DPI, min=72, max=400, step=10,
          order=11, group='⑤ 渲染精度',
@@ -63,8 +71,9 @@ SCHEMA = [
     dict(key='doc_unwarp', label='文档矫正(UVDoc)', type='select',
          default='on', options=['on', 'off'],
          order=12, group='⑥ 坐标回溯',
-         help='on=方向分类+UVDoc 去扭曲，适合旋转/弯曲扫描件（框叠矫正图）；'
-              'off=关闭预处理，适合平整电子截图，框 1:1 叠原图。仅影响表格模型。'),
+         help='on：方向分类 + UVDoc 去扭曲，适合旋转/弯曲扫描件（框叠矫正图）。\n'
+              'off：关闭预处理，适合平整电子截图，框 1:1 叠原图。\n'
+              '仅影响表格模型；人工列边界重切只在 off 生效。'),
 ]
 
 _BY_KEY = {p['key']: p for p in SCHEMA}
@@ -98,9 +107,9 @@ def parse_lines(value):
 
 
 def parse_page(value):
-    """'all'/'全部'/'*' → 'all'；1~500 正整数 → 规范字符串；非法 → None。"""
+    """''/all/全部/* → 'all'（默认全部页）；1~500 正整数 → 规范字符串；非法 → None。"""
     s = str(value if value is not None else '').strip().lower()
-    if s in ('all', '全部', '*'):
+    if s in ('', 'all', '全部', '*'):
         return 'all'
     try:
         n = int(s)
@@ -150,12 +159,12 @@ def normalize(raw):
         warns.append('人工列边界「{}」无法解析（需 ≥1 个递增数字），已忽略'
                      .format(lines_raw[:80]))
     out['_column_lines'] = parsed
-    page_raw = out.get('page', '1')
+    page_raw = out.get('page', '')
     page = parse_page(page_raw)
     if page is None:
-        warns.append('PDF 页码「{}」无法解析（需正整数或 all），已用第 1 页'
+        warns.append('PDF 页码「{}」无法解析（需正整数或留空/all），已提取全部页'
                      .format(str(page_raw)[:40]))
-        page = '1'
+        page = 'all'
     out['page'] = page
     return out, warns
 
@@ -166,14 +175,13 @@ def describe(params):
     for p in SCHEMA:
         val = params.get(p['key'], p['default'])
         if p['key'] == 'page':
-            shown = '全部页' if val == 'all' else '第 {} 页'.format(val)
+            shown = '全部页' if val in ('all', '') else '第 {} 页'.format(val)
         elif p['key'] == 'column_lines':
             lines = params.get('_column_lines') or []
             shown = (', '.join('{:g}'.format(x) for x in lines)
                      if lines else '（留空）')
         elif p['key'] == 'table_strategy':
-            shown = {'auto': 'auto', 'explicit': 'explicit',
-                     'lines': 'lines', 'default': 'default',
+            shown = {'auto': 'auto', 'lines': 'lines',
                      'text': 'text'}.get(val, str(val))
         elif p['key'] == 'doc_unwarp':
             shown = ('on' if val == 'on'
