@@ -2,7 +2,7 @@
 report/cards.py — 卡片各区块的 HTML 渲染（只管结构，样式在 assets/report.css）。
 
 每个文件一张卡片：
-    图片区（原图 / 矫正图） · 提取内容 · 表格内容 · 完整 JSON
+    图片区（原图 / 矫正图） · 文字内容 · 表格内容 · 完整 JSON
 """
 import io
 import os
@@ -158,7 +158,7 @@ def text_pane(rec, card_no):
                    .format(aid, esc(plain[:20000])))
     return (
         '<details class="panel" open>'
-        '<summary class="panel-head"><span class="panel-title">提取内容</span>'
+        '<summary class="panel-head"><span class="panel-title">文字内容</span>'
         '<span class="cnt">{} 行</span><span class="spacer"></span>{}</summary>'
         '<div class="panel-body">{}{}</div></details>'.format(
             len(texts), aux_btn, main, aux_src))
@@ -472,7 +472,7 @@ def card(rec, card_no):
     tabs = (
         '<div class="ctabs" data-card="{}">'
         '<button type="button" class="ctab on" data-card="{}" data-tab="text">'
-        '文字行 {}</button>'
+        '文字 {}</button>'
         '<button type="button" class="ctab" data-card="{}" data-tab="tables">'
         '表格 {}</button>'
         '<button type="button" class="ctab" data-card="{}" data-tab="md">'
