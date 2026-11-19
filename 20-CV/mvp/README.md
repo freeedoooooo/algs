@@ -64,12 +64,12 @@ uvicorn app:app --host 0.0.0.0 --port 8765 --workers 1    # 生产式
 |---|---|---|
 | 服务启动 `import app` | 只有 FastAPI + config，**连 paddleocr 库都不 import**（实测 0.53s） | ~0.5s |
 | 首次上传 → 后台线程动态加载 `pipeline` 包 | 才 import cv2 / pdfplumber / pymupdf / PIL，仍不碰模型权重 | 1~3s |
-| 首次 OCR `engines.ocr()` | 构造 PaddleOCR，加载检测 / 识别 / 方向分类模型 | 20~40s |
-| 首次表格 `engines.structure()` | **先跑 `grid_score()` 长直线预筛**，命中网格才构造 PPStructureV3 | 20~40s |
+| 首次 OCR `engines.ocr()` | 构造 PaddleOCR（仅「PDF 文本层」路线的文字源 / resplit 子格重 OCR 用） | 20~40s |
+| 首次表格 `engines.structure()` | 构造 PPStructureV3 **单次推理**：parsing / layout / 整页投影 / 表格 / 矫正图一次产出 | 20~40s |
 | 后续文件 | `_OCR` / `_STRUCT` 模块级单例复用 | 每张几秒 |
 
 - 两级懒加载：包级 import 在后台线程，权重只在第一次真正用到时实例化。上传页、`/healthz`、`/report` 都不会触发模型。
-- **纯文字图 / 证件扫描 / CSV / 有文本层 PDF 完全不加载表格结构模型**（预筛不命中，或走 pdfplumber 直读）。
+- **CSV / 有文本层 PDF 完全不加载表格结构模型**（直读 / pdfplumber）；图片 / 扫描件一律单次 PPStructureV3 推理（无网格预筛门槛）。
 - 单例按**进程**缓存，重启会重新加载；`--workers 1` 保证只有一份。
 - 想改成「启动即加载、首个请求不等」：设 `CV_MVP_WARMUP=1`，在 FastAPI lifespan 里同步预热，`python app.py` 与 `uvicorn app:app` 都生效。默认关闭。
 
@@ -90,7 +90,7 @@ mvp/
 │   ├── ocr.py                 逐行文字 / 置信度 / 四点框 + 带框 PNG
 │   ├── pdf.py                 首页渲染 / 文本层 / pdfplumber 表格 + bbox
 │   ├── plain.py               CSV / TXT 直读
-│   ├── table_model.py         网格预筛 / PPStructureV3 / HTML 解析 / 矫正图
+│   ├── ppstruct.py            PPStructureV3 单次推理：parsing/layout/投影/表格/矫正图
 │   ├── resplit.py             图片人工列边界：切黏连格 + 子格重 OCR 归位
 │   ├── structure.py           表头分离 / cells 网格 / CSV 导出
 │   └── runner.py              extract_one() 统一入口
@@ -221,7 +221,6 @@ output/20261116160231_103_real_bank_statement_textlayer/
 | ① 先看哪一页 | `page` | 1 | 跨页 case 逐页定位：只渲染 / OCR / 抽表这一页（超页数自动夹到末页）。**目前是指定单页，不是多页拼接** |
 | ② 表格能不能抽到 | `table_strategy` | auto | 强制 `text` 救无线框表；`lines` 按矢量线；避免纯文字页被伪抽 |
 | ② | `column_lines` | 空 | 人工列边界，填 `x1,x2,x3,…`（≥1 个递增数字）。**文本层 PDF** 用 PDF 点（像素×72/DPI，单条不成列自动回退）覆盖自动推断；**图片/扫描件** 用原图像素，单条即可沿竖线切开模型黏连格并重 OCR 归位（仅 `doc_unwarp=off`）。常规无需填 |
-| ③ 扫描件进不进模型 | `grid_min_h` / `grid_min_v` | 5 / 4 | 该进表格模型没进就调低（都填 0 = 跳过预筛强制进）；误把证件框当表就调高 |
 | ④ 文字识别 | `det_thresh` / `box_thresh` | 0.3 / 0.6 | 漏检调低（0.2/0.4）、误检调高；predict 按次覆盖，不重建模型 |
 | ⑤ 渲染精度 | `dpi` | 110 | 小字 / 密集表提到 150~200 更清晰；坐标同步缩放 |
 | ⑥ 坐标回溯 | `doc_unwarp` | on | **电子版平整截图（如 108）设 off**：关闭方向分类 + UVDoc，单元格框直接叠原图、1:1 精确；旋转/弯曲扫描件保持 on（框叠矫正图）|
@@ -230,8 +229,8 @@ output/20261116160231_103_real_bank_statement_textlayer/
 字段，报告页头「本次参数快照」折叠区按优先级列出全部参数，批次状态 `/api/status`
 也能看到。填错的参数会回退默认并在日志里给出警告，不会中断整批。
 
-技术分界：`det/box_thresh`、`page`、`table_strategy`、`column_lines`、`dpi`、
-`grid_min_*` 全是 predict 级 / 纯参数，**每批可不同、零额外开销**。
+技术分界：`det/box_thresh`、`page`、`table_strategy`、`column_lines`、`dpi`
+全是 predict 级 / 纯参数，**每批可不同、零额外开销**。
 `doc_unwarp` 是唯一的引擎构造级参数：`engines.structure(use_unwarp)` 按开关
 **分两个槽位缓存单例**，所以两种配置各只加载一次模型、互不污染，切换不会反复重建。
 移动端 / server 识别模型仍未放页面（换模型要改 `config.py`，属实验模式）。
@@ -257,8 +256,8 @@ x=0.1~910（贴满整页），而真实表格只到 x≈882；`<td>` 还多出 2
 
 - 坐标空间 = 原图像素（报告左图可直接量），仅 `doc_unwarp=off` 生效；on 时框在
   矫正图空间、与原图裁剪对不上，日志 warn 跳过。
-- 108 实测：摘要/余额间空白竖带 x≈494–498，填 `496` + `grid_min_h/v=0`（108 无竖线
-  需强制进模型）+ `doc_unwarp=off` → 23×7，余额、摘要分离。
+- 108 实测：摘要/余额间空白竖带 x≈494–498，填 `496` + `doc_unwarp=off` → 23×7，
+  余额、摘要分离（升级后无网格预筛，108 无竖线也自动进模型）。
 - 已知边界：换版式需重新量 x（同版式可复用）；表头标签若模型框 y 范围偏到首行数据，
   重切后表头仍可能带噪（旧问题，非重切引入）；弯曲扫描件不适用（列线非直线）。
 

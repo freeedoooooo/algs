@@ -33,13 +33,14 @@ header .sub{color:#6b7688;font-size:12px;display:flex;align-items:center;gap:6px
   vector-effect:non-scaling-stroke}
 .box.low{fill:rgba(222,92,40,.10);stroke:#de5c28}
 .box.hl{fill:rgba(37,99,235,.30);stroke-width:4}
+.box.pin{fill:rgba(216,97,10,.26);stroke:#d8610a;stroke-width:4}
 .viewbar{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin:0 0 10px}
 .viewbtn,.allcells,.boxtoggle{font:inherit;font-size:12px;cursor:pointer;
   padding:4px 11px;border-radius:7px;border:1px solid #d8e0ed;
   background:#fff;color:#1f2738}
 .viewbtn.on,.allcells.on,.boxtoggle.on{background:#2563eb;border-color:#2563eb;color:#fff}
 /* 只藏常显识别框；悬停文字行的回显高亮 .hl 仍要显示 */
-.stage.noboxes .box:not(.hl){display:none}
+.stage.noboxes .box:not(.hl):not(.pin){display:none}
 /* 叠加框开关：半透明角标叠在原图右上角，不单独占行（imgwrap line-height:0 需复位） */
 .imgwrap .boxtoggle{position:absolute;top:6px;right:6px;z-index:3;
   padding:3px 9px;font-size:11px;line-height:1.4;border-radius:6px;
@@ -108,6 +109,7 @@ th{text-align:left;color:#6b7688;font-weight:500;border-bottom:1px solid #e2e7f0
   padding:6px;position:sticky;top:0;background:#fff}
 td{border-bottom:1px solid #f0f2f6;padding:7px 6px;vertical-align:middle}
 tr[data-idx].hl,tr[data-idx]:hover{background:#eef4ff}
+tr[data-idx].pin{background:#fff0d9}
 tr.low td.txt{color:#de5c28}
 .num{width:34px;color:#8a94a6}
 .txt{word-break:break-all}
@@ -128,7 +130,9 @@ tr.low .bar i{background:#de5c28}
 .mdview{max-height:560px;padding:2px}
 .mdline{margin:0 0 4px;padding:2px 6px;border-radius:5px;word-break:break-all}
 .mdline:hover,.mdline.hl{background:#eef4ff}
+.mdline.pin{background:#fff0d9;outline:1px solid #d8610a}
 .mdline.low{color:#de5c28}
+.mdhead{font-weight:600;font-size:15px;color:#25324a;margin:12px 0 6px}
 .mdtbl{margin:10px 0}
 .mdtbl .tablewrap{max-height:300px;overflow:auto}
 .mdtbl-title{margin:0 0 6px;font-weight:500;color:#25324a}

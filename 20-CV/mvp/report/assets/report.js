@@ -1,10 +1,14 @@
 /* report/assets/report.js — 对照报告交互（生成时内联进 index.html） */
 function cardOf(el){ return el.closest('.card'); }
 function activeSpace(card){
-  var tp=card.querySelector('.tabpanel[data-tab="tables"]');
-  if(tp && tp.hidden) return '';
-  var p=card.querySelector('.tblpane:not([hidden])');
-  return p ? p.getAttribute('data-space') : '';
+  var tp=card.querySelector('.tabpanel:not([hidden])');
+  var t=tp?tp.getAttribute('data-tab'):'';
+  if(t==='tables'){
+    var p=card.querySelector('.tblpane:not([hidden])');
+    return p?p.getAttribute('data-space'):'';
+  }
+  if(t==='text'||t==='md'){ return card.getAttribute('data-textspace')||'source'; }
+  return '';
 }
 function currentView(card){
   var b=card.querySelector('.viewbtn.on');
@@ -35,15 +39,25 @@ function clearPin(card){
   card.querySelectorAll('.pin').forEach(function(x){x.classList.remove('pin');});
 }
 
-/* OCR 文字行 <-> 原图识别框 双向高亮 */
+/* OCR 文字行 <-> 识别框 双向高亮；框所在视图由 data-space 决定，点击可切视图钉住 */
 document.querySelectorAll('[data-card][data-idx]').forEach(function(el){
-  el.addEventListener('mouseenter',function(){
+  function matches(){
     var c=el.getAttribute('data-card'),i=el.getAttribute('data-idx');
-    document.querySelectorAll('[data-card="'+c+'"][data-idx="'+i+'"]')
-      .forEach(function(x){x.classList.add('hl');});
+    return document.querySelectorAll('[data-card="'+c+'"][data-idx="'+i+'"]');
+  }
+  el.addEventListener('mouseenter',function(){
+    var card=cardOf(el);
+    if(currentView(card)!==wantViewOf(elSpace(el))) return;
+    clearHover(card);
+    matches().forEach(function(x){x.classList.add('hl');});
   });
-  el.addEventListener('mouseleave',function(){
-    document.querySelectorAll('.hl').forEach(function(x){x.classList.remove('hl');});
+  el.addEventListener('mouseleave',function(){clearHover(cardOf(el));});
+  el.addEventListener('click',function(){
+    var card=cardOf(el),was=el.classList.contains('pin');
+    clearPin(card);clearHover(card);
+    if(was) return;
+    ensureViewFor(card,elSpace(el));
+    matches().forEach(function(x){x.classList.add('pin');});
   });
 });
 

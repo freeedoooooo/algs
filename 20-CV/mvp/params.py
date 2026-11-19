@@ -35,14 +35,6 @@ SCHEMA = [
          help='竖线 x 坐标，逗号/空格分隔，需 ≥1 个且递增。'
               '图片/扫描件用原图像素（仅 doc_unwarp=off 生效），单条即可切开黏连格；'
               '文本层 PDF 用点坐标。留空则 PDF 自动推断、图片不重切。'),
-    dict(key='grid_min_h', label='预筛·最少横线', type='int',
-         default=config.GRID_MIN_H, min=0, max=200,
-         order=4, group='③ 扫描件进不进模型',
-         help='长直线预筛门槛：漏检表格调低，误检调高。'),
-    dict(key='grid_min_v', label='预筛·最少竖线', type='int',
-         default=config.GRID_MIN_V, min=0, max=200,
-         order=5, group='③ 扫描件进不进模型',
-         help='竖线数门槛。两者都 0 = 跳过预筛、强制走表格模型。'),
     dict(key='det_thresh', label='文字检测阈值', type='float',
          default=DET_DEFAULT, min=0.05, max=0.95, step=0.05,
          order=6, group='④ 文字识别',

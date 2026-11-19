@@ -88,6 +88,11 @@ def image_views(rec, card_no):
             '<polygon class="{}" data-card="{}" data-idx="{}" points="{}">'
             '<title>#{} {} (score={:.2f})</title></polygon>'.format(
                 cls, card_no, i, points, i + 1, esc(tip), score))
+    tspace = rec.get('text_space') or 'source'
+    if tspace == 'rectified' and not rec.get('rectified'):
+        tspace = 'source'
+    polys_src = ''.join(polys) if tspace == 'source' else ''
+    polys_rect = ''.join(polys) if tspace == 'rectified' else ''
     cell_src = build_cell_rects(rec, card_no, 'source')
     cell_svg = ('<svg class="cellsvg" viewBox="0 0 {} {}" '
                 'preserveAspectRatio="none">{}</svg>'.format(w, h, cell_src)
@@ -100,11 +105,12 @@ def image_views(rec, card_no):
         rar = (rw / rh) if rh else 1.5
         rect_cells = build_cell_rects(rec, card_no, 'rectified')
         rect_view = (
-            '<div class="view" data-card="{}" data-view="rect" hidden>'
+            '<div class="view" data-card="{}" data-view="rect" '
+            'data-space="rectified" hidden>'
             '<div class="imgwrap" style="--ar:{:.4f}"><img src="{}" alt="矫正图" '
             'title="点击放大查看"><svg class="cellsvg" viewBox="0 0 {} {}" '
-            'preserveAspectRatio="none">{}</svg></div></div>'.format(
-                card_no, rar, rsrc, rw, rh, rect_cells))
+            'preserveAspectRatio="none">{}{}</svg></div></div>'.format(
+                card_no, rar, rsrc, rw, rh, rect_cells, polys_rect))
         viewbtns = (
             '<button type="button" class="viewbtn on" data-card="{}" '
             'data-view="orig">原图</button>'
@@ -118,30 +124,31 @@ def image_views(rec, card_no):
     ar = (w / h) if h else 1.5
     return (
         '<div class="stage">{}<div class="views">{}'
-        '<div class="view" data-card="{}" data-view="orig">'
+        '<div class="view" data-card="{}" data-view="orig" data-space="source">'
         '<div class="imgwrap" style="--ar:{:.4f}"><img src="{}" alt="原图" '
         'title="点击放大查看">'
         '<svg viewBox="0 0 {} {}" preserveAspectRatio="none">{}</svg>{}{}'
         '</div></div>{}</div></div>'.format(
             viewbar, '', card_no, ar, src, w, h,
-            ''.join(polys), cell_svg, boxbtn, rect_view))
+            polys_src, cell_svg, boxbtn, rect_view))
 
 
 def text_pane(rec, card_no):
     texts = rec.get('texts') or []
     scores = rec.get('scores') or []
+    tspace = rec.get('text_space') or 'source'
     if texts:
         rows = []
         for i, text in enumerate(texts):
             s = scores[i] if i < len(scores) else 1.0
             low = s < config.LOW_SCORE
             rows.append(
-                '<tr data-card="{}" data-idx="{}" class="{}">'
+                '<tr data-card="{}" data-idx="{}" data-space="{}" class="{}">'
                 '<td class="num">{}</td><td class="txt">{}</td>'
                 '<td class="score"><span class="bar"><i style="width:{:.0f}%"></i>'
                 '</span>{:.2f}</td></tr>'.format(
-                    card_no, i, 'low' if low else '', i + 1, esc(text),
-                    max(0, min(100, s * 100)), s))
+                    card_no, i, esc(tspace), 'low' if low else '', i + 1,
+                    esc(text), max(0, min(100, s * 100)), s))
         main = ('<div class="scrollbox"><table><thead><tr><th>#</th>'
                 '<th>识别文字</th><th>置信度</th></tr></thead>'
                 '<tbody>{}</tbody></table></div>'.format(''.join(rows)))
@@ -279,8 +286,8 @@ def _table_union(t):
     return [min(xs1), min(ys1), max(xs2), max(ys2)]
 
 
-def doc_blocks(rec):
-    """文档视图块序列：OCR 行与 source 空间表格按 y 穿插，其余表格置底。
+def _doc_blocks_ysort(rec):
+    """无 layout 语义时的回退：OCR 行与 source 空间表格按 y 穿插，其余表格置底。
 
     落在表格并集框内的 OCR 行被过滤（内容由表格块承载，避免重复）。
     返回 [{'kind':'line','idx':i} | {'kind':'table','ti':i,'trailing':bool}]
@@ -315,6 +322,78 @@ def doc_blocks(rec):
     return [it[2] for it in items] + trailing
 
 
+_TITLE_LABELS = {'doc_title', 'paragraph_title', 'title'}
+_VISUAL_LABELS = {'image', 'chart', 'formula', 'seal', 'figure'}
+
+
+def _line_center(boxes, i):
+    pts = boxes[i] if i < len(boxes) else []
+    ys = [float(p[1]) for p in pts] or [0.0]
+    xs = [float(p[0]) for p in pts] or [0.0]
+    return sum(xs) / len(xs), sum(ys) / len(ys)
+
+
+def _in_bbox(cx, cy, bbox):
+    if not bbox or len(bbox) < 4:
+        return False
+    return bbox[0] <= cx <= bbox[2] and bbox[1] <= cy <= bbox[3]
+
+
+def _doc_blocks_layout(rec):
+    """有 layout 语义时直读：官方阅读顺序 + 标题角色 + 表格块。
+
+    文字仍落到行级（data-idx 复用既有回溯通路）：每个文本块收集落在其
+    block_bbox 内的投影行；表格块按出现顺序映射 structured_tables。
+    返回 [{'kind':'head'|'para','lines':[idx]} | {'kind':'table','ti':i}]
+    """
+    texts = rec.get('texts') or []
+    boxes = rec.get('boxes') or []
+    tables = rec.get('structured_tables') or []
+    layout = rec.get('layout') or []
+    centers = [_line_center(boxes, i) for i in range(len(texts))]
+    assigned = set()
+    out = []
+    ti = 0
+    for lb in layout:
+        label = str(lb.get('label') or '').lower()
+        bbox = lb.get('bbox')
+        inside = [i for i in range(len(texts))
+                  if i not in assigned and _in_bbox(*centers[i], bbox)]
+        if 'table' in label:
+            assigned.update(inside)
+            if ti < len(tables):
+                out.append({'kind': 'table', 'ti': ti})
+            ti += 1
+            continue
+        if label in _VISUAL_LABELS:
+            assigned.update(inside)
+            continue
+        if not inside:
+            continue
+        assigned.update(inside)
+        inside.sort(key=lambda i: (centers[i][1], centers[i][0]))
+        out.append({'kind': 'head' if label in _TITLE_LABELS else 'para',
+                    'lines': inside})
+    stray = [i for i in range(len(texts)) if i not in assigned]
+    if stray:
+        stray.sort(key=lambda i: (centers[i][1], centers[i][0]))
+        out.append({'kind': 'para', 'lines': stray})
+    return out
+
+
+def doc_blocks(rec):
+    if rec.get('layout'):
+        return _doc_blocks_layout(rec)
+    return _doc_blocks_ysort(rec)
+
+
+def _block_lines(rec, b):
+    """块 → 行下标列表（兼容旧 'line' 与新 'head'/'para'）。"""
+    if b['kind'] == 'line':
+        return [b['idx']]
+    return b.get('lines') or []
+
+
 def _md_cell(v):
     return str(v or '').replace('|', '\\|').replace('\n', ' ')
 
@@ -327,8 +406,14 @@ def blocks_markdown(rec, blocks):
     if not texts and rec.get('plain_text'):
         parts.append(rec['plain_text'].strip())
     for b in blocks:
-        if b['kind'] == 'line':
-            parts.append(texts[b['idx']])
+        if b['kind'] in ('line', 'head', 'para'):
+            idxs = _block_lines(rec, b)
+            txt = '\n'.join(texts[i] for i in idxs if i < len(texts))
+            if not txt:
+                continue
+            if b['kind'] == 'head':
+                txt = '## ' + txt.replace('\n', ' ')
+            parts.append(txt)
             continue
         t = tables[b['ti']]
         if t.get('title'):
@@ -359,6 +444,7 @@ def md_pane(rec, card_no):
     texts = rec.get('texts') or []
     scores = rec.get('scores') or []
     tables = rec.get('structured_tables') or []
+    tspace = rec.get('text_space') or 'source'
     blocks = doc_blocks(rec)
     body = []
     if not texts and rec.get('plain_text'):
@@ -366,13 +452,17 @@ def md_pane(rec, card_no):
             if ln.strip():
                 body.append('<p class="mdline">{}</p>'.format(esc(ln)))
     for b in blocks:
-        if b['kind'] == 'line':
-            i = b['idx']
-            s = scores[i] if i < len(scores) else 1.0
-            low = ' low' if s < config.LOW_SCORE else ''
-            body.append(
-                '<p class="mdline{}" data-card="{}" data-idx="{}">{}</p>'
-                .format(low, card_no, i, esc(texts[i])))
+        if b['kind'] in ('line', 'head', 'para'):
+            head = ' mdhead' if b['kind'] == 'head' else ''
+            for i in _block_lines(rec, b):
+                if i >= len(texts):
+                    continue
+                s = scores[i] if i < len(scores) else 1.0
+                low = ' low' if s < config.LOW_SCORE else ''
+                body.append(
+                    '<p class="mdline{}{}" data-card="{}" data-idx="{}" '
+                    'data-space="{}">{}</p>'
+                    .format(head, low, card_no, i, esc(tspace), esc(texts[i])))
             continue
         ti = b['ti']
         t = tables[ti]
@@ -407,7 +497,10 @@ def md_pane(rec, card_no):
     dl = ('<a class="btn" href="{}" download="{}.md" '
           'onclick="event.stopPropagation()">下载 Markdown</a>'
           .format(md_data_uri(blocks_markdown(rec, blocks)), esc(stem)))
-    n_line = sum(1 for b in blocks if b['kind'] == 'line')
+    n_line = sum(len(_block_lines(rec, b)) for b in blocks
+                 if b['kind'] in ('line', 'head', 'para'))
+    order_tip = ('按官方版面顺序组织（标题/段落/表格）'
+                 if rec.get('layout') else '表格按 y 坐标穿插进文字流')
     return (
         '<details class="panel" open>'
         '<summary class="panel-head"><span class="panel-title">文档视图</span>'
@@ -415,10 +508,10 @@ def md_pane(rec, card_no):
         '<span class="spacer"></span>{}</summary>'
         '<div class="panel-body">'
         '<p class="note">悬停文字回溯左图识别框；悬停单元格回溯单格，点击钉住。'
-        '<span class="hint" tabindex="0" data-tip="表格按 y 坐标穿插进文字流；'
-        '矫正图空间的表格置底，点击单元格会自动切换左图视图。">?</span></p>'
+        '<span class="hint" tabindex="0" data-tip="{}；'
+        '矫正图空间的内容点击后会自动切换左图视图。">?</span></p>'
         '<div class="mdview scrollbox">{}</div></div></details>'.format(
-            n_line, len(tables), dl, ''.join(body)))
+            n_line, len(tables), dl, order_tip, ''.join(body)))
 
 
 def json_section(rec):
@@ -492,6 +585,7 @@ def card(rec, card_no):
             card_no, md_pane(rec, card_no),
             card_no, json_section(rec)))
     return (
-        '<section class="card" data-card="{}">{}'
+        '<section class="card" data-card="{}" data-textspace="{}">{}'
         '<div class="grid">{}{}</div></section>'.format(
-            card_no, head, image_views(rec, card_no), content))
+            card_no, esc(rec.get('text_space') or 'source'),
+            head, image_views(rec, card_no), content))

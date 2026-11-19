@@ -44,12 +44,6 @@ TEXT_EXTS = ('.csv', '.txt', '.md')
 ALLOWED_EXTS = IMAGE_EXTS + PDF_EXTS + TEXT_EXTS
 TEXT_ENCODINGS = ('utf-8-sig', 'gbk', 'latin-1')
 
-# ---- 表格网格预筛 ----
-GRID_MIN_H = 5
-GRID_MIN_V = 4
-GRID_RESIZE_MAX = 1000
-GRID_LINE_MIN_LEN = 80
-
 # 列边界不再写死任何 case：自动从 PDF 横线端点推断（pipeline/pdf.py::_lines_from_edges），
 # 实测与原先 103 的人工模板逐字一致。特殊版式在上传页用 column_lines 参数临时覆盖即可。
 

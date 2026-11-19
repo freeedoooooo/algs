@@ -2,11 +2,11 @@
 pipeline/runner.py — 单文件提取的统一入口（编排各子模块）。
 
 按后缀分流：
-    图片        → OCR + 网格预筛 → 表格模型（矫正图 + 单元格框）
-    PDF 有文本层 → 渲染首页 + OCR + pdfplumber 直读表格（带 bbox）
-    PDF 无文本层 → 同图片路线
+    图片        → PPStructureV3 单次推理（parsing/layout/投影/表格/矫正图）
+    PDF 有文本层 → 渲染首页 + pdfplumber 直读表格（带 bbox）+ 整页 OCR 作文字源
+    PDF 无文本层 → 同图片路线（单次推理）
     CSV / TXT   → 直读文本，不跑 OCR
-所有坐标统一以「报告左图」的像素为准，两套空间用 coord.space 区分。
+所有坐标统一以「报告左图」的像素为准，两套空间用 coord.space / text_space 区分。
 """
 import os
 import json
@@ -18,8 +18,8 @@ from .. import config
 from . import ocr as ocr_mod
 from . import pdf as pdf_mod
 from . import plain as plain_mod
+from . import ppstruct as pp_mod
 from . import resplit as resplit_mod
-from . import table_model as model_mod
 from . import structure as struct_mod
 
 
@@ -31,6 +31,7 @@ def _blank_rec(name, case_rel):
         'cropbox_limited': False, 'encoding': '', 'plain_text': '',
         'texts': [], 'scores': [], 'boxes': [], 'lines': 0,
         'avg_score': 0.0, 'low_score_lines': 0, 'elapsed': 0.0,
+        'parsing': None, 'layout': [], 'text_space': 'source',
         'tables': [], 'structured_tables': [],
         'table_route': 'skipped', 'notes': [],
         'page': 1, 'params_snapshot': {},
@@ -47,6 +48,31 @@ def _maybe_resplit(raw, img_path, params, use_unwarp, log):
             '（单元格框须与原图同空间），本次已跳过重切')
         return raw
     return resplit_mod.resplit(raw, lines, img_path, params=params, emit=log)
+
+
+def _pp_route(rec, img_path, case_abs, params, use_unwarp, log, emit):
+    """图片/扫描路线：PPStructureV3 单次推理，五路全利用，返回 raw 表。"""
+    res = pp_mod.extract(img_path, case_abs, use_unwarp=use_unwarp,
+                         params=params, emit=emit)
+    rec['parsing'] = res['parsing']
+    rec['layout'] = res['layout']
+    rec['text_space'] = res['text_space']
+    for k in ('texts', 'scores', 'boxes', 'lines', 'avg_score',
+              'low_score_lines', 'elapsed'):
+        rec[k] = res[k]
+    raw = _maybe_resplit(res['raw'], img_path, params, use_unwarp, log)
+    rec['table_route'] = 'ppstruct' if raw else 'skipped'
+    rec['rectified_size'] = res['rect_size']
+    if res['rect_size'] and use_unwarp:
+        rec['rectified'] = 'pages/' + config.RECTIFIED_NAME
+    log('ok', 'ocr', '单次推理投影 {} 行，平均置信度 {}，低置信 {} 行，耗时 {}s'
+        .format(rec['lines'], rec['avg_score'],
+                rec['low_score_lines'], rec['elapsed']))
+    if not emit:
+        for n in res['notes']:
+            log('info', 'model', n)
+    rec['notes'].extend(res['notes'])
+    return raw
 
 
 def extract_one(src_path, case_abs, case_rel, params=None, emit=None):
@@ -78,6 +104,7 @@ def extract_one(src_path, case_abs, case_rel, params=None, emit=None):
     rec['page'] = page
     img_path = None
     raw = []
+    notes = []
 
     if ext in config.TEXT_EXTS:
         rec['kind'] = 'csv'
@@ -123,20 +150,9 @@ def extract_one(src_path, case_abs, case_rel, params=None, emit=None):
             for n in notes:      # 文本层分支没有内部 emit，由 runner 统一发
                 log('info', 'table', n)
         else:
-            raw, notes, rect = model_mod.tables(
-                img_path, case_abs,
-                min_h=params.get('grid_min_h'), min_v=params.get('grid_min_v'),
-                use_unwarp=use_unwarp, emit=emit, params=params)
-            raw = _maybe_resplit(raw, img_path, params, use_unwarp, log)
-            rec['table_route'] = 'table_model' if raw else 'skipped'
-            rec['rectified_size'] = rect
-            # 只有「开了矫正」且真的落了矫正图，才需要原图/矫正图切换
-            if rect and use_unwarp:
-                rec['rectified'] = 'pages/' + config.RECTIFIED_NAME
+            raw = _pp_route(rec, img_path, case_abs, params, use_unwarp,
+                            log, emit)
         # 表格模型分支已在模块内即时 emit（时间戳准确），不再重复发
-        if not emit:
-            for n in notes:
-                log('info', 'table', n)
         rec['notes'].extend(notes)
         if limited:
             rec['notes'].append('PDF 有 CropBox 裁剪，预览图已按 MediaBox 整页渲染')
@@ -148,34 +164,26 @@ def extract_one(src_path, case_abs, case_rel, params=None, emit=None):
         rec['source'] = src_name
         img_path = os.path.join(case_abs, src_name)
         rec['image_size'] = list(Image.open(img_path).size)
-        log('info', 'split', '图片 {}×{}，进入长直线预筛'.format(*rec['image_size']))
-        raw, notes, rect = model_mod.tables(
-            img_path, case_abs,
-            min_h=params.get('grid_min_h'), min_v=params.get('grid_min_v'),
-            use_unwarp=use_unwarp, emit=emit, params=params)
-        raw = _maybe_resplit(raw, img_path, params, use_unwarp, log)
-        rec['table_route'] = 'table_model' if raw else 'skipped'
-        rec['rectified_size'] = rect
-        if rect and use_unwarp:
-            rec['rectified'] = 'pages/' + config.RECTIFIED_NAME
-        if not emit:
-            for n in notes:
-                log('info', 'table', n)
-        rec['notes'].extend(notes)
+        log('info', 'split', '图片 {}×{}，进入 PPStructureV3 单次推理'
+            .format(*rec['image_size']))
+        raw = _pp_route(rec, img_path, case_abs, params, use_unwarp, log, emit)
 
-    # OCR：有图就跑（PDF 用首页渲染图，坐标正好对应预览图）
-    if img_path and os.path.isfile(img_path):
+    # 整页 OCR 仅作「PDF 文本层」路线的文字源（该路线不跑 PPStructureV3）；
+    # 图片/扫描路线的文字已由单次推理的 overall_ocr_res 投影提供，不再重复推理。
+    if (rec['kind'] == 'pdf' and rec['text_layer']
+            and img_path and os.path.isfile(img_path)):
         log('info', 'ocr', 'OCR 文字识别中（det={}, box={}, unclip={}, limit={}/{}）…'
             .format(params.get('det_thresh'), params.get('box_thresh'),
                     params.get('det_unclip'), params.get('det_limit_side_len'),
                     params.get('det_limit_type')))
         rec.update(ocr_mod.recognize(img_path, params=params))
-        ocr_mod.draw_boxes_png(
-            img_path, rec, os.path.join(case_abs, config.BOXES_NAME))
-        rec['boxes_png'] = config.BOXES_NAME
         log('ok', 'ocr', '识别 {} 行，平均置信度 {}，低置信 {} 行，耗时 {}s'
             .format(rec['lines'], rec['avg_score'],
                     rec['low_score_lines'], rec['elapsed']))
+    if img_path and os.path.isfile(img_path) and rec['boxes']:
+        ocr_mod.draw_boxes_png(
+            img_path, rec, os.path.join(case_abs, config.BOXES_NAME))
+        rec['boxes_png'] = config.BOXES_NAME
 
     rec['tables'] = raw
     rec['structured_tables'] = struct_mod.structure_all(raw)
