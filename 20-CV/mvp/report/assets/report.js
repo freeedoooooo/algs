@@ -72,13 +72,15 @@ document.querySelectorAll('.viewbtn').forEach(function(btn){
   });
 });
 
-/* 内联图叠加框开关：不开 lightbox 也能看干净原图（只藏 OCR 识别框，单格高亮保留） */
+/* 内联图叠加框开关：原图 / 矫正图各有一个按钮，共用 stage.noboxes，状态同步 */
 document.querySelectorAll('.boxtoggle').forEach(function(btn){
   btn.addEventListener('click',function(){
-    var stage=cardOf(btn).querySelector('.stage');
+    var card=cardOf(btn),stage=card.querySelector('.stage');
     var off=stage.classList.toggle('noboxes');
-    btn.classList.toggle('on',off);
-    btn.textContent=off?'显示叠加框':'隐藏叠加框';
+    card.querySelectorAll('.boxtoggle').forEach(function(b){
+      b.classList.toggle('on',off);
+      b.textContent=off?'显示叠加框':'隐藏叠加框';
+    });
   });
 });
 

@@ -98,6 +98,8 @@ def image_views(rec, card_no):
                 'preserveAspectRatio="none">{}</svg>'.format(w, h, cell_src)
                 ) if cell_src else ''
 
+    boxbtn = ('<button type="button" class="boxtoggle" data-card="{}">'
+              '隐藏叠加框</button>'.format(card_no))
     rect_view, viewbtns = '', ''
     if rec.get('rectified'):
         rsrc = file_url(rec['case'], rec['rectified'])
@@ -109,16 +111,15 @@ def image_views(rec, card_no):
             'data-space="rectified" hidden>'
             '<div class="imgwrap" style="--ar:{:.4f}"><img src="{}" alt="矫正图" '
             'title="点击放大查看"><svg class="cellsvg" viewBox="0 0 {} {}" '
-            'preserveAspectRatio="none">{}{}</svg></div></div>'.format(
-                card_no, rar, rsrc, rw, rh, rect_cells, polys_rect))
+            'preserveAspectRatio="none">{}{}</svg>{}</div></div>'.format(
+                card_no, rar, rsrc, rw, rh, rect_cells, polys_rect, boxbtn))
         viewbtns = (
             '<button type="button" class="viewbtn on" data-card="{}" '
-            'data-view="orig">原图</button>'
+            'data-view="orig" title="原始上传图（矫正路线下无叠加框，仅作对照）">'
+            '原图</button>'
             '<button type="button" class="viewbtn" data-card="{}" '
-            'data-view="rect">矫正图（单元格坐标基准）</button>'.format(
-                card_no, card_no))
-    boxbtn = ('<button type="button" class="boxtoggle" data-card="{}">'
-              '隐藏叠加框</button>'.format(card_no))
+            'data-view="rect" title="单元格 / 文字框的坐标基准图">矫正图</button>'
+            .format(card_no, card_no))
     viewbar = ('<div class="viewbar">{}</div>'.format(viewbtns)
                if viewbtns else '')
     ar = (w / h) if h else 1.5

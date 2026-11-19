@@ -48,6 +48,13 @@ header .sub{color:#6b7688;font-size:12px;display:flex;align-items:center;gap:6px
   backdrop-filter:blur(2px)}
 .imgwrap .boxtoggle:hover{background:rgba(15,23,38,.78)}
 .imgwrap .boxtoggle.on{background:rgba(37,99,235,.8);border-color:rgba(255,255,255,.5)}
+/* 视图切换悬浮在图左上角（与右上「隐藏叠加框」对称），不占行、不把图往下压 */
+.stage .viewbar{position:absolute;top:16px;left:16px;z-index:4;gap:4px;margin:0}
+.stage .viewbar .viewbtn{padding:3px 9px;font-size:11px;line-height:1.4;border-radius:6px;
+  background:rgba(15,23,38,.55);color:#fff;border:1px solid rgba(255,255,255,.35);
+  backdrop-filter:blur(2px)}
+.stage .viewbar .viewbtn:hover{background:rgba(15,23,38,.78)}
+.stage .viewbar .viewbtn.on{background:rgba(37,99,235,.8);border-color:rgba(255,255,255,.5)}
 .lb-content .boxtoggle{display:none}
 .view[hidden]{display:none}
 /* 右栏：文字行 / 表格 / JSON 切 tab；图在左栏吸顶，切到表格悬停单元格即时可见高亮 */
