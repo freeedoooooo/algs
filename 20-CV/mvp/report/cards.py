@@ -569,7 +569,7 @@ def md_pane(rec, card_no):
             n_line, len(tables), dl, order_tip, ''.join(body)))
 
 
-def json_section(rec, href=None, label='result.json'):
+def json_section(rec, href=None, label='result.json', opened=True):
     # 展示落盘形态（ppstruct 剥掉派生投影），渲染时美化。
     # href 给出时带下载链接（单页=整份信封，与下载一致）；多页页卡片只展示本页切片。
     text = json.dumps(viewmodel.disk_view(rec), ensure_ascii=False, indent=2)
@@ -577,13 +577,13 @@ def json_section(rec, href=None, label='result.json'):
           'onclick="event.stopPropagation()">下载</a>'.format(href)
           if href else '')
     return (
-        '<details class="panel" open>'
+        '<details class="panel"{}>'
         '<summary class="panel-head"><span class="panel-title">完整 JSON</span>'
         '<span class="meta">{}</span><span class="spacer"></span>{}'
         '<button type="button" class="copyjson btn ghost" '
         'onclick="event.stopPropagation()">复制 JSON</button></summary>'
         '<div class="panel-body"><pre class="jsonpre">{}</pre></div>'
-        '</details>'.format(esc(label), dl, esc(text)))
+        '</details>'.format(' open' if opened else '', esc(label), dl, esc(text)))
 
 
 def _render_card(pg, card_no, file_rec, single=True, page_no=None,
@@ -618,11 +618,13 @@ def _render_card(pg, card_no, file_rec, single=True, page_no=None,
             len(pg.get('structured_tables') or []), pg.get('elapsed', 0)))
     if single:
         head = (
-            '<div class="card-head"><h2 id="case-{}">{}{}</h2>'
+            '<div class="card-head"><div class="fh-main">'
+            '<h2 id="case-{}" title="{}">{}{}</h2>'
             '<span class="tag">{}</span><span class="tag">路线 {}</span>'
-            '{}{}</div>'.format(
-                card_no, esc(name), esc(title_suffix),
-                kind_label, route_label, desc_html, metrics_html))
+            '<span class="spacer"></span>{}</div>'
+            '<div class="fh-sub">{}</div></div>'.format(
+                card_no, esc(name), esc(name), esc(title_suffix),
+                kind_label, route_label, metrics_html, desc_html))
     else:
         # 多页：页头整合进 filecard 的单一头，本页只留「页相关片段」模板（inert），
         # 切页时由 report.js 注入 .pagehead-slot —— 不再每页各渲染一个可见页头。
@@ -750,6 +752,10 @@ def stitch_content(file_rec, card_no):
             for r, row in enumerate(rows, 1))
         parts.append('<div class="tablewrap scrollbox"><table>{}<tbody>{}</tbody>'
                      '</table></div></div>'.format(thead, body))
+    # 整份信封 JSON 收进跨页 tab（默认收起），不再在文件底部单列占版面
+    parts.append(json_section(
+        file_rec, href=file_url(file_rec['case'], config.RESULT_JSON),
+        label='整份 result.json（含 stitched_tables）', opened=False))
     parts.append('</div>')
     return (
         '<details class="panel" open>'
@@ -769,23 +775,27 @@ def _multi_card(file_rec, idx):
     # 单一整合页头：文件级静态信息 + .pagehead-slot（切页时由 JS 注入当前页片段）。
     # 不再「文件一个头 + 每页又一个头」，页相关部分随切页动态更新。
     head = (
-        '<div class="card-head filehead"><h2 id="case-{}">{}</h2>'
+        '<div class="card-head filehead"><div class="fh-main">'
+        '<h2 id="case-{}" title="{}">{}</h2>'
         '<span class="tag">{}</span><span class="tag">路线 {}</span>'
         '<span class="tag">{} 页</span>'
-        '<div class="desc"><a href="{}" target="_blank">result.json（整份）</a></div>'
+        '<span class="spacer"></span>'
         '<div class="metrics">'
         '<span>总识别行数 <b>{}</b></span>'
         '<span>结构化表格 <b>{}</b></span>'
-        '<span>跨页合并 <b>{}</b></span></div>'
-        '<div class="pagehead-slot"></div></div>'.format(
-            idx, esc(name), labels.get(file_rec.get('kind'), '?'), esc(routes),
-            len(pages), file_url(file_rec['case'], config.RESULT_JSON),
-            tot_lines, tot_tables, len(stitched)))
+        '<span>跨页合并 <b>{}</b></span></div></div>'
+        '<div class="fh-sub">'
+        '<div class="desc"><a href="{}" target="_blank">result.json（整份）</a></div>'
+        '<div class="pagehead-slot"></div></div></div>'.format(
+            idx, esc(name), esc(name), labels.get(file_rec.get('kind'), '?'),
+            esc(routes), len(pages), tot_lines, tot_tables, len(stitched),
+            file_url(file_rec['case'], config.RESULT_JSON)))
     # 页签渲染进每个页卡片的 stage（悬浮在「看源文件」视图右缘），只显示激活页那组。
     pagetabs = '<div class="pagetabs">{}</div>'.format(''.join(
-        '<button type="button" class="pagetab{}" data-file="{}" data-page="{}">'
-        '第 {} 页</button>'.format(' on' if i == 0 else '', idx, p.get('page'),
-                                   p.get('page'))
+        '<button type="button" class="pagetab{}" data-file="{}" data-page="{}"'
+        ' title="第 {} 页">{}</button>'.format(
+            ' on' if i == 0 else '', idx, p.get('page'),
+            p.get('page'), p.get('page'))
         for i, p in enumerate(pages)))
     cards_html = ''.join(
         _render_card(p, '{}p{}'.format(idx, p.get('page')), file_rec,
@@ -793,12 +803,8 @@ def _multi_card(file_rec, idx):
                      hidden=(i > 0), pagetabs=pagetabs)
         for i, p in enumerate(pages))
     return (
-        '<section class="filecard" data-file="{}">{}{}'
-        '<div class="filejson">{}</div></section>'.format(
-            idx, head, cards_html,
-            json_section(file_rec,
-                         href=file_url(file_rec['case'], config.RESULT_JSON),
-                         label='result.json（整份信封）')))
+        '<section class="filecard" data-file="{}">{}{}</section>'.format(
+            idx, head, cards_html))
 
 
 def card(file_rec, idx):
