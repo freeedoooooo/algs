@@ -33,7 +33,8 @@ function matchingRects(card,el){
   return card.querySelectorAll(sel);
 }
 function clearHover(card){
-  card.querySelectorAll('.hv').forEach(function(x){x.classList.remove('hv');});
+  /* 文字行用 .hl、单元格用 .hv，移开时两类都要清，否则文字行框高亮残留 */
+  card.querySelectorAll('.hv,.hl').forEach(function(x){x.classList.remove('hv','hl');});
 }
 function clearPin(card){
   card.querySelectorAll('.pin').forEach(function(x){x.classList.remove('pin');});
