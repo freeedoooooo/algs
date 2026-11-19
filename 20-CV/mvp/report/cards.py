@@ -127,8 +127,10 @@ def image_views(rec, card_no, stitched=None, page_no=None, pagetabs=''):
                     w, h, cell_src, stitch_src)
                 ) if (cell_src or stitch_src) else ''
 
-    boxbtn = ('<button type="button" class="boxtoggle" data-card="{}">'
-              '隐藏叠加框</button>'.format(card_no))
+    # 默认隐藏常显识别框（stage 带 noboxes）；按钮初始即「显示叠加框」+on，
+    # 与 report.js 切换逻辑一致。悬停文字行的 .hl / 钉住 .pin 高亮不受影响。
+    boxbtn = ('<button type="button" class="boxtoggle on" data-card="{}">'
+              '显示叠加框</button>'.format(card_no))
     rect_view, viewbtns = '', ''
     if rec.get('rectified'):
         rsrc = file_url(rec['case'], rec['rectified'])
@@ -154,14 +156,17 @@ def image_views(rec, card_no, stitched=None, page_no=None, pagetabs=''):
     viewbar = ('<div class="viewbar">{}</div>'.format(viewbtns)
                if viewbtns else '')
     ar = (w / h) if h else 1.5
+    # 多页：stage 右侧留一条窄 gutter 给页签圆点，图不再被按钮盖住右缘；
+    # 单页无页签，不留 gutter，图铺满。
+    stage_cls = 'stage noboxes' + (' has-pages' if pagetabs else '')
     return (
-        '<div class="stage">{}{}<div class="views">{}'
+        '<div class="{}">{}{}<div class="views">{}'
         '<div class="view" data-card="{}" data-view="orig" data-space="source">'
         '<div class="imgwrap" style="--ar:{:.4f}"><img src="{}" alt="原图" '
         'title="点击放大查看">'
         '<svg viewBox="0 0 {} {}" preserveAspectRatio="none">{}</svg>{}{}'
         '</div></div>{}</div></div>'.format(
-            pagetabs, viewbar, '', card_no, ar, src, w, h,
+            stage_cls, pagetabs, viewbar, '', card_no, ar, src, w, h,
             polys_src, cell_svg, boxbtn, rect_view))
 
 
@@ -591,48 +596,49 @@ def _render_card(pg, card_no, file_rec, single=True, page_no=None,
     """渲染一个页卡片（单页文件=整张卡片；多页文件=其中一页）。复用既有全部区块。"""
     name = pg.get('file', '(未知)')
     labels = {'image': '图片', 'pdf': 'PDF', 'csv': '纯文本'}
-    links = []
+    img_links = []
     if pg.get('source'):
-        links.append('<a href="{}" target="_blank">原图副本</a>'.format(
+        img_links.append('<a href="{}" target="_blank">原图</a>'.format(
             file_url(pg['case'], pg['source'])))
     if pg.get('boxes_png'):
-        links.append('<a href="{}" target="_blank">带框 PNG</a>'.format(
+        img_links.append('<a href="{}" target="_blank">带框图</a>'.format(
             file_url(pg['case'], pg['boxes_png'])))
     if pg.get('rectified'):
-        links.append('<a href="{}" target="_blank">矫正图</a>'.format(
+        img_links.append('<a href="{}" target="_blank">矫正图</a>'.format(
             file_url(pg['case'], pg['rectified'])))
-    links.append('<a href="{}" target="_blank">result.json</a>'.format(
-        file_url(file_rec['case'], config.RESULT_JSON)))
+    json_link = '<a href="{}" target="_blank">result.json</a>'.format(
+        file_url(file_rec['case'], config.RESULT_JSON))
     kind_label = labels.get(pg.get('kind'), pg.get('kind', '?'))
     route_label = esc(pg.get('table_route', '-'))
-    desc_html = '<div class="desc">{}</div>'.format(' · '.join(links))
+    # 页头右侧保留信息：图链接 + result.json（单页/多页都只此一处，不重复）。
+    # 指标只留 行数/表格；可疑行仅 >0 时以琥珀色警示；置信度/耗时属诊断，不进页头。
+    desc_html = '<div class="desc">{}</div>'.format(
+        ' · '.join(img_links + [json_link]))
+    low = pg.get('low_score_lines', 0)
     metrics_html = (
         '<div class="metrics">'
-        '<span>识别行数 <b>{}</b></span>'
-        '<span>平均置信度 <b>{:.2f}</b></span>'
-        '<span>可疑行 <b>{}</b></span>'
-        '<span>结构化表格 <b>{}</b></span>'
-        '<span>耗时 <b>{}s</b></span></div>'.format(
-            pg.get('lines', 0), pg.get('avg_score', 0),
-            pg.get('low_score_lines', 0),
-            len(pg.get('structured_tables') or []), pg.get('elapsed', 0)))
+        '<span>行数 <b>{}</b></span>'
+        '<span>表格 <b>{}</b></span>'
+        '{}</div>'.format(
+            pg.get('lines', 0), len(pg.get('structured_tables') or []),
+            '<span class="warn">可疑 <b>{}</b></span>'.format(low) if low else ''))
     if single:
         head = (
-            '<div class="card-head"><div class="fh-main">'
+            '<div class="card-head"><div class="fh-left">'
             '<h2 id="case-{}" title="{}">{}{}</h2>'
-            '<span class="tag">{}</span><span class="tag">路线 {}</span>'
-            '<span class="spacer"></span>{}</div>'
-            '<div class="fh-sub">{}</div></div>'.format(
+            '<span class="tag">{}</span></div>'
+            '<div class="fh-right"><span class="tag">路线 {}</span>'
+            '{}{}</div></div>'.format(
                 card_no, esc(name), esc(name), esc(title_suffix),
                 kind_label, route_label, metrics_html, desc_html))
     else:
         # 多页：页头整合进 filecard 的单一头，本页只留「页相关片段」模板（inert），
-        # 切页时由 report.js 注入 .pagehead-slot —— 不再每页各渲染一个可见页头。
+        # 切页时由 report.js 注入右侧 .pagehead-slot —— 不再每页各渲染一个可见页头。
         head = (
             '<template class="pagehead-tpl" data-page="{}">'
             '<span class="tag">第 {} 页</span><span class="tag">路线 {}</span>'
             '{}{}</template>'.format(
-                page_no, page_no, route_label, desc_html, metrics_html))
+                page_no, page_no, route_label, metrics_html, desc_html))
     n_text = pg.get('lines', 0)
     n_tbl = len(pg.get('structured_tables') or [])
     has_stitch = (not single) and bool(stitched)
@@ -769,27 +775,17 @@ def _multi_card(file_rec, idx):
     stitched = file_rec.get('stitched_tables') or []
     name = file_rec.get('file', '(未知)')
     labels = {'image': '图片', 'pdf': 'PDF', 'csv': '纯文本'}
-    tot_lines = sum(p.get('lines', 0) for p in pages)
-    tot_tables = sum(len(p.get('structured_tables') or []) for p in pages)
-    routes = '/'.join(sorted({p.get('table_route', '-') for p in pages}))
-    # 单一整合页头：文件级静态信息 + .pagehead-slot（切页时由 JS 注入当前页片段）。
-    # 不再「文件一个头 + 每页又一个头」，页相关部分随切页动态更新。
+    # 单一整合页头（单行）：左=标题+类型+页数+跨页合并标签；右=.pagehead-slot，
+    # 切页时由 JS 注入当前页的 第N页/路线/行数/表格/可疑/链接（含整份 result.json）。
     head = (
-        '<div class="card-head filehead"><div class="fh-main">'
+        '<div class="card-head filehead"><div class="fh-left">'
         '<h2 id="case-{}" title="{}">{}</h2>'
-        '<span class="tag">{}</span><span class="tag">路线 {}</span>'
-        '<span class="tag">{} 页</span>'
-        '<span class="spacer"></span>'
-        '<div class="metrics">'
-        '<span>总识别行数 <b>{}</b></span>'
-        '<span>结构化表格 <b>{}</b></span>'
-        '<span>跨页合并 <b>{}</b></span></div></div>'
-        '<div class="fh-sub">'
-        '<div class="desc"><a href="{}" target="_blank">result.json（整份）</a></div>'
-        '<div class="pagehead-slot"></div></div></div>'.format(
+        '<span class="tag">{}</span><span class="tag">{} 页</span>{}</div>'
+        '<div class="fh-right pagehead-slot"></div></div>'.format(
             idx, esc(name), esc(name), labels.get(file_rec.get('kind'), '?'),
-            esc(routes), len(pages), tot_lines, tot_tables, len(stitched),
-            file_url(file_rec['case'], config.RESULT_JSON)))
+            len(pages),
+            '<span class="tag merge">跨页合并 {}</span>'.format(len(stitched))
+            if stitched else ''))
     # 页签渲染进每个页卡片的 stage（悬浮在「看源文件」视图右缘），只显示激活页那组。
     pagetabs = '<div class="pagetabs">{}</div>'.format(''.join(
         '<button type="button" class="pagetab{}" data-file="{}" data-page="{}"'

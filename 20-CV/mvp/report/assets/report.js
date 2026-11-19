@@ -219,6 +219,11 @@ document.querySelectorAll('.copyjson').forEach(function(btn){
     imgH=img.naturalHeight||ci.naturalHeight||700;
     ci.style.width=imgW+'px';ci.style.height=imgH+'px';
     lb.hidden=false;document.body.style.overflow='hidden';
+    /* 全屏叠加框默认跟随内联 stage 的状态（初始默认隐藏），可再单独切换 */
+    var srcStage=card.querySelector('.stage');
+    var nb=!!(srcStage&&srcStage.classList.contains('noboxes'));
+    lb.classList.toggle('lb-noboxes',nb);
+    boxesBtn.textContent=nb?'显示叠加框':'隐藏叠加框';
     fitWindow();
     if(!ci.complete){
       ci.addEventListener('load',function(){
