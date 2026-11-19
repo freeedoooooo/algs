@@ -156,10 +156,11 @@ document.querySelectorAll('td.cell,th.cell').forEach(function(el){
   });
 });
 
-/* JSON 复制 */
+/* JSON 复制：多页卡片有「本页 / 整份」两份 jsonpre，按按钮所在面板取，避免复制错对象 */
 document.querySelectorAll('.copyjson').forEach(function(btn){
   btn.addEventListener('click',function(){
-    var pre=cardOf(btn).querySelector('.jsonpre');
+    var host=btn.closest('.panel')||cardOf(btn);
+    var pre=host.querySelector('.jsonpre');
     if(!pre) return;
     navigator.clipboard.writeText(pre.textContent).then(function(){
       btn.textContent='已复制';
@@ -344,6 +345,11 @@ function alignPageTabs(){
 function switchPage(fc,p){
   if(!fc) return false;
   var tab=activeTabOf(fc),sub=activeStitchOf(fc);
+  /* 合并表在每页卡片各渲染一份：切页前记住当前滚动位置，切页后还原，
+     否则新卡片滚动归零→光标下的行换掉→又触发切页→页交接行高频来回抖动。 */
+  var oc=fc.querySelector('.card[data-page]:not([hidden])');
+  var osp=oc&&oc.querySelector('.stitchpane:not([hidden]) .tablewrap');
+  var sTop=osp?osp.scrollTop:0,sLeft=osp?osp.scrollLeft:0;
   var changed=showPage(fc,p);
   if(changed){
     clearPin(fc);clearHover(fc);
@@ -353,6 +359,10 @@ function switchPage(fc,p){
     if(tab==='stitch'&&sub!=null&&nc){
       var sb=nc.querySelector('.stitchtab[data-stitch="'+sub+'"]');
       if(sb&&!sb.classList.contains('on')) sb.click();
+    }
+    if(tab==='stitch'&&nc){
+      var nsp=nc.querySelector('.stitchpane:not([hidden]) .tablewrap');
+      if(nsp){nsp.scrollTop=sTop;nsp.scrollLeft=sLeft;}
     }
     updatePageHead(fc);
     alignPageTabs();
@@ -385,40 +395,59 @@ document.querySelectorAll('.stitchtab').forEach(function(btn){
   });
 });
 
-/* 跨页合并表单元格：页感知回溯。悬停/点击→切到该格所在页→高亮该页图上的格。
-   合并表每格带 data-page/data-space；rect 叠在对应页卡片 svg，td 在合并面板，
-   两者共享 data-stitch+data-cell，按 .filecard 作用域匹配。 */
-document.querySelectorAll('.scell').forEach(function(el){
-  function fc(){return fileCardOf(el);}
-  function matches(){
-    var f=fc();if(!f)return[];
-    return f.querySelectorAll('[data-stitch="'+el.getAttribute('data-stitch')+'"]'+
-      '[data-cell="'+el.getAttribute('data-cell')+'"]');
-  }
-  function pageCard(){
-    var f=fc();if(!f)return null;
-    return f.querySelector('.card[data-page="'+el.getAttribute('data-page')+'"]');
-  }
-  function reveal(){
-    var f=fc(),pc=pageCard();if(!f||!pc)return null;
-    switchPage(f,el.getAttribute('data-page'));
-    ensureViewFor(pc,el.getAttribute('data-space')||'source');
-    return pc;
-  }
-  el.addEventListener('mouseenter',function(){
-    var pc=reveal();if(!pc)return;
+/* 跨页合并表单元格：页感知回溯（filecard 级委托）。
+   悬停/点击→切到该格所在页→高亮该页图上的格。
+   不用逐副本 mouseenter/mouseleave：切页会隐藏光标底下的那份副本，
+   旧副本补发的 stale mouseleave 清掉刚加的高亮、新副本在鼠标不动时又不补发
+   mouseenter，表现为「悬停卡住、回溯不了框」。改为 mousemove 委托 + 格键去重：
+   高亮只随「光标下的格键」变化，与切页换 DOM 副本无关。 */
+function scellKey(el){
+  return el.getAttribute('data-stitch')+'|'+el.getAttribute('data-cell');
+}
+function scellMatches(fc,el){
+  return fc.querySelectorAll('[data-stitch="'+el.getAttribute('data-stitch')+'"]'+
+    '[data-cell="'+el.getAttribute('data-cell')+'"]');
+}
+/* 只清跨页格高亮，不碰逐页表格/文字行的 .hv（它们走各自的 enter/leave） */
+function clearScellHover(fc){
+  fc.querySelectorAll('.scell.hv,.stitchbox.hv').forEach(function(x){x.classList.remove('hv');});
+}
+function scellReveal(fc,el){
+  var pc=fc.querySelector('.card[data-page="'+el.getAttribute('data-page')+'"]');
+  if(!pc) return null;
+  switchPage(fc,el.getAttribute('data-page'));
+  ensureViewFor(pc,el.getAttribute('data-space')||'source');
+  return pc;
+}
+document.querySelectorAll('.filecard').forEach(function(fc){
+  var lastKey=null;
+  function hover(el){
+    var pc=scellReveal(fc,el);if(!pc)return;
     var space=el.getAttribute('data-space')||'source';
     if(currentView(pc)!==wantViewOf(space))return;
-    clearHover(fc());
-    matches().forEach(function(x){x.classList.add('hv');});
+    clearScellHover(fc);
+    scellMatches(fc,el).forEach(function(x){x.classList.add('hv');});
+  }
+  fc.addEventListener('mousemove',function(e){
+    var t=e.target;
+    var el=t&&t.closest?t.closest('.scell'):null;
+    var key=el?scellKey(el):null;
+    if(key===lastKey)return;
+    lastKey=key;
+    if(!el){clearScellHover(fc);return;}
+    hover(el);
   });
-  el.addEventListener('mouseleave',function(){var f=fc();if(f)clearHover(f);});
-  el.addEventListener('click',function(){
-    var f=fc(),was=el.classList.contains('pin');
-    var pc=reveal();if(!pc)return;
-    clearPin(f);clearHover(f);
+  fc.addEventListener('mouseleave',function(){lastKey=null;clearScellHover(fc);});
+  fc.addEventListener('click',function(e){
+    var t=e.target;
+    var el=t&&t.closest?t.closest('.scell'):null;
+    if(!el)return;
+    var was=el.classList.contains('pin');
+    var pc=scellReveal(fc,el);if(!pc)return;
+    clearPin(fc);clearScellHover(fc);
+    lastKey=null;
     if(was)return;
-    matches().forEach(function(x){x.classList.add('pin');});
+    scellMatches(fc,el).forEach(function(x){x.classList.add('pin');});
   });
 });
 

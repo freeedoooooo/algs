@@ -645,19 +645,26 @@ def _render_card(pg, card_no, file_rec, single=True, page_no=None,
         '<button type="button" class="ctab stitch" data-card="{}" '
         'data-tab="stitch">跨页合并 {}</button>'.format(card_no, len(stitched))
         if has_stitch else '')
+    # 多页：本页 JSON 与整份信封 JSON 各占一个独立 tab（与其他 tab 同款面板），
+    # 整份信封不再塞在跨页 tab 底部。
+    json_label = 'JSON' if single else '本页 JSON'
+    filejson_btn = (
+        '<button type="button" class="ctab" data-card="{}" '
+        'data-tab="filejson">整份 JSON</button>'.format(card_no)
+        if not single else '')
     tabs = (
-        '<div class="ctabs" data-card="{}">'
-        '<button type="button" class="ctab on" data-card="{}" data-tab="text">'
-        '文字 {}</button>'
-        '<button type="button" class="ctab" data-card="{}" data-tab="tables">'
-        '表格 {}</button>'
-        '<button type="button" class="ctab" data-card="{}" data-tab="md">'
+        '<div class="ctabs" data-card="{0}">'
+        '<button type="button" class="ctab on" data-card="{0}" data-tab="text">'
+        '文字 {1}</button>'
+        '<button type="button" class="ctab" data-card="{0}" data-tab="tables">'
+        '表格 {2}</button>'
+        '<button type="button" class="ctab" data-card="{0}" data-tab="md">'
         '文档</button>'
-        '{}'
-        '<button type="button" class="ctab" data-card="{}" data-tab="json">'
-        'JSON</button></div>'.format(
-            card_no, card_no, n_text, card_no, n_tbl, card_no,
-            stitch_btn, card_no))
+        '{3}'
+        '<button type="button" class="ctab" data-card="{0}" data-tab="json">'
+        '{4}</button>'
+        '{5}</div>'.format(
+            card_no, n_text, n_tbl, stitch_btn, json_label, filejson_btn))
     if single:
         json_html = json_section(
             file_rec, href=file_url(file_rec['case'], config.RESULT_JSON))
@@ -665,6 +672,12 @@ def _render_card(pg, card_no, file_rec, single=True, page_no=None,
         json_html = json_section(
             pg, href=None, label='本页 JSON · pages[{}]'.format(
                 (page_no or 1) - 1))
+    filejson_html = (
+        '<div class="tabpanel" data-card="{}" data-tab="filejson" hidden>{}</div>'
+        .format(card_no, json_section(
+            file_rec, href=file_url(file_rec['case'], config.RESULT_JSON),
+            label='整份 result.json（含 stitched_tables）'))
+        if not single else '')
     stitch_panel_html = (
         '<div class="tabpanel" data-card="{}" data-tab="stitch" hidden>{}</div>'
         .format(card_no, stitch_content(file_rec, card_no))
@@ -676,11 +689,12 @@ def _render_card(pg, card_no, file_rec, single=True, page_no=None,
         '<div class="tabpanel" data-card="{}" data-tab="md" hidden>{}</div>'
         '{}'
         '<div class="tabpanel" data-card="{}" data-tab="json" hidden>{}</div>'
+        '{}'
         '</div>'.format(
             tabs, card_no, text_pane(pg, card_no),
             card_no, tables_section(pg, card_no, stitched),
             card_no, md_pane(pg, card_no),
-            stitch_panel_html, card_no, json_html))
+            stitch_panel_html, card_no, json_html, filejson_html))
     page_attr = '' if single else ' data-page="{}"'.format(page_no)
     hidden_attr = ' hidden' if hidden else ''
     return (
@@ -757,10 +771,6 @@ def stitch_content(file_rec, card_no):
             for r, row in enumerate(rows, 1))
         parts.append('<div class="tablewrap scrollbox"><table>{}<tbody>{}</tbody>'
                      '</table></div></div>'.format(thead, body))
-    # 整份信封 JSON 收进跨页 tab（默认收起），不再在文件底部单列占版面
-    parts.append(json_section(
-        file_rec, href=file_url(file_rec['case'], config.RESULT_JSON),
-        label='整份 result.json（含 stitched_tables）', opened=False))
     parts.append('</div>')
     return (
         '<details class="panel" open>'
