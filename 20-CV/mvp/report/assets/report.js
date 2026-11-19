@@ -70,6 +70,7 @@ document.querySelectorAll('.viewbtn').forEach(function(btn){
     card.querySelectorAll('.view').forEach(function(p){
       p.hidden=(p.getAttribute('data-view')!==v);
     });
+    alignPageTabs();
   });
 });
 
@@ -325,6 +326,21 @@ function updatePageHead(fc){
   var tpl=c&&c.querySelector('template.pagehead-tpl');
   if(slot&&tpl) slot.innerHTML=tpl.innerHTML;
 }
+/* 页签圆点贴靠源图：按当前激活 imgwrap 的实测右缘 / 垂直中心锚定 pagetabs，
+   窗口伸缩 / 切页 / 切视图 / 图片加载后圆点始终悬浮在源图之上（不占布局、不压图宽）。 */
+function alignPageTabs(){
+  document.querySelectorAll('.stage .pagetabs').forEach(function(pt){
+    var stage=pt.closest('.stage');
+    var card=stage.closest('.card');
+    if(card&&card.hasAttribute('hidden')) return;
+    var iw=stage.querySelector('.view:not([hidden]) .imgwrap');
+    if(!iw) return;
+    var sr=stage.getBoundingClientRect(),ir=iw.getBoundingClientRect();
+    if(!ir.width) return;
+    pt.style.right=Math.max(6,Math.round(sr.right-ir.right+5))+'px';
+    pt.style.top=Math.round(ir.top-sr.top+ir.height/2)+'px';
+  });
+}
 function switchPage(fc,p){
   if(!fc) return false;
   var tab=activeTabOf(fc),sub=activeStitchOf(fc);
@@ -339,6 +355,7 @@ function switchPage(fc,p){
       if(sb&&!sb.classList.contains('on')) sb.click();
     }
     updatePageHead(fc);
+    alignPageTabs();
   }
   return changed;
 }
@@ -350,6 +367,11 @@ document.querySelectorAll('.pagetab').forEach(function(btn){
 });
 /* 初始：每个多页文件把第 1 页片段注入整合页头 */
 document.querySelectorAll('.filecard').forEach(function(fc){ updatePageHead(fc); });
+alignPageTabs();
+window.addEventListener('resize',alignPageTabs);
+document.querySelectorAll('.stage img').forEach(function(im){
+  im.addEventListener('load',alignPageTabs);
+});
 
 /* 跨页合并表多表 tab */
 document.querySelectorAll('.stitchtab').forEach(function(btn){

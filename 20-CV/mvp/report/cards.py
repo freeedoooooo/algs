@@ -156,17 +156,16 @@ def image_views(rec, card_no, stitched=None, page_no=None, pagetabs=''):
     viewbar = ('<div class="viewbar">{}</div>'.format(viewbtns)
                if viewbtns else '')
     ar = (w / h) if h else 1.5
-    # 多页：stage 右侧留一条窄 gutter 给页签圆点，图不再被按钮盖住右缘；
-    # 单页无页签，不留 gutter，图铺满。
-    stage_cls = 'stage noboxes' + (' has-pages' if pagetabs else '')
+    # 页签圆点**悬浮叠在源图右缘之上**（不另留 gutter、不压缩图宽）；
+    # 精确贴靠由 report.js alignPageTabs 按当前 imgwrap 实测位置锚定。
     return (
-        '<div class="{}">{}{}<div class="views">{}'
+        '<div class="stage noboxes">{}{}<div class="views">{}'
         '<div class="view" data-card="{}" data-view="orig" data-space="source">'
         '<div class="imgwrap" style="--ar:{:.4f}"><img src="{}" alt="原图" '
         'title="点击放大查看">'
         '<svg viewBox="0 0 {} {}" preserveAspectRatio="none">{}</svg>{}{}'
         '</div></div>{}</div></div>'.format(
-            stage_cls, pagetabs, viewbar, '', card_no, ar, src, w, h,
+            pagetabs, viewbar, '', card_no, ar, src, w, h,
             polys_src, cell_svg, boxbtn, rect_view))
 
 
