@@ -1,0 +1,261 @@
+<mxfile host="app.diagrams.net" agent="qoder" version="24.0.0">
+  <diagram id="page-before" name="升级前（现状）">
+    <mxGraphModel dx="1200" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="980" pageHeight="1180" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="b_title" value="升级前（现状）：两次推理 · 语义丢弃" style="text;html=0;align=center;verticalAlign=middle;fontSize=22;fontStyle=1;fontColor=#1f2738;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="900" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_grpL" value="表格路线" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#fafafa;strokeColor=#b3b3b3;dashed=1;verticalAlign=top;fontStyle=1;fontSize=14;fontColor=#6b7688;pointerEvents=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="170" width="430" height="740" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_grpR" value="文字路线" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#fafafa;strokeColor=#b3b3b3;dashed=1;verticalAlign=top;fontStyle=1;fontSize=14;fontColor=#6b7688;pointerEvents=0;" vertex="1" parent="1">
+          <mxGeometry x="530" y="170" width="400" height="340" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_input" value="输入图片 / 扫描件 PDF" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#ffffff;strokeColor=#666666;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="380" y="80" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_grid" value="长直线网格预筛&#10;grid_score（霍夫）" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="70" y="220" width="180" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_hit" value="网格&#10;命中？" style="rhombus;whiteSpace=wrap;html=0;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="290" y="215" width="130" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_skip" value="跳过表格模型" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#f5f5f5;strokeColor=#999999;fontSize=12;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="290" y="330" width="130" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_pp1" value="PPStructureV3&#10;推理 ①" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="70" y="330" width="180" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_take" value="取用&#10;表格 HTML + cell 框&#10;+ 矫正图" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="70" y="440" width="180" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_drop" value="丢弃&#10;版面语义&#10;overall_ocr_res" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="280" y="440" width="160" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_resplit" value="resplit 人工列边界&#10;（可选）" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="70" y="570" width="180" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_struct" value="structure.py&#10;表头切分 / 对齐" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="70" y="680" width="180" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_tables" value="structured_tables" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#ffffff;strokeColor=#666666;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="70" y="790" width="180" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_ocr2" value="PaddleOCR&#10;推理 ②（整页）" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="220" width="180" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_texts" value="texts / boxes / scores&#10;（source 空间）" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#ffffff;strokeColor=#666666;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="560" y="330" width="180" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_note2" value="同一张图再推理一遍（冗余）" style="text;html=0;align=center;verticalAlign=middle;fontSize=12;fontColor=#b85450;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="560" y="420" width="340" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_rec" value="rec（私有格式）" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#ffffff;strokeColor=#1f2738;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="380" y="960" width="200" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_report" value="报告前端&#10;文档 tab：按 y 坐标拼文档流&#10;无语义 · 无标题" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#f5f5f5;strokeColor=#999999;fontSize=13;fontColor=#444444;" vertex="1" parent="1">
+          <mxGeometry x="330" y="1060" width="300" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=0.25;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="b_input" target="b_grid">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=0.75;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="b_input" target="b_ocr2">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_e3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="b_grid" target="b_hit">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_e4" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=0.5;exitY=1;entryX=0.5;entryY=0;fontSize=12;" edge="1" parent="1" source="b_hit" target="b_pp1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="355" y="305"/>
+              <mxPoint x="160" y="305"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="b_e5" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=0.5;exitY=1;entryX=0.5;entryY=0;fontSize=12;" edge="1" parent="1" source="b_hit" target="b_skip">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_e6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="b_pp1" target="b_take">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_e7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;dashed=1;strokeColor=#b85450;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="b_pp1" target="b_drop">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_e8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="b_take" target="b_resplit">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_e9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="b_resplit" target="b_struct">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_e10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="b_struct" target="b_tables">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_e11" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="b_ocr2" target="b_texts">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="b_e12" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=0.5;exitY=1;entryX=0;entryY=0.5;" edge="1" parent="1" source="b_tables" target="b_rec">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="160" y="990"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="b_e13" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=0.5;exitY=1;entryX=1;entryY=0.5;" edge="1" parent="1" source="b_texts" target="b_rec">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="650" y="990"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="b_e14" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="b_rec" target="b_report">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="page-after" name="升级后（ppstruct）">
+    <mxGraphModel dx="1200" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="980" pageHeight="1060" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="a_title" value="升级后（ppstruct 路线）：单次推理 · 官方 JSON 为源" style="text;html=0;align=center;verticalAlign=middle;fontSize=22;fontStyle=1;fontColor=#1f2738;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="900" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="a_input" value="输入图片 / 扫描件 PDF" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#ffffff;strokeColor=#666666;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="380" y="80" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="a_pp" value="PPStructureV3&#10;单次推理" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="350" y="180" width="260" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="a_parsing" value="官方 JSON 原样&#10;rec['parsing']&#10;唯一事实源" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="320" width="170" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="a_layout" value="parsing_res_list&#10;rec['layout']&#10;角色块 + 官方顺序" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="230" y="320" width="170" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="a_proj" value="overall_ocr_res&#10;投影 texts/boxes/scores&#10;（可退役）" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#f5f5f5;strokeColor=#999999;fontSize=13;fontColor=#444444;" vertex="1" parent="1">
+          <mxGeometry x="420" y="320" width="170" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="a_tableres" value="table_res_list&#10;_TableParser（复用）&#10;HTML → 网格" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="610" y="320" width="170" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="a_rect" value="output_img&#10;rectified.png&#10;（现有逻辑）" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#f5f5f5;strokeColor=#999999;fontSize=13;fontColor=#444444;" vertex="1" parent="1">
+          <mxGeometry x="800" y="320" width="150" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="a_resplit2" value="resplit（可选）&#10;零改动" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="610" y="460" width="170" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="a_struct2" value="structure.py&#10;零改动" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="610" y="570" width="170" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="a_tables2" value="structured_tables" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#ffffff;strokeColor=#666666;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="610" y="680" width="170" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="a_rec2" value="rec = 应用信封&#10;+ parsing + layout&#10;+ 薄投影" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#ffffff;strokeColor=#1f2738;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="350" y="800" width="260" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="a_report2" value="报告前端&#10;文档 tab 直读 layout&#10;真实标题 · 官方顺序 · 块级回溯" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="330" y="920" width="300" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="a_e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="a_input" target="a_pp">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a_e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="a_pp" target="a_parsing">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="480" y="285"/>
+              <mxPoint x="125" y="285"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a_e3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="a_pp" target="a_layout">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="480" y="285"/>
+              <mxPoint x="315" y="285"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a_e4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="a_pp" target="a_proj">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="480" y="285"/>
+              <mxPoint x="505" y="285"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a_e5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="a_pp" target="a_tableres">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="480" y="285"/>
+              <mxPoint x="695" y="285"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a_e6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="a_pp" target="a_rect">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="480" y="285"/>
+              <mxPoint x="875" y="285"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a_e7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="a_tableres" target="a_resplit2">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a_e8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="a_resplit2" target="a_struct2">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a_e9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="a_struct2" target="a_tables2">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a_e10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=0.5;exitY=1;entryX=0.2;entryY=0;" edge="1" parent="1" source="a_parsing" target="a_rec2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="125" y="770"/>
+              <mxPoint x="402" y="770"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a_e11" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=0.5;exitY=1;entryX=0.4;entryY=0;" edge="1" parent="1" source="a_layout" target="a_rec2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="315" y="770"/>
+              <mxPoint x="454" y="770"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a_e12" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="a_proj" target="a_rec2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="505" y="770"/>
+              <mxPoint x="480" y="770"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a_e13" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=0.5;exitY=1;entryX=0.7;entryY=0;" edge="1" parent="1" source="a_tables2" target="a_rec2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="695" y="770"/>
+              <mxPoint x="532" y="770"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a_e14" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=0.5;exitY=1;entryX=0.9;entryY=0;" edge="1" parent="1" source="a_rect" target="a_rec2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="875" y="770"/>
+              <mxPoint x="584" y="770"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a_e15" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="a_rec2" target="a_report2">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
