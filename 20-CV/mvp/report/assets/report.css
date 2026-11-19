@@ -195,3 +195,21 @@ a{color:#2563eb}
 .paramsnap code{background:#eef4ff;color:var(--accent);padding:1px 6px;
   border-radius:4px;white-space:nowrap}
 .paramsnap .ph{color:var(--muted)}
+/* 多页文件：filecard 容器 + 页签 + 逐页卡片（只显示激活页）+ 跨页合并表 */
+.filecard{margin:0 0 18px}
+.filecard>.card{margin:0 0 12px}
+.filecard>.card[hidden]{display:none}
+.pagetabs{display:flex;gap:6px;flex-wrap:wrap;padding:8px 0;margin:0 0 10px;
+  border-bottom:1px solid #e2e7f0}
+.pagetab{font:inherit;font-size:13px;cursor:pointer;padding:5px 14px;border-radius:7px;
+  border:1px solid #d8e0ed;background:#fff;color:#1f2738}
+.pagetab.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.filejson{margin-top:4px}
+.stitchpane[hidden]{display:none}
+.scell{cursor:crosshair}
+.scell:hover,.scell.hv{background:#e3f7ee!important}
+.scell.pin{background:#fff0d9!important;outline:2px solid #d8610a;outline-offset:-2px}
+.stitchbox{display:none;fill:rgba(15,157,110,.10);stroke:#0f9d6e;stroke-width:3;
+  vector-effect:non-scaling-stroke}
+.stitchbox.hv{display:block;fill:rgba(15,157,110,.30);stroke-width:5}
+.stitchbox.pin{display:block;fill:rgba(216,97,10,.26);stroke:#d8610a;stroke-width:5}

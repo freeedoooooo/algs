@@ -159,11 +159,11 @@ def _cell_boxes(res):
         return []
 
 
-def _save_rectified(res, case_abs):
+def _save_rectified(res, case_abs, rect_name):
     try:
         out = res['doc_preprocessor_res']['output_img']   # ndarray, BGR
         im = Image.fromarray(out[:, :, ::-1])             # BGR → RGB
-        path = os.path.join(case_abs, 'pages', config.RECTIFIED_NAME)
+        path = os.path.join(case_abs, 'pages', rect_name)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         im.save(path)
         return [im.size[0], im.size[1]]
@@ -171,11 +171,11 @@ def _save_rectified(res, case_abs):
         return None
 
 
-def _coord(use_unwarp, rect_size):
+def _coord(use_unwarp, rect_size, rect_name):
     if use_unwarp:
         return {
             'space': 'rectified',
-            'image': 'pages/' + config.RECTIFIED_NAME,
+            'image': 'pages/' + rect_name,
             'origin': 'PPStructureV3', 'exact': bool(rect_size),
             'note': '单元格框取自模型矫正图，1:1 叠加；UVDoc 保持开启',
         }
@@ -187,11 +187,14 @@ def _coord(use_unwarp, rect_size):
     }
 
 
-def extract(img_path, case_abs, use_unwarp=True, params=None, emit=None):
+def extract(img_path, case_abs, use_unwarp=True, params=None, emit=None,
+            rect_name=None):
     """单次推理，返回 parsing（裁死字段）/raw/notes/rect_size/text_space/elapsed。
 
     投影与 layout 不在此计算——由 viewmodel.hydrate 渲染期从 parsing 派生。
+    rect_name 决定矫正图落盘名（多页逐页传 p{n}_rectified.png，避免互相覆盖）。
     """
+    rect_name = rect_name or config.RECTIFIED_NAME
     t0 = time.perf_counter()
     notes = []
 
@@ -222,15 +225,15 @@ def extract(img_path, case_abs, use_unwarp=True, params=None, emit=None):
         if not parsed:
             continue
         if use_unwarp:
-            rect_size = _save_rectified(res, case_abs)
+            rect_size = _save_rectified(res, case_abs, rect_name)
             if rect_size:
                 note('ok', '第 {} 页：已保存矫正图 pages/{}（{}×{}），框 1:1 叠加'
-                     .format(pno, config.RECTIFIED_NAME,
+                     .format(pno, rect_name,
                              rect_size[0], rect_size[1]))
         else:
             note('ok', '第 {} 页：文档矫正已关闭，框基于原图（space=source），'
                  '坐标 1:1 精确'.format(pno))
-        coord = _coord(use_unwarp, rect_size)
+        coord = _coord(use_unwarp, rect_size, rect_name)
         for rows, brows, tb in parsed:
             grid = [[
                 [round(float(v), 1) for v in list(tb[bi])[:4]]

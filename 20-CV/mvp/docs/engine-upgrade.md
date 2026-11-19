@@ -58,9 +58,11 @@
 | `table_res_list` | `_TableParser`（复用）→ `resplit` → `structure.py` → `structured_tables` | 领域资产，**零改动**（绿） |
 | `doc_preprocessor output_img` | `rectified.png` | 现有逻辑（灰） |
 
-汇成 `rec = 应用信封 + parsing + structured_tables` → `result.json`（紧凑）→ 报告前端。
+汇成 `rec = 应用元信息 + parsing + structured_tables` → `result.json`（紧凑）→ 报告前端。
 投影 / layout **不落盘**，由 `viewmodel.hydrate()` 渲染期从 parsing 现算（详见 [result-json-anatomy.md](./result-json-anatomy.md)）。
 文档 tab **直读派生 `layout`**：真实标题、官方阅读顺序、块级坐标回溯。
+
+> **多页信封（2026-11-19 同日后续）**：本文的 `rec` 现在是**每页一份的 `pageRec`**，外层包成文件信封 `pages:[pageRec…] + stitched_tables`（单页也是 `pages:[1]`）。单次推理 / 官方源 / 派生视图原则**逐页不变**；`page=all` 时逐页跑本流程，相邻页续表再合并。schema 细节见 result-json-anatomy.md §1。
 
 **收益**：省掉一次整页推理；文档 tab 从「y 排序拼行」升级为「语义块流」；格式与官方对齐。
 

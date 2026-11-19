@@ -22,9 +22,10 @@ LIMIT_TYPE_DEFAULT = 'min'
 
 # ---- 参数 schema：order 即页面优先级顺序 ----
 SCHEMA = [
-    dict(key='page', label='PDF 页码', type='int', default=1, min=1, max=500,
+    dict(key='page', label='PDF 页码', type='str', default='1',
          order=1, group='① 先看哪一页',
-         help='多页 PDF 只处理这一页。'),
+         help='填页码（1 起）只处理那一页；填 all（或「全部」）逐页处理整份 PDF。'
+              '默认单页，避免老 case 行为变化与推理耗时翻倍。图片/纯文本始终单页。'),
     dict(key='table_strategy', label='表格策略首选', type='select',
          default='auto', options=['auto', 'explicit', 'lines', 'default', 'text'],
          order=2, group='② 表格能不能抽到',
@@ -96,6 +97,20 @@ def parse_lines(value):
     return nums
 
 
+def parse_page(value):
+    """'all'/'全部'/'*' → 'all'；1~500 正整数 → 规范字符串；非法 → None。"""
+    s = str(value if value is not None else '').strip().lower()
+    if s in ('all', '全部', '*'):
+        return 'all'
+    try:
+        n = int(s)
+    except (TypeError, ValueError):
+        return None
+    if n < 1 or n > 500:
+        return None
+    return str(n)
+
+
 def normalize(raw):
     """
     校验并归一化页面参数 → (params, warnings)。
@@ -135,6 +150,13 @@ def normalize(raw):
         warns.append('人工列边界「{}」无法解析（需 ≥1 个递增数字），已忽略'
                      .format(lines_raw[:80]))
     out['_column_lines'] = parsed
+    page_raw = out.get('page', '1')
+    page = parse_page(page_raw)
+    if page is None:
+        warns.append('PDF 页码「{}」无法解析（需正整数或 all），已用第 1 页'
+                     .format(str(page_raw)[:40]))
+        page = '1'
+    out['page'] = page
     return out, warns
 
 
@@ -144,7 +166,7 @@ def describe(params):
     for p in SCHEMA:
         val = params.get(p['key'], p['default'])
         if p['key'] == 'page':
-            shown = '第 {} 页'.format(val)
+            shown = '全部页' if val == 'all' else '第 {} 页'.format(val)
         elif p['key'] == 'column_lines':
             lines = params.get('_column_lines') or []
             shown = (', '.join('{:g}'.format(x) for x in lines)

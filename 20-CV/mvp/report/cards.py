@@ -68,7 +68,32 @@ def build_cell_rects(rec, card_no, space):
     return ''.join(out)
 
 
-def image_views(rec, card_no):
+def build_stitch_rects(stitched, card_no, page_no, space):
+    """跨页合并表中「属于本页、本空间」的单元格 rect（页感知回溯叠在该页图上）。"""
+    if not stitched or page_no is None:
+        return ''
+    out = []
+    for si, t in enumerate(stitched):
+        for r, row in enumerate(t.get('cells') or []):
+            for c, cell in enumerate(row):
+                if not cell or cell.get('page') != page_no \
+                        or cell.get('space') != space:
+                    continue
+                b = cell.get('bbox')
+                if not b or len(b) < 4:
+                    continue
+                w, h = max(0.0, b[2] - b[0]), max(0.0, b[3] - b[1])
+                out.append(
+                    '<rect class="stitchbox" data-card="{}" data-stitch="{}" '
+                    'data-cell="{}_{}" data-page="{}" x="{:.1f}" y="{:.1f}" '
+                    'width="{:.1f}" height="{:.1f}">'
+                    '<title>跨页表 {} · 行 {} 列 {} · 第 {} 页</title></rect>'
+                    .format(card_no, si, r, c, page_no, b[0], b[1], w, h,
+                            si + 1, r, c + 1, page_no))
+    return ''.join(out)
+
+
+def image_views(rec, card_no, stitched=None, page_no=None):
     """左图区：每个 view 各自一个 .imgwrap，保证 img+svg 1:1。"""
     # CSV / TXT 也留了 source.<ext> 副本，但那不是图片，不能当 <img> 渲染
     if not rec.get('image_size') or rec.get('kind') == 'csv':
@@ -95,9 +120,11 @@ def image_views(rec, card_no):
     polys_src = ''.join(polys) if tspace == 'source' else ''
     polys_rect = ''.join(polys) if tspace == 'rectified' else ''
     cell_src = build_cell_rects(rec, card_no, 'source')
+    stitch_src = build_stitch_rects(stitched, card_no, page_no, 'source')
     cell_svg = ('<svg class="cellsvg" viewBox="0 0 {} {}" '
-                'preserveAspectRatio="none">{}</svg>'.format(w, h, cell_src)
-                ) if cell_src else ''
+                'preserveAspectRatio="none">{}{}</svg>'.format(
+                    w, h, cell_src, stitch_src)
+                ) if (cell_src or stitch_src) else ''
 
     boxbtn = ('<button type="button" class="boxtoggle" data-card="{}">'
               '隐藏叠加框</button>'.format(card_no))
@@ -107,13 +134,15 @@ def image_views(rec, card_no):
         rw, rh = rec.get('rectified_size') or [0, 0]
         rar = (rw / rh) if rh else 1.5
         rect_cells = build_cell_rects(rec, card_no, 'rectified')
+        stitch_rect = build_stitch_rects(stitched, card_no, page_no, 'rectified')
         rect_view = (
             '<div class="view" data-card="{}" data-view="rect" '
             'data-space="rectified" hidden>'
             '<div class="imgwrap" style="--ar:{:.4f}"><img src="{}" alt="矫正图" '
             'title="点击放大查看"><svg class="cellsvg" viewBox="0 0 {} {}" '
-            'preserveAspectRatio="none">{}{}</svg>{}</div></div>'.format(
-                card_no, rar, rsrc, rw, rh, rect_cells, polys_rect, boxbtn))
+            'preserveAspectRatio="none">{}{}{}</svg>{}</div></div>'.format(
+                card_no, rar, rsrc, rw, rh, rect_cells, polys_rect,
+                stitch_rect, boxbtn))
         viewbtns = (
             '<button type="button" class="viewbtn on" data-card="{}" '
             'data-view="orig" title="原始上传图（矫正路线下无叠加框，仅作对照）">'
@@ -516,39 +545,42 @@ def md_pane(rec, card_no):
             n_line, len(tables), dl, order_tip, ''.join(body)))
 
 
-def json_section(rec):
-    # 与下载的 result.json 一致：展示落盘形态（ppstruct 剥掉派生投影），渲染时美化
+def json_section(rec, href=None, label='result.json'):
+    # 展示落盘形态（ppstruct 剥掉派生投影），渲染时美化。
+    # href 给出时带下载链接（单页=整份信封，与下载一致）；多页页卡片只展示本页切片。
     text = json.dumps(viewmodel.disk_view(rec), ensure_ascii=False, indent=2)
-    href = file_url(rec['case'], config.RESULT_JSON)
+    dl = ('<a class="btn ghost" href="{}" target="_blank" '
+          'onclick="event.stopPropagation()">下载</a>'.format(href)
+          if href else '')
     return (
         '<details class="panel" open>'
         '<summary class="panel-head"><span class="panel-title">完整 JSON</span>'
-        '<span class="meta">result.json</span><span class="spacer"></span>'
-        '<a class="btn ghost" href="{}" target="_blank" '
-        'onclick="event.stopPropagation()">下载</a>'
+        '<span class="meta">{}</span><span class="spacer"></span>{}'
         '<button type="button" class="copyjson btn ghost" '
         'onclick="event.stopPropagation()">复制 JSON</button></summary>'
         '<div class="panel-body"><pre class="jsonpre">{}</pre></div>'
-        '</details>'.format(href, esc(text)))
+        '</details>'.format(esc(label), dl, esc(text)))
 
 
-def card(rec, card_no):
-    name = rec.get('file', '(未知)')
+def _render_card(pg, card_no, file_rec, single=True, page_no=None,
+                 stitched=None, title_suffix='', hidden=False):
+    """渲染一个页卡片（单页文件=整张卡片；多页文件=其中一页）。复用既有全部区块。"""
+    name = pg.get('file', '(未知)')
     labels = {'image': '图片', 'pdf': 'PDF', 'csv': '纯文本'}
     links = []
-    if rec.get('source'):
+    if pg.get('source'):
         links.append('<a href="{}" target="_blank">原图副本</a>'.format(
-            file_url(rec['case'], rec['source'])))
-    if rec.get('boxes_png'):
+            file_url(pg['case'], pg['source'])))
+    if pg.get('boxes_png'):
         links.append('<a href="{}" target="_blank">带框 PNG</a>'.format(
-            file_url(rec['case'], rec['boxes_png'])))
-    if rec.get('rectified'):
+            file_url(pg['case'], pg['boxes_png'])))
+    if pg.get('rectified'):
         links.append('<a href="{}" target="_blank">矫正图</a>'.format(
-            file_url(rec['case'], rec['rectified'])))
+            file_url(pg['case'], pg['rectified'])))
     links.append('<a href="{}" target="_blank">result.json</a>'.format(
-        file_url(rec['case'], config.RESULT_JSON)))
+        file_url(file_rec['case'], config.RESULT_JSON)))
     head = (
-        '<div class="card-head"><h2 id="case-{}">{}</h2>'
+        '<div class="card-head"><h2 id="case-{}">{}{}</h2>'
         '<span class="tag">{}</span><span class="tag">路线 {}</span>'
         '<div class="desc">{}</div>'
         '<div class="metrics">'
@@ -557,14 +589,14 @@ def card(rec, card_no):
         '<span>可疑行 <b>{}</b></span>'
         '<span>结构化表格 <b>{}</b></span>'
         '<span>耗时 <b>{}s</b></span></div></div>'.format(
-            card_no, esc(name),
-            labels.get(rec.get('kind'), rec.get('kind', '?')),
-            esc(rec.get('table_route', '-')), ' · '.join(links),
-            rec.get('lines', 0), rec.get('avg_score', 0),
-            rec.get('low_score_lines', 0),
-            len(rec.get('structured_tables') or []), rec.get('elapsed', 0)))
-    n_text = rec.get('lines', 0)
-    n_tbl = len(rec.get('structured_tables') or [])
+            card_no, esc(name), esc(title_suffix),
+            labels.get(pg.get('kind'), pg.get('kind', '?')),
+            esc(pg.get('table_route', '-')), ' · '.join(links),
+            pg.get('lines', 0), pg.get('avg_score', 0),
+            pg.get('low_score_lines', 0),
+            len(pg.get('structured_tables') or []), pg.get('elapsed', 0)))
+    n_text = pg.get('lines', 0)
+    n_tbl = len(pg.get('structured_tables') or [])
     tabs = (
         '<div class="ctabs" data-card="{}">'
         '<button type="button" class="ctab on" data-card="{}" data-tab="text">'
@@ -576,6 +608,13 @@ def card(rec, card_no):
         '<button type="button" class="ctab" data-card="{}" data-tab="json">'
         'JSON</button></div>'.format(
             card_no, card_no, n_text, card_no, n_tbl, card_no, card_no))
+    if single:
+        json_html = json_section(
+            file_rec, href=file_url(file_rec['case'], config.RESULT_JSON))
+    else:
+        json_html = json_section(
+            pg, href=None, label='本页 JSON · pages[{}]'.format(
+                (page_no or 1) - 1))
     content = (
         '<div class="contentcol">{}'
         '<div class="tabpanel" data-card="{}" data-tab="text">{}</div>'
@@ -583,12 +622,135 @@ def card(rec, card_no):
         '<div class="tabpanel" data-card="{}" data-tab="md" hidden>{}</div>'
         '<div class="tabpanel" data-card="{}" data-tab="json" hidden>{}</div>'
         '</div>'.format(
-            tabs, card_no, text_pane(rec, card_no),
-            card_no, tables_section(rec, card_no),
-            card_no, md_pane(rec, card_no),
-            card_no, json_section(rec)))
+            tabs, card_no, text_pane(pg, card_no),
+            card_no, tables_section(pg, card_no),
+            card_no, md_pane(pg, card_no),
+            card_no, json_html))
+    page_attr = '' if single else ' data-page="{}"'.format(page_no)
+    hidden_attr = ' hidden' if hidden else ''
     return (
-        '<section class="card" data-card="{}" data-textspace="{}">{}'
+        '<section class="card" data-card="{}"{}{} data-textspace="{}">{}'
         '<div class="grid">{}{}</div></section>'.format(
-            card_no, esc(rec.get('text_space') or 'source'),
-            head, image_views(rec, card_no), content))
+            card_no, page_attr, hidden_attr, esc(pg.get('text_space') or 'source'),
+            head, image_views(pg, card_no, stitched, page_no), content))
+
+
+def stitch_panel(file_rec, idx):
+    """跨页合并表面板（文件级，常驻页卡片下方）：每格带 data-page，悬停自动切页回溯。"""
+    stitched = file_rec.get('stitched_tables') or []
+    if not stitched:
+        return ''
+    card_no = '{}s'.format(idx)
+    parts = ['<div class="panel-body">',
+             '<p class="note">相邻页续表已合并（丢重复表头、数据顺接）。'
+             '悬停单元格自动切到它所在页的图并高亮，点击钉住。'
+             '<span class="hint" tabindex="0" data-tip="合并判据：相邻页 + 同列数 '
+             '+ 列边界对齐 + 表头逐字重复；不满足则保持各页独立，不强行合并。">?</span>'
+             '</p>']
+    if len(stitched) > 1:
+        tabs = ''.join(
+            '<button type="button" class="stitchtab{}" data-card="{}" '
+            'data-stitch="{}">合并表 {} · {}×{}</button>'.format(
+                ' on' if i == 0 else '', card_no, i, i + 1,
+                t.get('n_rows', 0), t.get('n_cols', 0))
+            for i, t in enumerate(stitched))
+        parts.append('<div class="tbltabs">{}</div>'.format(tabs))
+    for si, t in enumerate(stitched):
+        headers = t.get('headers') or []
+        rows = t.get('rows') or []
+        row_pages = t.get('row_pages') or []
+        cells = t.get('cells') or []
+        csv_file = t.get('csv_file', 'stitched_{}.csv'.format(si + 1))
+        parts.append('<div class="stitchpane" data-card="{}" data-stitch="{}"{}>'
+                     .format(card_no, si, '' if si == 0 else ' hidden'))
+        parts.append(
+            '<div class="tbl-bar"><b>跨页合并表 {}</b>'
+            '<span class="meta">来源页 {} · {} 行 × {} 列</span>'
+            '<a class="btn" href="{}" download="{}">下载 CSV</a>'
+            '<a class="btn ghost" href="{}" target="_blank">打开 {}</a></div>'
+            .format(si + 1, esc('、'.join(str(p) for p in t.get('source_pages') or [])),
+                    t.get('n_rows', 0), t.get('n_cols', 0),
+                    csv_data_uri(headers, rows), esc(csv_file),
+                    file_url(file_rec['case'], csv_file), esc(csv_file)))
+        if t.get('title'):
+            parts.append('<p class="note">标题：{}</p>'.format(esc(t['title'])))
+
+        def cell_attr(r, c):
+            cell = (cells[r][c] if r < len(cells) and c < len(cells[r]) else None)
+            pno = (cell or {}).get('page')
+            space = (cell or {}).get('space') or 'source'
+            return ' data-page="{}" data-space="{}"'.format(
+                pno if pno is not None else '', esc(space))
+
+        thead = ''
+        if headers:
+            thead = '<thead><tr>{}</tr></thead>'.format(''.join(
+                '<th class="scell" data-card="{}" data-stitch="{}" '
+                'data-cell="0_{}"{}>{}</th>'.format(
+                    card_no, si, c, cell_attr(0, c), esc(v))
+                for c, v in enumerate(headers)))
+        body = ''.join(
+            '<tr>{}</tr>'.format(''.join(
+                '<td class="scell" data-card="{}" data-stitch="{}" '
+                'data-cell="{}_{}"{}>{}</td>'.format(
+                    card_no, si, r, c, cell_attr(r, c), esc(v))
+                for c, v in enumerate(row)))
+            for r, row in enumerate(rows, 1))
+        parts.append('<div class="tablewrap scrollbox"><table>{}<tbody>{}</tbody>'
+                     '</table></div></div>'.format(thead, body))
+    parts.append('</div>')
+    return (
+        '<section class="card stitchcard" data-card="{}">'
+        '<details class="panel" open>'
+        '<summary class="panel-head"><span class="panel-title">跨页合并表</span>'
+        '<span class="cnt">{}</span><span class="spacer"></span></summary>'
+        '{}</details></section>'.format(card_no, len(stitched), ''.join(parts)))
+
+
+def _multi_card(file_rec, idx):
+    pages = file_rec.get('pages') or []
+    stitched = file_rec.get('stitched_tables') or []
+    name = file_rec.get('file', '(未知)')
+    labels = {'image': '图片', 'pdf': 'PDF', 'csv': '纯文本'}
+    tot_lines = sum(p.get('lines', 0) for p in pages)
+    tot_tables = sum(len(p.get('structured_tables') or []) for p in pages)
+    routes = '/'.join(sorted({p.get('table_route', '-') for p in pages}))
+    head = (
+        '<div class="card-head filehead"><h2 id="case-{}">{}</h2>'
+        '<span class="tag">{}</span><span class="tag">路线 {}</span>'
+        '<span class="tag">{} 页</span>'
+        '<div class="desc"><a href="{}" target="_blank">result.json（整份）</a></div>'
+        '<div class="metrics">'
+        '<span>总识别行数 <b>{}</b></span>'
+        '<span>结构化表格 <b>{}</b></span>'
+        '<span>跨页合并 <b>{}</b></span></div></div>'.format(
+            idx, esc(name), labels.get(file_rec.get('kind'), '?'), esc(routes),
+            len(pages), file_url(file_rec['case'], config.RESULT_JSON),
+            tot_lines, tot_tables, len(stitched)))
+    pagetabs = ''.join(
+        '<button type="button" class="pagetab{}" data-file="{}" data-page="{}">'
+        '第 {} 页</button>'.format(' on' if i == 0 else '', idx, p.get('page'),
+                                   p.get('page'))
+        for i, p in enumerate(pages))
+    pagetabs = '<div class="pagetabs">{}</div>'.format(pagetabs)
+    cards_html = ''.join(
+        _render_card(p, '{}p{}'.format(idx, p.get('page')), file_rec,
+                     single=False, page_no=p.get('page'), stitched=stitched,
+                     title_suffix=' · 第 {} 页'.format(p.get('page')),
+                     hidden=(i > 0))
+        for i, p in enumerate(pages))
+    return (
+        '<section class="filecard" data-file="{}">{}{}{}{}'
+        '<div class="filejson">{}</div></section>'.format(
+            idx, head, pagetabs, cards_html, stitch_panel(file_rec, idx),
+            json_section(file_rec,
+                         href=file_url(file_rec['case'], config.RESULT_JSON),
+                         label='result.json（整份信封）')))
+
+
+def card(file_rec, idx):
+    pages = file_rec.get('pages') or []
+    if len(pages) <= 1:
+        pg = pages[0] if pages else {}
+        return _render_card(pg, idx, file_rec, single=True)
+    return _multi_card(file_rec, idx)

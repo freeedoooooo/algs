@@ -13,6 +13,15 @@ import pymupdf
 from .. import config
 
 
+def page_count(pdf_path):
+    """PDF 总页数（轻量，只开文档头，不渲染）。"""
+    doc = pymupdf.open(pdf_path)
+    try:
+        return len(doc)
+    finally:
+        doc.close()
+
+
 def render_first_page(pdf_path, out_png, page_no=1, dpi=None):
     """渲染指定页（页码 1 起）；dpi / page_no 来自页面调试参数。"""
     os.makedirs(os.path.dirname(out_png), exist_ok=True)

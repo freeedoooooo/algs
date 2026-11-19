@@ -1,6 +1,7 @@
 # CV 提取 MVP
 
-把 week-02 验证过的提取能力封装成一个**本地 Web 工具**：浏览器上传文件 → 后端提取 → 生成单页对照报告。
+把 week-02 验证过的提取能力封装成一个**本地 Web 工具**：浏览器上传文件 → 后端提取 → 生成对照报告。
+支持**多页 PDF 逐页提取 + 报告页签切换 + 跨页表格拼接**（`page=all`）。
 `weekly/week-02/` 的代码与产物**完全不改动**，本目录自包含。
 
 ## 启动
@@ -89,12 +90,12 @@ mvp/
 ├── pipeline/                  提取层
 │   ├── engines.py             模型单例（懒加载；表格模型按 doc_unwarp 分槽缓存）
 │   ├── ocr.py                 逐行文字 / 置信度 / 四点框 + 带框 PNG
-│   ├── pdf.py                 首页渲染 / 文本层 / pdfplumber 表格 + bbox
+│   ├── pdf.py                 页数 / 逐页渲染 / 文本层 / pdfplumber 表格 + bbox
 │   ├── plain.py               CSV / TXT 直读
 │   ├── ppstruct.py            PPStructureV3 单次推理：官方 parsing（裁死字段）/ 表格 / 矫正图
 │   ├── resplit.py             图片人工列边界：切黏连格 + 子格重 OCR 归位
-│   ├── structure.py           表头分离 / cells 网格 / CSV 导出
-│   └── runner.py              extract_one() 统一入口
+│   ├── structure.py           表头分离 / cells 网格 / CSV 导出 / 跨页续表拼接
+│   └── runner.py              extract_one() 统一入口：逐页提取 + pages 信封编排
 ├── report/                    报告层
 │   ├── cards.py               各区块 HTML（图片 / 文字 / 表格 / JSON）
 │   ├── builder.py             组装 index.html
@@ -115,8 +116,20 @@ mvp/
 ```
 input/20261116160231_103_real_bank_statement_textlayer.pdf
 output/20261116160231_103_real_bank_statement_textlayer/
-       ├── result.json  boxes.png  source.png  table_1.csv
+       ├── result.json  boxes.png  source.png  table_1.csv      # 单页（page=1）
        └── pages/p1.png
+```
+
+多页 PDF（`page=all`）逐页产物加 `p{n}` 前缀，避免跨页互相覆盖：
+
+```
+output/<批次_文件名>/
+       ├── result.json                 文件信封：pages:[每页…] + stitched_tables
+       ├── stitched_1.csv              跨页合并表（如有）
+       └── pages/
+           ├── p1.png  p1_boxes.png  p1_rectified.png  p1_table_1.csv
+           ├── p2.png  p2_boxes.png  p2_rectified.png  p2_table_1.csv
+           └── …
 ```
 
 - **只加前缀，不改原文件名**：源文件自带的 `103_` 这类数字编号完整保留，`output` 目录名就是「带戳输入名去掉后缀」。
@@ -135,15 +148,18 @@ output/20261116160231_103_real_bank_statement_textlayer/
 
 | 输入 | 路线 | 主要产物 |
 |---|---|---|
-| png / jpg / bmp / webp / tif | OCR + 长直线预筛 → PPStructureV3 | `source.<ext>`、`boxes.png`、`pages/rectified.png`、`table_N.csv` |
-| PDF 有文本层 | pymupdf 渲染首页 + OCR + pdfplumber 直读表格 | 同上，`pages/p1.png`；表格带单元格 bbox |
-| PDF 无文本层 | 同图片路线 | 同上 |
+| png / jpg / bmp / webp / tif | PPStructureV3 单次推理（无预筛门槛） | `source.<ext>`、`boxes.png`、`pages/rectified.png`、`table_N.csv` |
+| PDF 有文本层 | 逐页渲染 + OCR + pdfplumber 直读表格 | 单页 `source.png`/`pages/p1.png`；多页 `pages/p{n}.*`；表格带单元格 bbox |
+| PDF 无文本层 | 同图片路线（逐页单次推理） | 同上 |
 | CSV / TXT / MD | 纯文本直读，不跑 OCR | `source.<ext>`、`table_N.csv`（CSV） |
 
-每个 case 目录还固定有一份 `result.json`（**紧凑落盘**）。清理后只存三样：官方 `parsing`（裁掉代码不读的死字段）+ `structured_tables`（加工后的表 + 单元格坐标）+ 应用元信息/诊断。
-文字投影 `texts/scores/boxes`、版面 `layout`、行数/均值**不落盘**，由 `viewmodel.hydrate()` 在渲染期从 `parsing` 现算（官方 JSON 为唯一事实源，派生视图不重复存储）；raw 表中间态已删。
-文本层 PDF / CSV 路线无 `parsing`，其 OCR 投影是唯一文字记录，直接存储。详见 [docs/result-json-anatomy.md](./docs/result-json-anatomy.md)。
-`rectified.png` 只在真正抽到表的图片 / 扫描件里生成。
+每个 case 目录固定有一份 `result.json`（**紧凑落盘**），统一为**文件信封**：
+`file/case/kind/encoding/params_snapshot/page_count` + `pages:[pageRec…]` + `stitched_tables`。
+单页文件也是 `pages:[1]`（无双形态、无兼容 shim）。每页 `pageRec` 只存三样：官方 `parsing`（裁掉代码不读的死字段）+ `structured_tables`（加工后的表 + 单元格坐标）+ 该页元信息/诊断。
+文字投影 `texts/scores/boxes`、版面 `layout`、行数/均值**不落盘**，由 `viewmodel.hydrate()` 在渲染期**逐页**从 `parsing` 现算（官方 JSON 为唯一事实源，派生视图不重复存储）；raw 表中间态已删。
+文本层 PDF / CSV 路线无 `parsing`，其 OCR 投影是唯一文字记录，直接存储。
+跨页续表合并进 `stitched_tables`（每格带 `page/space`，供报告页感知回溯）。详见 [docs/result-json-anatomy.md](./docs/result-json-anatomy.md)。
+`rectified.png` 只在真正抽到表的图片 / 扫描件里生成（多页为 `p{n}_rectified.png`）。
 
 ## 「横线端点自动还原」是怎么做到的（有文本层 PDF）
 
@@ -184,11 +200,13 @@ output/20261116160231_103_real_bank_statement_textlayer/
 
 ## 报告包含什么
 
+- **多页文件页签切换**：`page=all` 的 PDF 渲染成 `.filecard` 容器 + 页签 + 逐页子卡片（只显示激活页），左图吸顶、右栏 tab 与单页一致；跨页合并表常驻底部。
+- **跨页表格拼接**：相邻页「同列数 + 同坐标空间 + 列 x 边界对齐 + 表头相同（空白归一化）」的续表合并成一张逻辑表（去重复表头、行连续），每格保留来源 `page/space`；悬停/点击合并表单元格**自动切到对应页**并高亮该格（页感知回溯）。判据保守，宁可不拼不误拼。
 - **原图 / 矫正图**切换（有矫正图时才出现切换条），点击图片全屏放大：滚轮以光标为中心缩放、拖拽平移、1:1 原像素、双击切换、Esc 关闭、叠加框开关、新窗口打开原图。
 - **提取内容**：逐行 OCR 文字 + 置信度条，与左图识别框双向高亮；有文本层 / 纯文本另给全文折叠区。
 - **表格内容**：带表头的 HTML 表格、CSV 下载（自包含 data URI + 真实文件链接）、多表 tab 切换。
 - **单元格坐标回溯**：默认一个框都不画，悬停只高亮那一格、点击钉住（再点取消），并自动切到该表的坐标宿主视图；「显示整表网格」是默认关闭的调试开关。
-- **完整 JSON**：折叠查看、下载 `result.json`、一键复制。tab 内美化展示**落盘形态**（`disk_view`：ppstruct 路线含 parsing、不含派生投影），与下载文件内容一致；磁盘紧凑存储，tab 渲染时再 `indent=2` 美化。
+- **完整 JSON**：折叠查看、下载 `result.json`、一键复制。单页卡片 JSON tab 展示**文件信封落盘形态**（`disk_view`：含 pages/stitched_tables，ppstruct 页含 parsing、不含派生投影）；多页另给「本页 JSON」tab 展示该页 `pageRec`。磁盘紧凑存储，tab 渲染时再 `indent=2` 美化。
 
 三套坐标来源严格互斥，用 `coord.space` 区分：文本层 bbox 与 OCR 框基于 `source.<ext>`；
 表格模型**开矫正**时单元格框基于 `pages/rectified.png`（转正 + 去扭曲，1:1 无需逆变换）；
@@ -221,16 +239,16 @@ output/20261116160231_103_real_bank_statement_textlayer/
 
 | 优先级 | 参数 | 默认 | 调它能救什么 |
 |---|---|---|---|
-| ① 先看哪一页 | `page` | 1 | 跨页 case 逐页定位：只渲染 / OCR / 抽表这一页（超页数自动夹到末页）。**目前是指定单页，不是多页拼接** |
+| ① 先看哪一页 | `page` | 1 | 填页码（1 起）只处理那一页（超页数自动夹到末页）；填 `all`（或「全部」）**逐页全量提取整份 PDF** + 报告页签切换 + 跨页续表拼接。默认单页，便于逐页定位 badcase |
 | ② 表格能不能抽到 | `table_strategy` | auto | 强制 `text` 救无线框表；`lines` 按矢量线；避免纯文字页被伪抽 |
 | ② | `column_lines` | 空 | 人工列边界，填 `x1,x2,x3,…`（≥1 个递增数字）。**文本层 PDF** 用 PDF 点（像素×72/DPI，单条不成列自动回退）覆盖自动推断；**图片/扫描件** 用原图像素，单条即可沿竖线切开模型黏连格并重 OCR 归位（仅 `doc_unwarp=off`）。常规无需填 |
 | ④ 文字识别 | `det_thresh` / `box_thresh` | 0.3 / 0.6 | 漏检调低（0.2/0.4）、误检调高；predict 按次覆盖，不重建模型 |
 | ⑤ 渲染精度 | `dpi` | 110 | 小字 / 密集表提到 150~200 更清晰；坐标同步缩放 |
 | ⑥ 坐标回溯 | `doc_unwarp` | on | **电子版平整截图（如 108）设 off**：关闭方向分类 + UVDoc，单元格框直接叠原图、1:1 精确；旋转/弯曲扫描件保持 on（框叠矫正图）|
 
-**参数快照**：每次上传的生效参数写进每份 `result.json` 的 `params_snapshot` 与 `page`
-字段，报告页头「本次参数快照」折叠区按优先级列出全部参数，批次状态 `/api/status`
-也能看到。填错的参数会回退默认并在日志里给出警告，不会中断整批。
+**参数快照**：每次上传的生效参数写进 `result.json` 文件信封的 `params_snapshot`，
+页码写进每页 `pageRec.page`；报告页头「本次参数快照」折叠区按优先级列出全部参数
+（`page=all` 显示「全部页」），批次状态 `/api/status` 也能看到。填错的参数会回退默认并在日志里给出警告，不会中断整批。
 
 技术分界：`det/box_thresh`、`page`、`table_strategy`、`column_lines`、`dpi`
 全是 predict 级 / 纯参数，**每批可不同、零额外开销**。
@@ -303,6 +321,6 @@ VS Code: Reload Window）即可 —— 代码里已经没有任何顶层绝对�
 
 - 单任务串行、无鉴权、默认仅监听 `127.0.0.1`（可用 `CV_MVP_HOST=0.0.0.0` 放开）；上传用 base64 JSON，单文件上限 20MB。
 - 首次运行需联网下载 PaddleX 官方模型（数百 MB）；离线部署要预置缓存，见「独立部署」。
-- 多页 PDF 通过 `page` 参数**只处理指定的单页**（报告仍是单图单视图），**还没做「一次跑全部页 + 报告页签切换 + 跨页表格拼接」** —— 那是结构性改动，真正解决跨页问题需单独做。
+- 多页 PDF 已支持 `page=all` **逐页全量提取 + 报告页签切换 + 跨页续表拼接**（2026-11-19）。拼接判据保守（相邻页 + 同列 + 列对齐 + 重复表头），版式差异大的续表不会误拼；默认仍单页，逐页调试用页码。
 - 参数面板现覆盖 9 项（第一梯队 8 项 + `doc_unwarp`）+ 参数快照 + 运行日志；识别模型 mobile/server 仍未放（换模型要改 `config.py`，属实验模式）。
 - 自动列边界对「一页多表且各表端点混叠」的复杂版式仍是尽力而为；遇到新固定版式，直接在上传页填 `column_lines` 即可，不必改代码。

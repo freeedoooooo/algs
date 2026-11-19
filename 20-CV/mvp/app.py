@@ -308,10 +308,14 @@ def run_batch(paths, params=None, log=None):
             rec = pipeline.extract_one(path, case_abs, case_rel, params,
                                        emit=emit)
             records.append(rec)
-            log.ok('case', '识别 {} 行文字 · 表格 {} 张 · 路线 {} · 第 {} 页'
-                   .format(rec['lines'], len(rec['structured_tables']),
-                           rec['table_route'], rec.get('page', 1)),
-                   case=name)
+            pages = rec.get('pages') or []
+            tot_lines = sum(p.get('lines', 0) for p in pages)
+            tot_tables = sum(len(p.get('structured_tables') or []) for p in pages)
+            routes = '/'.join(sorted({p.get('table_route', '-') for p in pages}))
+            log.ok('case', '识别 {} 行文字 · 表格 {} 张 · 路线 {} · {} 页{}'.format(
+                tot_lines, tot_tables, routes, len(pages),
+                ' · 跨页合并 {} 张'.format(len(rec.get('stitched_tables') or []))
+                if rec.get('stitched_tables') else ''), case=name)
             progress(int(i / total * 100))
         log.stage('report', '正在生成汇总报告 …')
         progress(99)

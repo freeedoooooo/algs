@@ -43,16 +43,19 @@ def build(records, out_path, params=None):
     nav = ''.join(
         '<a href="#case-{}">{}</a>'.format(i, cards.esc(r.get('file', '?')))
         for i, r in enumerate(records))
-    total_lines = sum(r.get('lines', 0) for r in records)
-    total_tables = sum(len(r.get('structured_tables') or []) for r in records)
+    total_lines = sum(p.get('lines', 0)
+                      for r in records for p in (r.get('pages') or []))
+    total_tables = sum(len(p.get('structured_tables') or [])
+                       for r in records for p in (r.get('pages') or []))
+    total_stitch = sum(len(r.get('stitched_tables') or []) for r in records)
 
     header = (
         '<header><h1>CV 提取 MVP · 对照报告</h1>'
-        '<div class="sub">共 {} 个文件 · {} 行识别文字 · {} 张结构化表格'
-        '<span class="hint" tabindex="0" data-tip="左图吸顶，右侧页签切换；悬停/点击表格单元格定位；点击图片放大。">?</span>'
+        '<div class="sub">共 {} 个文件 · {} 行识别文字 · {} 张结构化表格 · {} 张跨页合并'
+        '<span class="hint" tabindex="0" data-tip="左图吸顶，右侧页签切换；悬停/点击表格单元格定位；点击图片放大。多页文件用页签切换，跨页合并表悬停自动切页。">?</span>'
         '</div><div class="nav">{}</div>'
         '{}</header>\n'
-        .format(len(records), total_lines, total_tables, nav,
+        .format(len(records), total_lines, total_tables, total_stitch, nav,
                 _param_block(params)))
     body = '\n'.join(cards.card(r, i) for i, r in enumerate(records))
 

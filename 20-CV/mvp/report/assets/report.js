@@ -281,6 +281,78 @@ document.querySelectorAll('.copyjson').forEach(function(btn){
   });
 })();
 
+/* 多页文件：页签切换（只显示激活页卡片）；跨页合并表 / 整份 JSON 常驻下方 */
+function fileCardOf(el){ return el.closest('.filecard'); }
+function showPage(fc,p){
+  if(!fc) return false;
+  var changed=false;
+  fc.querySelectorAll('.pagetab').forEach(function(b){
+    b.classList.toggle('on',b.getAttribute('data-page')===String(p));
+  });
+  fc.querySelectorAll('.card[data-page]').forEach(function(c){
+    var hide=(c.getAttribute('data-page')!==String(p));
+    if(c.hidden!==hide){c.hidden=hide;changed=true;}
+  });
+  return changed;
+}
+function activatePage(fc,p){
+  if(showPage(fc,p)){clearPin(fc);clearHover(fc);}
+}
+document.querySelectorAll('.pagetab').forEach(function(btn){
+  btn.addEventListener('click',function(){
+    activatePage(fileCardOf(btn),btn.getAttribute('data-page'));
+  });
+});
+
+/* 跨页合并表多表 tab */
+document.querySelectorAll('.stitchtab').forEach(function(btn){
+  btn.addEventListener('click',function(){
+    var card=cardOf(btn),si=btn.getAttribute('data-stitch');
+    clearPin(card);clearHover(card);
+    card.querySelectorAll('.stitchtab').forEach(function(b){b.classList.toggle('on',b===btn);});
+    card.querySelectorAll('.stitchpane').forEach(function(p){
+      p.hidden=(p.getAttribute('data-stitch')!==si);
+    });
+  });
+});
+
+/* 跨页合并表单元格：页感知回溯。悬停/点击→切到该格所在页→高亮该页图上的格。
+   合并表每格带 data-page/data-space；rect 叠在对应页卡片 svg，td 在合并面板，
+   两者共享 data-stitch+data-cell，按 .filecard 作用域匹配。 */
+document.querySelectorAll('.scell').forEach(function(el){
+  function fc(){return fileCardOf(el);}
+  function matches(){
+    var f=fc();if(!f)return[];
+    return f.querySelectorAll('[data-stitch="'+el.getAttribute('data-stitch')+'"]'+
+      '[data-cell="'+el.getAttribute('data-cell')+'"]');
+  }
+  function pageCard(){
+    var f=fc();if(!f)return null;
+    return f.querySelector('.card[data-page="'+el.getAttribute('data-page')+'"]');
+  }
+  function reveal(){
+    var f=fc(),pc=pageCard();if(!f||!pc)return null;
+    if(showPage(f,el.getAttribute('data-page'))){clearPin(f);clearHover(f);}
+    ensureViewFor(pc,el.getAttribute('data-space')||'source');
+    return pc;
+  }
+  el.addEventListener('mouseenter',function(){
+    var pc=reveal();if(!pc)return;
+    var space=el.getAttribute('data-space')||'source';
+    if(currentView(pc)!==wantViewOf(space))return;
+    clearHover(fc());
+    matches().forEach(function(x){x.classList.add('hv');});
+  });
+  el.addEventListener('mouseleave',function(){var f=fc();if(f)clearHover(f);});
+  el.addEventListener('click',function(){
+    var f=fc(),was=el.classList.contains('pin');
+    var pc=reveal();if(!pc)return;
+    clearPin(f);clearHover(f);
+    if(was)return;
+    matches().forEach(function(x){x.classList.add('pin');});
+  });
+});
+
 /* 辅助内容弹窗：文本原文 / 提取诊断点按钮弹出，不占版面 */
 (function(){
   var m=document.createElement('div');
