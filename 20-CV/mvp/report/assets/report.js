@@ -10,14 +10,18 @@ function currentView(card){
   var b=card.querySelector('.viewbtn.on');
   return b ? b.getAttribute('data-view') : 'orig';
 }
-function wantView(card){ return activeSpace(card)==='rectified' ? 'rect' : 'orig'; }
-function viewMatches(card){ return currentView(card)===wantView(card); }
-function ensureView(card){
-  var w=wantView(card);
+function elSpace(el){
+  var host=el.closest('[data-space]');
+  return host?host.getAttribute('data-space'):activeSpace(cardOf(el));
+}
+function wantViewOf(space){ return space==='rectified' ? 'rect' : 'orig'; }
+function ensureViewFor(card,space){
+  var w=wantViewOf(space);
   if(currentView(card)===w) return;
   var b=card.querySelector('.viewbtn[data-view="'+w+'"]');
   if(b) b.click();
 }
+function ensureView(card){ ensureViewFor(card,activeSpace(card)); }
 function matchingRects(card,el){
   var sel='.cellbox[data-card="'+el.getAttribute('data-card')+'"]'+
           '[data-tbl="'+el.getAttribute('data-tbl')+'"]'+
@@ -64,7 +68,7 @@ document.querySelectorAll('.boxtoggle').forEach(function(btn){
   });
 });
 
-/* 右栏 tab：文字行 / 表格 / JSON 切换；左图吸顶始终可见，切 tab 后视图跟随坐标空间 */
+/* 右栏 tab：文字行 / 表格 / 文档 / JSON 切换；左图吸顶始终可见，切 tab 后视图跟随坐标空间 */
 document.querySelectorAll('.ctab').forEach(function(btn){
   btn.addEventListener('click',function(){
     var card=cardOf(btn),t=btn.getAttribute('data-tab');
@@ -73,6 +77,16 @@ document.querySelectorAll('.ctab').forEach(function(btn){
     card.querySelectorAll('.tabpanel').forEach(function(p){
       p.hidden=(p.getAttribute('data-tab')!==t);
     });
+    /* 文档面板多表同屏：放开全部单格框；切回表格面板恢复「只显选中表」 */
+    if(t==='md'){
+      card.querySelectorAll('.cellbox').forEach(function(r){r.classList.remove('off');});
+    }else if(t==='tables'){
+      var on=card.querySelector('.tbltab.on');
+      var ti=on?on.getAttribute('data-tbl'):'0';
+      card.querySelectorAll('.cellbox').forEach(function(r){
+        r.classList.toggle('off',r.getAttribute('data-tbl')!==ti);
+      });
+    }
     ensureView(card);
   });
 });
@@ -108,7 +122,7 @@ document.querySelectorAll('.tbltab').forEach(function(btn){
 document.querySelectorAll('td.cell,th.cell').forEach(function(el){
   el.addEventListener('mouseenter',function(){
     var card=cardOf(el);
-    if(!viewMatches(card)) return;
+    if(currentView(card)!==wantViewOf(elSpace(el))) return;
     clearHover(card);
     el.classList.add('hv');
     matchingRects(card,el).forEach(function(r){r.classList.add('hv');});
@@ -118,7 +132,7 @@ document.querySelectorAll('td.cell,th.cell').forEach(function(el){
     var card=cardOf(el),was=el.classList.contains('pin');
     clearPin(card);clearHover(card);
     if(was) return;
-    ensureView(card);
+    ensureViewFor(card,elSpace(el));
     el.classList.add('pin');
     matchingRects(card,el).forEach(function(r){r.classList.add('pin');});
   });

@@ -5,6 +5,7 @@ report/cards.py — 卡片各区块的 HTML 渲染（只管结构，样式在 as
     图片区（原图 / 矫正图） · 提取内容 · 表格内容 · 完整 JSON
 """
 import io
+import os
 import csv
 import json
 import html
@@ -263,6 +264,163 @@ def tables_section(rec, card_no):
     return '<details class="panel" open>' + head + ''.join(parts) + '</details>'
 
 
+def _table_union(t):
+    """全部单元格 bbox 的并集；无有效坐标返回 None。"""
+    xs1, ys1, xs2, ys2 = [], [], [], []
+    for row in t.get('cells') or []:
+        for b in row:
+            if b and len(b) >= 4:
+                xs1.append(b[0])
+                ys1.append(b[1])
+                xs2.append(b[2])
+                ys2.append(b[3])
+    if not xs1:
+        return None
+    return [min(xs1), min(ys1), max(xs2), max(ys2)]
+
+
+def doc_blocks(rec):
+    """文档视图块序列：OCR 行与 source 空间表格按 y 穿插，其余表格置底。
+
+    落在表格并集框内的 OCR 行被过滤（内容由表格块承载，避免重复）。
+    返回 [{'kind':'line','idx':i} | {'kind':'table','ti':i,'trailing':bool}]
+    """
+    texts = rec.get('texts') or []
+    boxes = rec.get('boxes') or []
+    tables = rec.get('structured_tables') or []
+    unions = {}
+    for ti, t in enumerate(tables):
+        coord = t.get('coord') or {}
+        if coord.get('space') == 'source' and coord.get('exact'):
+            u = _table_union(t)
+            if u:
+                unions[ti] = u
+    items = []
+    for i in range(len(texts)):
+        pts = boxes[i] if i < len(boxes) else []
+        ys = [float(p[1]) for p in pts] or [0.0]
+        xs = [float(p[0]) for p in pts] or [0.0]
+        cy, cx = sum(ys) / len(ys), sum(xs) / len(xs)
+        if any(u[0] <= cx <= u[2] and u[1] <= cy <= u[3]
+               for u in unions.values()):
+            continue
+        items.append((min(ys), 0, {'kind': 'line', 'idx': i}))
+    trailing = []
+    for ti in range(len(tables)):
+        if ti in unions:
+            items.append((unions[ti][1], 1, {'kind': 'table', 'ti': ti}))
+        else:
+            trailing.append({'kind': 'table', 'ti': ti, 'trailing': True})
+    items.sort(key=lambda x: (x[0], x[1]))
+    return [it[2] for it in items] + trailing
+
+
+def _md_cell(v):
+    return str(v or '').replace('|', '\\|').replace('\n', ' ')
+
+
+def blocks_markdown(rec, blocks):
+    """与文档视图同序的纯 Markdown（坐标信息丢弃，供下载）。"""
+    texts = rec.get('texts') or []
+    tables = rec.get('structured_tables') or []
+    parts = []
+    if not texts and rec.get('plain_text'):
+        parts.append(rec['plain_text'].strip())
+    for b in blocks:
+        if b['kind'] == 'line':
+            parts.append(texts[b['idx']])
+            continue
+        t = tables[b['ti']]
+        if t.get('title'):
+            parts.append('**{}**'.format(t['title']))
+        headers = t.get('headers') or []
+        rows = t.get('rows') or []
+        width = len(headers) or max((len(r) for r in rows), default=0)
+        if not width:
+            continue
+        head = list(headers) + [''] * (width - len(headers))
+        lines = ['| ' + ' | '.join(_md_cell(c) for c in head) + ' |',
+                 '| ' + ' | '.join(['---'] * width) + ' |']
+        for r in rows:
+            r = list(r) + [''] * (width - len(r))
+            lines.append('| ' + ' | '.join(_md_cell(c) for c in r[:width])
+                         + ' |')
+        parts.append('\n'.join(lines))
+    return '\n\n'.join(p for p in parts if p) + '\n'
+
+
+def md_data_uri(text):
+    payload = text.encode('utf-8')
+    return ('data:text/markdown;charset=utf-8;base64,'
+            + base64.b64encode(payload).decode())
+
+
+def md_pane(rec, card_no):
+    texts = rec.get('texts') or []
+    scores = rec.get('scores') or []
+    tables = rec.get('structured_tables') or []
+    blocks = doc_blocks(rec)
+    body = []
+    if not texts and rec.get('plain_text'):
+        for ln in rec['plain_text'].splitlines():
+            if ln.strip():
+                body.append('<p class="mdline">{}</p>'.format(esc(ln)))
+    for b in blocks:
+        if b['kind'] == 'line':
+            i = b['idx']
+            s = scores[i] if i < len(scores) else 1.0
+            low = ' low' if s < config.LOW_SCORE else ''
+            body.append(
+                '<p class="mdline{}" data-card="{}" data-idx="{}">{}</p>'
+                .format(low, card_no, i, esc(texts[i])))
+            continue
+        ti = b['ti']
+        t = tables[ti]
+        space = (t.get('coord') or {}).get('space') or 'none'
+        body.append('<div class="mdtbl" data-space="{}">'.format(esc(space)))
+        if b.get('trailing'):
+            label = {'rectified': '矫正图',
+                     'none': '无图像载体'}.get(space, space)
+            body.append('<p class="note">表 {}（坐标：{}，无法按位置穿插，置底显示）'
+                        '</p>'.format(ti + 1, esc(label)))
+        if t.get('title'):
+            body.append('<p class="mdtbl-title">{}</p>'.format(esc(t['title'])))
+        headers = t.get('headers') or []
+        rows = t.get('rows') or []
+        thead = ''
+        if headers:
+            thead = '<thead><tr>{}</tr></thead>'.format(''.join(
+                '<th class="cell" data-card="{}" data-tbl="{}" '
+                'data-cell="0_{}">{}</th>'.format(card_no, ti, c, esc(v))
+                for c, v in enumerate(headers)))
+        tbody = ''.join(
+            '<tr>{}</tr>'.format(''.join(
+                '<td class="cell" data-card="{}" data-tbl="{}" '
+                'data-cell="{}_{}">{}</td>'.format(card_no, ti, r, c, esc(v))
+                for c, v in enumerate(row)))
+            for r, row in enumerate(rows, 1))
+        body.append('<div class="tablewrap"><table>{}<tbody>{}</tbody>'
+                    '</table></div></div>'.format(thead, tbody))
+    if not body:
+        body.append('<div class="empty">无文档内容</div>')
+    stem = os.path.splitext(rec.get('file', 'doc'))[0]
+    dl = ('<a class="btn" href="{}" download="{}.md" '
+          'onclick="event.stopPropagation()">下载 Markdown</a>'
+          .format(md_data_uri(blocks_markdown(rec, blocks)), esc(stem)))
+    n_line = sum(1 for b in blocks if b['kind'] == 'line')
+    return (
+        '<details class="panel" open>'
+        '<summary class="panel-head"><span class="panel-title">文档视图</span>'
+        '<span class="cnt">{} 行 · {} 表</span>'
+        '<span class="spacer"></span>{}</summary>'
+        '<div class="panel-body">'
+        '<p class="note">悬停文字回溯左图识别框；悬停单元格回溯单格，点击钉住。'
+        '<span class="hint" tabindex="0" data-tip="表格按 y 坐标穿插进文字流；'
+        '矫正图空间的表格置底，点击单元格会自动切换左图视图。">?</span></p>'
+        '<div class="mdview scrollbox">{}</div></div></details>'.format(
+            n_line, len(tables), dl, ''.join(body)))
+
+
 def json_section(rec):
     text = json.dumps(rec, ensure_ascii=False, indent=2)
     href = file_url(rec['case'], config.RESULT_JSON)
@@ -317,17 +475,21 @@ def card(rec, card_no):
         '文字行 {}</button>'
         '<button type="button" class="ctab" data-card="{}" data-tab="tables">'
         '表格 {}</button>'
+        '<button type="button" class="ctab" data-card="{}" data-tab="md">'
+        '文档</button>'
         '<button type="button" class="ctab" data-card="{}" data-tab="json">'
         'JSON</button></div>'.format(
-            card_no, card_no, n_text, card_no, n_tbl, card_no))
+            card_no, card_no, n_text, card_no, n_tbl, card_no, card_no))
     content = (
         '<div class="contentcol">{}'
         '<div class="tabpanel" data-card="{}" data-tab="text">{}</div>'
         '<div class="tabpanel" data-card="{}" data-tab="tables" hidden>{}</div>'
+        '<div class="tabpanel" data-card="{}" data-tab="md" hidden>{}</div>'
         '<div class="tabpanel" data-card="{}" data-tab="json" hidden>{}</div>'
         '</div>'.format(
             tabs, card_no, text_pane(rec, card_no),
             card_no, tables_section(rec, card_no),
+            card_no, md_pane(rec, card_no),
             card_no, json_section(rec)))
     return (
         '<section class="card" data-card="{}">{}'

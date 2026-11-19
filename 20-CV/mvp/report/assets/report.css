@@ -124,6 +124,14 @@ tr.low .bar i{background:#de5c28}
   border:1px solid #d8e0ed;background:#fff;color:#1f2738}
 .tbltab.on{background:#2563eb;border-color:#2563eb;color:#fff}
 .tblpane[hidden]{display:none}
+/* 文档视图：md 风格文档流；文字行/单元格高亮复用 data-idx / data-cell 既有通路 */
+.mdview{max-height:560px;padding:2px}
+.mdline{margin:0 0 4px;padding:2px 6px;border-radius:5px;word-break:break-all}
+.mdline:hover,.mdline.hl{background:#eef4ff}
+.mdline.low{color:#de5c28}
+.mdtbl{margin:10px 0}
+.mdtbl .tablewrap{max-height:300px;overflow:auto}
+.mdtbl-title{margin:0 0 6px;font-weight:500;color:#25324a}
 .tbl-bar{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin:12px 0 7px;font-size:12px}
 .tbl-bar .meta{color:#6b7688}
 .btn{display:inline-block;padding:4px 12px;border-radius:7px;background:#2563eb;
