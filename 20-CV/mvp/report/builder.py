@@ -9,6 +9,7 @@ import os
 
 from .. import config
 from .. import params as params_mod
+from .. import viewmodel
 from . import cards
 
 
@@ -37,6 +38,8 @@ def _asset(name):
 
 
 def build(records, out_path, params=None):
+    # 磁盘 result.json 只存官方 parsing（ppstruct 路线），渲染前派生投影/layout
+    records = [viewmodel.hydrate(r) for r in records]
     nav = ''.join(
         '<a href="#case-{}">{}</a>'.format(i, cards.esc(r.get('file', '?')))
         for i, r in enumerate(records))

@@ -82,6 +82,7 @@ mvp/
 ├── config.py                  唯一配置源：模型 / DPI / 阈值 / 路径 / 环境变量
 ├── params.py                  调试参数 schema（顺序=优先级）+ 校验 + 快照
 ├── runlog.py                  结构化运行日志（STATE + logs/<批次>.log）
+├── viewmodel.py               官方 parsing → 报告视图的纯函数桥（hydrate 派生 / disk_view 落盘）
 ├── app.py                     FastAPI 路由 + 后台任务编排 + 包自举（约 270 行）
 ├── __init__.py                支持 uvicorn mvp.app:app 包方式启动
 ├── .gitignore                 input/output/logs/__pycache__ 不入库
@@ -90,7 +91,7 @@ mvp/
 │   ├── ocr.py                 逐行文字 / 置信度 / 四点框 + 带框 PNG
 │   ├── pdf.py                 首页渲染 / 文本层 / pdfplumber 表格 + bbox
 │   ├── plain.py               CSV / TXT 直读
-│   ├── ppstruct.py            PPStructureV3 单次推理：parsing/layout/投影/表格/矫正图
+│   ├── ppstruct.py            PPStructureV3 单次推理：官方 parsing（裁死字段）/ 表格 / 矫正图
 │   ├── resplit.py             图片人工列边界：切黏连格 + 子格重 OCR 归位
 │   ├── structure.py           表头分离 / cells 网格 / CSV 导出
 │   └── runner.py              extract_one() 统一入口
@@ -139,7 +140,9 @@ output/20261116160231_103_real_bank_statement_textlayer/
 | PDF 无文本层 | 同图片路线 | 同上 |
 | CSV / TXT / MD | 纯文本直读，不跑 OCR | `source.<ext>`、`table_N.csv`（CSV） |
 
-每个 case 目录还固定有一份 `result.json`（OCR 行、表格、单元格坐标、诊断）。
+每个 case 目录还固定有一份 `result.json`（**紧凑落盘**）。清理后只存三样：官方 `parsing`（裁掉代码不读的死字段）+ `structured_tables`（加工后的表 + 单元格坐标）+ 应用元信息/诊断。
+文字投影 `texts/scores/boxes`、版面 `layout`、行数/均值**不落盘**，由 `viewmodel.hydrate()` 在渲染期从 `parsing` 现算（官方 JSON 为唯一事实源，派生视图不重复存储）；raw 表中间态已删。
+文本层 PDF / CSV 路线无 `parsing`，其 OCR 投影是唯一文字记录，直接存储。详见 [docs/result-json-anatomy.md](./docs/result-json-anatomy.md)。
 `rectified.png` 只在真正抽到表的图片 / 扫描件里生成。
 
 ## 「横线端点自动还原」是怎么做到的（有文本层 PDF）
@@ -185,7 +188,7 @@ output/20261116160231_103_real_bank_statement_textlayer/
 - **提取内容**：逐行 OCR 文字 + 置信度条，与左图识别框双向高亮；有文本层 / 纯文本另给全文折叠区。
 - **表格内容**：带表头的 HTML 表格、CSV 下载（自包含 data URI + 真实文件链接）、多表 tab 切换。
 - **单元格坐标回溯**：默认一个框都不画，悬停只高亮那一格、点击钉住（再点取消），并自动切到该表的坐标宿主视图；「显示整表网格」是默认关闭的调试开关。
-- **完整 JSON**：折叠查看、下载 `result.json`、一键复制。
+- **完整 JSON**：折叠查看、下载 `result.json`、一键复制。tab 内美化展示**落盘形态**（`disk_view`：ppstruct 路线含 parsing、不含派生投影），与下载文件内容一致；磁盘紧凑存储，tab 渲染时再 `indent=2` 美化。
 
 三套坐标来源严格互斥，用 `coord.space` 区分：文本层 bbox 与 OCR 框基于 `source.<ext>`；
 表格模型**开矫正**时单元格框基于 `pages/rectified.png`（转正 + 去扭曲，1:1 无需逆变换）；

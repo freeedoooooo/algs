@@ -52,14 +52,15 @@
 
 | 输出 | 去向 | 性质 |
 |---|---|---|
-| 官方 JSON 原样 | `rec['parsing']` | **唯一事实源**（蓝） |
-| `parsing_res_list` | `rec['layout']`：角色块 + 官方阅读顺序 | **新增语义**（绿） |
-| `overall_ocr_res` | 投影 `texts/boxes/scores` | 薄投影，**可退役**（灰） |
+| 官方 JSON（裁死字段） | `rec['parsing']` | **唯一事实源**（蓝） |
+| `parsing_res_list` | 渲染期派生 `layout`：角色块 + 官方阅读顺序 | **新增语义**（绿） |
+| `overall_ocr_res` | 渲染期派生 `texts/boxes/scores` | 薄投影，**已退役为派生视图**（灰） |
 | `table_res_list` | `_TableParser`（复用）→ `resplit` → `structure.py` → `structured_tables` | 领域资产，**零改动**（绿） |
 | `doc_preprocessor output_img` | `rectified.png` | 现有逻辑（灰） |
 
-汇成 `rec = 应用信封 + parsing + layout + 薄投影` → `result.json` → 报告前端。
-文档 tab **直读 `layout`**：真实标题、官方阅读顺序、块级坐标回溯。
+汇成 `rec = 应用信封 + parsing + structured_tables` → `result.json`（紧凑）→ 报告前端。
+投影 / layout **不落盘**，由 `viewmodel.hydrate()` 渲染期从 parsing 现算（详见 [result-json-anatomy.md](./result-json-anatomy.md)）。
+文档 tab **直读派生 `layout`**：真实标题、官方阅读顺序、块级坐标回溯。
 
 **收益**：省掉一次整页推理；文档 tab 从「y 排序拼行」升级为「语义块流」；格式与官方对齐。
 
@@ -96,8 +97,9 @@
 
 **有意保留（非 shim）**：
 - `ocr.recognize` 仅作「PDF 文本层」路线的文字源——该路线不跑 PPStructureV3，此处 OCR 不冗余。
-- 薄投影 `texts/boxes/scores`：文字 tab 仍在用；待文字 tab 也直读 parsing/layout 后可退役。
 - `_doc_blocks_ysort`：仅作无 layout 路线（文本层 PDF / CSV）的回退，升级路线不走它。
+
+> **薄投影已退役（2026-11-19 追加清理）**：`texts/scores/boxes/layout` 不再落盘，改由 `viewmodel.hydrate()` 渲染期从官方 `parsing` 现算；raw `tables` 中间态删除；parsing 裁死字段、紧凑落盘。result.json 体积降 76~89%，派生投影与清理前逐元素相等。详见 [result-json-anatomy.md](./result-json-anatomy.md)。
 
 > 历史 case 的 `result.json` 是旧格式，升级后需**重跑**才能享受新文档 tab。
 

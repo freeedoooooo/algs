@@ -13,6 +13,7 @@ import base64
 from urllib.parse import quote
 
 from .. import config
+from .. import viewmodel
 
 
 def esc(v):
@@ -516,7 +517,8 @@ def md_pane(rec, card_no):
 
 
 def json_section(rec):
-    text = json.dumps(rec, ensure_ascii=False, indent=2)
+    # 与下载的 result.json 一致：展示落盘形态（ppstruct 剥掉派生投影），渲染时美化
+    text = json.dumps(viewmodel.disk_view(rec), ensure_ascii=False, indent=2)
     href = file_url(rec['case'], config.RESULT_JSON)
     return (
         '<details class="panel" open>'

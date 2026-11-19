@@ -2,11 +2,15 @@
 pipeline/runner.py — 单文件提取的统一入口（编排各子模块）。
 
 按后缀分流：
-    图片        → PPStructureV3 单次推理（parsing/layout/投影/表格/矫正图）
+    图片        → PPStructureV3 单次推理（官方 parsing / 表格 / 矫正图）
     PDF 有文本层 → 渲染首页 + pdfplumber 直读表格（带 bbox）+ 整页 OCR 作文字源
     PDF 无文本层 → 同图片路线（单次推理）
     CSV / TXT   → 直读文本，不跑 OCR
 所有坐标统一以「报告左图」的像素为准，两套空间用 coord.space / text_space 区分。
+
+result.json 只存官方 parsing（裁死字段）+ structured_tables + 元信息；文字投影 /
+layout 由 viewmodel.hydrate 渲染期派生、紧凑落盘时剥掉（文本层/CSV 无 parsing，
+其 OCR 投影直接存储）。raw 表是中间态，不落盘。
 """
 import os
 import json
@@ -15,6 +19,7 @@ import shutil
 from PIL import Image
 
 from .. import config
+from .. import viewmodel
 from . import ocr as ocr_mod
 from . import pdf as pdf_mod
 from . import plain as plain_mod
@@ -32,7 +37,7 @@ def _blank_rec(name, case_rel):
         'texts': [], 'scores': [], 'boxes': [], 'lines': 0,
         'avg_score': 0.0, 'low_score_lines': 0, 'elapsed': 0.0,
         'parsing': None, 'layout': [], 'text_space': 'source',
-        'tables': [], 'structured_tables': [],
+        'structured_tables': [],
         'table_route': 'skipped', 'notes': [],
         'page': 1, 'params_snapshot': {},
     }
@@ -51,23 +56,21 @@ def _maybe_resplit(raw, img_path, params, use_unwarp, log):
 
 
 def _pp_route(rec, img_path, case_abs, params, use_unwarp, log, emit):
-    """图片/扫描路线：PPStructureV3 单次推理，五路全利用，返回 raw 表。"""
+    """图片/扫描路线：PPStructureV3 单次推理，官方 parsing 为源，返回 raw 表。
+
+    投影 texts/scores/boxes 与 layout 不在此存储——extract_one 末尾由
+    viewmodel.hydrate 从 parsing 渲染期派生（落盘时剥掉，避免重复）。
+    """
     res = pp_mod.extract(img_path, case_abs, use_unwarp=use_unwarp,
                          params=params, emit=emit)
     rec['parsing'] = res['parsing']
-    rec['layout'] = res['layout']
     rec['text_space'] = res['text_space']
-    for k in ('texts', 'scores', 'boxes', 'lines', 'avg_score',
-              'low_score_lines', 'elapsed'):
-        rec[k] = res[k]
-    raw = _maybe_resplit(res['raw'], img_path, params, use_unwarp, log)
-    rec['table_route'] = 'ppstruct' if raw else 'skipped'
+    rec['elapsed'] = res['elapsed']
     rec['rectified_size'] = res['rect_size']
     if res['rect_size'] and use_unwarp:
         rec['rectified'] = 'pages/' + config.RECTIFIED_NAME
-    log('ok', 'ocr', '单次推理投影 {} 行，平均置信度 {}，低置信 {} 行，耗时 {}s'
-        .format(rec['lines'], rec['avg_score'],
-                rec['low_score_lines'], rec['elapsed']))
+    raw = _maybe_resplit(res['raw'], img_path, params, use_unwarp, log)
+    rec['table_route'] = 'ppstruct' if raw else 'skipped'
     if not emit:
         for n in res['notes']:
             log('info', 'model', n)
@@ -180,12 +183,18 @@ def extract_one(src_path, case_abs, case_rel, params=None, emit=None):
         log('ok', 'ocr', '识别 {} 行，平均置信度 {}，低置信 {} 行，耗时 {}s'
             .format(rec['lines'], rec['avg_score'],
                     rec['low_score_lines'], rec['elapsed']))
+    # 渲染期派生视图：ppstruct 路线从官方 parsing 现算投影/layout（不落盘）；
+    # 文本层/CSV 无 parsing，投影已存储，hydrate 原样返回。
+    viewmodel.hydrate(rec)
+    if rec['table_route'] == 'ppstruct':
+        log('ok', 'ocr', '单次推理投影 {} 行，平均置信度 {}，低置信 {} 行，耗时 {}s'
+            .format(rec['lines'], rec['avg_score'],
+                    rec['low_score_lines'], rec['elapsed']))
     if img_path and os.path.isfile(img_path) and rec['boxes']:
         ocr_mod.draw_boxes_png(
             img_path, rec, os.path.join(case_abs, config.BOXES_NAME))
         rec['boxes_png'] = config.BOXES_NAME
 
-    rec['tables'] = raw
     rec['structured_tables'] = struct_mod.structure_all(raw)
     struct_mod.export_csvs(rec['structured_tables'], case_abs)
     for t in rec['structured_tables']:
@@ -194,7 +203,10 @@ def extract_one(src_path, case_abs, case_rel, params=None, emit=None):
             .format(t.get('csv_file'), t['n_rows'], t['n_cols'],
                     t['fill_ratio'], space or 'none'))
 
+    # 落盘 = 官方 parsing + structured_tables + 元信息（ppstruct 剥掉派生投影）；
+    # 紧凑序列化（报告 JSON tab 渲染时再美化），避免 indent 把数值数组撑大。
     with open(os.path.join(case_abs, config.RESULT_JSON), 'w',
               encoding='utf-8') as f:
-        json.dump(rec, f, ensure_ascii=False, indent=2)
+        json.dump(viewmodel.disk_view(rec), f, ensure_ascii=False,
+                  separators=(',', ':'))
     return rec
