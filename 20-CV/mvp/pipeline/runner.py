@@ -258,26 +258,22 @@ def extract_one(src_path, case_abs, case_rel, params=None, emit=None):
 
     # 跨页续表合并（相邻页 + 同列 + 列对齐 + 重复表头）
     file_rec['stitched_tables'] = struct_mod.stitch_tables(pages)
-    # 被并入合并表的逐页表 (page, 表下标) → 合并表下标；其碎片 CSV 不再单独导出，
-    # 下载统一给完整合并表（一个 PDF 可有多条跨页链，逐链记录）。
+    # 被并入合并表的逐页表 (page, 表下标) → 合并表下标（仅用于日志提示）。
+    # 逐页表 CSV 全部落盘：表格 tab 下载/预览「仅本页这张表」；完整合并表另存
+    # stitched_N.csv，在「跨页合并」tab 下载/预览（一个 PDF 可有多条跨页链）。
     merged = {(part['page'], part['tbl']): si
               for si, t in enumerate(file_rec['stitched_tables'])
               for part in t.get('parts') or []}
     for pg in pages:
-        keep = [t for ti, t in enumerate(pg['structured_tables'])
-                if (pg['page'], ti) not in merged]
-        struct_mod.export_csvs(keep, case_abs)
+        struct_mod.export_csvs(pg['structured_tables'], case_abs)
         for ti, t in enumerate(pg['structured_tables']):
             si = merged.get((pg['page'], ti))
-            if si is not None:
-                log('ok', 'table', '第 {} 页表 {} 已并入跨页合并表 {}'
-                    '（下载完整合并表，不另存碎片）'.format(
-                        pg['page'], t.get('csv_file'), si + 1))
-                continue
             space = (t.get('coord') or {}).get('space')
-            log('ok', 'table', '第 {} 页表 {}：{} 行 × {} 列 · 填充率 {} · 坐标空间 {}'
+            extra = ('；本页片段，完整见跨页合并表 {}'.format(si + 1)
+                     if si is not None else '')
+            log('ok', 'table', '第 {} 页表 {}：{} 行 × {} 列 · 填充率 {} · 坐标空间 {}{}'
                 .format(pg['page'], t.get('csv_file'), t['n_rows'], t['n_cols'],
-                        t['fill_ratio'], space or 'none'))
+                        t['fill_ratio'], space or 'none', extra))
     if file_rec['stitched_tables']:
         struct_mod.export_csvs(file_rec['stitched_tables'], case_abs)
         for t in file_rec['stitched_tables']:

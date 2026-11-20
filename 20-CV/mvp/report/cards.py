@@ -37,6 +37,21 @@ def csv_data_uri(headers, rows):
             + base64.b64encode(payload).decode())
 
 
+def csv_preview(aid, title, headers, rows):
+    """\u300c\u9884\u89c8 CSV\u300d\u6309\u94ae + \u9690\u85cf\u6e90\uff08\u590d\u7528 auxmodal \u5f39\u7a97\uff09\uff1a\u6253\u5f00=\u5f39\u7a97\u770b\u8868\uff0c\u4e0d\u518d\u662f\u4e0b\u8f7d\u3002"""
+    thead = ('<thead><tr>{}</tr></thead>'.format(
+        ''.join('<th>{}</th>'.format(esc(v)) for v in headers))
+        if headers else '')
+    body = ''.join('<tr>{}</tr>'.format(
+        ''.join('<td>{}</td>'.format(esc(v)) for v in r)) for r in rows)
+    btn = ('<button type="button" class="auxbtn" data-aux="{}" '
+           'data-title="{}">\u9884\u89c8 CSV</button>'.format(aid, esc(title)))
+    src = ('<div class="aux-src" id="{}" hidden>'
+           '<div class="tablewrap scrollbox"><table>{}<tbody>{}</tbody></table>'
+           '</div></div>'.format(aid, thead, body))
+    return btn, src
+
+
 def build_cell_rects(rec, card_no, space):
     """生成某个坐标空间下的 <rect>，与表格 data-cell 一一对应。"""
     out = []
@@ -277,37 +292,35 @@ def tables_section(rec, card_no, stitched=None):
         space = (t.get('coord') or {}).get('space') or 'none'
         headers = t.get('headers') or []
         rows = t.get('rows') or []
+        # 表格 tab 的下载/预览一律「仅本页这张表」；完整合并表在「跨页合并」tab。
+        csv_file = t.get('csv_file', 'table_{}.csv'.format(idx))
         si = merged.get((rec.get('page', 1), ti))
         if si is not None:
             st = stitched[si]
-            dl_headers = st.get('headers') or []
-            dl_rows = st.get('rows') or []
-            csv_file = st.get('csv_file', 'stitched_{}.csv'.format(si + 1))
-            dl_label = '下载完整合并表'
             badge = '<span class="tag merge">跨页合并 {}</span>'.format(si + 1)
             merge_note = (
                 '<p class="note">本页是「跨页合并表 {}」的一段（来源页 {}）；'
-                '下载给完整合并表，不另存碎片。</p>'.format(
+                '此处下载/预览仅本页片段，完整合并表见「跨页合并」tab。</p>'.format(
                     si + 1, esc('、'.join(str(p) for p in st.get('source_pages') or []))))
         else:
-            dl_headers, dl_rows = headers, rows
-            csv_file = t.get('csv_file', 'table_{}.csv'.format(idx))
-            dl_label = '下载 CSV'
             badge = merge_note = ''
+        pv_btn, pv_src = csv_preview(
+            'aux-csv-{}-{}'.format(card_no, ti),
+            '预览 {}（第 {} 页）'.format(csv_file, t.get('page', 1)),
+            headers, rows)
         parts.append('<div class="tblpane" data-card="{}" data-tbl="{}" '
                      'data-space="{}"{}>'.format(
                          card_no, ti, esc(space), '' if ti == 0 else ' hidden'))
         parts.append(
             '<div class="tbl-bar"><b>表 {}</b>{}'
             '<span class="meta">第 {} 页 · {} · {} · {} 行 × {} 列 · 填充率 {}</span>'
-            '<a class="btn" href="{}" download="{}">{}</a>'
-            '<a class="btn ghost" href="{}" target="_blank">打开 {}</a></div>'
+            '<a class="btn" href="{}" download="{}">下载 CSV</a>{}</div>'
             .format(idx, badge, t.get('page', 1), esc(t.get('source', '?')),
                     esc(t.get('strategy', '?')), t.get('n_rows', 0),
                     t.get('n_cols', 0), t.get('fill_ratio', 0),
-                    csv_data_uri(dl_headers, dl_rows), esc(csv_file), dl_label,
-                    file_url(rec['case'], csv_file), esc(csv_file)))
+                    csv_data_uri(headers, rows), esc(csv_file), pv_btn))
         parts.append(merge_note)
+        parts.append(pv_src)
         if t.get('title'):
             parts.append('<p class="note">标题：{}</p>'.format(esc(t['title'])))
         thead = ''
@@ -742,15 +755,17 @@ def stitch_content(file_rec, card_no):
                if pp.get('header_recovered')]
         rec_note = (' <span class="tag merge">无表头续页首行已回收 · 页 {}</span>'
                     .format(esc('、'.join(rec)))) if rec else ''
+        pv_btn, pv_src = csv_preview(
+            'aux-csv-{}-s{}'.format(card_no, si),
+            '预览 {}（跨页合并）'.format(csv_file), headers, rows)
         parts.append(
             '<div class="tbl-bar"><b>跨页合并表 {}</b>'
             '<span class="meta">来源页 {} · {} 行 × {} 列</span>{}'
-            '<a class="btn" href="{}" download="{}">下载完整 CSV</a>'
-            '<a class="btn ghost" href="{}" target="_blank">打开 {}</a></div>'
+            '<a class="btn" href="{}" download="{}">下载完整 CSV</a>{}</div>'
             .format(si + 1, esc('、'.join(str(p) for p in t.get('source_pages') or [])),
                     t.get('n_rows', 0), t.get('n_cols', 0), rec_note,
-                    csv_data_uri(headers, rows), esc(csv_file),
-                    file_url(file_rec['case'], csv_file), esc(csv_file)))
+                    csv_data_uri(headers, rows), esc(csv_file), pv_btn))
+        parts.append(pv_src)
         if t.get('title'):
             parts.append('<p class="note">标题：{}</p>'.format(esc(t['title'])))
 
