@@ -18,6 +18,7 @@ import json
 import time
 import base64
 import socket
+import shutil
 import hashlib
 import subprocess
 import importlib
@@ -49,13 +50,13 @@ def check(name, ok, detail=''):
         FAILS.append(name)
 
 
-def http(port, path, body=None):
+def http(port, path, body=None, timeout=30):
     req = urllib.request.Request(
         'http://127.0.0.1:{}{}'.format(port, path),
         data=json.dumps(body).encode() if body is not None else None,
         headers={'Content-Type': 'application/json'})
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.status, json.loads(r.read().decode())
     except urllib.error.HTTPError as e:
         try:
@@ -151,10 +152,12 @@ def start_service(port, dsn=None):
 
 
 def upload(port, src_bytes, name):
+    # WARMUP=0 时后台线程即刻建 paddle 模型（oneDNN 初始化持 GIL），
+    # 事件循环回包被饿死，首个 POST 可能数十秒——放宽到 120s
     st, j = http(port, '/api/upload',
                  {'files': [{'name': name,
                              'data': base64.b64encode(src_bytes).decode()}],
-                  'mode': 'preview'})
+                  'mode': 'preview'}, timeout=120)
     if st != 200 or not j.get('ok'):
         raise RuntimeError('upload 失败：{} {}'.format(st, j))
     task_id = j['task_id']
@@ -182,11 +185,29 @@ def find_pdf_file():
         page += 1
 
 
-def scratch_clean():
-    return not any(
-        n.startswith(('in_', 'case_'))
-        for d in (config.TMP_INPUT, config.TMP_WORK)
-        for n in os.listdir(d))
+def scratch_clean(wait=5):
+    # 清理在 running=False 发布后的 finally 里收尾，给几秒宽限轮询
+    for _ in range(wait * 2):
+        if not any(n.startswith(('in_', 'case_'))
+                   for d in (config.TMP_INPUT, config.TMP_WORK)
+                   for n in os.listdir(d)):
+            return True
+        time.sleep(0.5)
+    return False
+
+
+def sweep_stale_scratch(max_age=3600):
+    """清上一轮中断（kill/断电）留下的孤儿 scratch：只动 mtime 超 1 小时的
+    in_*/case_* 目录——任何在跑任务的 scratch 都远比这新，不会误伤。"""
+    now = time.time()
+    for d in (config.TMP_INPUT, config.TMP_WORK):
+        for n in os.listdir(d):
+            if not n.startswith(('in_', 'case_')):
+                continue
+            p = os.path.join(d, n)
+            if os.path.isdir(p) and now - os.path.getmtime(p) > max_age:
+                shutil.rmtree(p, ignore_errors=True)
+                print('  清扫孤儿 scratch：{}'.format(p))
 
 
 def cleanup_tasks(task_ids, file_ids):
@@ -251,6 +272,7 @@ def main():
         print(str(e))
         return 1
     db.connect().close()  # 触发 001 baseline 迁移门禁
+    sweep_stale_scratch()
     syn_tasks, syn_fids, up = [], [], []
     try:
         rc = _main(syn_tasks, syn_fids, up)
@@ -292,7 +314,9 @@ def _main(syn_tasks, syn_fids, up):
         remap = json.loads(json.dumps(doc))
         remap['task_id'] = task_id
         for i, f in enumerate(remap['files']):
-            fake = '{:064x}'.format(i + 1)
+            # 假 sha 按 task+file 唯一：跨 task 撞 sha 会去重命中别 task 的文件行
+            fake = hashlib.sha256(
+                'accept-{}-{}'.format(task_id, i).encode()).hexdigest()
             fid, dup = catalog.register_file(
                 f['name'], 'pdf', 1, fake, b'%PDF-1.4 accept')
             if not dup:

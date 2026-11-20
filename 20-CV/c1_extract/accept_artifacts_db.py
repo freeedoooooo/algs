@@ -51,22 +51,22 @@ def check(name, ok, detail=''):
         FAILS.append(name)
 
 
-def http(port, path, body=None, headers=None):
+def http(port, path, body=None, headers=None, timeout=60):
     # Starlette 回小写 header 名：统一 lower()，避免大小写查空
     req = urllib.request.Request(
         'http://127.0.0.1:{}{}'.format(port, path),
         data=json.dumps(body).encode() if body is not None else None,
         headers=dict({'Content-Type': 'application/json'}, **(headers or {})))
     try:
-        with urllib.request.urlopen(req, timeout=60) as r:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.status, {k.lower(): v for k, v in r.headers.items()}, \
                 r.read()
     except urllib.error.HTTPError as e:
         return e.code, {k.lower(): v for k, v in e.headers.items()}, e.read()
 
 
-def http_json(port, path, body=None):
-    st, _h, b = http(port, path, body)
+def http_json(port, path, body=None, timeout=60):
+    st, _h, b = http(port, path, body, timeout=timeout)
     try:
         return st, json.loads(b.decode())
     except Exception:
@@ -133,10 +133,12 @@ def start_service(port, dsn=None):
 
 
 def upload(port, src_bytes, name):
+    # WARMUP=0 时后台线程即刻建 paddle 模型（oneDNN 初始化持 GIL），
+    # 事件循环回包被饿死，首个 POST 可能数十秒——放宽到 120s
     st, j = http_json(port, '/api/upload',
                       {'files': [{'name': name,
                                   'data': base64.b64encode(src_bytes).decode()}],
-                       'mode': 'preview'})
+                       'mode': 'preview'}, timeout=120)
     if st != 200 or not j.get('ok'):
         raise RuntimeError('upload 失败：{} {}'.format(st, j))
     task_id = j['task_id']
@@ -167,11 +169,29 @@ def find_pdf_file():
         page += 1
 
 
-def scratch_clean():
-    return not any(
-        n.startswith(('in_', 'case_'))
-        for d in (config.TMP_INPUT, config.TMP_WORK)
-        for n in os.listdir(d))
+def scratch_clean(wait=5):
+    # 清理在 running=False 发布后的 finally 里收尾，给几秒宽限轮询
+    for _ in range(wait * 2):
+        if not any(n.startswith(('in_', 'case_'))
+                   for d in (config.TMP_INPUT, config.TMP_WORK)
+                   for n in os.listdir(d)):
+            return True
+        time.sleep(0.5)
+    return False
+
+
+def sweep_stale_scratch(max_age=3600):
+    """清上一轮中断（kill/断电）留下的孤儿 scratch：只动 mtime 超 1 小时的
+    in_*/case_* 目录——任何在跑任务的 scratch 都远比这新，不会误伤。"""
+    now = time.time()
+    for d in (config.TMP_INPUT, config.TMP_WORK):
+        for n in os.listdir(d):
+            if not n.startswith(('in_', 'case_')):
+                continue
+            p = os.path.join(d, n)
+            if os.path.isdir(p) and now - os.path.getmtime(p) > max_age:
+                shutil.rmtree(p, ignore_errors=True)
+                print('  清扫孤儿 scratch：{}'.format(p))
 
 
 def cleanup_task(task_id):
@@ -222,6 +242,7 @@ def main():
         print(str(e))
         return 1
     db.connect().close()  # 触发 001 baseline 迁移门禁
+    sweep_stale_scratch()
     up = []
     try:
         rc = _main(up)
@@ -353,7 +374,8 @@ def _main(up):
             [sys.executable, os.path.join(PKG, 'export_artifacts.py'),
              '--task', str(up[0]), '--out', out_dir],
             cwd=PARENT, env=dict(os.environ, PYTHONUTF8='1'),
-            capture_output=True, text=True, timeout=600)
+            capture_output=True, text=True, encoding='utf-8',
+            errors='replace', timeout=600)
         if p.returncode != 0:
             print(p.stdout[-2000:], p.stderr[-2000:])
         check('导出脚本退出 0', p.returncode == 0)

@@ -443,6 +443,21 @@ def _ingest_case(task_file_id, case_abs):
                 artifact.save(task_file_id, rel, f.read())
 
 
+def _rmtree_retry(path, tries=6, delay=0.3):
+    # Windows 杀软/索引器会短暂持有新写文件的句柄，首次 rmtree 常瞬败——短重试
+    for k in range(tries):
+        try:
+            shutil.rmtree(path)
+            return
+        except FileNotFoundError:
+            return
+        except OSError:
+            if k == tries - 1:
+                shutil.rmtree(path, ignore_errors=True)
+            else:
+                time.sleep(delay)
+
+
 def task_batch(paths, params=None, log=None, task_ctx=None):
     """后台线程：逐个提取 → raw/ + extract.json → 对照报告 → collect 记录入库
     → 产物 ingest 入 BLOB。DB 必选：写失败整任务 failed；scratch 跑完清尽。"""
@@ -526,7 +541,7 @@ def task_batch(paths, params=None, log=None, task_ctx=None):
             if fc.get('task_file_id'):
                 db('set_task_file_state', fc['task_file_id'], 'previewed')
                 _ingest_case(fc['task_file_id'], case_abs)
-            shutil.rmtree(case_abs, ignore_errors=True)
+            _rmtree_retry(case_abs)
             fc.pop('scratch', None)
             progress(int(i / total * 100))
         db('set_task_state', task_ctx.get('task_id'), 'previewed')
@@ -558,9 +573,9 @@ def task_batch(paths, params=None, log=None, task_ctx=None):
     finally:
         for f in task_ctx.get('files') or []:
             if f.get('scratch'):
-                shutil.rmtree(f['scratch'], ignore_errors=True)
+                _rmtree_retry(f['scratch'])
         if task_ctx.get('in_scratch'):
-            shutil.rmtree(task_ctx['in_scratch'], ignore_errors=True)
+            _rmtree_retry(task_ctx['in_scratch'])
 
 
 # ---- 数据链路 API（P0：资料库 / 模板 / 任务 / 预生成内容读取）----
