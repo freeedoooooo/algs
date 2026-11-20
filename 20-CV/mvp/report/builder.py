@@ -1,9 +1,10 @@
 """
-report/builder.py — 组装最终 index.html。
+report/builder.py — 组装提取报告（每个 case 一份独立自包含 HTML）。
 
-源码里 CSS / JS / lightbox 都是 assets/ 下的独立文件（方便维护、IDE 高亮），
-但生成报告时把它们**内联**进 HTML —— 产出的 index.html 仍是自包含的，
-整个 output/ 目录拷走、用 file:// 打开也能正常显示与交互。
+模板只有一份：CSS / JS / lightbox 都是 assets/ 下的独立文件（方便维护、IDE 高亮），
+生成报告时把它们**内联**进 HTML —— 产出的 提取报告.html 仍是自包含的。
+报告直接落在该 case 的 output/<批次戳_文件名>/ 目录里，与 result.json /
+图片 / CSV 同级，每次上传各自独立、互不覆盖。
 """
 import os
 
@@ -50,9 +51,9 @@ def build(records, out_path, params=None):
     total_stitch = sum(len(r.get('stitched_tables') or []) for r in records)
 
     header = (
-        '<header><h1>CV 提取 MVP · 对照报告</h1>'
+        '<header><h1>C1 提取 · 提取报告</h1>'
         '<div class="sub">共 {} 个文件 · {} 行识别文字 · {} 张结构化表格 · {} 张跨页合并'
-        '<span class="hint" tabindex="0" data-tip="左图吸顶，右侧页签切换；悬停/点击表格单元格定位；点击图片放大。多页文件用页签切换，跨页合并表悬停自动切页。">?</span>'
+        '<span class="hint" tabindex="0" data-tip="左图吸顶，右侧页签切换；悬停/点击表格单元格定位；点击图片放大。多页文件用翻页组件切换，跨页合并表悬停自动切页。">?</span>'
         '</div><div class="nav">{}</div>'
         '{}</header>\n'
         .format(len(records), total_lines, total_tables, total_stitch, nav,
@@ -62,7 +63,7 @@ def build(records, out_path, params=None):
     doc = (
         '<!DOCTYPE html>\n<html lang="zh-CN"><head><meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
-        '<title>CV 提取 MVP · 对照报告</title>\n'
+        '<title>C1 提取 · 提取报告</title>\n'
         '<style>\n' + _asset('hint.css') + '\n' + _asset('report.css')
         + '\n</style>\n</head><body>\n'
         + header

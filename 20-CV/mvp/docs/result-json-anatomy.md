@@ -74,11 +74,11 @@ extract_one(src) ── 按 page 参数决定 page_list（all → 全部页；�
 
 ### 1.2 多页产物命名与跨页拼接
 
-- **逐页产物加 `p{n}` 前缀**（仅多页 PDF）：`pages/p{n}.png`（渲染图）、`pages/p{n}_rectified.png`（矫正图）、`pages/p{n}_boxes.png`（带框图）、`p{n}_table_{i}.csv`（**仅未被合并的表**）。单页保持 `source.png` / `pages/rectified.png` / `boxes.png` / `table_{i}.csv`。
+- **逐页产物加 `p{n}` 前缀**（仅多页 PDF）：`pages/p{n}.png`（渲染图）、`pages/p{n}_rectified.png`（矫正图）、`pages/p{n}_boxes.png`（带框图）、`p{n}_table_{i}.csv`（逐页碎片，全部落盘）。单页保持 `source.png` / `pages/rectified.png` / `boxes.png` / `table_{i}.csv`。
 - **拼接判据（保守，宁可不拼不误拼）**：只合并**相邻页**（p 末表 ↔ p+1 首表），且同时满足 ① 列数相同且非零 ② 坐标空间相同（`coord.space`）③ 来源精确（`coord.exact`）④ 列 x 边界对齐（≥2 对有效列、容差 12px）⑤ 表头空白归一化后相同（重复表头丢弃、行连续）。`used` 集防止重复起链，**一个文件可有多条独立跨页链**。
 - 合并表 `stitched_tables[i]`：`headers/rows/row_pages/cells/n_rows/n_cols/source_pages/parts/csv_file=stitched_{i}.csv`，`coord={mixed:true, space:'per-cell', exact:true}`；**每格 `cells[r][c]={bbox,page,space}`** 保留来源页与空间，报告据此做页感知回溯（悬停自动切页 + 高亮）。
-- **下载归一 + 碎片不落盘**：被并入合并表的逐页表（`parts` 里的 `(page,tbl)`），提取层**跳过其碎片 CSV 导出**，磁盘只留 `stitched_{i}.csv`；报告里这些表的下载按钮直接给完整合并表（带「跨页合并」徽标），未合并的表保持各自 `table_{i}.csv`。
-- **报告呈现**：合并表收进**每个页卡片的「跨页合并」tab**（非独立底部面板），多链以子页签区分；**整份信封 JSON 以默认收起的折叠区同放该 tab**，文件底部不再单列占版面。页签为**仅数字的小圆点**、**悬浮叠在源图右缘之上**（不占布局、不压缩图宽；`alignPageTabs` 按当前 imgwrap 实测位置锚定，伸缩/切页/切视图后仍贴源图）；页头为**单一文件级单行整合头**，做成色带+左 accent 竖条+2px 下边线以区分文件与内容（左=标题+类型/页数/跨页合并标签，右=路线/行数/表格/可疑行(仅>0)/图链接/result.json，多页右侧 `.pagehead-slot` 切页时由 `<template>` 注入更新；平均置信度/耗时等诊断不进页头），切页保留激活 tab 与合并表子页签。文字叠加框默认隐藏。`stitched_tables` 仍是文件信封的落盘字段（数据模型不变），只是 UI 不再单列面板。
+- **下载按 tab 分口径 + 碎片全部落盘**（2026-11-20）：提取层**逐页碎片 CSV 全部落盘**（`p{n}_table_{i}.csv`）；**表格 tab** 的下载/预览只给当前页这张表（被并入合并表的页表保留「跨页合并 N」徽标与分段说明），**跨页合并 tab** 的下载/预览给完整合并表 `stitched_{i}.csv`。
+- **报告呈现**：合并表收进**每个页卡片的「跨页合并」tab**（非独立底部面板），多链以子页签区分；**整份信封 JSON 独立成「整份 JSON」tab**（与本页 JSON/文字/表格/文档同款面板），不再塞在跨页 tab 底部；内容**首次打开 tab 时按需 fetch 落盘 result.json**（不内联进每个页卡片，避免多页大文件报告平方级膨胀）。翻页组件为**窗口式页码胶囊**（首末页+当前页±1 常显、其余收进 …，« ‹ › » + 跳页输入），**悬浮叠在源图底缘之上**（不占布局、不压缩图宽；`alignPagers` 按当前 imgwrap 实测位置锚定，伸缩/切页/切视图后仍贴源图）；页头为**单一文件级单行整合头**，做成色带+左 accent 竖条+2px 下边线以区分文件与内容（左=标题+类型/页数/跨页合并标签，右=路线/行数/表格/可疑行(仅>0)/图链接/result.json，多页右侧 `.pagehead-slot` 切页时由 `<template>` 注入更新；平均置信度/耗时等诊断不进页头），切页保留激活 tab 与合并表子页签、同步合并表滚动位置。文字叠加框默认隐藏。`stitched_tables` 仍是文件信封的落盘字段（数据模型不变），只是 UI 不再单列面板。
 
 ---
 

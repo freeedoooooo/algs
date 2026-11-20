@@ -108,13 +108,13 @@ def build_stitch_rects(stitched, card_no, page_no, space):
     return ''.join(out)
 
 
-def image_views(rec, card_no, stitched=None, page_no=None, pagetabs=''):
+def image_views(rec, card_no, stitched=None, page_no=None, pager=''):
     """左图区：每个 view 各自一个 .imgwrap，保证 img+svg 1:1。
-    pagetabs（多页文件的页签）悬浮在本 stage 右缘——锚定「看源文件」视图而非整页右侧。"""
+    pager（多页文件的翻页组件）悬浮在本 stage 底缘——锚定「看源文件」视图而非整页底部。"""
     # CSV / TXT 也留了 source.<ext> 副本，但那不是图片，不能当 <img> 渲染
     if not rec.get('image_size') or rec.get('kind') == 'csv':
         return ('<div class="stage empty">{}纯文本输入：没有图像可显示，'
-                '右侧是解析出的文字与表格</div>'.format(pagetabs))
+                '右侧是解析出的文字与表格</div>'.format(pager))
     src = file_url(rec['case'], rec['source'])
     w, h = rec.get('image_size') or [0, 0]
     polys = []
@@ -171,8 +171,8 @@ def image_views(rec, card_no, stitched=None, page_no=None, pagetabs=''):
     viewbar = ('<div class="viewbar">{}</div>'.format(viewbtns)
                if viewbtns else '')
     ar = (w / h) if h else 1.5
-    # 页签圆点**悬浮叠在源图右缘之上**（不另留 gutter、不压缩图宽）；
-    # 精确贴靠由 report.js alignPageTabs 按当前 imgwrap 实测位置锚定。
+    # 翻页组件**悬浮叠在源图底缘之上**（不另留 gutter、不压缩图宽）；
+    # 精确贴靠由 report.js alignPagers 按当前 imgwrap 实测位置锚定。
     return (
         '<div class="stage noboxes">{}{}<div class="views">{}'
         '<div class="view" data-card="{}" data-view="orig" data-space="source">'
@@ -180,7 +180,7 @@ def image_views(rec, card_no, stitched=None, page_no=None, pagetabs=''):
         'title="点击放大查看">'
         '<svg viewBox="0 0 {} {}" preserveAspectRatio="none">{}</svg>{}{}'
         '</div></div>{}</div></div>'.format(
-            pagetabs, viewbar, '', card_no, ar, src, w, h,
+            pager, viewbar, '', card_no, ar, src, w, h,
             polys_src, cell_svg, boxbtn, rect_view))
 
 
@@ -605,7 +605,7 @@ def json_section(rec, href=None, label='result.json', opened=True):
 
 
 def _render_card(pg, card_no, file_rec, single=True, page_no=None,
-                 stitched=None, title_suffix='', hidden=False, pagetabs=''):
+                 stitched=None, title_suffix='', hidden=False, pager=''):
     """渲染一个页卡片（单页文件=整张卡片；多页文件=其中一页）。复用既有全部区块。"""
     name = pg.get('file', '(未知)')
     labels = {'image': '图片', 'pdf': 'PDF', 'csv': '纯文本'}
@@ -686,11 +686,22 @@ def _render_card(pg, card_no, file_rec, single=True, page_no=None,
         json_html = json_section(
             pg, href=None, label='本页 JSON · pages[{}]'.format(
                 (page_no or 1) - 1))
+    # 整份信封 JSON 首次打开 tab 时按需 fetch 落盘文件（report.js loadFileJson）：
+    # 若逐页卡片内联，多页大文件会把报告撑成平方级体积（实测 362 页 → 2.9GB）。
+    fj_href = file_url(file_rec['case'], config.RESULT_JSON)
     filejson_html = (
-        '<div class="tabpanel" data-card="{}" data-tab="filejson" hidden>{}</div>'
-        .format(card_no, json_section(
-            file_rec, href=file_url(file_rec['case'], config.RESULT_JSON),
-            label='整份 result.json（含 stitched_tables）'))
+        '<div class="tabpanel" data-card="{}" data-tab="filejson" hidden>'
+        '<details class="panel" open>'
+        '<summary class="panel-head"><span class="panel-title">完整 JSON</span>'
+        '<span class="meta">整份 result.json（含 stitched_tables）</span>'
+        '<span class="spacer"></span>'
+        '<a class="btn ghost" href="{}" target="_blank" '
+        'onclick="event.stopPropagation()">下载</a>'
+        '<button type="button" class="copyjson btn ghost" '
+        'onclick="event.stopPropagation()">复制 JSON</button></summary>'
+        '<div class="panel-body"><pre class="jsonpre" data-src="{}">'
+        '首次打开时加载…</pre></div></details></div>'.format(
+            card_no, fj_href, fj_href)
         if not single else '')
     stitch_panel_html = (
         '<div class="tabpanel" data-card="{}" data-tab="stitch" hidden>{}</div>'
@@ -715,7 +726,7 @@ def _render_card(pg, card_no, file_rec, single=True, page_no=None,
         '<section class="card" data-card="{}"{}{} data-textspace="{}">{}'
         '<div class="grid">{}{}</div></section>'.format(
             card_no, page_attr, hidden_attr, esc(pg.get('text_space') or 'source'),
-            head, image_views(pg, card_no, stitched, page_no, pagetabs), content))
+            head, image_views(pg, card_no, stitched, page_no, pager), content))
 
 
 def stitch_content(file_rec, card_no):
@@ -819,17 +830,25 @@ def _multi_card(file_rec, idx):
             len(pages),
             '<span class="tag merge">跨页合并 {}</span>'.format(len(stitched))
             if stitched else ''))
-    # 页签渲染进每个页卡片的 stage（悬浮在「看源文件」视图右缘），只显示激活页那组。
-    pagetabs = '<div class="pagetabs">{}</div>'.format(''.join(
-        '<button type="button" class="pagetab{}" data-file="{}" data-page="{}"'
-        ' title="第 {} 页">{}</button>'.format(
-            ' on' if i == 0 else '', idx, p.get('page'),
-            p.get('page'), p.get('page'))
-        for i, p in enumerate(pages)))
+    # 翻页组件（窗口式页码）渲染进每个页卡片的 stage，只显示激活页那组；
+    # 页码窗口 / 首末页 / 跳页由 report.js renderPager 按 data-pages 动态生成。
+    page_nums = [p.get('page') for p in pages]
+    pager = (
+        '<div class="pager" data-file="{idx}" data-total="{n}" data-pages="{nums}">'
+        '<button type="button" class="pg-btn" data-pg="first" title="第一页">&#171;</button>'
+        '<button type="button" class="pg-btn" data-pg="prev" title="上一页">&#8249;</button>'
+        '<span class="pg-nums"></span>'
+        '<button type="button" class="pg-btn" data-pg="next" title="下一页">&#8250;</button>'
+        '<button type="button" class="pg-btn" data-pg="last" title="最后一页">&#187;</button>'
+        '<span class="pg-count"><input class="pg-jump" type="text" inputmode="numeric"'
+        ' value="{first}" title="输入页码，回车跳转"><i>/</i><b>{n}</b></span>'
+        '</div>'.format(idx=idx, n=len(pages),
+                        nums=','.join(str(x) for x in page_nums),
+                        first=page_nums[0] if page_nums else 1))
     cards_html = ''.join(
         _render_card(p, '{}p{}'.format(idx, p.get('page')), file_rec,
                      single=False, page_no=p.get('page'), stitched=stitched,
-                     hidden=(i > 0), pagetabs=pagetabs)
+                     hidden=(i > 0), pager=pager)
         for i, p in enumerate(pages))
     return (
         '<section class="filecard" data-file="{}">{}{}</section>'.format(

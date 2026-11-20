@@ -2,6 +2,8 @@
 input/
 output/
 logs/
+sources/
+data/
 
 # Python / 虚拟环境 / 本地环境变量
 __pycache__/

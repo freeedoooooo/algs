@@ -10,11 +10,11 @@ mvp/app.py — Web 工具入口（FastAPI + uvicorn）。只负责路由与任�
     GET  /healthz       健康检查
     POST /api/upload    上传（base64 JSON，不依赖 python-multipart）
     GET  /api/status    处理进度
-    GET  /report        生成的报告
+    GET  /extract-report   提取报告（最新 case，报告在其 output 目录里）
     /files/<path>       各 case 的产物
     /static/<path>      上传页的 css / js
 
-提取逻辑在 pipeline/，报告生成在 report/，配置在 config.py。
+提取逻辑在 pipeline/，提取报告生成在 report/，配置在 config.py。
 """
 import os
 import re
@@ -261,13 +261,17 @@ def api_logs():
                         filename='{}.log'.format(STATE.get('batch') or 'run'))
 
 
-@app.get('/report')
-def report():
-    path = os.path.join(config.OUTPUT_DIR, config.REPORT_NAME)
-    if not os.path.isfile(path):
-        return HTMLResponse(
-            '<h3>还没有报告</h3><p><a href="/">返回上传页</a>先上传一个文件。</p>')
-    return FileResponse(path, media_type='text/html; charset=utf-8')
+@app.get('/extract-report')
+def extract_report():
+    """提取报告：看最新 case 的 提取报告.html（就在该 case 的 output 目录里，
+    与 result.json 同级）。历史批次直接打开各自 output 目录里的报告文件。"""
+    for name in sorted(os.listdir(config.OUTPUT_DIR), reverse=True):
+        path = os.path.join(config.OUTPUT_DIR, name,
+                            config.EXTRACT_REPORT_NAME)
+        if os.path.isfile(path):
+            return FileResponse(path, media_type='text/html; charset=utf-8')
+    return HTMLResponse(
+        '<h3>还没有提取报告</h3><p><a href="/">返回上传页</a>先上传一个文件。</p>')
 
 
 # 阶段 → 单文件内的进度占比（只增不减）。长耗时的模型加载/推理与 OCR
@@ -286,7 +290,7 @@ _STAGE_FRAC = {
 
 
 def run_batch(paths, params=None, log=None):
-    """后台线程：逐个提取 → 落 result.json → 生成汇总报告。"""
+    """后台线程：逐个提取 → 落 result.json → 在各自 output 目录生成提取报告。"""
     try:
         def progress(v):
             with LOCK:
@@ -295,7 +299,7 @@ def run_batch(paths, params=None, log=None):
         log.stage('load', '加载提取流水线（首次会导入 cv2 / pdfplumber）…')
         progress(1)
         pipeline = _load('pipeline')
-        report_mod = _load('report')
+        report_mod = _load('report.builder')
         records = []
         total = len(paths)
         for i, path in enumerate(paths, 1):
@@ -326,12 +330,11 @@ def run_batch(paths, params=None, log=None):
                 tot_lines, tot_tables, routes, len(pages),
                 ' · 跨页合并 {} 张'.format(len(rec.get('stitched_tables') or []))
                 if rec.get('stitched_tables') else ''), case=name)
+            # 报告与 result.json 同级，落在该 case 自己的 output 目录里
+            report_mod.build([rec],
+                             os.path.join(case_abs, config.EXTRACT_REPORT_NAME),
+                             params=params)
             progress(int(i / total * 100))
-        log.stage('report', '正在生成汇总报告 …')
-        progress(99)
-        report_mod.build(
-            records, os.path.join(config.OUTPUT_DIR, config.REPORT_NAME),
-            params=params)
         with LOCK:
             STATE.update(running=False, ready=True,
                          cases=[r['file'] for r in records],

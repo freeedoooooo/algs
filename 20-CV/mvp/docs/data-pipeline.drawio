@@ -188,7 +188,7 @@
         <mxCell id="f10" value="已校验记录入库" style="edgeStyle=orthogonalEdgeStyle;rounded=1;exitX=1;exitY=0.75;entryX=0;entryY=0.75;" edge="1" parent="1" source="o_stg" target="o_ll">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
-        <mxCell id="note1" value="SQLite（WAL）· 所有 SQL 收敛在 mvp/store/ · JSON 存 TEXT · 时间 UTC ISO8601 · 相对路径以 DATA_ROOT 为基准" style="text;align=center;fontStyle=2;fontColor=#666666;" vertex="1" parent="1">
+        <mxCell id="note1" value="MySQL 平台库 cv_pipeline（与业务库同实例分 schema）· 所有 SQL 收敛在 mvp/store/ · 驱动无关可换 · JSON 原生类型 · 相对路径以 DATA_ROOT 为基准" style="text;align=center;fontStyle=2;fontColor=#666666;" vertex="1" parent="1">
           <mxGeometry x="140" y="830" width="820" height="30" as="geometry"/>
         </mxCell>
       </root>

@@ -6,7 +6,7 @@ var log=document.getElementById('log'),msg=document.getElementById('msg');
 var paramgroups=document.getElementById('paramgroups');
 var lb=document.getElementById('lightbox'),lbimg=document.getElementById('lbimg');
 
-/* 参数持久化：上传完跳 /report 再回来不丢已填值。存浏览器 localStorage，
+/* 参数持久化：上传完看提取报告再回来不丢已填值。存浏览器 localStorage，
    与后端默认值解耦（后端 schema 仍是唯一真相源，这里只记用户上次的选择）。 */
 var PKEY='cv_mvp_params';
 function loadSaved(){
@@ -316,7 +316,8 @@ function rightState(st){
 }
 function showResult(){
   rightState('done');
-  reportFrame.src='/report?t='+Date.now();
+  /* 报告就在最新 case 的 output 目录里（提取报告.html），路由直接取最新 */
+  reportFrame.src='/extract-report?t='+Date.now();
 }
 /* 完成后点「查看日志」：进度卡作为抽屉叠加在报告上，「关闭」收回 */
 logbtn.onclick=function(){

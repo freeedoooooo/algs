@@ -1,4 +1,4 @@
-/* report/assets/report.js — 对照报告交互（生成时内联进 index.html） */
+/* report/assets/report.js — 提取报告交互（生成时内联进每批次 <批次戳>.html） */
 function cardOf(el){ return el.closest('.card'); }
 function activeSpace(card){
   var tp=card.querySelector('.tabpanel:not([hidden])');
@@ -70,7 +70,7 @@ document.querySelectorAll('.viewbtn').forEach(function(btn){
     card.querySelectorAll('.view').forEach(function(p){
       p.hidden=(p.getAttribute('data-view')!==v);
     });
-    alignPageTabs();
+    alignPagers();
   });
 });
 
@@ -95,6 +95,8 @@ document.querySelectorAll('.ctab').forEach(function(btn){
     card.querySelectorAll('.tabpanel').forEach(function(p){
       p.hidden=(p.getAttribute('data-tab')!==t);
     });
+    /* 整份 JSON 按需加载：信封不内联进每个页卡片（多页大文件会平方级膨胀） */
+    if(t==='filejson') loadFileJson(card);
     /* 文档面板多表同屏：放开全部单格框；切回表格面板恢复「只显选中表」 */
     if(t==='md'){
       card.querySelectorAll('.cellbox').forEach(function(r){r.classList.remove('off');});
@@ -155,6 +157,28 @@ document.querySelectorAll('td.cell,th.cell').forEach(function(el){
     matchingRects(card,el).forEach(function(r){r.classList.add('pin');});
   });
 });
+
+/* 整份 JSON 首次打开时 fetch 落盘 result.json 并美化；按 URL 缓存美化结果，
+   同一文件的多个页卡片共享，不重复下载/格式化。file:// 打开时 fetch 不可用，
+   提示走「下载」链接（报告内图片本就依赖 /files/ 服务路径）。 */
+var fjCache={};
+function loadFileJson(card){
+  var pre=card.querySelector('.tabpanel[data-tab="filejson"] .jsonpre[data-src]');
+  if(!pre||pre.getAttribute('data-loaded')) return;
+  var src=pre.getAttribute('data-src');
+  function fill(text){ pre.textContent=text; pre.setAttribute('data-loaded','1'); }
+  if(fjCache[src]){ fill(fjCache[src]); return; }
+  pre.textContent='加载中…';
+  fetch(src).then(function(r){
+    if(!r.ok) throw new Error(r.status);
+    return r.text();
+  }).then(function(t){
+    var pretty=JSON.stringify(JSON.parse(t),null,2);
+    fjCache[src]=pretty; fill(pretty);
+  }).catch(function(){
+    pre.textContent='在线加载失败：请点上方「下载」查看 result.json。';
+  });
+}
 
 /* JSON 复制：多页卡片有「本页 / 整份」两份 jsonpre，按按钮所在面板取，避免复制错对象 */
 document.querySelectorAll('.copyjson').forEach(function(btn){
@@ -296,9 +320,6 @@ function fileCardOf(el){ return el.closest('.filecard'); }
 function showPage(fc,p){
   if(!fc) return false;
   var changed=false;
-  fc.querySelectorAll('.pagetab').forEach(function(b){
-    b.classList.toggle('on',b.getAttribute('data-page')===String(p));
-  });
   fc.querySelectorAll('.card[data-page]').forEach(function(c){
     var hide=(c.getAttribute('data-page')!==String(p));
     if(c.hidden!==hide){c.hidden=hide;changed=true;}
@@ -327,19 +348,51 @@ function updatePageHead(fc){
   var tpl=c&&c.querySelector('template.pagehead-tpl');
   if(slot&&tpl) slot.innerHTML=tpl.innerHTML;
 }
-/* 页签圆点贴靠源图：按当前激活 imgwrap 的实测右缘 / 垂直中心锚定 pagetabs，
-   窗口伸缩 / 切页 / 切视图 / 图片加载后圆点始终悬浮在源图之上（不占布局、不压图宽）。 */
-function alignPageTabs(){
-  document.querySelectorAll('.stage .pagetabs').forEach(function(pt){
-    var stage=pt.closest('.stage');
+/* 窗口式页码：首末页 + 当前页±1 常显，其余收进 …，页数再多也只占一小条。
+   页码列表取自 data-pages（指定页提取时页码可能不连续）。 */
+function pagerPages(pg){
+  return (pg.getAttribute('data-pages')||'').split(',').filter(Boolean).map(Number);
+}
+function renderPager(fc){
+  var c=fc.querySelector('.card[data-page]:not([hidden])');
+  var cur=Number(c&&c.getAttribute('data-page'));
+  /* 每个页卡片各有一份 pager 副本（与页卡片同隐藏/显示），全部同步渲染 */
+  fc.querySelectorAll('.pager').forEach(function(pg){
+    var pages=pagerPages(pg);
+    var ci=pages.indexOf(cur);
+    if(ci<0) ci=0;
+    var html='',last=-1;
+    pages.forEach(function(p,i){
+      if(!(i===0||i===pages.length-1||Math.abs(i-ci)<=1)) return;
+      if(last>=0&&i-last>1) html+='<span class="pg-gap">…</span>';
+      html+='<button type="button" class="pg-num'+(i===ci?' on':'')+
+        '" data-page="'+p+'" title="第 '+p+' 页">'+p+'</button>';
+      last=i;
+    });
+    pg.querySelector('.pg-nums').innerHTML=html;
+    pg.querySelector('[data-pg="first"]').disabled=(ci===0);
+    pg.querySelector('[data-pg="prev"]').disabled=(ci===0);
+    pg.querySelector('[data-pg="next"]').disabled=(ci===pages.length-1);
+    pg.querySelector('[data-pg="last"]').disabled=(ci===pages.length-1);
+    var jump=pg.querySelector('.pg-jump');
+    if(document.activeElement!==jump) jump.value=pages[ci];
+  });
+}
+/* 翻页组件贴靠源图：按当前激活 imgwrap 的实测底缘 / 水平中心锚定 pager，
+   窗口伸缩 / 切页 / 切视图 / 图片加载后始终悬浮在源图底部（不占布局、不压图宽）。
+   垂直方向只用 bottom 锚定：若设 top 而 CSS bottom 仍在，绝对定位元素会被
+   上下同时约束而拉伸，offsetHeight 读到拉伸高度 → 锚定计算自我污染。 */
+function alignPagers(){
+  document.querySelectorAll('.stage .pager').forEach(function(pg){
+    var stage=pg.closest('.stage');
     var card=stage.closest('.card');
     if(card&&card.hasAttribute('hidden')) return;
     var iw=stage.querySelector('.view:not([hidden]) .imgwrap');
     if(!iw) return;
     var sr=stage.getBoundingClientRect(),ir=iw.getBoundingClientRect();
     if(!ir.width) return;
-    pt.style.right=Math.max(6,Math.round(sr.right-ir.right+5))+'px';
-    pt.style.top=Math.round(ir.top-sr.top+ir.height/2)+'px';
+    pg.style.left=Math.round(ir.left-sr.left+ir.width/2)+'px';
+    pg.style.bottom=Math.max(6,Math.round(sr.bottom-ir.bottom+8))+'px';
   });
 }
 function switchPage(fc,p){
@@ -367,22 +420,78 @@ function switchPage(fc,p){
       if(nsp){nsp.scrollTop=sTop;nsp.scrollLeft=sLeft;}
     }
     updatePageHead(fc);
-    alignPageTabs();
+    renderPager(fc);
+    alignPagers();
   }
   return changed;
 }
 function activatePage(fc,p){ switchPage(fc,p); }
-document.querySelectorAll('.pagetab').forEach(function(btn){
-  btn.addEventListener('click',function(){
-    activatePage(fileCardOf(btn),btn.getAttribute('data-page'));
+/* 翻页事件：每个页卡片各有一份 pager 副本，点击走 filecard 委托，
+   跳页输入框逐副本绑定；页码列表各副本一致，取第一份即可。 */
+document.querySelectorAll('.filecard').forEach(function(fc){
+  if(!fc.querySelector('.pager')) return;
+  function pages(){ return pagerPages(fc.querySelector('.pager')); }
+  function curIndex(){
+    var c=fc.querySelector('.card[data-page]:not([hidden])');
+    var i=pages().indexOf(Number(c&&c.getAttribute('data-page')));
+    return i<0?0:i;
+  }
+  function go(i){
+    var ps=pages();
+    activatePage(fc,String(ps[Math.max(0,Math.min(ps.length-1,i))]));
+  }
+  fc.addEventListener('click',function(e){
+    if(!(e.target.closest&&e.target.closest('.pager'))) return;
+    var num=e.target.closest('.pg-num');
+    if(num){activatePage(fc,num.getAttribute('data-page'));return;}
+    var btn=e.target.closest('.pg-btn');
+    if(!btn||btn.disabled) return;
+    var a=btn.getAttribute('data-pg'),i=curIndex();
+    if(a==='first') go(0);
+    else if(a==='prev') go(i-1);
+    else if(a==='next') go(i+1);
+    else if(a==='last') go(pages().length-1);
+  });
+  fc.querySelectorAll('.pager .pg-jump').forEach(function(jump){
+    function doJump(){
+      var ps=pages(),v=parseInt(jump.value,10);
+      if(isNaN(v)){jump.value=ps[curIndex()];return;}
+      var i=ps.indexOf(v);
+      if(i<0){ /* 输入的页码不在本次提取范围：就近落到存在的页 */
+        i=0;ps.forEach(function(p,k){if(Math.abs(p-v)<Math.abs(ps[i]-v))i=k;});
+      }
+      go(i);jump.value=ps[curIndex()];
+    }
+    jump.addEventListener('keydown',function(e){
+      e.stopPropagation();
+      if(e.key==='Enter'){e.preventDefault();doJump();jump.blur();}
+    });
+    jump.addEventListener('blur',doJump);
+    jump.addEventListener('click',function(e){e.stopPropagation();});
   });
 });
-/* 初始：每个多页文件把第 1 页片段注入整合页头 */
-document.querySelectorAll('.filecard').forEach(function(fc){ updatePageHead(fc); });
-alignPageTabs();
-window.addEventListener('resize',alignPageTabs);
+/* 左右方向键翻页：仅焦点在该文件卡片内且不在输入控件时生效，不劫持全局 */
+document.addEventListener('keydown',function(e){
+  if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight') return;
+  var t=e.target;
+  if(t&&(/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)||t.isContentEditable)) return;
+  var fc=t&&t.closest?t.closest('.filecard'):null;
+  var pg=fc&&fc.querySelector('.pager');
+  if(!pg) return;
+  var c=fc.querySelector('.card[data-page]:not([hidden])');
+  var ps=pagerPages(pg);
+  var i=ps.indexOf(Number(c&&c.getAttribute('data-page')));if(i<0)i=0;
+  var ni=e.key==='ArrowLeft'?i-1:i+1;
+  if(ni<0||ni>=ps.length) return;
+  e.preventDefault();
+  activatePage(fc,String(ps[ni]));
+});
+/* 初始：每个多页文件把第 1 页片段注入整合页头 + 渲染页码窗口 */
+document.querySelectorAll('.filecard').forEach(function(fc){ updatePageHead(fc); renderPager(fc); });
+alignPagers();
+window.addEventListener('resize',alignPagers);
 document.querySelectorAll('.stage img').forEach(function(im){
-  im.addEventListener('load',alignPageTabs);
+  im.addEventListener('load',alignPagers);
 });
 
 /* 跨页合并表多表 tab */

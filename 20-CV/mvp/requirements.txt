@@ -30,3 +30,9 @@ Pillow==12.3.0
 # ---- PDF / 文本表格 ----
 pdfplumber==0.11.10               # 文本层表格 + 单元格 bbox（本项目直接用，paddle 不带）
 PyMuPDF==1.28.2                   # pip 名 PyMuPDF，import 名 pymupdf；PDF 首页渲染
+
+# ---- 平台数据库（MySQL，数据链路设计见 docs/design-data-pipeline.md）----
+PyMySQL==1.2.4                    # 纯 Python MySQL 驱动；store/ 与 loader 共用驱动接缝的首个实现
+# MySQL 8 默认认证 caching_sha2_password：非 SSL 首次认证走 RSA 密钥交换，
+# PyMySQL 此路径必须有 cryptography（同 paddlepaddle 例：不直接 import 也须显式列出）。
+cryptography==50.0.2              # 环境已随 paddlex 装入，此处锁版本防漂移
