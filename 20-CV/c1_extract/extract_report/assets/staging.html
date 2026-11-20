@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>数据预览 · 结构化平台</title>
+<link rel="stylesheet" href="/static/shell.css">
+<link rel="stylesheet" href="/static/staging.css">
+</head>
+<body>
+<nav class="topnav">
+  <span class="brand">结构化平台</span>
+  <a href="/">提取</a>
+  <a href="/sources">资料</a>
+  <a class="off" title="P1 开放">模板</a>
+  <a class="off" title="P1 开放">校验</a>
+  <a class="off" title="P2 开放">入库</a>
+  <a href="/runs" class="on">记录</a>
+  <span class="spacer"></span>
+  <span class="navnote">P0 · 预览链路</span>
+</nav>
+<div class="pagebody wide">
+  <div class="pagehead">
+    <h1>数据预览</h1>
+    <span class="mono" id="runtag"></span>
+    <span id="tplbadge"></span>
+    <span class="spacer"></span>
+    <span id="filelinks"></span>
+    <a class="btn ghost mini" id="runlink" href="/runs">返回记录</a>
+  </div>
+  <div class="banner info">只读预览 · 提取出的记录（暂存事实源）。编辑 / 确认 / 拒绝在校验页 P1 开放。</div>
+  <div class="banner err" id="err" hidden></div>
+  <details class="panel xsearch">
+    <summary>跨运行搜索（暂存记录 · DB 直查）</summary>
+    <div class="xs-bar">
+      <input id="xs-field" placeholder="字段名（如 摘要）">
+      <input id="xs-q" placeholder="值关键词（如 报销）">
+      <select id="xs-state">
+        <option value="">全部状态</option>
+        <option value="pending">pending</option>
+        <option value="edited">edited</option>
+        <option value="confirmed">confirmed</option>
+      </select>
+      <button type="button" class="btn" id="xs-go">搜索</button>
+    </div>
+    <div class="banner err" id="xs-err" hidden></div>
+    <div class="listwrap">
+      <table class="list" id="xs-table" hidden>
+        <thead><tr><th>运行</th><th>文件</th><th>行</th><th>字段</th><th>值</th><th>状态</th><th></th></tr></thead>
+        <tbody id="xs-rows"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="xs-empty" hidden>无匹配记录</div>
+  </details>
+  <div class="filetabs" id="filetabs" hidden></div>
+  <div class="stgwrap">
+    <div class="panel stgmain">
+      <table class="list" id="rectable">
+        <thead id="rechead"></thead>
+        <tbody id="recrows"></tbody>
+      </table>
+      <div class="empty" id="empty" hidden><b>没有提取记录</b>该文件未抽出表格行。</div>
+    </div>
+    <aside class="panel lineage" id="lineage" hidden>
+      <div class="lhead">
+        <b id="ltitle">血缘回溯</b>
+        <span class="lsub" id="lsub"></span>
+        <button type="button" class="dclose" id="lclose">收起</button>
+      </div>
+      <div class="stage" id="lstage">
+        <div class="pager" id="lpager" data-pages="" hidden>
+          <button type="button" class="pg-btn" data-pg="first" title="第一页">«</button>
+          <button type="button" class="pg-btn" data-pg="prev" title="上一页">‹</button>
+          <span class="pg-nums"></span>
+          <button type="button" class="pg-btn" data-pg="next" title="下一页">›</button>
+          <button type="button" class="pg-btn" data-pg="last" title="最后一页">»</button>
+          <span class="pg-count"><input class="pg-jump" type="text" inputmode="numeric"
+            value="1" title="输入页码，回车跳转"><i>/</i><b id="pgtotal">1</b></span>
+        </div>
+        <div class="viewbar" id="viewbar"></div>
+        <div class="views" id="views"></div>
+        <div class="lhint" id="lhint" hidden></div>
+      </div>
+    </aside>
+  </div>
+  <div class="msg" id="summary" style="margin-top:10px"></div>
+</div>
+<div class="lightbox" id="lightbox" hidden>
+  <div class="lb-bar">
+    <span class="lb-title" id="lbTitle">图片查看</span>
+    <button type="button" data-lb="out">− 缩小</button>
+    <span class="lb-scale" id="lbScale">100%</span>
+    <button type="button" data-lb="in">＋ 放大</button>
+    <button type="button" data-lb="fit">适应窗口</button>
+    <button type="button" data-lb="one">1:1 原始像素</button>
+    <button type="button" data-lb="boxes" id="lbBoxes">显示叠加框</button>
+    <a id="lbOpen" href="#" target="_blank">新窗口打开原图</a>
+    <button type="button" data-lb="close">关闭 (Esc)</button>
+  </div>
+  <div class="lb-stage" id="lbStage"><div class="lb-content" id="lbContent"></div></div>
+  <div class="lb-hint">滚轮缩放 · 按住拖拽平移 · 双击切换 1:1 / 适应窗口 · 单击回溯框定位记录 · Esc 关闭</div>
+</div>
+<script src="/static/shell.js"></script>
+<script src="/static/staging.js"></script>
+</body>
+</html>
