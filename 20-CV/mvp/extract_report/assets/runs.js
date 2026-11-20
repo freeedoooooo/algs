@@ -53,11 +53,11 @@ rows.addEventListener('click',function(e){
 function fileRow(f,batch){
   var links='';
   if(f.case){
-    links='<a class="linkbtn" target="_blank" href="'+fileUrl(f.case,'对照报告.html')+'">报告</a>'+
+    links='<a class="linkbtn" target="_blank" href="/staging?batch='+encodeURIComponent(batch)+
+      '&file='+encodeURIComponent(f.case)+'">预览数据</a>'+
+      '<a class="linkbtn" target="_blank" href="'+fileUrl(f.case,'对照报告.html')+'">对照报告</a>'+
       '<a class="linkbtn" target="_blank" href="'+fileUrl(f.case,'extract.json')+'">extract</a>'+
-      '<a class="linkbtn" target="_blank" href="'+fileUrl(f.case,'records.json')+'">records</a>'+
-      '<a class="linkbtn" href="/staging?batch='+encodeURIComponent(batch)+
-      '&file='+encodeURIComponent(f.case)+'">暂存数据</a>';
+      '<a class="linkbtn" target="_blank" href="'+fileUrl(f.case,'records.json')+'">records</a>';
   }
   return '<tr>'+
     '<td><span class="nm" title="'+escHtml(f.name)+'">'+escHtml(shortName(f.name))+'</span></td>'+

@@ -325,7 +325,7 @@ var reportFrame=document.getElementById('reportFrame'),
     filetabs=document.getElementById('filetabs'),
     reportcol=document.querySelector('.reportcol'),
     stglink=document.getElementById('stglink');
-/* 完成提示：跳暂存只读视图（批次键，DB 无关） */
+/* 完成提示：跳数据预览（批次键，DB 无关） */
 function showStgLink(batch){
   if(!batch) return;
   stglink.href='/staging?batch='+encodeURIComponent(batch);

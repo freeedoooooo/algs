@@ -32,9 +32,12 @@ PACKAGES = [
     ('fastapi', 'fastapi', 'Web 框架'),
     ('uvicorn', 'uvicorn', 'ASGI 服务器'),
     ('jinja2', 'jinja2', '对照报告模板渲染'),
-    ('paddlepaddle', 'paddle', 'Paddle 运行时'),
+    # paddleocr/paddlex 必须先于 paddlepaddle：paddleocr 会引入 torch，而 torch 的
+    # shm.dll 须在 paddle 之前加载，否则 paddle↔torch 同名 DLL 冲突（WinError 127）。
+    # app 运行时同样先 import paddleocr（pipeline/engines.py），此处保持一致。
     ('paddleocr', 'paddleocr', 'OCR / 表格模型'),
     ('paddlex', 'paddlex', '模型管线'),
+    ('paddlepaddle', 'paddle', 'Paddle 运行时'),
     ('opencv-contrib-python', 'cv2', '网格预筛（cv2）'),
     ('numpy', 'numpy', '数值计算'),
     ('Pillow', 'PIL', '图像处理'),

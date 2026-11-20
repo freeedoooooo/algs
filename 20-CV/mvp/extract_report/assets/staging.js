@@ -122,14 +122,14 @@ function loadStaging(){
     document.getElementById('tplbadge').innerHTML=
       '<span class="badge blue">'+escHtml((t.name||'原始透传')+' v'+(t.version||1))+'</span>';
   }).catch(function(e){
-    records=[]; renderTable(); showErr('读取暂存数据失败：'+e.message);
+    records=[]; renderTable(); showErr('读取预览数据失败：'+e.message);
   });
 }
 
 document.getElementById('batchtag').textContent=batch||'（未指定批次）';
 document.getElementById('runlink').href=batch?('/runs?batch='+encodeURIComponent(batch)):'/runs';
 if(!batch){
-  showErr('缺少批次参数。请从运行详情或提取完成提示进入。');
+  showErr('缺少批次参数。请从记录详情或提取完成提示进入。');
 }else{
   fetch('/api/runs/'+encodeURIComponent(batch)).then(function(r){
     if(!r.ok) throw new Error('批次不存在');
