@@ -180,6 +180,11 @@ function renderViewer(){
     hint.textContent='当前视图无回溯框：坐标在'+(curView==='rect'?'原图':'矫正图')+'空间，切换视图查看。'; }
   else hint.hidden=true;
   applySelection();
+  /* 图片加载完成后才有真实高度：首次打开/切页时 img 尚未 load，imgwrap 高度≈0
+     会把翻页胶囊锚得偏上挡住文字。与报告一致绑 load→alignPagers，加载完再精确锚定。 */
+  views.querySelectorAll('img').forEach(function(im){
+    im.addEventListener('load',alignPagers);
+  });
   alignPagers();
   updateHead();
 }
