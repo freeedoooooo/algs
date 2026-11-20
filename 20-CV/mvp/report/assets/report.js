@@ -346,9 +346,11 @@ function switchPage(fc,p){
   if(!fc) return false;
   var tab=activeTabOf(fc),sub=activeStitchOf(fc);
   /* 合并表在每页卡片各渲染一份：切页前记住当前滚动位置，切页后还原，
-     否则新卡片滚动归零→光标下的行换掉→又触发切页→页交接行高频来回抖动。 */
+     否则新卡片滚动归零→光标下的行换掉→又触发切页→页交接行高频来回抖动。
+     选择器必须用直接子级 `> .tablewrap`：pane 外/内若混入隐藏预览表(.aux-src 里的
+     .tablewrap)，后代选择器会误命中它(scrollTop 恒 0)，同步失效→频闪复现。 */
   var oc=fc.querySelector('.card[data-page]:not([hidden])');
-  var osp=oc&&oc.querySelector('.stitchpane:not([hidden]) .tablewrap');
+  var osp=oc&&oc.querySelector('.stitchpane:not([hidden]) > .tablewrap');
   var sTop=osp?osp.scrollTop:0,sLeft=osp?osp.scrollLeft:0;
   var changed=showPage(fc,p);
   if(changed){
@@ -361,7 +363,7 @@ function switchPage(fc,p){
       if(sb&&!sb.classList.contains('on')) sb.click();
     }
     if(tab==='stitch'&&nc){
-      var nsp=nc.querySelector('.stitchpane:not([hidden]) .tablewrap');
+      var nsp=nc.querySelector('.stitchpane:not([hidden]) > .tablewrap');
       if(nsp){nsp.scrollTop=sTop;nsp.scrollLeft=sLeft;}
     }
     updatePageHead(fc);

@@ -320,7 +320,6 @@ def tables_section(rec, card_no, stitched=None):
                     t.get('n_cols', 0), t.get('fill_ratio', 0),
                     csv_data_uri(headers, rows), esc(csv_file), pv_btn))
         parts.append(merge_note)
-        parts.append(pv_src)
         if t.get('title'):
             parts.append('<p class="note">标题：{}</p>'.format(esc(t['title'])))
         thead = ''
@@ -338,6 +337,8 @@ def tables_section(rec, card_no, stitched=None):
             for r, row in enumerate(rows, 1))
         parts.append('<div class="tablewrap scrollbox"><table>{0}<tbody>{1}</tbody>'
                      '</table></div></div>'.format(thead, body))
+        # 预览源放在 tblpane 外，避免隐藏 .tablewrap 混入 pane 被滚动/坐标选择器误命中
+        parts.append(pv_src)
     parts.append(aux_src)
     parts.append('</div>')
     return '<details class="panel" open>' + head + ''.join(parts) + '</details>'
@@ -765,7 +766,6 @@ def stitch_content(file_rec, card_no):
             .format(si + 1, esc('、'.join(str(p) for p in t.get('source_pages') or [])),
                     t.get('n_rows', 0), t.get('n_cols', 0), rec_note,
                     csv_data_uri(headers, rows), esc(csv_file), pv_btn))
-        parts.append(pv_src)
         if t.get('title'):
             parts.append('<p class="note">标题：{}</p>'.format(esc(t['title'])))
 
@@ -792,6 +792,9 @@ def stitch_content(file_rec, card_no):
             for r, row in enumerate(rows, 1))
         parts.append('<div class="tablewrap scrollbox"><table>{}<tbody>{}</tbody>'
                      '</table></div></div>'.format(thead, body))
+        # 预览源放在 stitchpane 外：pane 内若混入隐藏 .tablewrap 会被
+        # 切页滚动同步的选择器误命中（读到 scrollTop=0 → 切页滚动归零 → 频闪）。
+        parts.append(pv_src)
     parts.append('</div>')
     return (
         '<details class="panel" open>'
