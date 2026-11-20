@@ -97,6 +97,7 @@ class OutputFiles(StaticFiles):
         ok = (rel in _TOP_FILES
               or (rel.startswith('pages/') and rel.endswith('.png'))
               or rel in _IMAGE_SRCS
+              or (rel.endswith('.md') and '/' not in rel)
               or any(fnmatch(rel, p) for p in _CSV_PATTERNS))
         if not ok:
             return PlainTextResponse('404 Not Found', status_code=404)

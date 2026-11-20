@@ -59,10 +59,10 @@ header .sub{color:#6b7688;font-size:12px;display:flex;align-items:center;gap:6px
 .allcells{background:rgba(15,23,38,.55);color:#fff;border-color:transparent}
 .allcells:hover{background:rgba(15,23,38,.78)}
 .allcells.on{background:#2563eb;border-color:#2563eb;color:#fff}
-/* 光标跟随提示：点图「定位/放大」选择在鼠标操作那一刻可见，不占版面 */
-#cursor-hint{position:fixed;z-index:70;pointer-events:none;white-space:nowrap;
+/* 光标跟随提示：点图「定位/放大」选择在鼠标操作那一刻即时可见，不占版面 */
+#cursor-hint{position:fixed;z-index:70;pointer-events:none;white-space:pre-line;
   background:rgba(15,23,38,.85);color:#fff;font-size:11px;padding:3px 8px;
-  border-radius:5px;opacity:0;transition:opacity .12s}
+  border-radius:5px;opacity:0;transition:opacity .12s;line-height:1.6}
 #cursor-hint.on{opacity:1}
 /* 视图切换悬浮在图左上角（与右上「隐藏叠加框」对称），不占行、不把图往下压 */
 .stage .viewbar{position:absolute;top:16px;left:16px;z-index:4;gap:4px;margin:0}

@@ -356,8 +356,8 @@ function hitCell(img,e){
 }
 
 /* 点图行为跟随光标（无持久开关）：悬停命中内容→十字光标，单击定位、Alt+单击放大；
-   悬停空白→放大光标，单击放大。光标旁的小 pill 实时提示当前单击会做什么，
-   把「定位 / 放大」的选择摆在鼠标操作的那一刻，而不是一个常驻按钮。 */
+   悬停空白→放大光标，单击放大。光标旁小 pill 即时提示单击动作（无原生 title 延迟），
+   完整操作说明见面板标题「?」气泡。 */
 var hintEl=null;
 function cursorHint(){
   if(!hintEl){
@@ -441,15 +441,14 @@ function hideCursorHint(){ if(hintEl) hintEl.classList.remove('on'); }
     stage.classList.remove('dragging');
   }
   document.querySelectorAll('.stage .imgwrap img').forEach(function(img){
-    img.setAttribute('title','单击：定位单元格 / 文字行\n空白处单击：放大图片\nAlt+单击：强制放大');
     img.addEventListener('mousemove',function(e){
       var hit=hitCell(img,e);
       var zoom=e.altKey||!hit;
       img.style.cursor=zoom?'zoom-in':'crosshair';
       var h=cursorHint();
-      h.textContent=e.altKey?'单击：放大（Alt）':(hit?'单击：定位 · Alt+单击：放大':'单击：放大');
-      h.style.left=Math.min(e.clientX+14,window.innerWidth-190)+'px';
-      h.style.top=Math.min(e.clientY+18,window.innerHeight-34)+'px';
+      h.textContent=e.altKey?'单击：放大（Alt）':(hit?'单击：定位\nAlt + 单击：放大':'单击：放大');
+      h.style.left=Math.min(e.clientX+14,window.innerWidth-h.offsetWidth-8)+'px';
+      h.style.top=Math.min(e.clientY+18,window.innerHeight-h.offsetHeight-8)+'px';
       h.classList.add('on');
     });
     img.addEventListener('mouseleave',function(){

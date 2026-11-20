@@ -41,13 +41,37 @@
     </div>
     <aside class="panel lineage" id="lineage" hidden>
       <div class="lhead">
-        <b id="ltitle">血缘</b>
+        <b id="ltitle">血缘回溯</b>
+        <span class="lsub" id="lsub"></span>
         <button type="button" class="dclose" id="lclose">收起</button>
       </div>
-      <div class="lbody" id="lbody"></div>
+      <div class="lstage" id="lstage">
+        <div class="imgwrap" id="imgwrap">
+          <img id="limg" alt="源文件图" title="单击回溯框：定位左侧记录行 / 单元格&#10;单击空白处：放大图片">
+          <svg id="lsvg" preserveAspectRatio="none"></svg>
+          <span class="viewbar" id="viewbar"></span>
+          <button type="button" class="zoombtn" id="zoombtn" title="放大图片">⤢</button>
+          <span class="lpager" id="lpager" hidden></span>
+        </div>
+        <div class="lhint" id="lhint" hidden></div>
+      </div>
     </aside>
   </div>
   <div class="msg" id="summary" style="margin-top:10px"></div>
+</div>
+<div class="stglb" id="stglb" hidden>
+  <div class="lbbar">
+    <span id="lbtitle">源文件图</span>
+    <span class="spacer"></span>
+    <span class="lbhint">滚轮缩放 · 拖拽平移 · 单击回溯框定位记录 · Esc 关闭</span>
+    <button type="button" class="lbclose" id="lbclose">关闭 ✕</button>
+  </div>
+  <div class="lbstage" id="lbstage">
+    <div class="imgwrap" id="lbwrap">
+      <img id="lbimg" alt="源文件图放大">
+      <svg id="lbsvg" preserveAspectRatio="none"></svg>
+    </div>
+  </div>
 </div>
 <script src="/static/shell.js"></script>
 <script src="/static/staging.js"></script>

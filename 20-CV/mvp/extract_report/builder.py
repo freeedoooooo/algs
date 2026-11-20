@@ -56,6 +56,26 @@ def build(records, out_path, params=None):
                               for i, r in enumerate(records))))
 
     os.makedirs(os.path.dirname(out_path) or '.', exist_ok=True)
+    _write_markdown(records, os.path.dirname(out_path) or '.')
     with open(out_path, 'w', encoding='utf-8') as f:
         f.write(doc)
     return os.path.abspath(out_path)
+
+
+def _write_markdown(records, case_dir):
+    """文档 Markdown 预生成落 output/<case>/（与报告同级），统一「内容先落盘」策略。
+
+    单页一份 <stem>.md，多页每页一份 <stem>_p<页码>.md；命名与渲染下载链接
+    共用 cards.md_filename。在线文档视图已内联进报告 HTML，此处只补可下载文件。
+    """
+    for r in records:
+        fname = (r.get('file') or {}).get('name', 'doc')
+        pages = r.get('pages') or []
+        single = len(pages) <= 1
+        for pg in pages:
+            page_no = None if single else pg.get('index')
+            md_name = cards.md_filename(fname, page_no, single)
+            text = cards.blocks_markdown(pg, cards.doc_blocks(pg))
+            with open(os.path.join(case_dir, md_name), 'w',
+                      encoding='utf-8') as f:
+                f.write(text)

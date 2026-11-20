@@ -56,10 +56,17 @@ def csv_data_uri(headers, rows):
             + base64.b64encode(payload).decode())
 
 
-def md_data_uri(text):
-    payload = text.encode('utf-8')
-    return ('data:text/markdown;charset=utf-8;base64,'
-            + base64.b64encode(payload).decode())
+def md_filename(fname, page_no=None, single=True):
+    """文档 Markdown 的落盘文件名（builder 写文件与渲染下载链接共用同一命名）。
+
+    单页文件 = <stem>.md；多页文件每页一份 = <stem>_p<页码>.md（页码从 1 起）。
+    文件与 对照报告.html 同级落在 output/<case>/，下载用相对路径，
+    file:// 直开与 /files/<case>/ 在线打开都成立。
+    """
+    stem = os.path.splitext(fname)[0]
+    if single or page_no is None:
+        return stem + '.md'
+    return '{}_p{}.md'.format(stem, page_no)
 
 
 def _cell_rects(rec, space):
@@ -379,7 +386,7 @@ def blocks_markdown(rec, blocks):
     return '\n\n'.join(p for p in parts if p) + '\n'
 
 
-def md_pane(rec, card_no, fname='doc'):
+def md_pane(rec, card_no, md_name):
     texts = rec.get('texts') or []
     tables = rec.get('tables') or []
     blocks = doc_blocks(rec)
@@ -411,15 +418,14 @@ def md_pane(rec, card_no, fname='doc'):
                       'title': t.get('title'),
                       'headers': t.get('headers') or [],
                       'rows': t.get('rows') or []})
-    stem = os.path.splitext(fname)[0]
     n_line = sum(len(_block_lines(rec, b)) for b in blocks
                  if b['kind'] in ('line', 'head', 'para'))
     order_tip = ('按版面阅读顺序组织（标题/段落/表格）'
                  if rec.get('blocks') else '表格按 y 坐标穿插进文字流')
     return render('md_pane.html', card=card_no, n_line=n_line,
                   n_tbl=len(tables),
-                  dl_uri=md_data_uri(blocks_markdown(rec, blocks)),
-                  stem=stem, order_tip=order_tip,
+                  dl_uri=file_url(md_name), md_name=md_name,
+                  order_tip=order_tip,
                   tspace=rec.get('space') or 'source', items=items)
 
 
@@ -461,7 +467,7 @@ def _render_card(pg, card_no, file_rec, single=True, page_no=None,
         json_label='完整 JSON' if single else '本页 JSON',
         text_html=text_pane(pg, card_no),
         tables_html=tables_section(pg, card_no, stitched),
-        md_html=md_pane(pg, card_no, fname),
+        md_html=md_pane(pg, card_no, md_filename(fname, page_no, single)),
         stitch_html=stitch_content(file_rec, card_no) if has_stitch else '',
         json_html=json_html,
         result_href=quote(config.EXTRACT_JSON, safe=''))

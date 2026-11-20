@@ -1,4 +1,4 @@
-/* extract_report/assets/staging.css — 暂存只读视图：记录表 + 血缘侧栏 */
+/* extract_report/assets/staging.css — 数据预览：记录表 + 源图回溯框双向血缘侧栏 */
 .pagebody.wide{max-width:1500px}
 .filetabs{display:flex;align-items:center;gap:4px;margin-bottom:10px;
   overflow-x:auto;padding-bottom:2px}
@@ -16,22 +16,68 @@
 .stgmain tbody tr{cursor:pointer}
 .stgmain tbody tr.sel{background:#e7f0ff}
 .stgmain tbody tr.sel:hover{background:#dbe8ff}
+.stgmain tbody td.hv{background:#e3f7ee!important}
+.stgmain tbody td.pin{background:#fff0d9!important;outline:2px solid #d8610a;
+  outline-offset:-2px}
 .idx{color:#8a94a6;font-variant-numeric:tabular-nums}
-/* 血缘侧栏：点记录行展开，逐字段列出锚点（页/表/bbox/空间/原文） */
-.lineage{flex:none;width:330px;max-height:calc(100vh - 210px);
-  display:flex;flex-direction:column;position:sticky;top:12px}
+
+/* 右侧血缘回溯：源文件图 + 单元格回溯框（复刻对照报告视觉） */
+.lineage{flex:none;width:560px;max-width:46vw;max-height:calc(100vh - 210px);
+  display:flex;flex-direction:column;position:sticky;top:12px;overflow:hidden}
 .lineage[hidden]{display:none}
 .lhead{display:flex;align-items:center;gap:8px;padding:9px 12px;
   border-bottom:1px solid #e2e7f0;font-size:13px;color:#25324a}
-.lhead b{flex:1;font-weight:600}
-.lbody{overflow:auto;padding:8px 12px;font-size:12px}
-.litem{border-bottom:1px solid #eef2f8;padding:7px 0}
-.litem:last-child{border-bottom:0}
-.litem .k{color:#2563eb;font-weight:500}
-.litem .v{color:#25324a;word-break:break-all;margin:2px 0}
-.litem .a{color:#8a94a6;font-family:Consolas,Monaco,monospace;font-size:11px;
-  word-break:break-all}
+.lhead b{font-weight:600}
+.lsub{flex:1;font-size:11px;color:#8a94a6;font-weight:400}
+.dclose{font:inherit;font-size:12px;cursor:pointer;border:1px solid #d8e0ed;
+  background:#fff;color:#5a6a85;border-radius:6px;padding:2px 9px}
+.dclose:hover{border-color:#2563eb;color:#2563eb}
+.lstage{flex:1 1 auto;min-height:220px;overflow:auto;padding:10px;
+  background:#eceff3;position:relative}
+.imgwrap{position:relative;line-height:0;margin-inline:auto;width:100%}
+.lstage img{display:block;width:100%;height:auto;cursor:zoom-in}
+.lstage svg{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
+.cellbox{fill:rgba(15,157,110,.10);stroke:#0f9d6e;stroke-width:2;
+  vector-effect:non-scaling-stroke;pointer-events:all;cursor:crosshair}
+.cellbox.all{opacity:.55}
+.cellbox.hv{opacity:1;fill:rgba(15,157,110,.30);stroke-width:3}
+.cellbox.pin{opacity:1;fill:rgba(216,97,10,.26);stroke:#d8610a;stroke-width:3}
+/* 悬浮控件叠在图上，不占布局 */
+.viewbar{position:absolute;top:6px;left:6px;z-index:4;display:flex;gap:4px}
+.viewbtn,.pbtn,.zoombtn{font:inherit;font-size:11px;line-height:1.5;cursor:pointer;
+  border:1px solid rgba(255,255,255,.35);background:rgba(15,23,38,.6);color:#fff;
+  border-radius:6px;padding:2px 9px;transition:.15s}
+.viewbtn:hover,.pbtn:hover,.zoombtn:hover{background:rgba(15,23,38,.82)}
+.viewbtn.on,.pbtn.on{background:rgba(37,99,235,.85);border-color:rgba(255,255,255,.5)}
+.zoombtn{position:absolute;top:6px;right:6px;z-index:4;padding:2px 8px;font-size:13px}
+.lpager{position:absolute;bottom:6px;left:50%;transform:translateX(-50%);z-index:4;
+  display:flex;gap:4px;flex-wrap:wrap;justify-content:center;max-width:92%}
+.lpager[hidden]{display:none}
+.lhint{padding:6px 12px;font-size:12px;color:#8a6d3b;background:#fcf8e3;
+  border-top:1px solid #f0e6c8}
+.lhint[hidden]{display:none}
+
+/* 放大浮层 */
+.stglb{position:fixed;inset:0;z-index:1000;background:rgba(10,15,25,.92);
+  display:flex;flex-direction:column}
+.stglb[hidden]{display:none}
+.lbbar{display:flex;align-items:center;gap:10px;padding:8px 14px;color:#e6edf7;
+  font-size:13px;background:rgba(15,23,38,.9)}
+.lbbar .spacer{flex:1}
+.lbhint{color:#9fb0c8;font-size:11px}
+.lbclose{font:inherit;font-size:12px;cursor:pointer;border:1px solid rgba(255,255,255,.35);
+  background:rgba(255,255,255,.08);color:#fff;border-radius:6px;padding:3px 11px}
+.lbclose:hover{background:rgba(255,255,255,.2)}
+.lbstage{flex:1;overflow:hidden;position:relative;display:flex;align-items:center;
+  justify-content:center;cursor:grab}
+.lbstage:active{cursor:grabbing}
+.lbstage .imgwrap{width:auto;transform-origin:center center}
+.lbstage img{display:block;max-height:88vh;max-width:92vw;width:auto;height:auto}
+.lbstage svg{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
+.lbstage .cellbox{pointer-events:all;cursor:crosshair}
+
 @media(max-width:1000px){
   .stgwrap{flex-direction:column}
-  .lineage{width:100%;position:static;max-height:40vh}
+  .lineage{width:100%;max-width:none;position:static;max-height:none}
+  .lstage{max-height:60vh}
 }
