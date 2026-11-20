@@ -73,7 +73,7 @@ async def lifespan(_app):
     yield
 
 
-app = FastAPI(title='文档表格提取', version='0.1', lifespan=lifespan)
+app = FastAPI(title='结构化平台', version='0.1', lifespan=lifespan)
 
 # ---- output 静态白名单：页面只见预生成的自有标准视图 ----
 # raw/（引擎原样）与旧 result.json 一律 403 —— 引擎结构不出适配层（防方案抄袭）。
@@ -773,7 +773,7 @@ async def api_runs_create(request: Request):
 
 if __name__ == '__main__':
     import uvicorn
-    print('>> 文档表格提取 启动： http://{}:{}'.format(config.HOST, config.PORT))
+    print('>> 结构化平台 启动： http://{}:{}'.format(config.HOST, config.PORT))
     print('>> 输入目录：{}'.format(config.INPUT_DIR))
     print('>> 产物目录：{}'.format(config.OUTPUT_DIR))
     uvicorn.run(app, host=config.HOST, port=config.PORT,
