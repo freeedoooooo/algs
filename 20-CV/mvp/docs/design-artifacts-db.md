@@ -9,6 +9,9 @@
 > **批准记录**：① 范围＝选项 1 全量入库；② DB 必选、D1 退役，file:// 改按需导出；
 > ③ 自动快照退役，records 完整关系化（三表）存储；④ **只做 MySQL**——PG 方言接缝
 > 现在不做，留给以后引入框架/ORM 重构时统一解决（用户裁决）。
+> ⑤ **file 模式整体删除**（2026-11-20 用户裁决：file 模式只是初期调试过渡产物）——
+> 无 `CV_MVP_RECORDS_STORE`/`CV_MVP_ARTIFACT_STORE` 开关，DB 是唯一模式；
+> 回滚不再靠开关，靠 export_artifacts.py 导出＋旧版本代码。
 
 ---
 
@@ -56,9 +59,9 @@
 
 ## 3. 架构翻转与代价（应力测试）
 
-1. **D1 退役，DB 必选**：DB 挂＝提取无法落产物＝整 run 显式失败；读 503。
-   上一稿「DB 是可选索引、引擎层照常」哲学作废。降级开关保留为 **file 模式回滚**
-   （`CV_MVP_ARTIFACT_STORE=file`，现状行为）。
+1. **D1 退役，DB 必选**：DB 挂＝上传/登记即 503（run 都建不出来）；运行中写库失败
+   ＝整 run 显式 failed；读 503。上一稿「DB 是可选索引、引擎层照常」哲学作废。
+   ~~降级开关保留为 file 模式回滚~~ → **批准项⑤：file 模式已删除，无开关**。
 2. **file:// 直开 / 常驻逐层审计 → 按需**：`export_artifacts.py`（DB→output/sources
    目录树，逐字节 sha 校验）恢复审计与 file://。md/CSV 下载改 HTTP stream（download 属性照旧）。
 3. **自动快照退役**：records.json 不再每次写导出；staging 三表是唯一记录源；
@@ -95,44 +98,47 @@ CREATE TABLE extract_artifact (
 - 重跑＝同 (case_rel,name) upsert 替换（与 staging 级联同哲学）。
 - JSON 三件（extract/run/records 导出）kind=json，content 存 utf8 字节，驱动无关。
 
-## 5. 接缝与实现方式（已落地）
+## 5. 接缝与实现方式（已落地，DB-only）
 
-- `store/artifact.py`（file 实现＝原子磁盘写）＋ `store/artifact_db.py`（BLOB upsert），
-  `config.ARTIFACT_STORE`（env `CV_MVP_ARTIFACT_STORE`，默认 file）分发，同 content 模式。
-  **db 模式联动 `RECORDS_STORE='db'`**（config.py 强制）。
+- `store/artifact.py`＝门面，直接委托 `store/artifact_db.py`（BLOB upsert）；
+  `store/content.py` 同构：extract/run 经 artifact JSON 接缝，records 经 content_db
+  三表。**无 file 实现、无 env 开关**（批准项⑤）；未来 MinIO＝只换 artifact_db 驱动。
   API：`save/save_json/get/get_json/list/cases/delete/delete_case/exists`；
   kind/mime 由文件名推断（raw/ 前缀→kind=raw）。
-- **写点＝scratch＋ingest（管线/报告生成零改动）**：db 模式 case 工作目录是
-  tempfile scratch，pipeline/builder/cards 照旧写文件；报告生成后 `_ingest_case`
-  遍历 scratch 全量入 BLOB，随即 rmtree。input 批次副本同样落 scratch（字节事实源
-  在 sources BLOB），run 结束 finally 清尽。content.save_extract/save_run 经
-  artifact JSON 接缝；records 经 content_db 三表（run.json 直写 DB，不经 scratch）。
-- **读点**：db 模式 `/files/{case}/{path:path}`、`/srcfiles/{name:path}` 为 API 路由
-  （白名单 `_files_guard` 与 file 模式共用，raw 403，ETag=sha256，If-None-Match→304）；
-  file 模式照旧挂 StaticFiles。runs 列表/详情/`/extract-report` 重定向 db 模式查
+- **写点＝scratch＋ingest（管线/报告生成零改动）**：case 工作目录是 tempfile
+  scratch，pipeline/builder/cards 照旧写文件；报告先于 records 写库生成（断库时
+  引擎产物仍完整），随后 `_ingest_case` 遍历 scratch 全量入 BLOB，随即 rmtree。
+  input 批次副本同样落 scratch（字节事实源在 sources BLOB），run 结束 finally 清尽。
+  run.json 直写 DB（不经 scratch）。目录状态写失败上抛→整 run failed，不降级。
+- **读点**：`/files/{case}/{path:path}`、`/srcfiles/{name:path}` 恒为 API 路由
+  （白名单 `_files_guard`，raw 403，ETag=sha256，If-None-Match→304）；仅 /static
+  挂 StaticFiles。runs 列表/详情/`/extract-report` 重定向查
   `catalog.list_run_cases()`＋run.json BLOB；批次戳去重查 `catalog.list_batch_tags()`。
-- **DB 必选**：db 模式上传时模板解析/目录登记失败→整批 503；运行中写库失败→
-  整 run failed；读端点 DB 故障→503。file 模式保留原降级行为（回滚态）。
+- **DB 必选**：上传时模板解析/目录登记失败→整批 503（不建 run）；运行中写库失败→
+  整 run failed；读端点 DB 故障→503；`/api/templates` 不再降级内置清单。
+  check_env.py 平台库连通性为**必选项**（不通即退出码 1）。
 - **方言接缝不做**（批准项④）：SQL 全部 MySQL 方言收敛在 store/*_db.py，
   以后框架重构统一替换。
 
 ## 6. 迁移与导出
 
 - `migrate_artifacts_to_db.py`：幂等扫 output/sources 逐件 sha 登记＋BLOB 写入；
-  失败批次（缺件）跳过记 warning；input 副本不迁（退役）。
+  失败批次（缺件）跳过记 warning；input 副本不迁（退役）。磁盘清空后为 no-op。
 - `export_artifacts.py`：DB→目录树（output/<case>/…＋sources/），含 records.json 重建；
-  逐件 sha 校验；用途＝审计/file:// /灾备回滚 file 模式。
-- 回滚：`CV_MVP_ARTIFACT_STORE=file`＋先跑 export，现状行为完整恢复。
+  逐件 sha 校验；用途＝审计/file:// /灾备。
+- 回滚：无开关（批准项⑤）。灾备＝export 导出目录树＋回退旧版本代码。
 
-## 7. 验收清单（`mvp/accept_artifacts_db.py`）
+## 7. 验收清单（DB-only，`mvp/accept_*_db.py`，顺序跑严禁并行）
 
-1. 回填幂等＋逐件 sha 一致（含多页 case、失败批次缺件照收）。
-2. db 模式上传真实 case：无持久 output/input 副本（scratch 清尽）；/files/ 报告/json
-   mime 正确、ETag 304、raw 403、records.json 404（三表为事实源）；/srcfiles 200。
-3. runs 列表/详情/报告重定向/暂存/跨批查询无磁盘成立。
-4. export 还原目录树逐字节一致＋records.json 语义一致；导出报告在树内可 file:// 直开。
-5. 断库：upload 503、runs/files/报告/暂存读 503（新契约）。
-6. file 模式无 DB 照常（回滚）。
+`mvp/accept_records_db.py`：1 回填幂等+真实 case 投影往返一致 · 2 重跑级联 ·
+3 patch_record · 4 跨批查询 · 5 真链路（无持久磁盘）· 6 断库上传/runs/暂存/模板 503。
+
+`mvp/accept_artifacts_db.py`：1 回填幂等+全量读回 sha 自洽 · 2 真链路无持久磁盘+BLOB ·
+3 /files mime/ETag 304/raw 403/records.json 404/srcfiles · 4 runs/报告重定向/暂存/查询 ·
+5 export 逐字节一致+records 语义+file:// 在树内 · 6 断库上传/runs/files/报告/暂存 503。
+
+上传字节取自 sources BLOB（磁盘已清空）；断库用不可达 DSN 临时服务（8797），
+真链路临时服务 8799；用户 8765 不动。
 
 ## 8. 批准项（已裁决 2026-11-20）
 
@@ -140,3 +146,4 @@ CREATE TABLE extract_artifact (
 2. **DB 必选、D1 退役**；file:///常驻审计改**按需导出** ✅
 3. **自动快照退役**，records 完整关系化存 DB（三表），导出命令承担备份 ✅
 4. **只做 MySQL**，方言问题留给以后框架重构，现在不建方言接缝 ✅
+5. **file 模式整体删除**（初期调试过渡产物）：无存储开关，DB 唯一模式 ✅

@@ -1,12 +1,12 @@
-# records 事实源迁库（选项 B）设计 · 待批准
+# records 事实源迁库（选项 B）设计 · 已实现（历史稿）
 
-> 状态：**设计稿，未实现**。批准前不动代码。
+> 状态：**已实现并验收 6/6 PASS**（2026-11-20）。本稿的开关/快照/D1 降级表述
+> 已被 [design-artifacts-db.md](design-artifacts-db.md) 吞并更新：
+> **file 模式整体删除、无存储开关、自动快照退役、DB 必选不降级**——
+> 下文与之冲突处以 artifacts 稿为准（本稿保留作决策轨迹）。
 > 触发：item2 裁决 = B。用户场景 = **跨批次 SQL 查未确认暂存记录**
 > （「没办法直接从表里找提取记录」）。配套：[design-data-pipeline.md](design-data-pipeline.md)、
 > [progress-handoff.md](progress-handoff.md) §二。
-> 接缝现状：`store/content.py` 的 `get_records / save_records / patch_record`
-> 是 records 唯一读写口（当前 = 文件原子写）；API `GET /api/runs/{batch}/staging`
-> 整 doc 返回；review/PATCH 路由尚未建（P1 校验台挂起），`patch_record` 为预留语义。
 
 ---
 

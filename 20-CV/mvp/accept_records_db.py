@@ -107,6 +107,14 @@ def counts():
 
 
 def start_service(port, dsn=None):
+    # 端口必须空闲：否则 wait_http 会误连到别的服务（两套脚本严禁并行跑）
+    s = socket.socket()
+    try:
+        s.bind(('127.0.0.1', port))
+    except OSError:
+        raise RuntimeError('端口 {} 已被占用，先停掉占用者再跑'.format(port))
+    finally:
+        s.close()
     env = dict(os.environ, CV_MVP_PORT=str(port), CV_MVP_WARMUP='0')
     if dsn:
         env['CV_PLATFORM_DB'] = dsn
@@ -117,7 +125,7 @@ def start_service(port, dsn=None):
          '--host', '127.0.0.1', '--port', str(port)],
         cwd=PARENT, env=env,
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    if not wait_http(port):
+    if not wait_http(port) or p.poll() is not None:
         p.kill()
         raise RuntimeError('服务 {} 启动失败'.format(port))
     return p
@@ -200,6 +208,7 @@ def main():
     run_id = mig.ensure_run(conn, SYN_TAG, 'preview', tv, {})
     syn_shas, src_real = [], None
     for case, doc in real:
+        conn.commit()  # 结束旧快照：catalog 用独立连接提交，须读得到
         remap = json.loads(json.dumps(doc))
         for i, f in enumerate(remap['files']):
             fake = '{:064x}'.format(i + 1)
@@ -235,6 +244,7 @@ def main():
     sid, _ = catalog.register_source('accept.pdf', 'pdf', 22,
                                      '0' * 64, 'sources/00000000_accept.pdf')
     syn_shas.append('0' * 64)
+    conn.commit()  # 同上：刷新快照再查 run_file
     rf = mig.ensure_run_file(conn, run_id, sid, SYN_CASE)
     syn_doc['files'][0]['run_file_id'] = rf
     syn_doc['files'][0]['source_file_id'] = sid

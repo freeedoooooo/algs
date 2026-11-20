@@ -1,15 +1,15 @@
 """
-mvp/accept_artifacts_db.py — 产物全量入库六项验收（design-artifacts-db.md §7）。
+mvp/accept_artifacts_db.py — 产物全量入库六项验收（DB-only 契约，
+design-artifacts-db.md §7：DB 唯一事实源，无 file 模式）。
 
 前置：CV_PLATFORM_DB 已配置（env 或 data/secrets.json，用户配置的库）。
 用法（从 20-CV）：D:/miniforge3/envs/paddle/python.exe -u mvp/accept_artifacts_db.py
 
-验 ARTIFACT_STORE=db（config 联动 RECORDS_STORE=db）：
-1 回填幂等+sha 一致 · 2 db 真链路（无持久磁盘+路由/ETag/raw403）·
-3 runs/报告/暂存全查库 · 4 导出字节一致 · 5 断库显式 503 · 6 file 回滚。
-断库用不可达 DSN 的临时服务模拟，不触碰真实库可用性。
-破坏性操作只落临时批次与临时导出目录，验完清理；用户的 8765 全程不动。
-临时服务 8799(db)/8797(db 不可达)/8798(file)。
+1 回填幂等+读回 sha 自洽 · 2 真链路无持久磁盘+BLOB · 3 /files 路由/ETag/raw403 ·
+4 runs/报告/暂存全查库 · 5 导出字节一致 · 6 断库显式 503。
+磁盘已清空：上传字节取自 sources BLOB；断库用不可达 DSN 的临时服务模拟，
+不触碰真实库可用性。破坏性操作只落临时批次与临时导出目录，验完清理；
+用户的 8765 全程不动。临时服务 8799(真库)/8797(不可达 DSN)。
 """
 import os
 import sys
@@ -31,7 +31,6 @@ PKG = os.path.basename(ROOT)
 for _p in (PARENT, ROOT):
     if _p not in sys.path:
         sys.path.insert(0, _p)
-os.environ['CV_MVP_ARTIFACT_STORE'] = 'db'
 os.environ.setdefault('PYTHONUTF8', '1')
 config = importlib.import_module(PKG + '.config')
 db = importlib.import_module(PKG + '.store.db')
@@ -53,15 +52,17 @@ def check(name, ok, detail=''):
 
 
 def http(port, path, body=None, headers=None):
+    # Starlette 回小写 header 名：统一 lower()，避免大小写查空
     req = urllib.request.Request(
         'http://127.0.0.1:{}{}'.format(port, path),
         data=json.dumps(body).encode() if body is not None else None,
         headers=dict({'Content-Type': 'application/json'}, **(headers or {})))
     try:
         with urllib.request.urlopen(req, timeout=60) as r:
-            return r.status, dict(r.headers), r.read()
+            return r.status, {k.lower(): v for k, v in r.headers.items()}, \
+                r.read()
     except urllib.error.HTTPError as e:
-        return e.code, dict(e.headers), e.read()
+        return e.code, {k.lower(): v for k, v in e.headers.items()}, e.read()
 
 
 def http_json(port, path, body=None):
@@ -106,11 +107,16 @@ def art_counts():
         conn.close()
 
 
-def start_service(port, artifact_store, records_store=None, dsn=None):
-    env = dict(os.environ, CV_MVP_ARTIFACT_STORE=artifact_store,
-               CV_MVP_PORT=str(port), CV_MVP_WARMUP='0')
-    env['CV_MVP_RECORDS_STORE'] = records_store or (
-        'db' if artifact_store == 'db' else 'file')
+def start_service(port, dsn=None):
+    # 端口必须空闲：否则 wait_http 会误连到别的服务（两套脚本严禁并行跑）
+    s = socket.socket()
+    try:
+        s.bind(('127.0.0.1', port))
+    except OSError:
+        raise RuntimeError('端口 {} 已被占用，先停掉占用者再跑'.format(port))
+    finally:
+        s.close()
+    env = dict(os.environ, CV_MVP_PORT=str(port), CV_MVP_WARMUP='0')
     if dsn:
         env['CV_PLATFORM_DB'] = dsn
     else:
@@ -120,17 +126,16 @@ def start_service(port, artifact_store, records_store=None, dsn=None):
          '--host', '127.0.0.1', '--port', str(port)],
         cwd=PARENT, env=env,
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    if not wait_http(port):
+    if not wait_http(port) or p.poll() is not None:
         p.kill()
         raise RuntimeError('服务 {} 启动失败'.format(port))
     return p
 
 
-def upload(port, src_path, name):
-    with open(src_path, 'rb') as f:
-        data = base64.b64encode(f.read()).decode()
+def upload(port, src_bytes, name):
     st, j = http_json(port, '/api/upload',
-                      {'files': [{'name': name, 'data': data}],
+                      {'files': [{'name': name,
+                                  'data': base64.b64encode(src_bytes).decode()}],
                        'mode': 'preview'})
     if st != 200 or not j.get('ok'):
         raise RuntimeError('upload 失败：{} {}'.format(st, j))
@@ -177,22 +182,6 @@ def cleanup_batch(batch):
     for c in cases:
         artifact_db.delete_case(c)
         shutil.rmtree(os.path.join(config.OUTPUT_DIR, c), ignore_errors=True)
-    for d in os.listdir(config.INPUT_DIR):
-        if d.startswith(batch + '_'):
-            os.remove(os.path.join(config.INPUT_DIR, d))
-
-
-def disk_files(base):
-    out = {}
-    for root, _, files in os.walk(base):
-        for fn in files:
-            if fn.endswith('.tmp'):
-                continue
-            p = os.path.join(root, fn)
-            rel = os.path.relpath(p, base).replace(os.sep, '/')
-            with open(p, 'rb') as f:
-                out[rel] = f.read()
-    return out
 
 
 def main():
@@ -207,37 +196,33 @@ def main():
         return 1
     db.connect().close()  # 触发 001-004 迁移
 
-    print('[1/6] 回填幂等 + sha 一致')
+    print('[1/6] 回填幂等 + 读回 sha 自洽')
     mig_art.main()
     c1 = art_counts()
     mig_art.main()
     c2 = art_counts()
     check('两遍行数/字节不变', c1 == c2, '{} vs {}'.format(c1, c2))
-    cases = [d for d in sorted(os.listdir(config.OUTPUT_DIR))
-             if os.path.isdir(os.path.join(config.OUTPUT_DIR, d))]
-    bad = []
-    for d in cases:
-        for rel, data in disk_files(os.path.join(config.OUTPUT_DIR, d)).items():
-            if rel == config.RECORDS_JSON:
-                continue
-            a = artifact_db.get(d, rel)
-            if a is None or a['sha'] != sha(data):
-                bad.append('{}/{}'.format(d, rel))
-    for rel, data in disk_files(config.SOURCES_DIR).items():
-        a = artifact_db.get('sources', rel)
-        if a is None or a['sha'] != sha(data):
-            bad.append('sources/' + rel)
-    check('逐文件 sha 一致', not bad,
-          '{} 个 case + sources'.format(len(cases)) if not bad
-          else '不一致：{}'.format(bad[:5]))
+    bad, n = [], 0
+    for case in artifact_db.cases() + ['sources']:
+        for m in artifact_db.list(case):
+            n += 1
+            a = artifact_db.get(case, m['name'])
+            if a is None or a['sha'] != m['sha'] \
+                    or sha(a['data']) != m['sha'] \
+                    or len(a['data']) != m['size']:
+                bad.append('{}/{}'.format(case, m['name']))
+    check('全量读回 sha/size 自洽', not bad,
+          '{} 个文件'.format(n) if not bad else '不一致：{}'.format(bad[:5]))
 
-    print('[2/6] db 真链路：无持久磁盘 + 路由（临时服务 8799）')
-    pdf = os.path.join(config.INPUT_DIR,
-                       '20261120211314_招行流水（已脱敏）.pdf')
-    svc = start_service(8799, 'db')
+    print('[2/6] 真链路：无持久磁盘 + BLOB（临时服务 8799）')
+    src = artifact_db.get('sources', '83ef00a8_招行流水（已脱敏）.pdf')
+    if src is None:
+        print('  FAIL  sources BLOB 缺招行流水 PDF，无法真链路验收')
+        return 1
+    svc = start_service(8799)
     up_batch = None
     try:
-        batch, st = upload(8799, pdf, '招行流水（已脱敏）.pdf')
+        batch, st = upload(8799, src['data'], '招行流水（已脱敏）.pdf')
         up_batch = batch
         case = batch + '_招行流水_已脱敏_'
         time.sleep(1)  # finally 清理 scratch 在 running=False 之后
@@ -245,28 +230,30 @@ def main():
         check('真链路 previewed', st.get('error') is None
               and rrun and rrun['files'][0]['state'] == 'previewed',
               'err={}'.format(st.get('error')))
-        no_dir = not os.path.exists(os.path.join(config.OUTPUT_DIR, case))
-        no_in = not any(n.startswith(batch + '_')
-                        for n in os.listdir(config.INPUT_DIR))
-        check('无持久 output/input 副本', no_dir and no_in)
+        check('无持久 output/input 副本',
+              not os.path.exists(os.path.join(config.OUTPUT_DIR, case))
+              and not any(nm.startswith(batch + '_')
+                          for nm in os.listdir(config.INPUT_DIR)))
         names = {m['name'] for m in artifact_db.list(case)}
         check('产物入 BLOB', {config.EXTRACT_JSON, config.RUN_JSON,
                              config.EXTRACT_REPORT_NAME} <= names,
               '{} 个文件'.format(len(names)))
+
+        print('[3/6] /files 路由：mime / ETag 304 / raw 403 / records 404')
         q = urllib.request.quote
         st1, h1, b1 = http(8799, '/files/{}/{}'.format(q(case),
                            q(config.EXTRACT_JSON)))
         check('/files extract 200+mime', st1 == 200
-              and h1.get('Content-Type', '').startswith('application/json')
+              and h1.get('content-type', '').startswith('application/json')
               and json.loads(b1.decode()).get('schema'))
         st2, h2, _b2 = http(8799, '/files/{}/{}'.format(q(case),
                             q(config.EXTRACT_REPORT_NAME)))
         check('/files 报告 200+html', st2 == 200
-              and h2.get('Content-Type', '').startswith('text/html'))
-        etag = h1.get('ETag')
+              and h2.get('content-type', '').startswith('text/html'))
+        etag = h1.get('etag')
         st3, _h3, _b3 = http(8799, '/files/{}/{}'.format(q(case),
                              q(config.EXTRACT_JSON)),
-                             headers={'If-None-Match': etag})
+                             headers={'If-None-Match': etag} if etag else None)
         check('ETag 304', bool(etag) and st3 == 304, 'etag={}'.format(etag))
         st4, _h4, _b4 = http(8799, '/files/{}/raw/pdfplumber.json'.format(
             q(case)))
@@ -274,14 +261,10 @@ def main():
         st5, _h5, _b5 = http(8799, '/files/{}/records.json'.format(q(case)))
         check('records.json 404（DB 三表为事实源）', st5 == 404)
         srcs = artifact_db.list('sources')
-        st6, h6, _b6 = http(8799, '/srcfiles/{}'.format(q(srcs[0]['name'])))
-        check('/srcfiles 200', st6 == 200 and len(_b6) > 0)
-    finally:
-        svc.kill()
+        st6, _h6, b6 = http(8799, '/srcfiles/{}'.format(q(srcs[0]['name'])))
+        check('/srcfiles 200', st6 == 200 and len(b6) > 0)
 
-    print('[3/6] runs / 报告重定向 / 暂存全查库（无磁盘依赖）')
-    svc = start_service(8799, 'db')
-    try:
+        print('[4/6] runs / 报告重定向 / 暂存全查库（无磁盘依赖）')
         st, j = http_json(8799, '/api/runs')
         check('runs 列表含新批次', st == 200
               and any(r.get('batch_tag') == up_batch for r in j['items']))
@@ -292,18 +275,17 @@ def main():
         with urllib.request.urlopen(req, timeout=30) as r:
             check('报告重定向落 /files/', r.status == 200
                   and '/files/' in r.url and r.url.endswith(
-                      urllib.request.quote(config.EXTRACT_REPORT_NAME)))
+                      q(config.EXTRACT_REPORT_NAME)))
         st, j = http_json(8799, '/api/runs/{}/staging'.format(up_batch))
         check('暂存 API 24 条', st == 200
               and len(j['files'][0]['records']) == 24)
-        st, j = http_json(8799, '/api/staging/query?q=' +
-                          urllib.request.quote('报销'))
+        st, j = http_json(8799, '/api/staging/query?q=' + q('报销'))
         check('跨批查询 200', st == 200 and j.get('ok')
               and len(j.get('items', [])) > 0)
     finally:
         svc.kill()
 
-    print('[4/6] 导出字节一致 + records 重建')
+    print('[5/6] 导出字节一致 + records 重建')
     out_dir = tempfile.mkdtemp(prefix='cv_export_')
     try:
         p = subprocess.run(
@@ -314,7 +296,8 @@ def main():
             print(p.stdout[-2000:], p.stderr[-2000:])
         check('导出脚本退出 0', p.returncode == 0)
         bad = []
-        for d in cases + [up_batch + '_招行流水_已脱敏_']:
+        cases = [c for c in artifact_db.cases() if c != 'sources']
+        for d in cases:
             for m in artifact_db.list(d):
                 fp = os.path.join(out_dir, 'output', d,
                                   m['name'].replace('/', os.sep))
@@ -342,7 +325,7 @@ def main():
                 if sha(f.read()) != m['sha']:
                     bad.append('sha sources/' + m['name'])
         check('导出逐文件字节一致 + records 语义一致', not bad,
-              '{} case'.format(len(cases) + 1) if not bad
+              '{} case'.format(len(cases)) if not bad
               else '问题：{}'.format(bad[:5]))
         rep = os.path.join(out_dir, 'output',
                            up_batch + '_招行流水_已脱敏_',
@@ -351,14 +334,14 @@ def main():
     finally:
         shutil.rmtree(out_dir, ignore_errors=True)
 
-    print('[5/6] 断库显式 503（临时服务 8797，不可达 DSN）')
-    svc = start_service(8797, 'db', dsn=BAD_DSN)
+    print('[6/6] 断库显式 503（临时服务 8797，不可达 DSN）')
+    svc = start_service(8797, dsn=BAD_DSN)
     try:
-        with open(pdf, 'rb') as f:
-            data = base64.b64encode(f.read()).decode()
         st, j = http_json(8797, '/api/upload',
                           {'files': [{'name': '招行流水（已脱敏）.pdf',
-                                      'data': data}], 'mode': 'preview'})
+                                      'data': base64.b64encode(
+                                          src['data']).decode()}],
+                           'mode': 'preview'})
         check('断库上传 503', st == 503, 'st={} err={}'.format(
             st, j.get('error')))
         st, _j = http_json(8797, '/api/runs')
@@ -374,25 +357,9 @@ def main():
     finally:
         svc.kill()
 
-    print('[6/6] file 回滚（临时服务 8798，DB 不可达）')
-    svc = start_service(8798, 'file', records_store='file', dsn=BAD_DSN)
-    rollback_batch = None
-    try:
-        batch, st = upload(8798, pdf, '招行流水（已脱敏）.pdf')
-        rollback_batch = batch
-        case = batch + '_招行流水_已脱敏_'
-        check('file 模式无 DB 照常', st.get('error') is None
-              and os.path.isfile(os.path.join(config.OUTPUT_DIR, case,
-                                              config.RECORDS_JSON))
-              and os.path.isfile(os.path.join(config.OUTPUT_DIR, case,
-                                              config.EXTRACT_REPORT_NAME)))
-    finally:
-        svc.kill()
-
     print('清理临时产物')
-    for b in (up_batch, rollback_batch):
-        if b:
-            cleanup_batch(b)
+    if up_batch:
+        cleanup_batch(up_batch)
 
     print('\n结论：{}'.format('六项全部 PASS' if not FAILS
                             else 'FAIL {} 项：{}'.format(len(FAILS), FAILS)))
