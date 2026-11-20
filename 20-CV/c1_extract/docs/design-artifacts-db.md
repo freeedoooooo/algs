@@ -1,6 +1,10 @@
 # 设计稿 · 产物附件入库（MySQL BLOB）
 
-> 状态：**已批准并实现**（2026-11-20）。动机：部署/迁移＝代码＋一个 DB dump，
+> 状态：**已批准并实现**（2026-11-20）。**表结构与接缝已被
+> [design-c1-storage.md](design-c1-storage.md) 取代**（2026-11-21：附件键改
+> run_file_id、原件字节进 source_file.content、batch_tag/rel_path/run.json 退役）；
+> 本稿的 DB-only 契约（DB 必选 / scratch / 按需导出 / 只做 MySQL）仍然有效。
+> 动机：部署/迁移＝代码＋一个 DB dump，
 > 不再 rsync 数据目录。配套：[design-records-db.md](design-records-db.md)（B 已实现）、
 > [design-data-pipeline.md](design-data-pipeline.md)（四层分层，本稿再次重述）。
 > 本稿**吞并**上一挂起决策「records.json 快照简化」：全量入库后自动快照退役，

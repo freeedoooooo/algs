@@ -1,8 +1,20 @@
 # 设计稿 · C1 存储演进（命名去 MVP 化 + 附件模型纯关系化）
 
-> 状态：**待批准**（2026-11-20 用户提出 5 项演进）。前置：
+> 状态：**已批准并实现**（2026-11-20 提出 5 项演进，2026-11-21 落地验收）。前置：
 > [design-artifacts-db.md](design-artifacts-db.md)（DB-only 已实现）。
-> 本稿批准后取代其 §4 表结构与 §5 接缝表述。
+> 本稿取代其 §4 表结构与 §5 接缝表述。
+>
+> **落地注记（2026-11-21）**：
+> - 包名 `mvp/` → `c1_extract/`（git mv）；env 前缀 `C1_EXTRACT_*`；凭据键 `C1_EXTRACT_DB`。
+> - 005 为**数据保留迁移**（非清库）：source_file.content 从 sources 附件按 sha8_name
+>   回填；artifact 按 output_rel_dir 映射到 run_file_id；只删无字节且无引用的幽灵行。
+>   迁移前整库备份 `data/backup/pre_005_*.sql`。
+> - **006_fix_fks.sql**：配置库 schema 漂移修复——run_file/staging 三表建表时丢了
+>   001/003 的外键（删除不级联、孤儿行积累）。006 清孤儿＋条件补 5 个外键
+>   （information_schema 命中即跳过，新库不受影响）。备份 `pre_006_*.sql`。
+> - 验收：`accept_records_db.py` / `accept_artifacts_db.py` 各 6/6 PASS（顺序跑，严禁并行）；
+>   浏览器全链路验证（runs/staging/血缘/lightbox/跨 run 搜索/sources/报告/上传）。
+> - 用户 8765 已运行新代码（c1_extract/app.py）。
 
 ## 0. 用户 5 项提议与评估
 
