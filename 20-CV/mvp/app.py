@@ -25,6 +25,8 @@ import time
 import json
 import base64
 import hashlib
+import shutil
+import tempfile
 import importlib
 import threading
 import traceback
@@ -54,7 +56,7 @@ config = _load('config')           # 必须在 paddle 相关导入之前：设�
 params_mod = _load('params')       # 调试参数 schema / 校验（纯 Python，不碰模型）
 from fastapi import FastAPI, Request
 from fastapi.responses import (HTMLResponse, JSONResponse, FileResponse,
-                               RedirectResponse, PlainTextResponse)
+                               RedirectResponse, PlainTextResponse, Response)
 from fastapi.staticfiles import StaticFiles
 
 
@@ -83,6 +85,19 @@ _IMAGE_SRCS = {'source' + e for e in config.IMAGE_EXTS}
 _CSV_PATTERNS = ('table_*.csv', 'stitched_*.csv', 'p*_table_*.csv')
 
 
+def _files_guard(rel):
+    """白名单校验：None=放行，否则 HTTP 状态码（file/db 两种服务方式共用）。"""
+    head = rel.split('/')[0]
+    if head == 'raw' or rel == 'result.json':
+        return 403
+    ok = (rel in _TOP_FILES
+          or (rel.startswith('pages/') and rel.endswith('.png'))
+          or rel in _IMAGE_SRCS
+          or (rel.endswith('.md') and '/' not in rel)
+          or any(fnmatch(rel, p) for p in _CSV_PATTERNS))
+    return None if ok else 404
+
+
 class OutputFiles(StaticFiles):
     async def get_response(self, path, scope):
         norm = unquote(path).replace('\\', '/')
@@ -90,25 +105,59 @@ class OutputFiles(StaticFiles):
         if '..' in parts:
             return PlainTextResponse('403 Forbidden', status_code=403)
         rel = '/'.join(parts[1:])          # 首段是批次目录名
-        head = rel.split('/')[0]
-        if head == 'raw' or rel == 'result.json':
-            return PlainTextResponse('403 Forbidden（引擎原始层不对外）',
-                                     status_code=403)
-        ok = (rel in _TOP_FILES
-              or (rel.startswith('pages/') and rel.endswith('.png'))
-              or rel in _IMAGE_SRCS
-              or (rel.endswith('.md') and '/' not in rel)
-              or any(fnmatch(rel, p) for p in _CSV_PATTERNS))
-        if not ok:
-            return PlainTextResponse('404 Not Found', status_code=404)
+        code = _files_guard(rel)
+        if code:
+            msg = ('403 Forbidden（引擎原始层不对外）' if code == 403
+                   else '404 Not Found')
+            return PlainTextResponse(msg, status_code=code)
         return await super().get_response(path, scope)
 
 
-app.mount('/files', OutputFiles(directory=config.OUTPUT_DIR), name='files')
+def _artifact_response(path, request, sources=False):
+    """db 模式的 /files、/srcfiles：BLOB 流式输出，白名单与 raw 403 不变，
+    ETag=sha256（内容变才变），If-None-Match 命中回 304。"""
+    norm = unquote(path).replace('\\', '/')
+    parts = [p for p in norm.split('/') if p not in ('', '.')]
+    if not parts or '..' in parts:
+        return PlainTextResponse('403 Forbidden', status_code=403)
+    if sources:
+        case_rel, rel = 'sources', '/'.join(parts)
+    else:
+        if len(parts) < 2:
+            return PlainTextResponse('404 Not Found', status_code=404)
+        case_rel, rel = parts[0], '/'.join(parts[1:])
+        code = _files_guard(rel)
+        if code:
+            msg = ('403 Forbidden（引擎原始层不对外）' if code == 403
+                   else '404 Not Found')
+            return PlainTextResponse(msg, status_code=code)
+    try:
+        a = _load('store.artifact').get(case_rel, rel)
+    except Exception as e:
+        return _db_unavailable(e)
+    if a is None:
+        return PlainTextResponse('404 Not Found', status_code=404)
+    etag = '"{}"'.format(a['sha'])
+    if request.headers.get('if-none-match') == etag:
+        return Response(status_code=304, headers={'ETag': etag})
+    return Response(a['data'], media_type=a['mime'], headers={'ETag': etag})
+
+
+if config.ARTIFACT_STORE == 'db':
+    @app.get('/files/{path:path}')
+    def files_db(path: str, request: Request):
+        return _artifact_response(path, request)
+
+    @app.get('/srcfiles/{path:path}')
+    def srcfiles_db(path: str, request: Request):
+        return _artifact_response(path, request, sources=True)
+else:
+    app.mount('/files', OutputFiles(directory=config.OUTPUT_DIR), name='files')
+    # 资料库规范副本（sources/）：资料页/选择抽屉的缩略图与原件预览。
+    # 目录里只有登记过的上传副本，无引擎产物，直接静态服务即可。
+    app.mount('/srcfiles', StaticFiles(directory=config.SOURCES_DIR),
+              name='srcfiles')
 app.mount('/static', StaticFiles(directory=config.ASSETS_DIR), name='static')
-# 资料库规范副本（sources/）：资料页/选择抽屉的缩略图与原件预览。
-# 目录里只有登记过的上传副本，无引擎产物，直接静态服务即可。
-app.mount('/srcfiles', StaticFiles(directory=config.SOURCES_DIR), name='srcfiles')
 
 
 @app.middleware('http')
@@ -165,8 +214,11 @@ def batch_tag():
     目录按字典序排就是按时间排。同一秒内再传一次加 -2 / -3 区分。
     注意：只加前缀，原文件名（含 103_ 这类数字编号）一字不改。
     """
-    existing = (set(os.listdir(config.INPUT_DIR))
-                | set(os.listdir(config.OUTPUT_DIR)))
+    if config.ARTIFACT_STORE == 'db':
+        existing = set(_load('store.catalog').list_batch_tags())
+    else:
+        existing = (set(os.listdir(config.INPUT_DIR))
+                    | set(os.listdir(config.OUTPUT_DIR)))
     tag = time.strftime(config.BATCH_TS_FMT, time.localtime())
     if not any(n.startswith(tag) for n in existing):
         return tag
@@ -201,12 +253,20 @@ def _kind_of(name):
 
 
 def _register_source(name, data):
-    """sha256 去重登记 + sources/ 规范副本（方案 A：库副本与批次副本分离）。
+    """sha256 去重登记 + sources 规范副本（方案 A：库副本与批次副本分离）。
 
-    降级隔离：DB 不可用只影响登记（id=None），提取照常。
+    file 模式：副本落 sources/，DB 不可用只影响登记（id=None），提取照常。
+    db 模式：副本入 BLOB，DB 必选，失败上抛（调用方回 503）。
     """
     sha = hashlib.sha256(data).hexdigest()
-    rel = 'sources/{}_{}'.format(sha[:8], name)
+    base = '{}_{}'.format(sha[:8], name)
+    rel = 'sources/' + base
+    if config.ARTIFACT_STORE == 'db':
+        _load('store.artifact').save('sources', base, data)
+        sid, dedup = _load('store.catalog').register_source(
+            name, _kind_of(name), len(data), sha, rel)
+        return {'source_file_id': sid, 'sha256': sha, 'dedup': dedup,
+                'rel_path': rel}
     abs_path = config.to_abs(rel)
     if not os.path.isfile(abs_path):
         with open(abs_path, 'wb') as f:
@@ -222,7 +282,8 @@ def _register_source(name, data):
 
 
 def _resolve_template(version_id=None):
-    """模板版本解析；DB 不可用降级为内置「原始透传」（P0 唯一通路）。"""
+    """模板版本解析；file 模式 DB 不可用降级为内置「原始透传」；
+    db 模式 DB 必选，失败上抛。"""
     try:
         catalog = _load('store.catalog')
         tv = (catalog.get_template_version(version_id=version_id)
@@ -230,8 +291,11 @@ def _resolve_template(version_id=None):
         if tv:
             return {'name': tv['name'], 'version': tv['version'],
                     'version_id': tv['id']}
-    except Exception:
-        pass
+        err = '平台库无可用模板版本'
+    except Exception as e:
+        err = str(e)
+    if config.ARTIFACT_STORE == 'db':
+        raise RuntimeError(err)
     return {'name': '原始透传', 'version': 1, 'version_id': None}
 
 
@@ -287,11 +351,20 @@ async def upload(request: Request):
         return JSONResponse(
             {'ok': False, 'error': '入库模式在 P2 开放，当前请用预览模式'},
             status_code=400)
-    tpl = _resolve_template(body.get('template_version_id'))
+    try:
+        tpl = _resolve_template(body.get('template_version_id'))
+    except Exception as e:
+        return _db_unavailable(e)
     # 调试参数：校验一次，非法值回退默认并把警告带回页面（不让整批失败）
     params, warns = params_mod.normalize(body.get('params'))
 
-    tag = batch_tag()
+    try:
+        tag = batch_tag()
+    except Exception as e:
+        return _db_unavailable(e)
+    # db 模式输入副本只落临时 scratch（字节事实源在 sources BLOB），跑完即清
+    in_dir = (tempfile.mkdtemp(prefix='cv_in_')
+              if config.ARTIFACT_STORE == 'db' else config.INPUT_DIR)
     paths, used, ctx = [], set(), []
     for item in files:
         name = safe_name(item.get('name', ''))
@@ -319,18 +392,22 @@ async def upload(request: Request):
                 {'ok': False,
                  'error': '{} 超过 {}MB'.format(name, config.MAX_FILE_MB)},
                 status_code=400)
-        path = os.path.join(config.INPUT_DIR, '{}_{}'.format(tag, name))
+        path = os.path.join(in_dir, '{}_{}'.format(tag, name))
         with open(path, 'wb') as f:
             f.write(data)
         paths.append(path)
-        info = _register_source(name, data)
+        try:
+            info = _register_source(name, data)
+        except Exception as e:
+            return _db_unavailable(e)
         ctx.append(dict(info, name=name, path=path))
 
     return _launch(tag, paths, params, warns, ctx, mode, tpl)
 
 
 def _launch(tag, paths, params, warns, ctx, mode='preview', tpl=None):
-    """建日志 → 重置 STATE → 登记 Run（DB 可降级）→ 起后台线程。"""
+    """建日志 → 重置 STATE → 登记 Run → 起后台线程。
+    file 模式 DB 登记可降级；db 模式 DB 必选（登记失败整批 503）。"""
     tpl = tpl or _resolve_template()
     runlog = _load('runlog')
     content = _load('store.content')
@@ -339,11 +416,13 @@ def _launch(tag, paths, params, warns, ctx, mode='preview', tpl=None):
                         on_emit=_on_log)
     run_ctx = {'batch': tag, 'mode': mode, 'template': tpl,
                'run_id': None, 'files': ctx, 'created_at': _now()}
+    if config.ARTIFACT_STORE == 'db' and paths:
+        run_ctx['in_scratch'] = os.path.dirname(paths[0])
     for f in ctx:
         # case 目录名与 input 批次副本同名（带批次戳）：重跑=新目录，旧批次不动
         f['case'] = case_dir_name('{}_{}'.format(tag, f['name']))
         f['state'] = 'pending'
-    # DB 目录登记（降级隔离：失败只记 warning，提取与 Preview 文件链路照常）
+    # DB 目录登记（file 模式降级隔离：失败只记 warning，提取与文件链路照常）
     try:
         catalog = _load('store.catalog')
         if tpl.get('version_id'):
@@ -355,8 +434,16 @@ def _launch(tag, paths, params, warns, ctx, mode='preview', tpl=None):
                         run_ctx['run_id'], f['source_file_id'],
                         'output/{}'.format(f['case']))
     except Exception as e:
+        if config.ARTIFACT_STORE == 'db':
+            return _db_unavailable(e)
         log.warn('store', '平台库不可用，本次运行仅文件留档（降级）：{}'
                  .format(e))
+    if config.ARTIFACT_STORE == 'db' and (
+            run_ctx['run_id'] is None
+            or any(not f.get('run_file_id') for f in ctx)):
+        return JSONResponse(
+            {'ok': False, 'error': '目录登记不完整（产物 db 模式 DB 必选）'},
+            status_code=503)
     with LOCK:
         STATE.update(running=True, ready=False, error=None, steps=[],
                      cases=[], batch=tag, started=time.time(), elapsed=0,
@@ -372,7 +459,10 @@ def _launch(tag, paths, params, warns, ctx, mode='preview', tpl=None):
                   if not k.startswith('_'))))
     for w in warns:
         log.warn('params', w)
-    _save_run_snapshot(run_ctx, 'extracting', content)
+    try:
+        _save_run_snapshot(run_ctx, 'extracting', content)
+    except Exception as e:
+        return _db_unavailable(e)
     threading.Thread(target=run_batch, args=(paths, params, log, run_ctx),
                      daemon=True).start()
     return {'ok': True, 'count': len(paths), 'batch': tag,
@@ -380,7 +470,7 @@ def _launch(tag, paths, params, warns, ctx, mode='preview', tpl=None):
 
 
 def _save_run_snapshot(run_ctx, state, content=None, error=None):
-    """run.json 批次快照：每个 case 目录各留一份（自包含，DB 无关）。"""
+    """run.json 批次快照：每个 case 各留一份（file=磁盘自包含 / db=BLOB）。"""
     content = content or _load('store.content')
     doc = {
         'schema': 'c1-extract-run/1',
@@ -422,15 +512,26 @@ def api_logs():
 def extract_report():
     """对照报告：重定向到最新 case 的 对照报告.html 真实地址（/files/<case>/…）。
     报告内资源全是相对路径，必须落在 case 目录的 URL 下才能解析；
-    历史批次直接打开各自 output 目录里的报告文件（file:// 同样可用）。"""
+    file 模式历史批次可 file:// 直开，db 模式用 export_artifacts.py 按需导出。"""
     from urllib.parse import quote
-    for name in sorted(os.listdir(config.OUTPUT_DIR), reverse=True):
-        path = os.path.join(config.OUTPUT_DIR, name,
-                            config.EXTRACT_REPORT_NAME)
-        if os.path.isfile(path):
-            return RedirectResponse('/files/{}/{}'.format(
-                quote(name, safe=''),
-                quote(config.EXTRACT_REPORT_NAME, safe='')))
+    if config.ARTIFACT_STORE == 'db':
+        try:
+            artifact = _load('store.artifact')
+            for name, _tag in _load('store.catalog').list_run_cases():
+                if artifact.exists(name, config.EXTRACT_REPORT_NAME):
+                    return RedirectResponse('/files/{}/{}'.format(
+                        quote(name, safe=''),
+                        quote(config.EXTRACT_REPORT_NAME, safe='')))
+        except Exception as e:
+            return _db_unavailable(e)
+    else:
+        for name in sorted(os.listdir(config.OUTPUT_DIR), reverse=True):
+            path = os.path.join(config.OUTPUT_DIR, name,
+                                config.EXTRACT_REPORT_NAME)
+            if os.path.isfile(path):
+                return RedirectResponse('/files/{}/{}'.format(
+                    quote(name, safe=''),
+                    quote(config.EXTRACT_REPORT_NAME, safe='')))
     return HTMLResponse(
         '<h3>还没有对照报告</h3><p><a href="/">返回上传页</a>先上传一个文件。</p>')
 
@@ -450,9 +551,24 @@ _STAGE_FRAC = {
 }
 
 
+def _ingest_case(case_rel, case_abs):
+    """db 模式：scratch 目录全量产物入 extract_artifact（管线/报告生成零改动，
+    它们照旧写文件，这里统一收编入库）。"""
+    artifact = _load('store.artifact')
+    for root, _, files in os.walk(case_abs):
+        for fn in files:
+            if fn.endswith('.tmp'):
+                continue
+            p = os.path.join(root, fn)
+            rel = os.path.relpath(p, case_abs).replace(os.sep, '/')
+            with open(p, 'rb') as f:
+                artifact.save(case_rel, rel, f.read())
+
+
 def run_batch(paths, params=None, log=None, run_ctx=None):
-    """后台线程：逐个提取 → raw/ + extract.json → collect 生成 records.json
-    → 对照报告。DB 状态同步全程降级隔离（故障只记 warning）。"""
+    """后台线程：逐个提取 → raw/ + extract.json → collect 记录入库 → 对照报告。
+    file 模式 DB 状态同步降级隔离；db 模式 DB 必选（写失败整批 failed），
+    产物先写 scratch 再 ingest 入 BLOB，跑完清理 scratch。"""
     run_ctx = run_ctx or {'batch': STATE.get('batch'), 'mode': 'preview',
                           'template': _resolve_template(), 'run_id': None,
                           'files': [{'name': os.path.basename(p), 'path': p}
@@ -494,7 +610,13 @@ def run_batch(paths, params=None, log=None, run_ctx=None):
             progress(int((i - 1) / total * 100))
             case_rel = fc.get('case') or case_dir_name(name)
             fc['case'] = case_rel
-            case_abs = os.path.join(config.OUTPUT_DIR, case_rel)
+            if config.ARTIFACT_STORE == 'db':
+                # 磁盘只是 scratch（paddle 需要真实图片路径），产物最终入 BLOB
+                case_abs = fc.get('scratch') or tempfile.mkdtemp(
+                    prefix='cv_case_')
+                fc['scratch'] = case_abs
+            else:
+                case_abs = os.path.join(config.OUTPUT_DIR, case_rel)
             os.makedirs(case_abs, exist_ok=True)
             frac = [0.0]
 
@@ -520,7 +642,12 @@ def run_batch(paths, params=None, log=None, run_ctx=None):
                 tot_lines, tot_tables, routes, len(pages),
                 ' · 跨页合并 {} 张'.format(len(rec.get('stitched_tables') or []))
                 if rec.get('stitched_tables') else ''), case=name)
-            # L2 记录层：passthrough 收集 + 逐格血缘 → records.json（事实源）
+            # 报告只依赖 extract 层，先于 records 写库生成：
+            # 断库时引擎产物（extract+报告）仍完整，运行显式 failed
+            report_mod.build([rec],
+                             os.path.join(case_abs, config.EXTRACT_REPORT_NAME),
+                             params=params)
+            # L2 记录层：passthrough 收集 + 逐格血缘 → DB 三表（db 模式事实源）
             tpl = run_ctx['template']
             recs = collect.passthrough(rec)
             rdoc = collect.build_records_doc(
@@ -528,34 +655,19 @@ def run_batch(paths, params=None, log=None, run_ctx=None):
                 run_file_id=fc.get('run_file_id'),
                 source_file_id=fc.get('source_file_id'),
                 template={'name': tpl['name'], 'version': tpl['version']})
-            try:
-                content.save_records(case_rel, rdoc)
-            except Exception as e:
-                if config.RECORDS_STORE != 'db':
-                    raise
-                # D1：引擎层照常，暂存显式失败（不静默回落文件写）
-                fc['state'] = 'staging_failed'
-                log.error('collect', '暂存写入失败（D1 显式降级）：{}'.format(e),
-                          case=name)
-                if fc.get('run_file_id'):
-                    db('set_run_file_state', fc['run_file_id'],
-                       'staging_failed')
-            else:
-                fc['records_n'] = len(recs)
-                fc['state'] = 'previewed'
-                log.ok('collect', '暂存记录 {} 条（passthrough · 逐格血缘）→ {}'
-                       .format(len(recs), config.RECORDS_JSON), case=name)
-                if fc.get('run_file_id'):
-                    db('set_run_file_state', fc['run_file_id'], 'previewed')
-            # 报告与 extract.json 同级，落在该 case 自己的 output 目录里
-            report_mod.build([rec],
-                             os.path.join(case_abs, config.EXTRACT_REPORT_NAME),
-                             params=params)
+            content.save_records(case_rel, rdoc)
+            fc['records_n'] = len(recs)
+            fc['state'] = 'previewed'
+            log.ok('collect', '暂存记录 {} 条（passthrough · 逐格血缘）'.format(
+                len(recs)), case=name)
+            if fc.get('run_file_id'):
+                db('set_run_file_state', fc['run_file_id'], 'previewed')
+            if config.ARTIFACT_STORE == 'db':
+                _ingest_case(case_rel, case_abs)
+                shutil.rmtree(case_abs, ignore_errors=True)
+                fc.pop('scratch', None)
             progress(int(i / total * 100))
-        any_failed = any(f.get('state') == 'staging_failed'
-                         for f in run_ctx['files'])
-        db('set_run_state', run_ctx.get('run_id'),
-           'partial' if any_failed else 'previewed')
+        db('set_run_state', run_ctx.get('run_id'), 'previewed')
         _save_run_snapshot(run_ctx, 'previewed', content)
         # 完成态最后发布：status 变 running=False 时 run.json 必已落盘
         with LOCK:
@@ -575,16 +687,28 @@ def run_batch(paths, params=None, log=None, run_ctx=None):
             log.error('error', '出错：' + str(e))
             log.error('error', traceback.format_exc(limit=3).strip())
         db('set_run_state', run_ctx.get('run_id'), 'failed', str(e))
-        _save_run_snapshot(run_ctx, 'failed', content, error=str(e))
+        try:
+            _save_run_snapshot(run_ctx, 'failed', content, error=str(e))
+        except Exception as e2:
+            if log:
+                log.warn('store', 'run.json 写入失败：{}'.format(e2))
         with LOCK:
             STATE.update(running=False, ready=False, error=str(e),
                          stage='error')
         print(traceback.format_exc(limit=3))
+    finally:
+        if config.ARTIFACT_STORE == 'db':
+            for f in run_ctx.get('files') or []:
+                if f.get('scratch'):
+                    shutil.rmtree(f['scratch'], ignore_errors=True)
+            if run_ctx.get('in_scratch'):
+                shutil.rmtree(run_ctx['in_scratch'], ignore_errors=True)
 
 
 # ---- 数据链路 API（P0：资料库 / 模板 / 运行 / 预生成内容读取）----
-# 目录端点经 catalog repo（DB 故障回 503）；内容端点经 content repo 读预生成文件，
-# 完全不依赖 DB。运行以 batch_tag 为键（run.json 文件留档，DB id 在其中可查）。
+# 目录端点经 catalog repo（DB 故障回 503）；内容端点经 content/artifact repo：
+# file 模式读磁盘不依赖 DB，db 模式 DB 必选（故障回 503）。
+# 运行以 batch_tag 为键（run.json 留档，DB id 在其中可查）。
 
 def _db_unavailable(e):
     return JSONResponse({'ok': False, 'error': '平台库不可用：{}'.format(e)},
@@ -621,9 +745,12 @@ async def api_sources_add(request: Request):
         return JSONResponse(
             {'ok': False, 'error': '{} 超过 {}MB'.format(name, config.MAX_FILE_MB)},
             status_code=400)
-    info = _register_source(name, data)
+    try:
+        info = _register_source(name, data)
+    except Exception as e:
+        return _db_unavailable(e)
     if info['source_file_id'] is None:
-        return _db_unavailable('登记失败（副本已存 sources/）')
+        return _db_unavailable('登记失败')
     return {'ok': True, 'id': info['source_file_id'], 'dedup': info['dedup']}
 
 
@@ -638,9 +765,16 @@ def api_sources_del(source_id: int):
     if not ok:
         return JSONResponse({'ok': False, 'reason': reason}, status_code=409)
     if row and row.get('rel_path'):
-        p = config.to_abs(row['rel_path'])
-        if os.path.isfile(p):
-            os.remove(p)
+        try:
+            if config.ARTIFACT_STORE == 'db':
+                _load('store.artifact').delete(
+                    'sources', os.path.basename(row['rel_path']))
+            else:
+                p = config.to_abs(row['rel_path'])
+                if os.path.isfile(p):
+                    os.remove(p)
+        except Exception as e:
+            return _db_unavailable(e)
     return JSONResponse({'ok': True}, status_code=200)
 
 
@@ -655,7 +789,17 @@ def api_templates():
 
 
 def _batch_cases(batch):
-    """按 batch_tag 找各 case 目录的 run.json（文件留档，DB 无关）。"""
+    """按 batch_tag 找各 case 的 run.json（file=扫磁盘 / db=目录 join + BLOB）。"""
+    if config.ARTIFACT_STORE == 'db':
+        content = _load('store.content')
+        out = []
+        for name, tag in _load('store.catalog').list_run_cases():
+            if tag != batch:
+                continue
+            doc = content.get_run(name)
+            if doc:
+                out.append((name, doc))
+        return out
     out = []
     if not os.path.isdir(config.OUTPUT_DIR):
         return out
@@ -675,8 +819,20 @@ def _batch_cases(batch):
 
 @app.get('/api/runs')
 def api_runs():
-    """运行列表：扫 output/*/run.json 按批次去重（停 MySQL 照常可用）。"""
+    """运行列表：file=扫 output/*/run.json（停 MySQL 照常）；
+    db=目录 join + run.json BLOB，按批次去重（DB 故障 503）。"""
     seen = {}
+    if config.ARTIFACT_STORE == 'db':
+        try:
+            content = _load('store.content')
+            for name, _tag in _load('store.catalog').list_run_cases():
+                doc = content.get_run(name)
+                tag = (doc or {}).get('batch_tag')
+                if tag and tag not in seen:
+                    seen[tag] = doc
+        except Exception as e:
+            return _db_unavailable(e)
+        return {'items': list(seen.values())}
     if os.path.isdir(config.OUTPUT_DIR):
         for name in sorted(os.listdir(config.OUTPUT_DIR), reverse=True):
             p = os.path.join(config.OUTPUT_DIR, name, config.RUN_JSON)
@@ -695,7 +851,10 @@ def api_runs():
 
 @app.get('/api/runs/{batch}')
 def api_run_detail(batch: str):
-    cases = _batch_cases(batch)
+    try:
+        cases = _batch_cases(batch)
+    except Exception as e:
+        return _db_unavailable(e)
     if not cases:
         return JSONResponse({'ok': False, 'error': '批次不存在'},
                             status_code=404)
@@ -719,8 +878,11 @@ def _case_of(batch, file):
 
 @app.get('/api/runs/{batch}/extract')
 def api_run_extract(batch: str, file: str = None):
-    case = _case_of(batch, file)
-    doc = _load('store.content').get_extract(case) if case else None
+    try:
+        case = _case_of(batch, file)
+        doc = _load('store.content').get_extract(case) if case else None
+    except Exception as e:
+        return _db_unavailable(e)
     if doc is None:
         return JSONResponse({'ok': False, 'error': 'extract.json 不存在'},
                             status_code=404)
@@ -729,10 +891,13 @@ def api_run_extract(batch: str, file: str = None):
 
 @app.get('/api/runs/{batch}/staging')
 def api_run_staging(batch: str, file: str = None):
-    case = _case_of(batch, file)
-    doc = _load('store.content').get_records(case) if case else None
+    try:
+        case = _case_of(batch, file)
+        doc = _load('store.content').get_records(case) if case else None
+    except Exception as e:
+        return _db_unavailable(e)
     if doc is None:
-        return JSONResponse({'ok': False, 'error': 'records.json 不存在'},
+        return JSONResponse({'ok': False, 'error': '暂存记录不存在'},
                             status_code=404)
     return doc
 
@@ -776,8 +941,13 @@ async def api_runs_create(request: Request):
         return JSONResponse({'ok': False, 'error': '存在未登记的文件 id'},
                             status_code=400)
     params, warns = params_mod.normalize(body.get('params'))
-    tpl = _resolve_template(body.get('template_version_id'))
-    tag = batch_tag()
+    try:
+        tpl = _resolve_template(body.get('template_version_id'))
+        tag = batch_tag()
+    except Exception as e:
+        return _db_unavailable(e)
+    in_dir = (tempfile.mkdtemp(prefix='cv_in_')
+              if config.ARTIFACT_STORE == 'db' else config.INPUT_DIR)
     paths, used, ctx = [], set(), []
     for row in rows:
         name = row['name']
@@ -788,14 +958,30 @@ async def api_runs_create(request: Request):
                 k += 1
             name = '{}-{}{}'.format(stem, k, e)
         used.add(name)
-        src = config.to_abs(row['rel_path'])
-        if not os.path.isfile(src):
-            return JSONResponse(
-                {'ok': False, 'error': '规范副本缺失：{}'.format(row['rel_path'])},
-                status_code=409)
-        path = os.path.join(config.INPUT_DIR, '{}_{}'.format(tag, name))
-        with open(src, 'rb') as fi, open(path, 'wb') as fo:
-            fo.write(fi.read())
+        if config.ARTIFACT_STORE == 'db':
+            try:
+                a = _load('store.artifact').get(
+                    'sources', os.path.basename(row['rel_path']))
+            except Exception as e:
+                return _db_unavailable(e)
+            if a is None:
+                return JSONResponse(
+                    {'ok': False,
+                     'error': '规范副本缺失：{}'.format(row['rel_path'])},
+                    status_code=409)
+            data = a['data']
+        else:
+            src = config.to_abs(row['rel_path'])
+            if not os.path.isfile(src):
+                return JSONResponse(
+                    {'ok': False,
+                     'error': '规范副本缺失：{}'.format(row['rel_path'])},
+                    status_code=409)
+            with open(src, 'rb') as fi:
+                data = fi.read()
+        path = os.path.join(in_dir, '{}_{}'.format(tag, name))
+        with open(path, 'wb') as fo:
+            fo.write(data)
         paths.append(path)
         ctx.append({'name': name, 'path': path,
                     'source_file_id': row['id'], 'sha256': row['sha256'],

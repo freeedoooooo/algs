@@ -2,17 +2,14 @@
 store/content_db.py — 内容 repo 的 DB 实现（选项 B，design-records-db.md）。
 
 get_records / save_records / patch_record 与 content.py 同签名；
-extract / run 仍走文件。写方向唯一：三表同事务 commit 后导出 records.json
-派生快照（可全量重建，非独立事实源）。D1 降级：读故障由 content.py 分发层
-回落快照只读；写故障抛错，调用方显式 staging_failed。
+DB 是 records 唯一事实源（自动快照已退役，export_artifacts.py 按需导出）。
+DB 必选：读写故障一律上抛，由调用方显式失败/503。
 """
 import json
 import time
 from datetime import datetime
 
 from . import db
-from . import content
-from .. import config
 from ..adapter.base import RECORDS_SCHEMA
 
 _TS = '%Y-%m-%dT%H:%M:%SZ'
@@ -114,13 +111,6 @@ def get_records(case_rel):
         conn.close()
 
 
-def _export_snapshot(case_rel):
-    doc = get_records(case_rel)
-    if doc is not None:
-        content.atomic_write_json(
-            content._path(case_rel, config.RECORDS_JSON), doc)
-
-
 def save_records(case_rel, doc):
     conn = db.connect()
     try:
@@ -129,7 +119,7 @@ def save_records(case_rel, doc):
                 rf_id = f.get('run_file_id')
                 if not rf_id:
                     raise ValueError(
-                        'run_file_id 缺失：db 模式须先目录登记成功（D1 显式降级）')
+                        'run_file_id 缺失：db 模式须先目录登记成功')
                 cur.execute(
                     'DELETE FROM extract_staging_record WHERE run_file_id=%s',
                     (rf_id,))
@@ -172,7 +162,6 @@ def save_records(case_rel, doc):
         raise
     finally:
         conn.close()
-    _export_snapshot(case_rel)
 
 
 def patch_record(case_rel, file_index, index, values):
@@ -208,7 +197,6 @@ def patch_record(case_rel, file_index, index, values):
         raise
     finally:
         conn.close()
-    _export_snapshot(case_rel)
     doc = get_records(case_rel)
     rec = next((r for r in doc['files'][file_index]['records']
                 if r['index'] == index), None)

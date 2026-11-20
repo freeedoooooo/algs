@@ -86,8 +86,14 @@ EXTRACT_REPORT_NAME = '对照报告.html'
 PLATFORM_DB_REF = 'CV_PLATFORM_DB'
 
 # ---- records 保存方式接缝（design-records-db.md）：file=文件事实源（现状）；
-# db=DB 事实源 + records.json 派生快照（选项 B，须先跑迁移回填）----
+# db=DB 唯一事实源（自动快照已退役，export_artifacts.py 按需导出）----
 RECORDS_STORE = os.getenv('CV_MVP_RECORDS_STORE', 'file')
+
+# ---- 产物附件接缝（design-artifacts-db.md）：file=持久磁盘（现状）；
+# db=extract_artifact BLOB 唯一事实源，磁盘仅 scratch（DB 必选，D1 退役）----
+ARTIFACT_STORE = os.getenv('CV_MVP_ARTIFACT_STORE', 'file')
+if ARTIFACT_STORE == 'db':
+    RECORDS_STORE = 'db'  # 全量入库：records 同样以 DB 为事实源
 
 for _d in (INPUT_DIR, OUTPUT_DIR, LOG_DIR, SOURCES_DIR, DATA_DIR):
     os.makedirs(_d, exist_ok=True)

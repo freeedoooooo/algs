@@ -215,6 +215,31 @@ def set_run_file_state(run_file_id, state):
         conn.close()
 
 
+def list_batch_tags():
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('SELECT batch_tag FROM extract_run')
+            return [r[0] for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def list_run_cases():
+    """(case 目录名, batch_tag) 列表，新 run 在前 —— artifact db 模式的 runs 数据源。"""
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT rf.output_rel_dir, r.batch_tag'
+                ' FROM extract_run r JOIN extract_run_file rf ON rf.run_id=r.id'
+                ' ORDER BY r.id DESC, rf.id')
+            return [(row[0].rsplit('/', 1)[-1], row[1])
+                    for row in cur.fetchall()]
+    finally:
+        conn.close()
+
+
 # ---- extract_quarantine ----
 
 def add_quarantine(run_id, run_file_id, record_index, stage, reason, payload):

@@ -1,16 +1,16 @@
 """
-store/content.py — 内容 repo（保存方式接缝，当前 = 文件实现）。
+store/content.py — 内容 repo（保存方式接缝）。
 
-extract.json / records.json / run.json 的读写全部经过这里：
-将来换 DB / 对象存储只换本文件实现，API 与页面不动。
-写入一律原子（tmp + os.replace）；--workers 1 单写者，无并发竞争。
-路径只存相对（正斜杠），经 config.to_abs 唯一换算。
+extract.json / run.json 经 artifact 接缝（file=磁盘 / db=BLOB）；
+records：RECORDS_STORE=db 时 DB 必选（错误上抛，不降级），file 时磁盘。
+file 写入一律原子（tmp + os.replace）；--workers 1 单写者，无并发竞争。
 """
 import os
 import json
 import time
 
 from .. import config
+from . import artifact
 
 
 def _path(case_rel, name):
@@ -33,20 +33,17 @@ def _read(path):
 
 
 def get_extract(case_rel):
-    return _read(_path(case_rel, config.EXTRACT_JSON))
+    return artifact.get_json(case_rel, config.EXTRACT_JSON)
 
 
 def save_extract(case_rel, doc):
-    atomic_write_json(_path(case_rel, config.EXTRACT_JSON), doc)
+    artifact.save_json(case_rel, config.EXTRACT_JSON, doc)
 
 
 def get_records(case_rel):
     if config.RECORDS_STORE == 'db':
         from . import content_db
-        try:
-            return content_db.get_records(case_rel)
-        except Exception:
-            pass  # D1：DB 故障只读降级，回落派生快照
+        return content_db.get_records(case_rel)
     return _read(_path(case_rel, config.RECORDS_JSON))
 
 
@@ -59,11 +56,11 @@ def save_records(case_rel, doc):
 
 
 def get_run(case_rel):
-    return _read(_path(case_rel, config.RUN_JSON))
+    return artifact.get_json(case_rel, config.RUN_JSON)
 
 
 def save_run(case_rel, doc):
-    atomic_write_json(_path(case_rel, config.RUN_JSON), doc)
+    artifact.save_json(case_rel, config.RUN_JSON, doc)
 
 
 def patch_record(case_rel, file_index, index, values):

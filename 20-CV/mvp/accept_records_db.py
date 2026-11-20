@@ -1,10 +1,12 @@
 """
-mvp/accept_records_db.py — 选项 B 六项验收（design-records-db.md §6）。
+mvp/accept_records_db.py — 选项 B 六项验收（design-records-db.md §6，
+契约已按 design-artifacts-db.md 更新：自动快照退役、DB 必选不降级）。
 
 前置：CV_PLATFORM_DB 已配置（env 或 data/secrets.json，用户配置的库）。
 用法（从 20-CV）：D:/miniforge3/envs/paddle/python.exe -u mvp/accept_records_db.py
 
-D1 降级用「不可达 DSN 的临时服务」模拟库故障，全程不触碰真实库的可用性。
+本脚本验 RECORDS_STORE=db + ARTIFACT_STORE=file（产物仍磁盘）。
+库故障用「不可达 DSN 的临时服务」模拟，全程不触碰真实库的可用性。
 破坏性操作只落在合成 case（_accept_tmp）与临时批次，验完清理；
 真实 case 仅做迁移回填（id 补齐 + schema 刷新，设计内行为）。
 临时服务 8799(db)/8797(db 不可达)/8798(file)，用户的 8765 全程不动。
@@ -19,6 +21,7 @@ import socket
 import subprocess
 import importlib
 import urllib.request
+import urllib.error
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 PARENT = os.path.dirname(ROOT)
@@ -54,8 +57,14 @@ def http(port, path, body=None):
         'http://127.0.0.1:{}{}'.format(port, path),
         data=json.dumps(body).encode() if body is not None else None,
         headers={'Content-Type': 'application/json'})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return r.status, json.loads(r.read().decode())
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return r.status, json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, json.loads(e.read().decode())
+        except Exception:
+            return e.code, {}
 
 
 def wait_http(port, secs=30):
@@ -237,13 +246,13 @@ def main():
 
     print('[3/6] patch_record 语义')
     ok, rec = content.patch_record(SYN_CASE, 0, 0, {'摘要': 'ACCEPT_EDIT'})
-    snap = case_doc(SYN_CASE)['files'][0]['records'][0]
-    check('edited+original 不变+快照同步',
+    back = content_db.get_records(SYN_CASE)['files'][0]['records'][0]
+    check('edited+original 不变+DB 读回一致',
           ok and rec['review']['state'] == 'edited'
           and rec['original'] == src_real[0]['original']
           and rec['values']['摘要'] == 'ACCEPT_EDIT'
-          and snap['values']['摘要'] == 'ACCEPT_EDIT'
-          and snap['review']['state'] == 'edited')
+          and back['values']['摘要'] == 'ACCEPT_EDIT'
+          and back['review']['state'] == 'edited')
 
     print('[4/6] 跨批查询')
     hit = content_db.query_fields(field='摘要', q='ACCEPT_EDIT')
@@ -251,7 +260,7 @@ def main():
     check('field 投影命中', any(h['case'] == SYN_CASE for h in hit)
           and len(hit2) > 0, 'syn={} real={}'.format(len(hit), len(hit2)))
 
-    print('[5/6] 真链路 + D1 降级（临时服务 8799 / 8797）')
+    print('[5/6] 真链路 + 断库显式失败（临时服务 8799 / 8797）')
     pdf = os.path.join(config.INPUT_DIR,
                        '20261120211314_招行流水（已脱敏）.pdf')
     svc = start_service(8799, 'db')
@@ -259,7 +268,7 @@ def main():
     try:
         batch, st = upload(8799, pdf, '招行流水（已脱敏）.pdf')
         case = batch + '_招行流水_已脱敏_'
-        rj = case_doc(case)
+        rj = content_db.get_records(case)
         rrun = run_doc(case)
         check('db 模式真链路 previewed',
               st.get('error') is None
@@ -273,7 +282,8 @@ def main():
         check('查询 API 200', stq == 200 and jq.get('ok')
               and len(jq.get('items', [])) > 0)
         up_batch = batch
-        # D1：不可达 DSN 的独立服务模拟库故障（真实库不受影响）
+        # 断库：不可达 DSN 的独立服务（真实库不受影响）。
+        # 新契约：无快照回落 —— 运行显式 failed，旧数据读 503。
         svc_down = start_service(8797, 'db', BAD_DSN)
         batch2, st2 = upload(8797, pdf, '招行流水（已脱敏）.pdf')
         case2 = batch2 + '_招行流水_已脱敏_'
@@ -281,13 +291,12 @@ def main():
                                            config.EXTRACT_REPORT_NAME))
         ext2 = os.path.isfile(os.path.join(config.OUTPUT_DIR, case2,
                                            config.EXTRACT_JSON))
-        check('D1：引擎照常+暂存显式失败',
-              run_doc(case2)['files'][0]['state'] == 'staging_failed'
+        check('断库：引擎照常+运行显式 failed',
+              run_doc(case2)['state'] == 'failed'
               and rep2 and ext2,
-              'state={}'.format(run_doc(case2)['files'][0]['state']))
+              'state={}'.format(run_doc(case2)['state']))
         sto, jo = http(8797, '/api/runs/{}/staging'.format(up_batch))
-        check('D1：旧数据快照只读', sto == 200
-              and len(jo['files'][0]['records']) == 24)
+        check('断库：暂存读 503（无快照回落）', sto == 503)
         down_batch = batch2
     finally:
         svc.kill()

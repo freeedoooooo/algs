@@ -8,7 +8,7 @@ mvp/migrate_records_to_db.py — 旧 case 回填 DB（选项 B，幂等，design
 
 扫 output/*/records.json → 以 (batch_tag, 文件名) 自然键幂等登记
 template_version / run / source_file / run_file → content_db.save_records
-单事务写三表 + 重导快照 → run.json 回填 id。可重复跑、可中断续跑。
+单事务写三表 → run.json 回填 id。可重复跑、可中断续跑。
 源字节取 input/ 批次副本，缺失时回落 sources/ 规范副本。
 """
 import os

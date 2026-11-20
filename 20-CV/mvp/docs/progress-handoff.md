@@ -75,13 +75,44 @@
   `state` 读 **run.json**（records.json 无 state，且 D1 不写快照）；清理**先子后父**
   （run_file→run 外键无级联）。
 
-### 新待裁决：快照与降级要不要简化（用户提出，未动代码）
-- 用户质疑：D1 降级逻辑＋records.json 派生快照是否多余，不如直查 DB。
-- 已澄清事实：**对照报告不读 records**（纯 extract 层渲染，builder.py）；records 的消费方＝暂存页。
-- 权衡：降级＝核心管线不被远程 DB 绑架（建议保留）；快照＝断库旧数据可读＋
-  **人工编辑层库外副本**（records = passthrough(extract) + 人工编辑/审核状态，后者仅存 DB）＋case 目录自包含。
-  简化代价＝人工编辑单副本＋断库暂存页全 503。
-- 倾向：保留 D1 显式失败；快照降格为手动导出/备份或删。**等用户拍板再动**（设计先行）。
+### 快照/降级简化：已裁决（被产物入库方案吞并）
+- 用户质疑 D1＋records.json 快照多余 → 升级为「产物全量入库」方案
+  （[design-artifacts-db.md](design-artifacts-db.md)），四项批准：全量入库 /
+  DB 必选 D1 退役 / 自动快照退役 records 完整关系化 / **只做 MySQL**
+  （方言留给以后框架重构）。实现见 §二·续。
+
+---
+
+## 二·续、产物全量入库（design-artifacts-db.md · 已实现）
+
+### 契约（与旧 B 的差异）
+- `CV_MVP_ARTIFACT_STORE=db`（默认 file＝现状回滚态）；db 模式 config 强制
+  `RECORDS_STORE=db`。**DB 必选**：上传登记失败→503；运行写库失败→整 run failed；
+  读端点断库→503。旧 `staging_failed`/`partial`/快照只读回落全部退役。
+- 磁盘仅 scratch：case 工作目录与 input 副本都是 tempfile，报告生成后
+  `_ingest_case` 遍历入 `extract_artifact` BLOB 即 rmtree（管线/builder/cards 零改动）。
+- records.json 不再自动导出；`export_artifacts.py --out <dir>` 按需还原目录树
+  （BLOB 原字节＋records.json 经 content_db 重建），file:// 直开报告恢复。
+- `/files/`、`/srcfiles/` db 模式＝API 路由：白名单/raw 403 不变，ETag=sha256→304。
+- runs 列表/详情/报告重定向/批次戳去重 db 模式查库
+  （`catalog.list_run_cases()/list_batch_tags()`）。
+
+### 实现清单
+- `store/migrations/004_artifacts.sql`（extract_artifact：case_rel+name 唯一，
+  kind/mime/size/sha256/LONGBLOB）；`store/artifact.py`（file/db 分发＋kind/mime 推断）
+  ＋`store/artifact_db.py`（upsert/get/list/cases/delete）。
+- `store/content.py`：extract/run 经 artifact JSON；records db 读不再回落快照。
+- `store/content_db.py`：`_export_snapshot` 删除（save/patch 不再写 records.json）。
+- `app.py`：scratch＋ingest、DB 路由、上传/资料库/runs 全接线、D1 契约重写。
+- `migrate_artifacts_to_db.py`（幂等回填，records.json/input 副本不迁）；
+  `export_artifacts.py`（按需导出）。
+- 已回填配置库：46 文件 7.2MB（5 case＋sources，2026-11-20）。
+
+### 验收
+- `mvp/accept_records_db.py`（契约更新：item3 DB 读回、item5 断库 failed＋503）
+  与 `mvp/accept_artifacts_db.py`（六项：回填 sha/真链路无磁盘/查库/导出字节一致/
+  断库 503/file 回滚）。端口约定沿用 8799/8797/8798，8765 不动。
+- 结果见下次会话记录（本段写于验收运行中）。
 
 ---
 
@@ -116,10 +147,11 @@
 
 ## 五、下次上班入口
 
-1. 读 §二「新待裁决」：**快照/降级简化**——用户拍板后再动代码（设计先行）。
-   若简化：删 content_db 导出＋content.py 读回落，保留 D1 显式失败；
-   验收脚本第 5 项「旧快照只读」断言需同步改为断库 503。
+1. 产物全量入库已实现（§二·续）：确认两套验收脚本结果（accept_records_db /
+   accept_artifacts_db，幂等自清理，直接重跑即可）；浏览器验证 db 模式页面后收尾。
+   用户 8765 仍是 file 模式旧代码——**切 db 模式需用户拍板重启方式**
+   （设 `CV_MVP_ARTIFACT_STORE=db` 重启；先跑 migrate_artifacts_to_db 已回填）。
 2. 观察项：用户 8765 出现两个失败批次 `20261120220957` / `20261120221713`（原因未查，用户未问）；
    若用户提起，先查 `logs/<batch>.log`，勿动 8765 服务。
-3. item2=B 已实现＋验收 6/6 PASS＋浏览器验证，无需重做；重跑验收直接跑脚本（幂等、自清理）。
+3. item2=B 已实现＋验收 PASS，无需重做。
 4. 其余沿用 §三挂起项或 P1 校验台。
