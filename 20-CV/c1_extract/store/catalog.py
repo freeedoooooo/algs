@@ -151,7 +151,7 @@ def list_templates():
 
 
 def get_template_version(version_id=None, name=None):
-    """按 id 或模板名（取当前版本）拿三段 JSON。"""
+    """按 id / 模板名取版本；都不给则取第一个模板的当前版本（名可改，不硬编码）。"""
     conn = db.connect()
     try:
         with conn.cursor() as cur:
@@ -161,14 +161,22 @@ def get_template_version(version_id=None, name=None):
                     ' tv.mapping_json, tv.transform_json, t.name'
                     ' FROM extract_template_version tv JOIN extract_template t'
                     ' ON t.id = tv.template_id WHERE tv.id=%s', (version_id,))
-            else:
+            elif name:
                 cur.execute(
                     'SELECT tv.id, tv.template_id, tv.version, tv.schema_json,'
                     ' tv.mapping_json, tv.transform_json, t.name'
                     ' FROM extract_template_version tv JOIN extract_template t'
                     ' ON t.id = tv.template_id'
                     ' WHERE t.name=%s AND tv.version=t.current_version',
-                    (name or '原始透传',))
+                    (name,))
+            else:
+                cur.execute(
+                    'SELECT tv.id, tv.template_id, tv.version, tv.schema_json,'
+                    ' tv.mapping_json, tv.transform_json, t.name'
+                    ' FROM extract_template_version tv JOIN extract_template t'
+                    ' ON t.id = tv.template_id'
+                    ' WHERE tv.version=t.current_version'
+                    ' ORDER BY t.id LIMIT 1')
             rows = _rows(cur)
         if not rows:
             return None

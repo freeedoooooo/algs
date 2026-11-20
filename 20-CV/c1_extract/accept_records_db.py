@@ -276,7 +276,7 @@ def _main(syn_tasks, syn_fids, up):
     check('门禁重跑零变更 + schema baseline [1]',
           counts() == c0 and vers == [1],
           '{} vs {} · {}'.format(c0, counts(), vers))
-    tv = catalog.get_template_version(name='原始透传')
+    tv = catalog.get_template_version()
     real = []
     for task in catalog.list_tasks():
         doc = content_db.get_records(task['task_id'])
