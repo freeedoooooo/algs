@@ -3,7 +3,7 @@ store/catalog.py — 目录元数据 repo（MySQL）。P0 子集：
 extract_source_file / extract_template(+version) / extract_run / extract_run_file /
 extract_quarantine。业务表统一 extract_ 前缀（002 迁移）；schema_version 为迁移簿记表。
 
-只经 db.connect 拿 DB-API 连接，SQL 全部收敛在本文件；调用方负责降级
+只经 db.connect 拿 DB-API 连接，SQL 全部收敛在本文件；DB 必选，错误上抛
 （DB 故障只记 warning，提取与 Preview 文件链路不受影响）。
 JSON 列：写入 json.dumps，读出 json.loads（驱动无关，不依赖 MySQL JSON 函数）。
 """

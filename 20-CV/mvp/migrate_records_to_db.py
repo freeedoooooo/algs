@@ -9,7 +9,7 @@ mvp/migrate_records_to_db.py — 旧 case 回填 DB（选项 B，幂等，design
 扫 output/*/records.json → 以 (batch_tag, 文件名) 自然键幂等登记
 template_version / run / source_file / run_file → content_db.save_records
 单事务写三表 → run.json 回填 id。可重复跑、可中断续跑。
-源字节取 input/ 批次副本，缺失时回落 sources/ 规范副本。
+源字节取 input/ 批次副本，缺失时回落 sources/ 磁盘副本；规范副本统一入 BLOB。
 """
 import os
 import sys
@@ -29,6 +29,7 @@ db = importlib.import_module(PKG + '.store.db')
 catalog = importlib.import_module(PKG + '.store.catalog')
 content = importlib.import_module(PKG + '.store.content')
 content_db = importlib.import_module(PKG + '.store.content_db')
+_artifact = importlib.import_module(PKG + '.store.artifact')
 
 
 def _kind_of(name):
@@ -122,12 +123,10 @@ def migrate_case(conn, case_dir):
         with open(src, 'rb') as fh:
             data = fh.read()
         sha = hashlib.sha256(data).hexdigest()
-        rel = 'sources/{}_{}'.format(sha[:8], orig)
-        if not os.path.isfile(config.to_abs(rel)):
-            with open(config.to_abs(rel), 'wb') as fh:
-                fh.write(data)
+        base = '{}_{}'.format(sha[:8], orig)
+        _artifact.save('sources', base, data)
         sid, _dedup = catalog.register_source(
-            orig, _kind_of(orig), len(data), sha, rel)
+            orig, _kind_of(orig), len(data), sha, 'sources/' + base)
         rf_id = ensure_run_file(conn, run_id, sid, case_dir)
         catalog.set_run_file_state(rf_id, 'previewed')
         f['run_file_id'] = rf_id
@@ -151,7 +150,7 @@ def migrate_case(conn, case_dir):
 
 
 def main():
-    print('records 回填 → {}（RECORDS_STORE 开关不影响本脚本，直写 DB）'
+    print('records 回填 → {}（直写 DB）'
           .format(db.safe_detail(config.PLATFORM_DB_REF)))
     conn = db.connect()
     total = 0

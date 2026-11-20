@@ -1,15 +1,16 @@
 """
-store/artifact.py — 产物附件接缝（design-artifacts-db.md）。
+store/artifact.py — 产物附件接缝（design-artifacts-db.md，DB-only）。
 
-file=持久磁盘（现状，原子写）；db=extract_artifact BLOB（DB 必选，错误上抛）。
+字节事实源＝extract_artifact BLOB（MySQL 驱动在 artifact_db.py，
+将来换 MinIO/对象存储只换驱动实现，本接缝 API 不变）。
 case_rel='<case目录名>' 或 'sources'；name=case 内相对路径（正斜杠）。
 kind/mime 由 name 推断；raw/ 前缀 kind=raw（服务路由 403）。
+DB 必选：错误上抛，不降级。
 """
 import os
 import json
-import hashlib
 
-from .. import config
+from . import artifact_db
 
 _MIME = {'.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
          '.json': 'application/json', '.html': 'text/html',
@@ -31,29 +32,9 @@ def mime_of(name):
                      'application/octet-stream')
 
 
-def _db():
-    from . import artifact_db
-    return artifact_db
-
-
-def _fpath(case_rel, name):
-    base = (config.SOURCES_DIR if case_rel == 'sources'
-            else os.path.join(config.OUTPUT_DIR, case_rel))
-    return os.path.join(base, name.replace('/', os.sep))
-
-
 def save(case_rel, name, data, mime=None, kind=None):
-    mime = mime or mime_of(name)
-    kind = kind or kind_of(name)
-    if config.ARTIFACT_STORE == 'db':
-        return _db().save(case_rel, name, data, mime, kind)
-    path = _fpath(case_rel, name)
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + '.tmp'
-    with open(tmp, 'wb') as f:
-        f.write(data)
-    os.replace(tmp, path)
-    return hashlib.sha256(data).hexdigest()
+    return artifact_db.save(case_rel, name, data,
+                            mime or mime_of(name), kind or kind_of(name))
 
 
 def save_json(case_rel, name, doc):
@@ -64,15 +45,7 @@ def save_json(case_rel, name, doc):
 
 
 def get(case_rel, name):
-    if config.ARTIFACT_STORE == 'db':
-        return _db().get(case_rel, name)
-    path = _fpath(case_rel, name)
-    if not os.path.isfile(path):
-        return None
-    with open(path, 'rb') as f:
-        data = f.read()
-    return {'kind': kind_of(name), 'mime': mime_of(name), 'size': len(data),
-            'sha': hashlib.sha256(data).hexdigest(), 'data': data}
+    return artifact_db.get(case_rel, name)
 
 
 def get_json(case_rel, name):
@@ -81,47 +54,20 @@ def get_json(case_rel, name):
 
 
 def exists(case_rel, name):
-    if config.ARTIFACT_STORE == 'db':
-        return _db().exists(case_rel, name)
-    return os.path.isfile(_fpath(case_rel, name))
+    return artifact_db.exists(case_rel, name)
 
 
 def list(case_rel):
-    if config.ARTIFACT_STORE == 'db':
-        return _db().list(case_rel)
-    base = (config.SOURCES_DIR if case_rel == 'sources'
-            else os.path.join(config.OUTPUT_DIR, case_rel))
-    out = []
-    for root, _, files in os.walk(base):
-        for fn in files:
-            if fn.endswith('.tmp'):
-                continue
-            rel = os.path.relpath(os.path.join(root, fn), base)
-            rel = rel.replace(os.sep, '/')
-            out.append({'name': rel, 'kind': kind_of(rel),
-                        'mime': mime_of(rel)})
-    return sorted(out, key=lambda x: x['name'])
+    return artifact_db.list(case_rel)
 
 
 def cases():
-    if config.ARTIFACT_STORE == 'db':
-        return [c for c in _db().cases() if c != 'sources']
-    if not os.path.isdir(config.OUTPUT_DIR):
-        return []
-    return sorted(d for d in os.listdir(config.OUTPUT_DIR)
-                  if os.path.isdir(os.path.join(config.OUTPUT_DIR, d)))
+    return [c for c in artifact_db.cases() if c != 'sources']
 
 
 def delete(case_rel, name):
-    if config.ARTIFACT_STORE == 'db':
-        return _db().delete(case_rel, name)
-    path = _fpath(case_rel, name)
-    if os.path.isfile(path):
-        os.remove(path)
+    return artifact_db.delete(case_rel, name)
 
 
 def delete_case(case_rel):
-    if config.ARTIFACT_STORE == 'db':
-        return _db().delete_case(case_rel)
-    import shutil
-    shutil.rmtree(_fpath(case_rel, ''), ignore_errors=True)
+    return artifact_db.delete_case(case_rel)

@@ -1,15 +1,15 @@
 """
-mvp/accept_records_db.py — 选项 B 六项验收（design-records-db.md §6，
-契约已按 design-artifacts-db.md 更新：自动快照退役、DB 必选不降级）。
+mvp/accept_records_db.py — records 入库六项验收（DB-only 契约，
+design-records-db.md + design-artifacts-db.md：DB 唯一事实源，无 file 模式）。
 
 前置：CV_PLATFORM_DB 已配置（env 或 data/secrets.json，用户配置的库）。
 用法（从 20-CV）：D:/miniforge3/envs/paddle/python.exe -u mvp/accept_records_db.py
 
-本脚本验 RECORDS_STORE=db + ARTIFACT_STORE=file（产物仍磁盘）。
-库故障用「不可达 DSN 的临时服务」模拟，全程不触碰真实库的可用性。
-破坏性操作只落在合成 case（_accept_tmp）与临时批次，验完清理；
-真实 case 仅做迁移回填（id 补齐 + schema 刷新，设计内行为）。
-临时服务 8799(db)/8797(db 不可达)/8798(file)，用户的 8765 全程不动。
+1 回填幂等+真实 case 投影往返一致 · 2 重跑级联替换 · 3 patch_record ·
+4 跨批查询 · 5 真链路（临时服务 8799）· 6 断库显式 503（临时服务 8797）。
+磁盘已清空：上传字节取自 sources BLOB；断库用不可达 DSN 的临时服务模拟，
+全程不触碰真实库的可用性。破坏性操作只落合成 case（_accept_tmp）与临时批次，
+验完清理；真实 case 只读。用户的 8765 全程不动。
 """
 import os
 import sys
@@ -18,6 +18,7 @@ import time
 import base64
 import shutil
 import socket
+import tempfile
 import subprocess
 import importlib
 import urllib.request
@@ -29,13 +30,13 @@ PKG = os.path.basename(ROOT)
 for _p in (PARENT, ROOT):
     if _p not in sys.path:
         sys.path.insert(0, _p)
-os.environ['CV_MVP_RECORDS_STORE'] = 'db'
 os.environ.setdefault('PYTHONUTF8', '1')
 config = importlib.import_module(PKG + '.config')
 db = importlib.import_module(PKG + '.store.db')
 catalog = importlib.import_module(PKG + '.store.catalog')
 content = importlib.import_module(PKG + '.store.content')
 content_db = importlib.import_module(PKG + '.store.content_db')
+artifact_db = importlib.import_module(PKG + '.store.artifact_db')
 mig = importlib.import_module(PKG + '.migrate_records_to_db')
 
 # 本地无人监听的端口：模拟库不可达，凭据为假值，永不落日志
@@ -105,9 +106,8 @@ def counts():
         conn.close()
 
 
-def start_service(port, store, dsn=None):
-    env = dict(os.environ, CV_MVP_RECORDS_STORE=store, CV_MVP_PORT=str(port),
-               CV_MVP_WARMUP='0')
+def start_service(port, dsn=None):
+    env = dict(os.environ, CV_MVP_PORT=str(port), CV_MVP_WARMUP='0')
     if dsn:
         env['CV_PLATFORM_DB'] = dsn
     else:
@@ -139,18 +139,6 @@ def upload(port, src_path, name):
     raise RuntimeError('upload 超时')
 
 
-def case_doc(case):
-    with open(os.path.join(config.OUTPUT_DIR, case, config.RECORDS_JSON),
-              encoding='utf-8') as f:
-        return json.load(f)
-
-
-def run_doc(case):
-    with open(os.path.join(config.OUTPUT_DIR, case, config.RUN_JSON),
-              encoding='utf-8') as f:
-        return json.load(f)
-
-
 def _delete_batch_rows(cur, batch):
     # run_file→run 无级联：先子后父（field/lineage 随 record 级联）
     cur.execute(
@@ -167,23 +155,26 @@ def _delete_batch_rows(cur, batch):
 
 
 def cleanup_batch(batch):
-    for d in os.listdir(config.OUTPUT_DIR):
-        if d.startswith(batch + '_'):
-            shutil.rmtree(os.path.join(config.OUTPUT_DIR, d), ignore_errors=True)
-    for d in os.listdir(config.INPUT_DIR):
-        if d.startswith(batch + '_'):
-            os.remove(os.path.join(config.INPUT_DIR, d))
     conn = db.connect()
     try:
         with conn.cursor() as cur:
+            cur.execute(
+                'SELECT rf.output_rel_dir FROM extract_run_file rf'
+                ' JOIN extract_run r ON r.id=rf.run_id'
+                ' WHERE r.batch_tag=%s', (batch,))
+            cases = [r[0].rsplit('/', 1)[-1] for r in cur.fetchall()]
             _delete_batch_rows(cur, batch)
         conn.commit()
     finally:
         conn.close()
+    for c in cases:
+        artifact_db.delete_case(c)
+        shutil.rmtree(os.path.join(config.OUTPUT_DIR, c), ignore_errors=True)
 
 
 def main():
-    print('== 选项 B 验收 · {} =='.format(db.safe_detail(config.PLATFORM_DB_REF)))
+    print('== records 入库验收 · {} =='.format(
+        db.safe_detail(config.PLATFORM_DB_REF)))
     try:
         if not wait_db():
             print('配置库不可达，检查 CV_PLATFORM_DB（env / data/secrets.json）')
@@ -191,48 +182,62 @@ def main():
     except LookupError as e:
         print(str(e))
         return 1
-    conn = db.connect()  # 触发 001-003 迁移
+    conn = db.connect()  # 触发 001-004 迁移
 
-    print('[1/6] 迁移幂等 + 逐字段一致')
-    real = [d for d in sorted(os.listdir(config.OUTPUT_DIR))
-            if os.path.isfile(os.path.join(config.OUTPUT_DIR, d,
-                                           config.RECORDS_JSON))
-            and d[:14].isdigit()]
-    pre = {d: case_doc(d) for d in real}
+    print('[1/6] 回填幂等 + 真实 case 投影往返一致')
+    c0 = counts()
+    mig.main()
     mig.main()
     c1 = counts()
-    mig.main()
-    c2 = counts()
-    check('两遍行数不变', c1 == c2, '{} vs {}'.format(c1, c2))
-    for d in real:
-        got = content_db.get_records(d)
-        want = pre[d]
-        ok = got is not None and len(got['files']) == len(want['files'])
+    check('回填两遍行数不变', c0 == c1, '{} vs {}'.format(c0, c1))
+    real = []
+    for case, _tag in catalog.list_run_cases():
+        if case not in [r[0] for r in real]:
+            doc = content_db.get_records(case)
+            if doc is not None:
+                real.append((case, doc))
+    tv = mig.ensure_template_version(conn, '原始透传', 1)
+    run_id = mig.ensure_run(conn, SYN_TAG, 'preview', tv, {})
+    syn_shas, src_real = [], None
+    for case, doc in real:
+        remap = json.loads(json.dumps(doc))
+        for i, f in enumerate(remap['files']):
+            fake = '{:064x}'.format(i + 1)
+            syn_shas.append(fake)
+            sid, _ = catalog.register_source(
+                f['name'], 'pdf', 1, fake, 'sources/accept.pdf')
+            f['source_file_id'] = sid
+            f['run_file_id'] = mig.ensure_run_file(conn, run_id, sid, SYN_CASE)
+        remap['run_id'] = run_id
+        content_db.save_records(SYN_CASE, remap)
+        got = content_db.get_records(SYN_CASE)
+        ok = got is not None and len(got['files']) == len(doc['files'])
         if ok:
-            for gf, wf in zip(got['files'], want['files']):
-                ok = ok and gf['name'] == wf['name'] \
-                    and gf['records'] == wf['records']
-        check('逐字段一致 ' + d, ok)
+            for gf, wf in zip(got['files'], doc['files']):
+                ok = ok and gf['records'] == wf['records']
+        check('投影往返一致 ' + case, ok,
+              '{} 条记录'.format(sum(len(f['records']) for f in doc['files'])))
+        if src_real is None:
+            for f in doc['files']:
+                if f['records']:
+                    src_real = f['records'][:2]
+                    break
+    if src_real is None:
+        print('  FAIL  无可用真实记录，后续项无法执行')
+        return 1
 
     print('[2/6] 重跑级联替换（合成 case）')
-    src_real = pre[real[0]]['files'][0]['records'][:2]
-    syn_doc = {'schema': 'c1-extract-records/1', 'run_id': None,
+    syn_doc = {'schema': 'c1-extract-records/1', 'run_id': run_id,
                'template': {'name': '原始透传', 'version': 1},
                'files': [{'run_file_id': None, 'source_file_id': None,
                           'name': SYN_TAG + '_accept.pdf',
                           'records': json.loads(json.dumps(src_real))}]}
-    dummy = os.path.join(config.INPUT_DIR, SYN_TAG + '_accept.pdf')
-    with open(dummy, 'wb') as f:
-        f.write(b'%PDF-1.4 accept dummy')
-    tv = mig.ensure_template_version(conn, '原始透传', 1)
-    run_id = mig.ensure_run(conn, SYN_TAG, 'preview', tv, {})
     sid, _ = catalog.register_source('accept.pdf', 'pdf', 22,
                                      '0' * 64, 'sources/00000000_accept.pdf')
+    syn_shas.append('0' * 64)
     rf = mig.ensure_run_file(conn, run_id, sid, SYN_CASE)
-    syn_doc['run_id'] = run_id
     syn_doc['files'][0]['run_file_id'] = rf
     syn_doc['files'][0]['source_file_id'] = sid
-    os.makedirs(os.path.join(config.OUTPUT_DIR, SYN_CASE), exist_ok=True)
     content_db.save_records(SYN_CASE, syn_doc)
     n2 = counts()
     one = json.loads(json.dumps(syn_doc))
@@ -260,74 +265,74 @@ def main():
     check('field 投影命中', any(h['case'] == SYN_CASE for h in hit)
           and len(hit2) > 0, 'syn={} real={}'.format(len(hit), len(hit2)))
 
-    print('[5/6] 真链路 + 断库显式失败（临时服务 8799 / 8797）')
-    pdf = os.path.join(config.INPUT_DIR,
-                       '20261120211314_招行流水（已脱敏）.pdf')
-    svc = start_service(8799, 'db')
-    svc_down = None
+    print('[5/6] 真链路（临时服务 8799，上传字节取自 sources BLOB）')
+    src = artifact_db.get('sources', '83ef00a8_招行流水（已脱敏）.pdf')
+    if src is None:
+        print('  FAIL  sources BLOB 缺招行流水 PDF，无法真链路验收')
+        return 1
+    fd, pdf = tempfile.mkstemp(suffix='.pdf', prefix='cv_accept_')
+    with os.fdopen(fd, 'wb') as f:
+        f.write(src['data'])
+    svc = start_service(8799)
+    up_batch = None
     try:
         batch, st = upload(8799, pdf, '招行流水（已脱敏）.pdf')
+        up_batch = batch
         case = batch + '_招行流水_已脱敏_'
+        time.sleep(1)  # finally 清理 scratch 在 running=False 之后
         rj = content_db.get_records(case)
-        rrun = run_doc(case)
-        check('db 模式真链路 previewed',
+        rrun = content.get_run(case)
+        check('真链路 previewed',
               st.get('error') is None
-              and rrun['files'][0]['state'] == 'previewed'
+              and rrun and rrun['files'][0]['state'] == 'previewed'
               and rj['files'][0]['run_file_id'] is not None,
               'state={} rf_id={} err={}'.format(
                   rrun['files'][0]['state'], rj['files'][0]['run_file_id'],
                   st.get('error')))
+        check('无持久 output/input 副本',
+              not os.path.exists(os.path.join(config.OUTPUT_DIR, case))
+              and not any(n.startswith(batch + '_')
+                          for n in os.listdir(config.INPUT_DIR)))
+        stq, jq = http(8799, '/api/runs/{}/staging'.format(batch))
+        check('暂存 API 24 条', stq == 200
+              and len(jq['files'][0]['records']) == 24)
         stq, jq = http(8799, '/api/staging/query?q=' +
                        urllib.request.quote('报销'))
         check('查询 API 200', stq == 200 and jq.get('ok')
               and len(jq.get('items', [])) > 0)
-        up_batch = batch
-        # 断库：不可达 DSN 的独立服务（真实库不受影响）。
-        # 新契约：无快照回落 —— 运行显式 failed，旧数据读 503。
-        svc_down = start_service(8797, 'db', BAD_DSN)
-        batch2, st2 = upload(8797, pdf, '招行流水（已脱敏）.pdf')
-        case2 = batch2 + '_招行流水_已脱敏_'
-        rep2 = os.path.isfile(os.path.join(config.OUTPUT_DIR, case2,
-                                           config.EXTRACT_REPORT_NAME))
-        ext2 = os.path.isfile(os.path.join(config.OUTPUT_DIR, case2,
-                                           config.EXTRACT_JSON))
-        check('断库：引擎照常+运行显式 failed',
-              run_doc(case2)['state'] == 'failed'
-              and rep2 and ext2,
-              'state={}'.format(run_doc(case2)['state']))
-        sto, jo = http(8797, '/api/runs/{}/staging'.format(up_batch))
-        check('断库：暂存读 503（无快照回落）', sto == 503)
-        down_batch = batch2
     finally:
         svc.kill()
-        if svc_down:
-            svc_down.kill()
+        os.remove(pdf)
 
-    print('[6/6] 回滚 file 模式（临时服务 8798，DB 不可达）')
-    svc2 = start_service(8798, 'file', BAD_DSN)
+    print('[6/6] 断库显式 503（临时服务 8797，不可达 DSN）')
+    svc_down = start_service(8797, BAD_DSN)
     try:
-        batch3, st3 = upload(8798, pdf, '招行流水（已脱敏）.pdf')
-        case3 = batch3 + '_招行流水_已脱敏_'
-        check('file 模式无 DB 照常', st3.get('error') is None
-              and run_doc(case3)['files'][0]['state'] == 'previewed'
-              and os.path.isfile(os.path.join(config.OUTPUT_DIR, case3,
-                                              config.RECORDS_JSON)))
-        rollback_batch = batch3
+        data = base64.b64encode(src['data']).decode()
+        st, j = http(8797, '/api/upload',
+                     {'files': [{'name': '招行流水（已脱敏）.pdf',
+                                 'data': data}], 'mode': 'preview'})
+        check('断库上传 503（不建 run）', st == 503, 'st={}'.format(st))
+        st, _j = http(8797, '/api/runs')
+        check('断库 runs 503', st == 503)
+        st, _j = http(8797, '/api/runs/{}/staging'.format(up_batch))
+        check('断库暂存读 503（无快照回落）', st == 503)
+        st, _j = http(8797, '/api/templates')
+        check('断库模板 503（不降级）', st == 503)
     finally:
-        svc2.kill()
+        svc_down.kill()
 
     print('清理临时产物')
-    for b in (up_batch, down_batch, rollback_batch):
-        cleanup_batch(b)
-    shutil.rmtree(os.path.join(config.OUTPUT_DIR, SYN_CASE), ignore_errors=True)
-    if os.path.isfile(dummy):
-        os.remove(dummy)
+    if up_batch:
+        cleanup_batch(up_batch)
     conn = db.connect()
     try:
         with conn.cursor() as cur:
             _delete_batch_rows(cur, SYN_TAG)
-            cur.execute('DELETE FROM extract_source_file WHERE sha256=%s',
-                        ('0' * 64,))
+            if syn_shas:
+                ph = ','.join(['%s'] * len(syn_shas))
+                cur.execute(
+                    'DELETE FROM extract_source_file WHERE sha256 IN ({})'
+                    .format(ph), syn_shas)
         conn.commit()
     finally:
         conn.close()

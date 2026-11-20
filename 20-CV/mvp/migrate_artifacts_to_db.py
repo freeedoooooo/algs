@@ -45,7 +45,7 @@ def migrate_tree(case_rel, base, skip=()):
             continue
         with open(p, 'rb') as f:
             data = f.read()
-        # 直写 DB（不受 ARTIFACT_STORE 开关影响）；kind/mime 与接缝同规则
+        # 直写 DB；kind/mime 与接缝同规则
         artifact_db.save(case_rel, rel, data,
                          seam.mime_of(rel), seam.kind_of(rel))
         back = artifact_db.get(case_rel, rel)
@@ -57,7 +57,7 @@ def migrate_tree(case_rel, base, skip=()):
 
 
 def main():
-    print('产物回填 → {}（直写 DB，不受 ARTIFACT_STORE 开关影响）'
+    print('产物回填 → {}（直写 DB）'
           .format(db.safe_detail(config.PLATFORM_DB_REF)))
     total, total_bytes = 0, 0
     for case_dir in sorted(os.listdir(config.OUTPUT_DIR)):

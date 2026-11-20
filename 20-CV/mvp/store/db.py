@@ -23,7 +23,7 @@ _READY = set()          # 已完成迁移的 (ref, database)
 
 
 def resolve_conn(ref):
-    """conn_ref → DSN。未配置抛 LookupError（调用方降级或报错）。"""
+    """conn_ref → DSN。未配置抛 LookupError（调用方显式报错）。"""
     v = os.getenv(ref)
     if not v:
         p = os.path.join(config.DATA_DIR, 'secrets.json')

@@ -85,15 +85,10 @@ EXTRACT_REPORT_NAME = '对照报告.html'
 # ---- 平台目录库凭据引用名（解析顺序 env → data/secrets.json，见 store/db.py）----
 PLATFORM_DB_REF = 'CV_PLATFORM_DB'
 
-# ---- records 保存方式接缝（design-records-db.md）：file=文件事实源（现状）；
-# db=DB 唯一事实源（自动快照已退役，export_artifacts.py 按需导出）----
-RECORDS_STORE = os.getenv('CV_MVP_RECORDS_STORE', 'file')
-
-# ---- 产物附件接缝（design-artifacts-db.md）：file=持久磁盘（现状）；
-# db=extract_artifact BLOB 唯一事实源，磁盘仅 scratch（DB 必选，D1 退役）----
-ARTIFACT_STORE = os.getenv('CV_MVP_ARTIFACT_STORE', 'file')
-if ARTIFACT_STORE == 'db':
-    RECORDS_STORE = 'db'  # 全量入库：records 同样以 DB 为事实源
+# 存储契约（design-artifacts-db.md）：DB 是唯一事实源——目录/记录/血缘在关系表，
+# 产物字节在 extract_artifact BLOB；磁盘仅运行期 scratch（跑完即清）。
+# file 模式已删除（初期调试过渡态，2026-11-20 用户裁决）；审计/file:// 用
+# export_artifacts.py 按需导出。DB 不可用＝服务显式失败（503），不降级。
 
 for _d in (INPUT_DIR, OUTPUT_DIR, LOG_DIR, SOURCES_DIR, DATA_DIR):
     os.makedirs(_d, exist_ok=True)

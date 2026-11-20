@@ -8,10 +8,9 @@ mvp/check_env.py — 独立部署自检（只读，不加载任何模型权重�
     1) requirements.txt 里的包能否 import、装的是哪个版本
     2) input/ output/ sources/ data/ 是否存在且可写
     3) PaddleX 官方模型缓存是否就绪（没有→首次处理会联网下载）
-    4) 平台库（MySQL）连通性 —— 可选项，连不上只 WARN（降级隔离，提取照常）
+    4) 平台库（MySQL）连通性 —— 必选项（DB 唯一事实源），连不上即 FAIL
 
-有任何缺包时退出码为 1，方便在 CI / Docker build 里当门禁用。
-平台库不通 / 未装 PyMySQL 不影响退出码（P0 降级设计：文件链路独立可用）。
+有任何缺包 / 目录缺失 / 平台库不通时退出码为 1，方便在 CI / Docker build 里当门禁用。
 """
 import os
 import sys
@@ -43,6 +42,7 @@ PACKAGES = [
     ('Pillow', 'PIL', '图像处理'),
     ('pdfplumber', 'pdfplumber', '文本层表格 + bbox'),
     ('PyMuPDF', 'pymupdf', 'PDF 首页渲染'),
+    ('PyMySQL', 'pymysql', '平台库驱动（DB 唯一事实源）'),
 ]
 
 
@@ -98,29 +98,22 @@ def check_models():
 
 
 def check_platform_db():
-    """平台库（MySQL）连通性：可选项，失败不致命（降级隔离，提取照常）。
+    """平台库（MySQL）连通性：必选项（DB 唯一事实源，不通＝服务不可用）。
 
     只读探针（SELECT VERSION()，不触发迁移、不写库）；只回显脱敏 host/库名，
-    凭据永不打印。未装 PyMySQL / 未配引用 / 连不上 → WARN + 降级说明。
+    凭据永不打印。未配引用 / 连不上 → FAIL。
     """
     ref = config.PLATFORM_DB_REF
-    try:
-        import pymysql
-    except Exception:
-        print('  WARN    未装 PyMySQL：平台库不可用，降级运行（文件链路照常）')
-        print('           启用平台库：pip install -r requirements.txt'
-              '（含 PyMySQL + cryptography）')
-        return
     db = importlib.import_module(PKG + '.store.db')
     try:
         p = db._parts(db.resolve_conn(ref))
     except Exception as e:
-        print('  WARN    凭据引用 {} 未配置：{}'.format(ref, e))
-        print('           设环境变量 {} 或 data/secrets.json；未配置则降级运行'
-              .format(ref))
-        return
+        print('  FAIL    凭据引用 {} 未配置：{}'.format(ref, e))
+        print('           设环境变量 {} 或 data/secrets.json'.format(ref))
+        return False
     detail = '{}:{}/{}'.format(p['host'], p['port'], p['database'])
     try:
+        import pymysql
         conn = pymysql.connect(
             host=p['host'], port=p['port'], user=p['user'],
             password=p['password'], database=p['database'],
@@ -132,9 +125,11 @@ def check_platform_db():
         finally:
             conn.close()
         print('  OK      MySQL {} · {}'.format(ver, detail))
+        return True
     except Exception as e:
-        print('  WARN    平台库连接失败（{}）：{}'.format(detail, type(e).__name__))
-        print('           提取与预览降级照常；资料目录 / 登记暂不可用')
+        print('  FAIL    平台库连接失败（{}）：{}'.format(detail, type(e).__name__))
+        print('           DB 是唯一事实源：上传/运行/读端点都将显式失败')
+        return False
 
 
 def main():
@@ -145,12 +140,13 @@ def main():
     bad_dirs = check_dirs()
     print('\n[3/4] 模型缓存')
     check_models()
-    print('\n[4/4] 平台库（可选 · 降级隔离）')
-    check_platform_db()
-    print('\n结论：', '依赖齐全，可启动' if not (missing or bad_dirs)
-          else '缺 {} 个包 / {} 个目录，执行 pip install -r requirements.txt'.format(
-              len(missing), len(bad_dirs)))
-    return 1 if (missing or bad_dirs) else 0
+    print('\n[4/4] 平台库（必选 · DB 唯一事实源）')
+    db_ok = check_platform_db()
+    ok = not (missing or bad_dirs) and db_ok
+    print('\n结论：', '依赖齐全、平台库可达，可启动' if ok
+          else '缺 {} 个包 / {} 个目录 / 平台库{}'.format(
+              len(missing), len(bad_dirs), '可达' if db_ok else '不可达'))
+    return 0 if ok else 1
 
 
 if __name__ == '__main__':
