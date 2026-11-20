@@ -3,7 +3,7 @@ input/
 output/
 logs/
 sources/
-data/
+# data/
 
 # Python / 虚拟环境 / 本地环境变量
 __pycache__/
@@ -14,4 +14,4 @@ venv/
 
 # 注意：若 input/ output/ 之前已被 git add 跟踪过，.gitignore 对它们不生效，
 # 需在仓库根执行一次（只清索引、不删本地文件）：
-#   git rm -r --cached 20-CV/mvp/input 20-CV/mvp/output
+# git rm -r --cached 20-CV/mvp/input 20-CV/mvp/output
