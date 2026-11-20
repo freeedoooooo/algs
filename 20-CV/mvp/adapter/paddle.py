@@ -2,7 +2,7 @@
 adapter/paddle.py — PPStructureV3 路线适配（全仓唯一认识官方 parsing 结构的模块）。
 
 derive()：官方 overall_ocr_res / parsing_res_list → 派生投影（原 viewmodel 逻辑，
-迁移后在提取期一次算好，渲染期不再现算）。page()：内部页 → cvdoc 页。
+迁移后在提取期一次算好，渲染期不再现算）。page()：内部页 → c1-extract 页。
 """
 from .. import config
 from . import base

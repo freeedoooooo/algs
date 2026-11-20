@@ -1,7 +1,7 @@
 # 详细设计：文档 ETL 数据链路（Sources → Extract → Adapter → Staging → Review → Load）
 
 > 状态：**详细设计稿 v3（待批准）**，2026-11-20。本文件是唯一设计源。
-> v3变更：数据分层 + 自有标准 cvdoc + 适配层（防腐层）；页面数据全部预生成落盘；raw 与前端隔离；
+> v3变更：数据分层 + 自有标准 c1-extract + 适配层（防腐层）；页面数据全部预生成落盘；raw 与前端隔离；
 > records.json 为记录事实源（取消 DB staging_record 表）；MySQL 只管目录元数据。
 > 前置准备已完成：requirements 锁 PyMySQL==1.2.4 + cryptography==50.0.2；测试库凭据入 data/secrets.json（git 排除）；
 > 10.0.6.161:3306 连通验证通过（MySQL 8.0.36，测试 schema co_dev）。业务代码未动。
@@ -23,8 +23,8 @@ flowchart TD
     S["源文件库 Sources<br/>临时上传 / 从库选择 / 上次重跑<br/>sha256 去重"] --> E["资料提取 Extract<br/>现 mvp pipeline，算法零改动"]
     E --> RAW["L0 原始层 raw/*.json<br/>模型原样返回，永不服务前端"]
     RAW --> AD["适配层 Adapter（防腐层）<br/>唯一认识引擎结构的模块"]
-    AD --> EX["L1 标准层 extract.json<br/>自有标准 cvdoc，派生视图预生成"]
-    EX --> MT["字段映射 Mapping + 数据转换 Transform<br/>只消费 cvdoc"]
+    AD --> EX["L1 标准层 extract.json<br/>自有标准 c1-extract，派生视图预生成"]
+    EX --> MT["字段映射 Mapping + 数据转换 Transform<br/>只消费 c1-extract"]
     T["模板 Template（版本化）<br/>Schema + Mapping + Transform<br/>不含入库信息"] --> MT
     MT --> ST["L2 记录层 records.json<br/>暂存记录 + 血缘 + 校验状态<br/>事实源，PATCH 原子重写"]
     ST --> RV["数据校验 Review<br/>确认 / 修改 / 拒绝<br/>单格坐标回溯，双向联动"]
@@ -36,7 +36,7 @@ flowchart TD
     MT -.->|失败| Q["异常隔离区 Quarantine<br/>修复后从失败阶段重放"]
     RV -.->|拒绝| Q
     L -.->|失败| Q
-    EX --> UI["产品页面 / 报告<br/>只读预生成的 cvdoc 文件"]
+    EX --> UI["产品页面 / 报告<br/>只读预生成的 c1-extract 文件"]
     ST --> UI
 ```
 
@@ -53,10 +53,10 @@ flowchart TD
 | 提取 | Extract | 资料提取 | 现 mvp 能力 |
 | 原始层 | Raw | 原始返回 | 引擎原样输出，逐引擎分文件 |
 | 适配层 | Adapter（Anti-Corruption Layer） | 适配层 / 防腐层 | 引擎结构 → 自有标准，唯一翻译点 |
-| 自有标准 | cvdoc（Canonical Document Model） | 文档标准格式 | 页面与下游唯一消费契约 |
+| 自有标准 | c1-extract（Canonical Document Model） | 文档标准格式 | 页面与下游唯一消费契约 |
 | 模板 | Template | 模板 | 按文档类型复用，含版本 |
 | 字段定义 | Schema | 字段定义 | 目标记录有哪些字段、什么类型 |
-| 字段映射 | Mapping | 字段映射（原「数据收集」） | 从 cvdoc 哪张表 / 哪个块 / 哪列取值 |
+| 字段映射 | Mapping | 字段映射（原「数据收集」） | 从 c1-extract 哪张表 / 哪个块 / 哪列取值 |
 | 转换规则 | Transform | 数据转换 | 值级清洗 |
 | 暂存数据 | Staging Records | 暂存数据 | records.json，Mapping + Transform 产物 |
 | 人工校验 | Review | 数据校验 | 对照原图核对 / 修改暂存数据 |
@@ -72,7 +72,7 @@ Kettle（任意步骤 Preview）、dbt（model 与 materialization 分离）、R
 
 ---
 
-## 2. 数据分层与自有标准 cvdoc（v3 核心）
+## 2. 数据分层与自有标准 c1-extract（v3 核心）
 
 ### 2.1 四层模型与批次内文件布局
 
@@ -82,12 +82,12 @@ output/<批次戳_名>/
 │   ├── paddle.json           #   ppstruct 路线：官方 JSON 原样（现 result.json 的 parsing 等）
 │   ├── pdfplumber.json       #   文本层路线：find_tables/words 原始快照
 │   └── plain.json            #   CSV/TXT 路线：直读原始行
-├── extract.json              # L1 标准层：cvdoc 自有标准（adapter 产物，派生视图全部预生成）
+├── extract.json              # L1 标准层：c1-extract 自有标准（adapter 产物，派生视图全部预生成）
 ├── records.json              # L2 记录层：暂存记录 + 血缘 + 校验状态（事实源）
 ├── pages/                    # 页图（现有）：p1.png… / rectified.png
 ├── boxes.png                 # 现有带框图
-├── table_*.csv               # 现有表格 CSV（改从 cvdoc 生成）
-├── index.html                # 自包含报告（内联 cvdoc 数据，不再内联官方结构）
+├── table_*.csv               # 现有表格 CSV（改从 c1-extract 生成）
+├── index.html                # 自包含报告（内联 c1-extract 数据，不再内联官方结构）
 └── run.json                  # 本批次运行快照（参数/模板版本/状态时间线，自包含留档）
 ```
 
@@ -102,13 +102,13 @@ output/<批次戳_名>/
 4. **批次自包含加强**：raw + extract + records + 页图 + 报告同目录，整目录拷走即可离线复核对账。
 5. 重跑 = 新批次目录，旧批次不动（现有约定）。
 
-### 2.2 cvdoc 标准草案（extract.json）
+### 2.2 c1-extract 标准草案（extract.json）
 
 简洁、引擎无关、带版本号。坐标一律 `[x0,y0,x1,y1]` 像素（页图空间），页码 1 起。
 
 ```json
 {
-  "schema": "cvdoc/1",
+  "schema": "c1-extract/1",
   "file": {"name": "103_real_xxx.pdf", "kind": "pdf", "page_count": 3},
   "params": { "…提取参数快照…" },
   "pages": [{
@@ -139,7 +139,7 @@ output/<批次戳_名>/
 
 ```json
 {
-  "schema": "cvdoc-records/1",
+  "schema": "c1-extract-records/1",
   "run_id": 12, "template": {"name": "银行流水", "version": 3},
   "files": [{
     "run_file_id": 34, "source_file_id": 5, "name": "103_real_xxx.pdf",
@@ -165,14 +165,14 @@ output/<批次戳_名>/
 
 ```
 mvp/adapter/
-├── base.py       # cvdoc schema 常量 + 适配接口：adapt(raw, route_meta) -> cvdoc
-├── paddle.py     # PPStructureV3 官方 JSON → cvdoc（全仓唯一认识 Paddle 结构的模块）
-├── pdfplumber.py # 文本层路线原始快照 → cvdoc
-└── plain.py      # CSV/TXT → cvdoc
+├── base.py       # c1-extract schema 常量 + 适配接口：adapt(raw, route_meta) -> c1-extract
+├── paddle.py     # PPStructureV3 官方 JSON → c1-extract（全仓唯一认识 Paddle 结构的模块）
+├── pdfplumber.py # 文本层路线原始快照 → c1-extract
+└── plain.py      # CSV/TXT → c1-extract
 ```
 
 - 换引擎（MinerU / 其他平台）= 新增一个 adapter 实现 + 引擎路线接入，**collect / transform / 报告 / 页面零改动**；
-- adapter 是纯函数（raw dict → cvdoc dict），可单测；派生视图（原 hydrate 逻辑）在此预生成；
+- adapter 是纯函数（raw dict → c1-extract dict），可单测；派生视图（原 hydrate 逻辑）在此预生成；
 - `viewmodel.py` 迁移完成后**删除，不留 shim**（彻底清理约定）。
 
 ---
@@ -281,7 +281,7 @@ sequenceDiagram
     A->>P: run_batch(paths, params, emit)
     P->>F: raw/*.json 原样落盘
     A->>AD: adapt(raw)
-    AD->>F: extract.json (cvdoc, 派生视图预生成)
+    AD->>F: extract.json (c1-extract, 派生视图预生成)
     A->>A: collect + transform (只读 extract.json)
     A->>F: records.json (values/original/lineage/review)
     A->>S: state=previewed
@@ -304,7 +304,7 @@ sequenceDiagram
 | 事实源 | raw = 引擎事实源；extract = 标准投影；records = 记录事实源；DB = 目录事实源。四层各司其职，不双写 |
 | 校验边界 | Load 只放行 confirmed / edited；pending / rejected 不入业务库 |
 | 错误策略 | 部分成功合法；失败进隔离区；从失败阶段重放 |
-| 阶段解耦 | collect/transform/报告/页面只认 cvdoc，引擎结构不出 adapter |
+| 阶段解耦 | collect/transform/报告/页面只认 c1-extract，引擎结构不出 adapter |
 | 模板版本 | Run 锁定版本；历史可复现 |
 | 内容 vs 状态 | 内容数据全部预生成文件；运行时状态（进度/日志）天然动态，走 API，不属于「临时内容」 |
 
@@ -519,7 +519,7 @@ CREATE TABLE cv_lineage (
 | 数据 | 事实源 | 派生 / 快照 |
 |---|---|---|
 | 引擎原始返回 | output/<批次>/raw/*.json | 无（原样留档） |
-| 标准提取结果 | output/<批次>/extract.json（cvdoc） | 报告 HTML 内联副本、CSV |
+| 标准提取结果 | output/<批次>/extract.json（c1-extract） | 报告 HTML 内联副本、CSV |
 | 暂存记录 + 校验状态 | **output/<批次>/records.json** | 无（DB 不存记录内容） |
 | 源文件内容 | sources/ 规范副本 | input/<批次> 工作副本 |
 | 目录元数据（库/模板/目的地/Run/隔离/回执） | MySQL | run.json 批次快照 |
@@ -558,14 +558,14 @@ mvp/
 ├── collect.py        # Mapping：extract.json → 原始记录集
 ├── transform.py      # Transform：规则链 + 类型化 → records.json
 ├── loader.py         # Load：upsert + cv_lineage + 回执
-└── extract_report/   # 报告：消费迁移到 cvdoc（builder/cards 改读 extract.json/records.json）
+└── extract_report/   # 报告：消费迁移到 c1-extract（builder/cards 改读 extract.json/records.json）
 ```
 
 pipeline/ 算法零改动；产物落盘路径调整（result.json → raw/ 分路线文件）。
 
 ### 6.2 Mapping 引擎（collect.py）
 
-输入 extract.json（cvdoc）+ mapping_json；输出原始记录集 + warnings。选择器：
+输入 extract.json（c1-extract）+ mapping_json；输出原始记录集 + warnings。选择器：
 
 ```json
 {"field": "交易金额", "table": {"index": 0}, "column": {"name": "金额"}}
@@ -581,7 +581,7 @@ pipeline/ 算法零改动；产物落盘路径调整（result.json → raw/ 分�
 - 选择器落空 → 字段全列空 + warning，不静默；全落空 → 该文件进隔离区。
 - passthrough：每表每行 → 记录，键 = 表头原文（空表头 col_<n>），lineage 逐格。
 - 跨页拼接表 cells 逐格带 page，血缘页码天然正确。
-- 纯函数可单测；**只认 cvdoc，不认识任何引擎字段**。
+- 纯函数可单测；**只认 c1-extract，不认识任何引擎字段**。
 
 ### 6.3 Transform 引擎（transform.py）
 
@@ -663,7 +663,7 @@ flowchart LR
 - **页面内容数据全部来自预生成文件**（extract.json / records.json / 页图），经 content repo 读取；
   运行时状态（进度/日志）走 API 轮询。
 - 缩略图内嵌文件名行（40×40）；lightbox 全屏；叠加框默认隐藏 hover 显示点击钉住；悬浮控件不占布局。
-- JSON 视图展示 **cvdoc 自有标准**；raw 不可访问（403）。
+- JSON 视图展示 **c1-extract 自有标准**；raw 不可访问（403）。
 - 新页面资源放 extract_report/assets；纯前端改动刷新即生效。
 
 ### 7.1 资料提取 Extract（现上传页增强）
@@ -825,7 +825,7 @@ GET  /api/runs/{id}                        → {state, progress, files:[{name,st
 POST /api/runs/{id}/load {destination_id, load_mapping_id} → {state:"loading"}
 POST /api/runs/{id}/rerun                  → {run_id}
 
-GET  /api/runs/{id}/extract?file=          → extract.json 内容（cvdoc，经 content repo）
+GET  /api/runs/{id}/extract?file=          → extract.json 内容（c1-extract，经 content repo）
 GET  /api/runs/{id}/staging?review_state=  → records.json 记录（含 lineage/review）
 PATCH /api/staging/{run_file_id}/{index} {values} → {ok} | 422 {field_errors}
 POST /api/runs/{id}/review {records:[{run_file_id,index}], action} → {updated_n}
@@ -847,13 +847,13 @@ POST /api/quarantine/{id}/ignore           → {ok}
 ## 9. 与现有 mvp 的映射与风险隔离
 
 **分层边界**：DB 只接编排层与目录；pipeline 算法零改动（产物落盘路径调整：result.json → raw/ 分路线）；
-adapter 取代 viewmodel（迁移后删除，不留 shim）；collect/transform/报告/页面只认 cvdoc。
+adapter 取代 viewmodel（迁移后删除，不留 shim）；collect/transform/报告/页面只认 c1-extract。
 
 | 模块 | 改动 | 对旧功能风险 |
 |---|---|---|
 | pipeline/ 提取算法 | 零改动；落盘路径小改（raw/） | 低（回归基线验证） |
 | viewmodel.py | 派生逻辑迁入 adapter 后**删除** | 中（迁移期报告双消费点要同步） |
-| extract_report/ | **消费迁移**：builder/cards 改读 extract.json/records.json；JSON tab 展示 cvdoc | 中（v3 不再是零改动，P0 专项回归报告） |
+| extract_report/ | **消费迁移**：builder/cards 改读 extract.json/records.json；JSON tab 展示 c1-extract | 中（v3 不再是零改动，P0 专项回归报告） |
 | config.py | DATA_ROOT + to_abs/to_rel + conn_ref 常量 | 低 |
 | app.py | 编排（登记/Run/adapter 调度）+ 新路由 + 静态白名单 | 唯一编排风险面，降级隔离 |
 | 前端 | 新 tab/新页面；旧上传页增强 | 低 |
@@ -870,7 +870,7 @@ adapter 取代 viewmodel（迁移后删除，不留 shim）；collect/transform/
 
 | 期 | 内容 | 验收标准 |
 |---|---|---|
-| **P0 最小闭环 + 数据分层** | cvdoc 标准 + adapter + raw 分离 + 白名单 + 报告消费迁移；源文件库 + Run + Preview（passthrough）；资料/提取/运行页首批 | ① 上传→提取→看暂存数据三步闭环；② 页面/报告只见 cvdoc，raw 403；③ raw/extract/records 三层分文件可逐层比对；④ 哈希去重；⑤ 停 MySQL 提取+Preview 照常；⑥ 现有 case 回归（103 25×8 / 107 5×8 / 108 23×7 / 21 双表 / CSV）+ 报告交互回归零变化；⑦ import app ≤0.5s |
+| **P0 最小闭环 + 数据分层** | c1-extract 标准 + adapter + raw 分离 + 白名单 + 报告消费迁移；源文件库 + Run + Preview（passthrough）；资料/提取/运行页首批 | ① 上传→提取→看暂存数据三步闭环；② 页面/报告只见 c1-extract，raw 403；③ raw/extract/records 三层分文件可逐层比对；④ 哈希去重；⑤ 停 MySQL 提取+Preview 照常；⑥ 现有 case 回归（103 25×8 / 107 5×8 / 108 23×7 / 21 双表 / CSV）+ 报告交互回归零变化；⑦ import app ≤0.5s |
 | **P1 模板与校验** | collect 选择器 + transform 引擎 + 模板页（样例拾取）+ 校验台（双向联动）+ 隔离区前两阶段 | ① 银行流水模板端到端（拾取配映射+日期/金额清洗+改值确认）；② 点字段亮格/点格亮字段跨页正确；③ 改值留 original、records.json 原子写；④ 失败不阻塞；⑤ 规则 unittest 全 op |
 | **P2 入库链路** | loader + cv_lineage（1:N）+ 幂等回执 + 目的地管理 + 隔离区重放 + 发起入库 | ① 一键入库业务行+血缘同事务；② 重入幂等；③ 库内字段跳回原图格子；④ partial→重放→loaded；⑤ 凭据不落日志 |
 | **P3 加厚** | 规则扩充、block 选择器+段落锚点、文档 tab 正向定位、漏提覆盖视图、从库读列、双层 PDF 导出（先裁决矫正图边界）、调度/看板/快捷键 | 按需逐项立项 |
@@ -889,7 +889,7 @@ adapter 取代 viewmodel（迁移后删除，不留 shim）；collect/transform/
 | 21 一页双表 | text_layer | 表 6×6 + 表 3×4（lines 策略，未误并） | 双表 | 多表守卫正确 |
 | CSV | plain | 3 记录 · 血缘 space=none 无坐标 | — | 正确 |
 
-**验收逐项**：① 上传→提取→看暂存三步闭环 ✅（浏览器实测）；② 页面/报告只见 cvdoc、raw 403 ✅（全 case 泄漏扫描 rec_texts/parsing_res_list/PPStructure/pdfplumber/dt_polys/cell_box_list 均 0）；③ raw/extract/records 三层分文件 ✅；④ sha256 去重 ✅（代码就绪，DB 通后生效）；⑤ 停 MySQL 提取+Preview 照常 ✅（全程无 DB 跑通；sources 503、templates 降级透传、runs 靠 run.json 独立）；⑥ case 回归 + 报告交互（tab/原图矫正图切换/叠加框默认隐藏点击显隐 0→58→0/单格/CSV 下载）零变化 ✅；⑦ import app **0.864s**（fastapi 裸导入基线 0.725s，本助手新增仅 ~0.14s、无重顶层导入；稿 ≤0.5s 低于本机 fastapi 基线，属环境基线非回归）。
+**验收逐项**：① 上传→提取→看暂存三步闭环 ✅（浏览器实测）；② 页面/报告只见 c1-extract、raw 403 ✅（全 case 泄漏扫描 rec_texts/parsing_res_list/PPStructure/pdfplumber/dt_polys/cell_box_list 均 0）；③ raw/extract/records 三层分文件 ✅；④ sha256 去重 ✅（代码就绪，DB 通后生效）；⑤ 停 MySQL 提取+Preview 照常 ✅（全程无 DB 跑通；sources 503、templates 降级透传、runs 靠 run.json 独立）；⑥ case 回归 + 报告交互（tab/原图矫正图切换/叠加框默认隐藏点击显隐 0→58→0/单格/CSV 下载）零变化 ✅；⑦ import app **0.864s**（fastapi 裸导入基线 0.725s，本助手新增仅 ~0.14s、无重顶层导入；稿 ≤0.5s 低于本机 fastapi 基线，属环境基线非回归）。
 
 **环境备注**：paddle 环境 torch 残装致 shm.dll 损坏——`import paddle` 后再 `import paddleocr` 触发 WinError 127；check_env 按 paddle→paddleocr 顺序故报缺 paddleocr/paddlex（误报）。app 实际经 engines 直接 `from paddleocr import …`（不预导入 paddle）模型路线正常（107/108 实测通过）。彻底修复需用户清理残装 torch。
 
@@ -912,10 +912,10 @@ adapter 取代 viewmodel（迁移后删除，不留 shim）；collect/transform/
 |---|---|---|---|---|---|
 | 0 | 装 PyMySQL + 完整认证验证（co_dev 权限） | requirements 已就绪 | S | 用户安装 | SELECT VERSION / SHOW GRANTS |
 | 1 | DATA_ROOT + to_abs/to_rel + conn_ref 常量 | config.py | S | — | 默认路径逐字不变 |
-| 2 | cvdoc schema 定义 + 适配接口 | adapter/base.py | M | — | schema 文档化、版本字段 |
+| 2 | c1-extract schema 定义 + 适配接口 | adapter/base.py | M | — | schema 文档化、版本字段 |
 | 3 | paddle/pdfplumber/plain 三适配器（含派生视图预生成，迁 viewmodel 逻辑） | adapter/*.py | L | 2 | 103/107/108/CSV extract.json 与现报告数据逐项一致 |
 | 4 | raw 分路线落盘（result.json → raw/） | pipeline 落盘点/app.py | S | 3 | raw 原样、批次自包含 |
-| 5 | 报告消费迁移：builder/cards 读 extract.json；JSON tab=cvdoc；删 viewmodel.py | extract_report/ | M | 3,4 | 报告全交互回归（tab/单格/lightbox/跨页/CSV 下载） |
+| 5 | 报告消费迁移：builder/cards 读 extract.json；JSON tab=c1-extract；删 viewmodel.py | extract_report/ | M | 3,4 | 报告全交互回归（tab/单格/lightbox/跨页/CSV 下载） |
 | 6 | 静态白名单（raw 403） | app.py | S | 4 | raw 请求 403，白名单文件正常 |
 | 7 | 薄驱动 + PyMySQL + conn_ref 解析 + 迁移执行器 | store/db.py | M | 1 | 连 co_dev；迁移幂等 |
 | 8 | 001_init.sql（10 表）+ 种子透传模板 | store/migrations/ | M | 7 | 表/索引/外键齐全 |
@@ -974,10 +974,10 @@ adapter 取代 viewmodel（迁移后删除，不留 shim）；collect/transform/
 3. 凭据暂不加密；conn_ref 引用制（测试库凭据已入 data/secrets.json）。
 4. 平台目录库 = MySQL（推翻早稿 SQLite）；与业务库同实例分 schema；DB 只管目录元数据。
 5. **数据分层 + 自有标准（v3，2026-11-20 用户五条诉求）**：页面数据全部预生成落盘；raw/extract/records
-   分阶段独立保存；页面响应只用自有标准 cvdoc；adapter 防腐层隔离引擎结构（换引擎只换适配）；
+   分阶段独立保存；页面响应只用自有标准 c1-extract；adapter 防腐层隔离引擎结构（换引擎只换适配）；
    raw 永不服务前端（防方案抄袭）。records.json 为记录事实源，取消 DB staging_record 表。
 6. sources/ 规范副本 = 方案 A（库副本与批次副本分离，清旧批次不伤库）。**（2026-11-20 P0 落地）**
 7. 导航 = 顶部横向短名 tab（紧凑、不压校验页图宽）。**（2026-11-20 P0 落地：提取|资料|模板|校验|目的地|运行，模板/校验/目的地为 P1/P2 占位）**
-8. 自有标准命名 **cvdoc**（可改产品名）；阶段文件名 raw/ + extract.json + records.json（可改）。**（2026-11-20 P0 落地：cvdoc/1 + cvdoc-records/1 + cvdoc-run/1）**
+8. 自有标准命名 **c1-extract**（可改产品名）；阶段文件名 raw/ + extract.json + records.json（可改）。**（2026-11-20 P0 落地：c1-extract/1 + c1-extract-records/1 + c1-extract-run/1）**
 
 > 原「待确认」6/7/8 已按默认裁决并随 P0 实现（用户 2026-11-20「就按照你的判断来」授权）。

@@ -16,7 +16,7 @@
         <mxCell id="tpl" value="模板 Template（版本化）&#10;&#10;Schema 字段定义&#10;Mapping 字段映射&#10;Transform 转换规则&#10;&#10;不含任何入库信息" style="rounded=1;whiteSpace=wrap;align=left;spacingLeft=10;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
           <mxGeometry x="20" y="270" width="220" height="140" as="geometry"/>
         </mxCell>
-        <mxCell id="n4" value="adapter 适配层 → extract.json（cvdoc 自有标准）&#10;字段映射 Mapping + 数据转换 Transform（只消费 cvdoc）&#10;无配置 = passthrough 整表透传" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+        <mxCell id="n4" value="adapter 适配层 → extract.json（c1-extract 自有标准）&#10;字段映射 Mapping + 数据转换 Transform（只消费 c1-extract）&#10;无配置 = passthrough 整表透传" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
           <mxGeometry x="320" y="290" width="260" height="80" as="geometry"/>
         </mxCell>
         <mxCell id="n5" value="L2 records.json 暂存数据（事实源）&#10;values + original + lineage + review&#10;PATCH 原子重写，页面只读预生成文件" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">

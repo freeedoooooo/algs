@@ -1,5 +1,5 @@
 """
-collect.py — 字段映射 Mapping：cvdoc → 暂存记录集（只认 cvdoc，不认识引擎字段）。
+collect.py — 字段映射 Mapping：c1-extract → 暂存记录集（只认 c1-extract，不认识引擎字段）。
 
 P0：passthrough（无配置整表透传）——每表每行一条记录，键 = 表头原文
 （空表头 col_<n>，重名加下标），lineage 逐格（1:N 锚点数组形态）。
@@ -38,7 +38,7 @@ def _anchor(scope, t, ti, cells, r, c, value, page_default):
 
 
 def passthrough(doc):
-    """cvdoc 信封 → 记录列表（values/original/lineage/review）。"""
+    """c1-extract 信封 → 记录列表（values/original/lineage/review）。"""
     records = []
     stitched = doc.get('stitched_tables') or []
     merged = {(part.get('page'), part.get('tbl'))

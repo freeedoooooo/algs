@@ -12,7 +12,7 @@ page 参数填 all 时 PDF 逐页全量提取，否则只处理指定页（默�
 
 落盘边界（数据分层，算法零改动）：
   raw/*.json   引擎原样返回按路线分文件（paddle/pdfplumber/plain），永不服务前端；
-  extract.json adapter 产出的 cvdoc 自有标准（派生视图提取期一次算好）。
+  extract.json adapter 产出的 c1-extract 自有标准（派生视图提取期一次算好）。
 内部 rec 的 parsing / 投影中间态不出 adapter；跨页续表由 structure.stitch_tables
 合并成 stitched_tables（每格带 page/space，供报告页感知回溯）。
 """
@@ -170,7 +170,7 @@ def _extract_page_pdf(src_path, case_abs, pno, npages, params, dpi,
 def extract_one(src_path, case_abs, case_rel, params=None, emit=None):
     """
     处理一个文件，写产物到 case_abs（raw/ + extract.json + 页图 + CSV），
-    返回 cvdoc 信封（含 pages / stitched_tables，自有标准，无引擎结构）。
+    返回 c1-extract 信封（含 pages / stitched_tables，自有标准，无引擎结构）。
 
     params 是本批调试参数；emit 是可选的日志回调 (level, stage, msg)，
     由 app 注入 —— 提取层只认回调，不 import Web 层。
@@ -241,7 +241,7 @@ def extract_one(src_path, case_abs, case_rel, params=None, emit=None):
                 t['csv_file'] = 'p{}_{}'.format(pg['page'], t['csv_file'])
 
     # 派生视图提取期一次算好（ppstruct 从官方 parsing；文本层/CSV 投影已存储）。
-    # 带框图 / 跨页拼接都消费这份内部投影；落盘时 adapter 翻译成 cvdoc。
+    # 带框图 / 跨页拼接都消费这份内部投影；落盘时 adapter 翻译成 c1-extract。
     adapter.hydrate(file_rec)
 
     # 每页带框 PNG（投影已在 hydrate 后就绪）
@@ -287,7 +287,7 @@ def extract_one(src_path, case_abs, case_rel, params=None, emit=None):
                 .format(t['csv_file'], t['n_rows'], t['n_cols'],
                         t['source_pages']))
 
-    # 落盘 = 数据分层：raw/ 引擎原样（按路线分文件）+ extract.json（cvdoc）。
+    # 落盘 = 数据分层：raw/ 引擎原样（按路线分文件）+ extract.json（c1-extract）。
     # 紧凑序列化（报告 JSON tab 渲染时再美化），避免 indent 把数值数组撑大。
     _write_raw(file_rec, case_abs)
     doc = adapter.adapt(file_rec)

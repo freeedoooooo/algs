@@ -1,4 +1,6 @@
-/* extract_report/assets/staging.css — 数据预览：记录表 + 源图回溯框双向血缘侧栏 */
+/* extract_report/assets/staging.css — 数据预览：记录表 + 源图回溯框双向血缘侧栏。
+   右侧舞台忠实复刻对照报告（report.css 舞台规则原样拷贝）：默认零框、悬停/点击揭示、
+   hitCell 点图命中任意记录、窗口式翻页、原图/矫正图切换、叠加框开关、全屏浮层。 */
 .pagebody.wide{max-width:1500px}
 .filetabs{display:flex;align-items:center;gap:4px;margin-bottom:10px;
   overflow-x:auto;padding-bottom:2px}
@@ -16,14 +18,11 @@
 .stgmain tbody tr{cursor:pointer}
 .stgmain tbody tr.sel{background:#e7f0ff}
 .stgmain tbody tr.sel:hover{background:#dbe8ff}
-.stgmain tbody td.hv{background:#e3f7ee!important}
-.stgmain tbody td.pin{background:#fff0d9!important;outline:2px solid #d8610a;
-  outline-offset:-2px}
 .idx{color:#8a94a6;font-variant-numeric:tabular-nums}
 
-/* 右侧血缘回溯：源文件图 + 单元格回溯框（复刻对照报告视觉） */
+/* 右侧血缘侧栏容器（吸顶 + 限高），内部舞台用报告同款 .stage */
 .lineage{flex:none;width:560px;max-width:46vw;max-height:calc(100vh - 210px);
-  display:flex;flex-direction:column;position:sticky;top:12px;overflow:hidden}
+  display:flex;flex-direction:column;position:sticky;top:12px;overflow:auto}
 .lineage[hidden]{display:none}
 .lhead{display:flex;align-items:center;gap:8px;padding:9px 12px;
   border-bottom:1px solid #e2e7f0;font-size:13px;color:#25324a}
@@ -32,52 +31,115 @@
 .dclose{font:inherit;font-size:12px;cursor:pointer;border:1px solid #d8e0ed;
   background:#fff;color:#5a6a85;border-radius:6px;padding:2px 9px}
 .dclose:hover{border-color:#2563eb;color:#2563eb}
-.lstage{flex:1 1 auto;min-height:220px;overflow:auto;padding:10px;
-  background:#eceff3;position:relative}
-.imgwrap{position:relative;line-height:0;margin-inline:auto;width:100%}
-.lstage img{display:block;width:100%;height:auto;cursor:zoom-in}
-.lstage svg{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
-.cellbox{fill:rgba(15,157,110,.10);stroke:#0f9d6e;stroke-width:2;
-  vector-effect:non-scaling-stroke;pointer-events:all;cursor:crosshair}
-.cellbox.all{opacity:.55}
-.cellbox.hv{opacity:1;fill:rgba(15,157,110,.30);stroke-width:3}
-.cellbox.pin{opacity:1;fill:rgba(216,97,10,.26);stroke:#d8610a;stroke-width:3}
-/* 悬浮控件叠在图上，不占布局 */
-.viewbar{position:absolute;top:6px;left:6px;z-index:4;display:flex;gap:4px}
-.viewbtn,.pbtn,.zoombtn{font:inherit;font-size:11px;line-height:1.5;cursor:pointer;
-  border:1px solid rgba(255,255,255,.35);background:rgba(15,23,38,.6);color:#fff;
-  border-radius:6px;padding:2px 9px;transition:.15s}
-.viewbtn:hover,.pbtn:hover,.zoombtn:hover{background:rgba(15,23,38,.82)}
-.viewbtn.on,.pbtn.on{background:rgba(37,99,235,.85);border-color:rgba(255,255,255,.5)}
-.zoombtn{position:absolute;top:6px;right:6px;z-index:4;padding:2px 8px;font-size:13px}
-.lpager{position:absolute;bottom:6px;left:50%;transform:translateX(-50%);z-index:4;
-  display:flex;gap:4px;flex-wrap:wrap;justify-content:center;max-width:92%}
-.lpager[hidden]{display:none}
+.lineage .stage{flex:1 1 auto;min-height:220px;overflow:visible;border-right:0}
 .lhint{padding:6px 12px;font-size:12px;color:#8a6d3b;background:#fcf8e3;
   border-top:1px solid #f0e6c8}
 .lhint[hidden]{display:none}
 
-/* 放大浮层 */
-.stglb{position:fixed;inset:0;z-index:1000;background:rgba(10,15,25,.92);
+/* ===== 以下舞台规则原样拷贝自 report.css（视觉/交互与对照报告一致） ===== */
+.stage{position:relative;background:#eceff3;padding:10px;
+  border-right:1px solid #e2e7f0}
+.imgwrap{position:relative;line-height:0;margin-inline:auto;
+  max-width:min(100%,calc((100vh - 180px) * var(--ar,1.5)))}
+.stage img{display:block;width:100%;height:auto;cursor:zoom-in}
+.stage svg{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
+.box{fill:rgba(37,99,235,.06);stroke:#2563eb;stroke-width:2;
+  vector-effect:non-scaling-stroke}
+.box.low{fill:rgba(222,92,40,.10);stroke:#de5c28}
+.box.hl{fill:rgba(37,99,235,.30);stroke-width:4}
+.box.pin{fill:rgba(216,97,10,.26);stroke:#d8610a;stroke-width:4}
+.viewbar{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin:0 0 10px}
+.viewbtn,.allcells,.boxtoggle{font:inherit;font-size:12px;cursor:pointer;
+  padding:4px 11px;border-radius:7px;border:1px solid #d8e0ed;
+  background:#fff;color:#1f2738}
+.viewbtn.on,.allcells.on,.boxtoggle.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.stage.noboxes .box:not(.hl):not(.pin){display:none}
+.imgwrap .boxtoggle{position:absolute;top:6px;right:6px;z-index:3;
+  padding:3px 9px;font-size:11px;line-height:1.4;border-radius:6px;
+  background:rgba(15,23,38,.55);color:#fff;border:1px solid rgba(255,255,255,.35);
+  backdrop-filter:blur(2px)}
+.imgwrap .boxtoggle:hover{background:rgba(15,23,38,.78)}
+.imgwrap .boxtoggle.on{background:rgba(37,99,235,.8);border-color:rgba(255,255,255,.5)}
+.stage .viewbar{position:absolute;top:16px;left:16px;z-index:4;gap:4px;margin:0}
+.stage .viewbar .viewbtn{padding:3px 9px;font-size:11px;line-height:1.4;border-radius:6px;
+  background:rgba(15,23,38,.55);color:#fff;border:1px solid rgba(255,255,255,.35);
+  backdrop-filter:blur(2px)}
+.stage .viewbar .viewbtn:hover{background:rgba(15,23,38,.78)}
+.stage .viewbar .viewbtn.on{background:rgba(37,99,235,.8);border-color:rgba(255,255,255,.5)}
+.lb-content .boxtoggle{display:none}
+#cursor-hint{position:fixed;z-index:70;pointer-events:none;white-space:pre-line;
+  background:rgba(15,23,38,.85);color:#fff;font-size:11px;padding:3px 8px;
+  border-radius:5px;opacity:0;transition:opacity .12s;line-height:1.6}
+#cursor-hint.on{opacity:1}
+#trace-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:80;
+  background:rgba(15,23,38,.92);color:#fff;font-size:13px;padding:8px 14px;
+  border-radius:6px;pointer-events:none;opacity:0;transition:opacity .18s;max-width:80vw}
+#trace-toast.on{opacity:1}
+.view[hidden]{display:none}
+.cellsvg{display:block}
+.cellbox{display:none;fill:rgba(15,157,110,.10);stroke:#0f9d6e;stroke-width:3;
+  vector-effect:non-scaling-stroke}
+.cellbox.off{display:none!important}
+.cellbox.hv{display:block;fill:rgba(15,157,110,.30);stroke-width:5}
+.cellbox.pin{display:block;fill:rgba(216,97,10,.26);stroke:#d8610a;stroke-width:5}
+.cellbox.all{display:block;opacity:.32}
+.cellbox.all.hv,.cellbox.all.pin{opacity:1}
+.cellbox.hv,.cellbox.pin,.cellbox.all{pointer-events:all;cursor:crosshair}
+td.cell,th.cell{cursor:crosshair}
+td.cell:hover,th.cell:hover,td.cell.hv,th.cell.hv{background:#e3f7ee!important}
+td.cell.pin,th.cell.pin{background:#fff0d9!important;
+  outline:2px solid #d8610a;outline-offset:-2px}
+/* 窗口式翻页胶囊：悬浮叠在源图底缘，alignPagers 实测锚定（拷贝自 report.css） */
+.stage .pager{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);z-index:7;
+  display:flex;align-items:center;gap:2px;padding:3px 6px;border-radius:999px;
+  background:rgba(15,23,38,.62);border:1px solid rgba(255,255,255,.28);
+  backdrop-filter:blur(3px);box-shadow:0 2px 10px rgba(8,12,22,.35);
+  transition:left .15s ease,bottom .15s ease}
+.stage .pager[hidden]{display:none}
+.pg-nums{display:flex;align-items:center;gap:2px}
+.pg-btn,.pg-num{font:inherit;font-size:11px;line-height:1;cursor:pointer;
+  width:20px;height:20px;min-width:0;padding:0;border-radius:50%;border:0;
+  display:flex;align-items:center;justify-content:center;
+  background:none;color:#e8ecf4;font-variant-numeric:tabular-nums;
+  transition:background .12s ease}
+.pg-btn{font-size:13px;color:#c6cede}
+.pg-btn:hover:not(:disabled),.pg-num:hover{background:rgba(255,255,255,.18)}
+.pg-btn:disabled{opacity:.35;cursor:default}
+.pg-num.on{background:rgba(37,99,235,.95);color:#fff;font-weight:600}
+.pg-gap{width:12px;text-align:center;color:#9aa4b8;font-size:10px;user-select:none}
+.pg-count{display:flex;align-items:center;gap:3px;margin-left:4px;
+  color:#c6cede;font-size:10px;font-variant-numeric:tabular-nums}
+.pg-count i{font-style:normal;opacity:.7}
+.pg-count b{font-weight:600;color:#e8ecf4}
+.pg-jump{width:30px;height:18px;padding:0 2px;border-radius:4px;text-align:center;
+  border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.12);
+  color:#fff;font-size:10px;font-family:inherit;outline:none}
+.pg-jump:focus{border-color:#7ea6f5;background:rgba(255,255,255,.22)}
+/* 全屏浮层（拷贝自 report.css lightbox） */
+.lightbox{position:fixed;inset:0;z-index:9999;background:rgba(18,22,30,.95);
   display:flex;flex-direction:column}
-.stglb[hidden]{display:none}
-.lbbar{display:flex;align-items:center;gap:10px;padding:8px 14px;color:#e6edf7;
-  font-size:13px;background:rgba(15,23,38,.9)}
-.lbbar .spacer{flex:1}
-.lbhint{color:#9fb0c8;font-size:11px}
-.lbclose{font:inherit;font-size:12px;cursor:pointer;border:1px solid rgba(255,255,255,.35);
-  background:rgba(255,255,255,.08);color:#fff;border-radius:6px;padding:3px 11px}
-.lbclose:hover{background:rgba(255,255,255,.2)}
-.lbstage{flex:1;overflow:hidden;position:relative;display:flex;align-items:center;
-  justify-content:center;cursor:grab}
-.lbstage:active{cursor:grabbing}
-.lbstage .imgwrap{width:auto;transform-origin:center center}
-.lbstage img{display:block;max-height:88vh;max-width:92vw;width:auto;height:auto}
-.lbstage svg{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
-.lbstage .cellbox{pointer-events:all;cursor:crosshair}
+.lightbox[hidden]{display:none}
+.lb-bar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;
+  padding:10px 14px;background:#1d2330;color:#e8ecf4;font-size:12px}
+.lb-bar button,.lb-bar a{font:inherit;font-size:12px;cursor:pointer;padding:5px 12px;
+  border-radius:7px;border:1px solid #46506a;background:#2a3245;color:#e8ecf4;
+  text-decoration:none}
+.lb-bar button:hover,.lb-bar a:hover{background:#3a4560}
+.lb-title{font-size:13px;font-weight:500;margin-right:6px;max-width:34vw;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lb-scale{min-width:54px;text-align:center}
+.lb-stage{flex:1;min-height:0;overflow:hidden;position:relative;cursor:grab;
+  display:flex;align-items:center;justify-content:center}
+.lb-stage.dragging{cursor:grabbing}
+.lb-content{position:relative;line-height:0;flex:none;transform-origin:center center}
+.lb-content img{display:block;max-width:none;height:auto;user-select:none}
+.lb-content svg{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
+.lb-content .cellbox,.lb-content .box{pointer-events:all;cursor:crosshair}
+.lb-noboxes .lb-content svg{display:none!important}
+.lb-hint{padding:8px 14px;background:#1d2330;color:#9aa6bd;font-size:12px;text-align:center}
 
 @media(max-width:1000px){
   .stgwrap{flex-direction:column}
   .lineage{width:100%;max-width:none;position:static;max-height:none}
-  .lstage{max-height:60vh}
+  .lineage .stage{max-height:60vh}
 }

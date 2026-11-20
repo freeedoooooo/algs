@@ -383,7 +383,7 @@ def _save_run_snapshot(run_ctx, state, content=None, error=None):
     """run.json 批次快照：每个 case 目录各留一份（自包含，DB 无关）。"""
     content = content or _load('store.content')
     doc = {
-        'schema': 'cvdoc-run/1',
+        'schema': 'c1-extract-run/1',
         'batch_tag': run_ctx['batch'], 'mode': run_ctx['mode'],
         'template': run_ctx['template'], 'run_id': run_ctx['run_id'],
         'params': STATE.get('params') or {},

@@ -55,9 +55,7 @@ function fileRow(f,batch){
   if(f.case){
     links='<a class="linkbtn" target="_blank" href="/staging?batch='+encodeURIComponent(batch)+
       '&file='+encodeURIComponent(f.case)+'">预览数据</a>'+
-      '<a class="linkbtn" target="_blank" href="'+fileUrl(f.case,'对照报告.html')+'">对照报告</a>'+
-      '<a class="linkbtn" target="_blank" href="'+fileUrl(f.case,'extract.json')+'">extract</a>'+
-      '<a class="linkbtn" target="_blank" href="'+fileUrl(f.case,'records.json')+'">records</a>';
+      '<a class="linkbtn" target="_blank" href="'+fileUrl(f.case,'对照报告.html')+'">对照报告</a>';
   }
   return '<tr>'+
     '<td><span class="nm" title="'+escHtml(f.name)+'">'+escHtml(shortName(f.name))+'</span></td>'+

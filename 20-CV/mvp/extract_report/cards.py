@@ -3,11 +3,11 @@ extract_report/cards.py — 卡片渲染的薄层：准备数据 + 选模板。
 
 HTML 结构全部在 templates/*.html（Jinja2，autoescape 默认开启），
 样式在 assets/report.css，交互在 assets/report.js。本文件只做：
-  · 从 cvdoc 页 / 信封里挑出渲染所需的数据（坐标 rect、行、表格、文档块）
+  · 从 c1-extract 页 / 信封里挑出渲染所需的数据（坐标 rect、行、表格、文档块）
   · 生成自包含 data URI（CSV / Markdown 下载）
   · 调 render() 产出 HTML 片段（Markup，供上层模板安全内嵌）
 
-消费契约 = adapter 产出的 cvdoc（extract.json）：页面与报告只见自有标准，
+消费契约 = adapter 产出的 c1-extract（extract.json）：页面与报告只见自有标准，
 引擎结构不出适配层（raw/ 前端 403）。
 """
 import io
@@ -431,7 +431,7 @@ def md_pane(rec, card_no, md_name):
 
 def json_section(rec, href=None, label='extract.json', title='完整 JSON',
                  opened=True):
-    # 展示 cvdoc 落盘形态（自有标准），渲染时美化。
+    # 展示 c1-extract 落盘形态（自有标准），渲染时美化。
     # href 给出时带下载链接（单页=完整信封，与下载一致）；多页页卡片只展示本页切片。
     text = json.dumps(rec, ensure_ascii=False, indent=2)
     return render('json_panel.html', opened=opened, label=label, title=title,

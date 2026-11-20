@@ -28,7 +28,7 @@
     <span id="filelinks"></span>
     <a class="btn ghost mini" id="runlink" href="/runs">返回记录</a>
   </div>
-  <div class="banner info">只读预览 · 提取出的记录（records.json 暂存事实源）。编辑 / 确认 / 拒绝在校验页 P1 开放。</div>
+  <div class="banner info">只读预览 · 提取出的记录（暂存事实源）。编辑 / 确认 / 拒绝在校验页 P1 开放。</div>
   <div class="banner err" id="err" hidden></div>
   <div class="filetabs" id="filetabs" hidden></div>
   <div class="stgwrap">
@@ -45,33 +45,38 @@
         <span class="lsub" id="lsub"></span>
         <button type="button" class="dclose" id="lclose">收起</button>
       </div>
-      <div class="lstage" id="lstage">
-        <div class="imgwrap" id="imgwrap">
-          <img id="limg" alt="源文件图" title="单击回溯框：定位左侧记录行 / 单元格&#10;单击空白处：放大图片">
-          <svg id="lsvg" preserveAspectRatio="none"></svg>
-          <span class="viewbar" id="viewbar"></span>
-          <button type="button" class="zoombtn" id="zoombtn" title="放大图片">⤢</button>
-          <span class="lpager" id="lpager" hidden></span>
+      <div class="stage" id="lstage">
+        <div class="pager" id="lpager" data-pages="" hidden>
+          <button type="button" class="pg-btn" data-pg="first" title="第一页">«</button>
+          <button type="button" class="pg-btn" data-pg="prev" title="上一页">‹</button>
+          <span class="pg-nums"></span>
+          <button type="button" class="pg-btn" data-pg="next" title="下一页">›</button>
+          <button type="button" class="pg-btn" data-pg="last" title="最后一页">»</button>
+          <span class="pg-count"><input class="pg-jump" type="text" inputmode="numeric"
+            value="1" title="输入页码，回车跳转"><i>/</i><b id="pgtotal">1</b></span>
         </div>
+        <div class="viewbar" id="viewbar"></div>
+        <div class="views" id="views"></div>
         <div class="lhint" id="lhint" hidden></div>
       </div>
     </aside>
   </div>
   <div class="msg" id="summary" style="margin-top:10px"></div>
 </div>
-<div class="stglb" id="stglb" hidden>
-  <div class="lbbar">
-    <span id="lbtitle">源文件图</span>
-    <span class="spacer"></span>
-    <span class="lbhint">滚轮缩放 · 拖拽平移 · 单击回溯框定位记录 · Esc 关闭</span>
-    <button type="button" class="lbclose" id="lbclose">关闭 ✕</button>
+<div class="lightbox" id="lightbox" hidden>
+  <div class="lb-bar">
+    <span class="lb-title" id="lbTitle">图片查看</span>
+    <button type="button" data-lb="out">− 缩小</button>
+    <span class="lb-scale" id="lbScale">100%</span>
+    <button type="button" data-lb="in">＋ 放大</button>
+    <button type="button" data-lb="fit">适应窗口</button>
+    <button type="button" data-lb="one">1:1 原始像素</button>
+    <button type="button" data-lb="boxes" id="lbBoxes">显示叠加框</button>
+    <a id="lbOpen" href="#" target="_blank">新窗口打开原图</a>
+    <button type="button" data-lb="close">关闭 (Esc)</button>
   </div>
-  <div class="lbstage" id="lbstage">
-    <div class="imgwrap" id="lbwrap">
-      <img id="lbimg" alt="源文件图放大">
-      <svg id="lbsvg" preserveAspectRatio="none"></svg>
-    </div>
-  </div>
+  <div class="lb-stage" id="lbStage"><div class="lb-content" id="lbContent"></div></div>
+  <div class="lb-hint">滚轮缩放 · 按住拖拽平移 · 双击切换 1:1 / 适应窗口 · 单击回溯框定位记录 · Esc 关闭</div>
 </div>
 <script src="/static/shell.js"></script>
 <script src="/static/staging.js"></script>

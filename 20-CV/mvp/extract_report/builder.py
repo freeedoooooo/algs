@@ -7,7 +7,7 @@ extract_report/builder.py — 组装对照报告（每个 case 一份独立自�
 目录里，与 extract.json / 图片 / CSV 同级，每次上传各自独立、互不覆盖。
 一份报告只含一个文件，多文件批次由上传页顶部的文件页签切换各自的报告。
 
-消费契约 = cvdoc（extract.json 同形态）：派生视图已由 adapter 预生成，
+消费契约 = c1-extract（extract.json 同形态）：派生视图已由 adapter 预生成，
 渲染期不再现算任何内容数据。
 """
 import os
@@ -34,7 +34,7 @@ def _asset(name):
 
 
 def build(records, out_path, params=None):
-    # records 已是 cvdoc（adapter 产物）：投影/统计预生成，直接消费。
+    # records 已是 c1-extract（adapter 产物）：投影/统计预生成，直接消费。
     total_lines = sum((p.get('stats') or {}).get('lines', 0)
                       for r in records for p in (r.get('pages') or []))
     total_tables = sum(len(p.get('tables') or [])

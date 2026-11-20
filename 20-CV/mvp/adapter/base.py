@@ -1,7 +1,7 @@
 """
-adapter/base.py — cvdoc 标准契约 + 适配入口（纯函数，不加载模型）。
+adapter/base.py — c1-extract 标准契约 + 适配入口（纯函数，不加载模型）。
 
-cvdoc/1 契约（extract.json）：
+c1-extract/1 契约（extract.json）：
   信封  schema / case / file{name,kind,encoding,page_count} / params /
         pages:[page…] / stitched_tables:[跨页合并表…]
   page  index(1起) / size[w,h] / rectified_size / image / rectified_image /
@@ -19,8 +19,8 @@ cvdoc/1 契约（extract.json）：
 引擎名（PPStructureV3 / pdfplumber / PaddleOCR）不出本包：
 source/strategy/coord.origin/notes 全部中性化；原始结构只落 raw/（前端 403）。
 """
-SCHEMA = 'cvdoc/1'
-RECORDS_SCHEMA = 'cvdoc-records/1'
+SCHEMA = 'c1-extract/1'
+RECORDS_SCHEMA = 'c1-extract-records/1'
 
 # 引擎名 → 中性词（notes / coord.note 展示净化；raw 与运行日志保留原名供运维）
 _ENGINE_WORDS = (
@@ -45,7 +45,7 @@ def sanitize(text):
 
 
 def block_role(label):
-    """官方版面标签 → cvdoc 角色（title/text/table/figure/formula/seal）。"""
+    """官方版面标签 → c1-extract 角色（title/text/table/figure/formula/seal）。"""
     lab = str(label or '').lower()
     if 'table' in lab:
         return 'table'
@@ -106,7 +106,7 @@ def _texts(pg):
 
 
 def _table(t):
-    """领域表 → cvdoc 表：语义保留，来源中性化，coord.origin 剥掉。"""
+    """领域表 → c1-extract 表：语义保留，来源中性化，coord.origin 剥掉。"""
     out = {k: t.get(k) for k in (
         'page', 'title', 'headers', 'rows', 'cells',
         'n_rows', 'n_cols', 'fill_ratio', 'low_confidence', 'csv_file')}
@@ -127,7 +127,7 @@ def _blocks(layout):
 
 
 def adapt(rec):
-    """内部文件信封（已 hydrate）→ cvdoc。纯函数，不改输入。"""
+    """内部文件信封（已 hydrate）→ c1-extract。纯函数，不改输入。"""
     from . import paddle, pdfplumber, plain
     kind = rec.get('kind')
     pages = []
