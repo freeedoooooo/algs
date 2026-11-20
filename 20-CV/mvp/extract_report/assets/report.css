@@ -85,6 +85,10 @@ header .sub{color:#6b7688;font-size:12px;display:flex;align-items:center;gap:6px
 .cellbox.pin{display:block;fill:rgba(216,97,10,.26);stroke:#d8610a;stroke-width:5}
 .cellbox.all{display:block;opacity:.32}
 .cellbox.all.hv,.cellbox.all.pin{opacity:1}
+/* 反向定位：框可见态（悬停/钉住/整表网格）才可交互；SVG 整体仍忽略指针，不影响图片点击 */
+.cellbox.hv,.cellbox.pin,.cellbox.all,
+.stitchbox.hv,.stitchbox.pin{pointer-events:all;cursor:crosshair}
+.stage:not(.noboxes) .box{pointer-events:all;cursor:crosshair}
 td.cell,th.cell{cursor:crosshair}
 td.cell:hover,th.cell:hover,td.cell.hv,th.cell.hv{background:#e3f7ee!important}
 td.cell.pin,th.cell.pin{background:#fff0d9!important;
@@ -191,6 +195,7 @@ a{color:#2563eb}
 .lb-content{position:relative;line-height:0;flex:none;transform-origin:center center}
 .lb-content img{display:block;max-width:none;height:auto;user-select:none}
 .lb-content svg{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
+.lb-content .cellbox,.lb-content .stitchbox,.lb-content .box{pointer-events:all;cursor:crosshair}
 .lb-noboxes .lb-content svg{display:none!important}
 .lb-hint{padding:8px 14px;background:#1d2330;color:#9aa6bd;font-size:12px;text-align:center}
 @media(max-width:640px){.grid{grid-template-columns:1fr}

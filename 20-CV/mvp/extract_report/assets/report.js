@@ -39,6 +39,27 @@ function clearHover(card){
 function clearPin(card){
   card.querySelectorAll('.pin').forEach(function(x){x.classList.remove('pin');});
 }
+/* 反向定位公共件：图框 → 数据侧。先激活对应 tab/子页签（切换会清 pin，须先做），再滚动到位 */
+function matchingCells(card,el){
+  return card.querySelectorAll('.cell[data-card="'+el.getAttribute('data-card')+'"]'+
+    '[data-tbl="'+el.getAttribute('data-tbl')+'"][data-cell="'+el.getAttribute('data-cell')+'"]');
+}
+function activateTab(card,t){
+  var b=card.querySelector('.ctab[data-tab="'+t+'"]');
+  if(b&&!b.classList.contains('on')) b.click();
+}
+function revealCell(card,el){
+  activateTab(card,'tables');
+  var tb=card.querySelector('.tbltab[data-tbl="'+el.getAttribute('data-tbl')+'"]');
+  if(tb&&!tb.classList.contains('on')) tb.click();
+  el.scrollIntoView({block:'nearest',inline:'nearest'});
+}
+function revealScell(card,el){
+  activateTab(card,'stitch');
+  var sb=card.querySelector('.stitchtab[data-stitch="'+el.getAttribute('data-stitch')+'"]');
+  if(sb&&!sb.classList.contains('on')) sb.click();
+  el.scrollIntoView({block:'nearest',inline:'nearest'});
+}
 
 /* OCR 文字行 <-> 识别框 双向高亮；框所在视图由 data-space 决定，点击可切视图钉住 */
 document.querySelectorAll('[data-card][data-idx]').forEach(function(el){
@@ -57,6 +78,12 @@ document.querySelectorAll('[data-card][data-idx]').forEach(function(el){
     var card=cardOf(el),was=el.classList.contains('pin');
     clearPin(card);clearHover(card);
     if(was) return;
+    /* 从图上的识别框反向点入：切到文字 tab 并滚动到对应行（tab 切换会清 pin，先做） */
+    if(el.tagName==='polygon'){
+      activateTab(card,'text');
+      var row=card.querySelector('.tabpanel[data-tab="text"] tr[data-idx="'+el.getAttribute('data-idx')+'"]');
+      if(row) row.scrollIntoView({block:'nearest',inline:'nearest'});
+    }
     ensureViewFor(card,elSpace(el));
     matches().forEach(function(x){x.classList.add('pin');});
   });
@@ -158,6 +185,57 @@ document.querySelectorAll('td.cell,th.cell').forEach(function(el){
   });
 });
 
+/* 反向定位：图上单元格框 → 表格单元格。悬停临时高亮，点击切表格 tab/子页签 + 滚动钉住。
+   框默认隐藏，可见态（整表网格/钉住）才可交互；隐藏态的反向定位走图片点击命中测试 hitCell。 */
+document.querySelectorAll('.cellbox').forEach(function(r){
+  r.addEventListener('mouseenter',function(){
+    var card=cardOf(r);
+    if(currentView(card)!==wantViewOf(elSpace(r))) return;
+    clearHover(card);
+    r.classList.add('hv');
+    matchingCells(card,r).forEach(function(x){x.classList.add('hv');});
+  });
+  r.addEventListener('mouseleave',function(){clearHover(cardOf(r));});
+  r.addEventListener('click',function(e){
+    e.stopPropagation();
+    var card=cardOf(r),was=r.classList.contains('pin');
+    clearPin(card);clearHover(card);
+    if(was) return;
+    var cells=matchingCells(card,r);
+    if(cells.length) revealCell(card,cells[0]);
+    ensureViewFor(card,elSpace(r));
+    matchingRects(card,r).forEach(function(x){x.classList.add('pin');});
+    cells.forEach(function(x){x.classList.add('pin');});
+  });
+});
+
+/* 反向定位：图上跨页合并格框 → 合并表单元格（框画在哪页，scell 副本就在当前页卡片里） */
+document.querySelectorAll('.stitchbox').forEach(function(r){
+  function scells(){
+    return cardOf(r).querySelectorAll('.scell[data-stitch="'+r.getAttribute('data-stitch')+'"]'+
+      '[data-cell="'+r.getAttribute('data-cell')+'"]');
+  }
+  r.addEventListener('mouseenter',function(){
+    var card=cardOf(r);
+    if(currentView(card)!==wantViewOf(elSpace(r))) return;
+    clearScellHover(fileCardOf(r));
+    r.classList.add('hv');
+    scells().forEach(function(x){x.classList.add('hv');});
+  });
+  r.addEventListener('mouseleave',function(){clearScellHover(fileCardOf(r));});
+  r.addEventListener('click',function(e){
+    e.stopPropagation();
+    var card=cardOf(r),fc=fileCardOf(r),was=r.classList.contains('pin');
+    clearPin(fc);clearScellHover(fc);
+    if(was) return;
+    var cs=scells();
+    if(cs.length) revealScell(card,cs[0]);
+    ensureViewFor(card,elSpace(r));
+    r.classList.add('pin');
+    cs.forEach(function(x){x.classList.add('pin');});
+  });
+});
+
 /* 整份 JSON：紧凑信封嵌在 filecard 的 <script type="application/json"> 里
    （全报告仅一份，不逐页内联——平方级膨胀），首次打开 tab 时才解析美化。
    不用 fetch：file:// 直开时浏览器禁止 fetch 本地文件，嵌入则两种打开都成立。
@@ -192,6 +270,43 @@ document.querySelectorAll('.copyjson').forEach(function(btn){
   });
 });
 
+/* 图片点击命中测试：表格/跨页 tab 下，点单元格区域即反向定位（叠加框隐藏时也生效）；
+   点空白处保持原「点击放大」行为。只测当前激活表的框；坐标按 viewBox 1:1 换算，
+   重叠框取面积最小者（最内层格）。 */
+function hitCell(img,e){
+  var card=cardOf(img);
+  var tp=card.querySelector('.tabpanel:not([hidden])');
+  var tab=tp?tp.getAttribute('data-tab'):'';
+  if(tab!=='tables'&&tab!=='stitch') return null;
+  var view=img.closest('.view');
+  var svg=view&&view.querySelector('.cellsvg');
+  if(!svg||!svg.viewBox||!svg.viewBox.baseVal||!svg.viewBox.baseVal.width) return null;
+  var vb=svg.viewBox.baseVal,r=img.getBoundingClientRect();
+  if(!r.width||!r.height) return null;
+  var x=(e.clientX-r.left)/r.width*vb.width,y=(e.clientY-r.top)/r.height*vb.height;
+  var rects;
+  if(tab==='tables'){
+    rects=svg.querySelectorAll('.cellbox:not(.off)');
+  }else{
+    var on=card.querySelector('.stitchtab.on');
+    var si=on?on.getAttribute('data-stitch'):null;
+    rects=svg.querySelectorAll('.stitchbox');
+    if(si!=null) rects=Array.prototype.filter.call(rects,function(b){
+      return b.getAttribute('data-stitch')===si;
+    });
+  }
+  var best=null,bestA=Infinity;
+  Array.prototype.forEach.call(rects,function(b){
+    var bx=+b.getAttribute('x'),by=+b.getAttribute('y'),
+        bw=+b.getAttribute('width'),bh=+b.getAttribute('height');
+    if(x>=bx&&x<=bx+bw&&y>=by&&y<=by+bh){
+      var a=bw*bh;
+      if(a<bestA){bestA=a;best=b;}
+    }
+  });
+  return best;
+}
+
 /* 点击图片全屏放大：克隆整个 .imgwrap，叠加框按同一 viewBox 1:1 跟随 */
 (function(){
   var lb=document.getElementById('lightbox');
@@ -202,7 +317,7 @@ document.querySelectorAll('.copyjson').forEach(function(btn){
   var openBtn=document.getElementById('lbOpen');
   var boxesBtn=document.getElementById('lbBoxes');
   if(!lb||!stage||!content) return;
-  var scale=1,fit=1,tx=0,ty=0,imgW=0,imgH=0,drag=null;
+  var scale=1,fit=1,tx=0,ty=0,imgW=0,imgH=0,drag=null,srcCard=null,moved=false;
   function apply(){
     content.style.transform='translate('+tx+'px,'+ty+'px) scale('+scale+')';
     scaleEl.textContent=Math.round(scale*100)+'%';
@@ -228,6 +343,7 @@ document.querySelectorAll('.copyjson').forEach(function(btn){
     var view=img.closest('.view');
     var label=(view&&view.getAttribute('data-view')==='rect')?'矫正图':'原图';
     var card=cardOf(img);
+    srcCard=card;
     var h2=card.querySelector('h2');
     if(!h2){var fc=fileCardOf(img);h2=fc&&fc.querySelector('h2');}
     var pg=card.getAttribute('data-page');
@@ -262,9 +378,11 @@ document.querySelectorAll('.copyjson').forEach(function(btn){
     stage.classList.remove('dragging');
   }
   document.querySelectorAll('.stage .imgwrap img').forEach(function(img){
-    img.setAttribute('title','点击放大查看');
+    img.setAttribute('title','点空白处放大；表格/跨页 tab 下点单元格反向定位');
     img.addEventListener('click',function(e){
       e.stopPropagation();
+      var hit=hitCell(img,e);
+      if(hit){hit.dispatchEvent(new MouseEvent('click',{bubbles:true}));return;}
       open(img);
     });
   });
@@ -292,11 +410,12 @@ document.querySelectorAll('.copyjson').forEach(function(btn){
   },{passive:false});
   stage.addEventListener('mousedown',function(e){
     if(e.button!==0) return;
-    drag={x:e.clientX,y:e.clientY,tx:tx,ty:ty};
+    drag={x:e.clientX,y:e.clientY,tx:tx,ty:ty};moved=false;
     stage.classList.add('dragging');
   });
   window.addEventListener('mousemove',function(e){
     if(!drag) return;
+    if(Math.abs(e.clientX-drag.x)+Math.abs(e.clientY-drag.y)>4) moved=true;
     tx=drag.tx+(e.clientX-drag.x);ty=drag.ty+(e.clientY-drag.y);apply();
   });
   window.addEventListener('mouseup',function(){drag=null;stage.classList.remove('dragging');});
@@ -304,6 +423,31 @@ document.querySelectorAll('.copyjson').forEach(function(btn){
     e.preventDefault();
     if(Math.abs(scale-1)<0.01) fitWindow();
     else{scale=1;tx=0;ty=0;apply();}
+  });
+  /* 全屏里点叠加框反向定位：关闭全屏，回到报告钉住原格/行（拖动松手不算点击）。
+     克隆框不带处理器，按 data 属性找回源卡片里当前可见视图中的原框，转发点击。 */
+  stage.addEventListener('click',function(e){
+    if(moved||!srcCard) return;
+    var b=e.target.closest?e.target.closest('.cellbox,.stitchbox,.box'):null;
+    if(!b) return;
+    e.stopPropagation();
+    var sel;
+    if(b.classList.contains('cellbox'))
+      sel='.cellbox[data-tbl="'+b.getAttribute('data-tbl')+'"][data-cell="'+b.getAttribute('data-cell')+'"]';
+    else if(b.classList.contains('stitchbox'))
+      sel='.stitchbox[data-stitch="'+b.getAttribute('data-stitch')+'"][data-cell="'+b.getAttribute('data-cell')+'"]';
+    else
+      sel='.box[data-idx="'+b.getAttribute('data-idx')+'"]';
+    var orig=null;
+    srcCard.querySelectorAll(sel).forEach(function(r){
+      var v=r.closest('.view');
+      if(!orig&&v&&!v.hidden) orig=r;
+    });
+    close();
+    if(!orig) return;
+    var fc=fileCardOf(srcCard),pg=srcCard.getAttribute('data-page');
+    if(fc&&pg&&srcCard.hidden) activatePage(fc,pg);
+    orig.dispatchEvent(new MouseEvent('click',{bubbles:true}));
   });
   document.addEventListener('keydown',function(e){
     if(lb.hidden) return;
@@ -540,6 +684,8 @@ document.querySelectorAll('.filecard').forEach(function(fc){
   }
   fc.addEventListener('mousemove',function(e){
     var t=e.target;
+    /* 图上合并框的反向悬停由框自身管理，委托 here 不清它的高亮 */
+    if(t&&t.closest&&t.closest('.stitchbox'))return;
     var el=t&&t.closest?t.closest('.scell'):null;
     var key=el?scellKey(el):null;
     if(key===lastKey)return;
