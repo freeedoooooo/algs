@@ -1,12 +1,12 @@
 """
-c1_extract/runlog.py — 结构化运行日志（唯一真相源）。
+c1_extract/tasklog.py — 结构化运行日志（唯一真相源）。
 
 设计要点：
-  · 一个 RunLog 实例对应「一次运行（run）」，同时服务三处消费方：
+  · 一个 TaskLog 实例对应「一次任务（task）」，同时服务三处消费方：
       - STATE['logs']：页面轮询 /api/status 时拿到结构化数组（带级别/阶段/耗时）
-      - logs/run_<id>.log：落盘纯文本，一次运行一份，可单独清理 / 归档
+      - logs/task_<id>.log：落盘纯文本，一次任务一份，可单独清理 / 归档
       - 控制台：同格式实时打印，终端启动时也能直接看进度
-  · pipeline 只认一个 emit(level, stage, msg) 回调，不 import app / runlog，
+  · pipeline 只认一个 emit(level, stage, msg) 回调，不 import app / tasklog，
     避免提取层反向依赖 Web 层，也方便以后换成别的日志后端。
   · level: info / ok / warn / error / stage；stage 是短阶段名（ocr/table/…）。
   · t 是相对运行开始的秒数，ms 是本条相对上一条的耗时，页面直接显示。
@@ -20,8 +20,8 @@ _LEVEL_TAG = {'info': 'INFO', 'ok': ' OK ', 'stage': 'STAGE',
               'warn': 'WARN', 'error': 'ERROR'}
 
 
-class RunLog:
-    """一次运行的日志收集器；线程安全（后台线程写、主线程读状态）。"""
+class TaskLog:
+    """一次任务的日志收集器；线程安全（后台线程写、主线程读状态）。"""
 
     def __init__(self, label, log_path=None, on_emit=None):
         self.label = label
@@ -35,7 +35,7 @@ class RunLog:
             os.makedirs(os.path.dirname(log_path), exist_ok=True)
             self.path = log_path
             with open(self.path, 'w', encoding='utf-8') as f:
-                f.write('# run {}\n'.format(label))
+                f.write('# task {}\n'.format(label))
 
     def emit(self, level, stage, msg, **extra):
         now = time.time()

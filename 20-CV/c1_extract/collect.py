@@ -72,16 +72,16 @@ def passthrough(doc):
     return records
 
 
-def build_records_doc(doc, records, run_id=None, run_file_id=None,
-                      source_file_id=None, template=None):
+def build_records_doc(doc, records, task_id=None, task_file_id=None,
+                      file_id=None, template=None):
     """records.json 信封（L2 事实源形态）。"""
     return {
         'schema': RECORDS_SCHEMA,
-        'run_id': run_id,
+        'task_id': task_id,
         'template': template or {'name': '原始透传', 'version': 1},
         'files': [{
-            'run_file_id': run_file_id,
-            'source_file_id': source_file_id,
+            'task_file_id': task_file_id,
+            'file_id': file_id,
             'name': (doc.get('file') or {}).get('name'),
             'records': records,
         }],

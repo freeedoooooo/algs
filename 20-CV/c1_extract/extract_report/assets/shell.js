@@ -35,7 +35,7 @@ function thumbHtml(name,url){
     escHtml(name)+'"><span>'+escHtml(label.slice(0,4))+'</span></a>';
 }
 var STATE_LABEL={
-  pending:['待处理','gray'], extracting:['运行中','blue'],
+  pending:['待处理','gray'], extracting:['提取中','blue'],
   previewed:['已预览','green'], reviewed:['已校验','purple'],
   loading:['入库中','blue'], loaded:['已入库','green'],
   failed:['失败','red'], partial:['部分失败','yellow'],
@@ -62,7 +62,7 @@ function bindLightbox(){
     if(!lb.hidden&&e.key==='Escape'){ lb.hidden=true; img.removeAttribute('src'); }
   });
 }
-/* 文件产物链接（/files/<run_file_id>/…，白名单挂载，raw 不会出现） */
+/* 文件产物链接（/files/<task_file_id>/…，白名单挂载，raw 不会出现） */
 function fileUrl(rfId,rel){
   return '/files/'+rfId+'/'+encodeURIComponent(rel);
 }

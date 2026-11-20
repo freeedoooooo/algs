@@ -60,10 +60,10 @@ rows.addEventListener('click',function(e){
   var b=e.target.closest?e.target.closest('[data-del]'):null;
   if(!b) return;
   var id=b.getAttribute('data-del'),name=b.getAttribute('data-name');
-  if(!confirm('删除「'+name+'」的登记与原件字节？\n已产生的运行产物不受影响。')) return;
+  if(!confirm('删除「'+name+'」的登记与原件字节？\n已产生的任务产物不受影响。')) return;
   fetch('/api/sources/'+id,{method:'DELETE'}).then(function(r){return r.json().then(function(j){return {s:r.status,j:j};});})
     .then(function(o){
-      if(o.s===409){ alert('不能删除：'+(o.j.reason||'已被运行引用')); return; }
+      if(o.s===409){ alert('不能删除：'+(o.j.reason||'已被任务引用')); return; }
       if(!o.j.ok){ alert('删除失败：'+(o.j.error||o.s)); return; }
       load();
     }).catch(function(){ alert('删除失败：平台库不可用'); });

@@ -33,7 +33,7 @@ _ENV.filters.update(
 
 def file_url(rel):
     # 报告 HTML 就放在 case 目录里、与产物同级：一律相对路径。
-    # file:// 直开与 /files/<run_file_id>/对照报告.html 在线打开都成立。
+    # file:// 直开与 /files/<task_file_id>/对照报告.html 在线打开都成立。
     return quote(rel, safe='/')
 
 
@@ -61,7 +61,7 @@ def md_filename(fname, page_no=None, single=True):
 
     单页文件 = <stem>.md；多页文件每页一份 = <stem>_p<页码>.md（页码从 1 起）。
     文件与 对照报告.html 同级落在 output/<case>/，下载用相对路径，
-    file:// 直开与 /files/<run_file_id>/ 在线打开都成立。
+    file:// 直开与 /files/<task_file_id>/ 在线打开都成立。
     """
     stem = os.path.splitext(fname)[0]
     if single or page_no is None:

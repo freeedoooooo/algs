@@ -312,7 +312,7 @@ function poll(){
     if(s.ready){
       msg.textContent='完成。改参数后直接重测。';
       go.disabled=false;
-      showStgLink(s.run_id);
+      showStgLink(s.task_id);
       showResult(s.cases);
     }
   }).catch(function(){timer=setTimeout(poll,1200);});
@@ -325,13 +325,13 @@ var reportFrame=document.getElementById('reportFrame'),
     filetabs=document.getElementById('filetabs'),
     reportcol=document.querySelector('.reportcol'),
     stglink=document.getElementById('stglink');
-/* 完成提示：跳数据预览（run id 键） */
-function showStgLink(runId){
-  if(!runId) return;
-  stglink.href='/staging?run='+runId;
+/* 完成提示：跳数据预览（task id 键） */
+function showStgLink(taskId){
+  if(!taskId) return;
+  stglink.href='/staging?task='+taskId;
   stglink.hidden=false;
 }
-/* 右侧报告区三态：idle 占位 / run 进度 / done 报告（+「查看日志」浮钮） */
+/* 右侧报告区三态：idle 占位 / 任务进度 / done 报告（+「查看日志」浮钮） */
 function rightState(st){
   reportempty.hidden=(st!=='idle');
   runpanel.hidden=(st!=='run');
@@ -341,7 +341,7 @@ function rightState(st){
   logbtn.hidden=(st!=='done');
   if(st!=='done'){ filetabs.hidden=true; reportcol.classList.remove('hastabs'); }
 }
-/* 每个文件一份独立报告（各自 run_file 命名空间）。多文件运行顶部给文件页签，
+/* 每个文件一份独立报告（各自 task_file 命名空间）。多文件任务顶部给文件页签，
    点击在下方 iframe 切换；单文件直接看报告，不显示页签。 */
 function reportUrl(rf){
   return '/files/'+rf+'/'+encodeURIComponent('对照报告.html');
@@ -361,13 +361,13 @@ function showResult(cases){
         filetabs.querySelectorAll('.ftab').forEach(function(x){
           x.classList.toggle('on',x===b);
         });
-        reportFrame.src=reportUrl(c.run_file_id)+'?t='+Date.now();
+        reportFrame.src=reportUrl(c.task_file_id)+'?t='+Date.now();
       };
       filetabs.appendChild(b);
     });
-    reportFrame.src=reportUrl(cases[0].run_file_id)+'?t='+Date.now();
+    reportFrame.src=reportUrl(cases[0].task_file_id)+'?t='+Date.now();
   }else{
-    /* 单文件（或未知 cases）：路由重定向到最新 run_file 的报告真实地址 */
+    /* 单文件（或未知 cases）：路由重定向到最新 task_file 的报告真实地址 */
     reportFrame.src='/extract-report?t='+Date.now();
   }
 }
@@ -421,11 +421,11 @@ fetch('/api/status').then(function(r){return r.json();}).then(function(s){
   if(s.running){ rightState('run'); say(s.logs,s.steps); progress(s); poll(); }
   else if(s.ready){
     /* 刷新页面直接进完成态：日志/进度也要补渲染，否则「查看日志」抽屉是空的 */
-    say(s.logs,s.steps); progress(s); showStgLink(s.run_id); showResult(s.cases);
+    say(s.logs,s.steps); progress(s); showStgLink(s.task_id); showResult(s.cases);
   }
 });
 
-/* ---- 从资料库选择：抽屉多选已登记文件 → POST /api/runs（不再收 base64） ---- */
+/* ---- 从资料库选择：抽屉多选已登记文件 → POST /api/tasks（不再收 base64） ---- */
 var srcdrawer=document.getElementById('srcdrawer'),
     srclist=document.getElementById('srclist'),
     srcgo=document.getElementById('srcgo'),
@@ -494,10 +494,10 @@ srcgo.onclick=async function(){
   srcgo.disabled=true;
   try{
     saveParams(collectParams());
-    var res=await fetch('/api/runs',{
+    var res=await fetch('/api/tasks',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({source_file_ids:ids,params:collectParams(),
+      body:JSON.stringify({file_ids:ids,params:collectParams(),
         template_version_id:tplVersionId()})
     });
     var j=await res.json();

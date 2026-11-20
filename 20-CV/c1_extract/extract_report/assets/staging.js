@@ -2,10 +2,10 @@
    右侧舞台忠实复刻对照报告（report.js 舞台逻辑移植）：默认零框，悬停/点击揭示单格，
    点图走 hitCell 命中测试可定位任意记录行/格（不限选中行），窗口式翻页、原图/矫正图
    切换、叠加框开关、光标跟随提示、全屏浮层。匹配键用 data-i（记录序）/data-key（字段）。
-   数据经 /api/runs/<id>/staging|extract 读 DB；图片经 /files/<run_file_id>/…。 */
-var run=new URLSearchParams(location.search).get('run')||'';
+   数据经 /api/tasks/<id>/staging|extract 读 DB；图片经 /files/<task_file_id>/…。 */
+var task=new URLSearchParams(location.search).get('task')||'';
 var curFile=new URLSearchParams(location.search).get('file')||'';
-var runDoc=null, records=[], keys=[], selIdx=-1, selKey=null;
+var taskDoc=null, records=[], keys=[], selIdx=-1, selKey=null;
 var pageMap={}, allAnchors=[], pagesPresent=[], curPage=null, curView=null, allOn=false;
 
 function showErr(t){
@@ -18,12 +18,12 @@ function imgUrl(rel){
 }
 function renderTabs(){
   var tabs=document.getElementById('filetabs');
-  var files=(runDoc&&runDoc.files||[]).filter(function(f){return f.run_file_id;});
+  var files=(taskDoc&&taskDoc.files||[]).filter(function(f){return f.task_file_id;});
   if(files.length<2){ tabs.hidden=true; return; }
   tabs.hidden=false;
   tabs.innerHTML=files.map(function(f){
-    return '<button type="button" class="ftab'+(String(f.run_file_id)===curFile?' on':'')+
-      '" data-rf="'+f.run_file_id+'" title="'+escHtml(f.name)+'">'+
+    return '<button type="button" class="ftab'+(String(f.task_file_id)===curFile?' on':'')+
+      '" data-rf="'+f.task_file_id+'" title="'+escHtml(f.name)+'">'+
       escHtml(shortName(f.name))+'</button>';
   }).join('');
 }
@@ -31,7 +31,7 @@ document.getElementById('filetabs').addEventListener('click',function(e){
   var b=e.target.closest?e.target.closest('[data-rf]'):null;
   if(!b) return;
   curFile=b.getAttribute('data-rf');
-  history.replaceState(null,'','/staging?run='+encodeURIComponent(run)+
+  history.replaceState(null,'','/staging?task='+encodeURIComponent(task)+
     '&file='+encodeURIComponent(curFile));
   renderTabs(); loadStaging();
 });
@@ -577,9 +577,9 @@ var closeLb=function(){};
 /* ---- 加载 ---- */
 function loadStaging(){
   document.getElementById('err').hidden=true;
-  var u='/api/runs/'+encodeURIComponent(run)+'/staging'+
+  var u='/api/tasks/'+encodeURIComponent(task)+'/staging'+
     (curFile?('?file='+encodeURIComponent(curFile)):'');
-  var eu='/api/runs/'+encodeURIComponent(run)+'/extract'+
+  var eu='/api/tasks/'+encodeURIComponent(task)+'/extract'+
     (curFile?('?file='+encodeURIComponent(curFile)):'');
   Promise.all([
     fetch(u).then(function(r){
@@ -608,25 +608,25 @@ function loadStaging(){
   });
 }
 
-document.getElementById('runtag').textContent=run?('运行 #'+run):'（未指定运行）';
-document.getElementById('runlink').href=run?('/runs?run='+encodeURIComponent(run)):'/runs';
-if(!run){
-  showErr('缺少运行参数。请从记录详情或提取完成提示进入。');
+document.getElementById('tasktag').textContent=task?('任务 #'+task):'（未指定任务）';
+document.getElementById('tasklink').href=task?('/tasks?task='+encodeURIComponent(task)):'/tasks';
+if(!task){
+  showErr('缺少任务参数。请从记录详情或提取完成提示进入。');
 }else{
-  fetch('/api/runs/'+encodeURIComponent(run)).then(function(r){
-    if(!r.ok) throw new Error('运行不存在');
+  fetch('/api/tasks/'+encodeURIComponent(task)).then(function(r){
+    if(!r.ok) throw new Error('任务不存在');
     return r.json();
   }).then(function(j){
-    runDoc=j.run;
+    taskDoc=j.task;
     if(!curFile){
-      var f=(runDoc.files||[]).find(function(x){return x.run_file_id;});
-      curFile=f?String(f.run_file_id):'';
+      var f=(taskDoc.files||[]).find(function(x){return x.task_file_id;});
+      curFile=f?String(f.task_file_id):'';
     }
     renderTabs(); loadStaging();
   }).catch(function(e){ showErr(e.message); });
 }
 
-/* 跨运行搜索：/api/staging/query 直查 DB field 投影，与当前运行无关 */
+/* 跨任务搜索：/api/staging/query 直查 DB field 投影，与当前任务无关 */
 (function(){
   var go=document.getElementById('xs-go');
   if(!go) return;
@@ -652,12 +652,12 @@ if(!run){
       }
       var items=o.j.items||[];
       tb.innerHTML=items.map(function(it){
-        return '<tr><td class="mono">#'+it.run_id+'</td><td>'+
+        return '<tr><td class="mono">#'+it.task_id+'</td><td>'+
           escHtml(it.source_name)+'</td><td class="num">'+it.record_index+
           '</td><td>'+escHtml(it.field_name)+'</td><td>'+
           escHtml(it.value_text)+'</td><td>'+escHtml(it.review_state)+
-          '</td><td><a class="btn ghost mini" href="/staging?run='+
-          it.run_id+'&file='+it.run_file_id+'">预览</a></td></tr>';
+          '</td><td><a class="btn ghost mini" href="/staging?task='+
+          it.task_id+'&file='+it.task_file_id+'">预览</a></td></tr>';
       }).join('');
       tbl.hidden=!items.length;
       em.hidden=!!items.length;

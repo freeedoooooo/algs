@@ -1,16 +1,16 @@
 """
-c1_extract/accept_records_db.py — records 入库六项验收（C1 契约，
-design-c1-storage.md：DB 唯一事实源，run_id / run_file_id 粒度，无 file 模式）。
+c1_extract/accept_records_db.py — records 入库六项验收（任务化契约，
+design-task-schema.md：DB 唯一事实源，task_id / task_file_id 粒度，无外键）。
 
 前置：C1_EXTRACT_DB 已配置（env 或 data/secrets.json，用户配置的库）。
 用法（从 20-CV）：D:/miniforge3/envs/paddle/python.exe -u c1_extract/accept_records_db.py
 
-1 迁移门禁幂等+真实 run 投影往返一致 · 2 重跑级联替换 · 3 patch_record ·
-4 跨 run 查询 · 5 真链路（临时服务 8799）· 6 断库显式 503（临时服务 8797）。
-上传字节取自 source_file.content；断库用不可达 DSN 的临时服务模拟，
-全程不触碰真实库的可用性。破坏性操作只落合成 run（验完按 id 清理，
-附件随 run_file FK 级联）；真实 run / source 只读。用户的 8765 全程不动。
-两套验收脚本严禁并行（共用 8799/8797 端口）。
+1 迁移门禁幂等+真实 task 投影往返一致 · 2 重跑级联替换（应用层）· 3 patch_record ·
+4 跨 task 查询 · 5 真链路（临时服务 8799）· 6 断库显式 503（临时服务 8797）。
+上传字节取自 extract_file.content；断库用不可达 DSN 的临时服务模拟，
+全程不触碰真实库的可用性。破坏性操作只落合成 task（验完按 id 清理，
+无外键：field/lineage/artifact 等子表须显式先删）；真实 task / file 只读。
+用户的 8765 全程不动。两套验收脚本严禁并行（共用 8799/8797 端口）。
 """
 import os
 import sys
@@ -19,7 +19,6 @@ import time
 import base64
 import socket
 import hashlib
-import tempfile
 import subprocess
 import importlib
 import urllib.request
@@ -103,6 +102,29 @@ def counts():
         conn.close()
 
 
+def orphan_counts():
+    """无外键后引用完整性归应用层：反查三张子表不得有悬空引用。"""
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            out = []
+            for sql in (
+                    'SELECT COUNT(*) FROM extract_staging_field f'
+                    ' LEFT JOIN extract_staging_record r ON r.id=f.record_id'
+                    ' WHERE r.id IS NULL',
+                    'SELECT COUNT(*) FROM extract_staging_lineage l'
+                    ' LEFT JOIN extract_staging_record r ON r.id=l.record_id'
+                    ' WHERE r.id IS NULL',
+                    'SELECT COUNT(*) FROM extract_staging_record sr'
+                    ' LEFT JOIN extract_task_file tf ON tf.id=sr.task_file_id'
+                    ' WHERE tf.id IS NULL'):
+                cur.execute(sql)
+                out.append(cur.fetchone()[0])
+            return tuple(out)
+    finally:
+        conn.close()
+
+
 def start_service(port, dsn=None):
     # 端口必须空闲：否则 wait_http 会误连到别的服务（两套脚本严禁并行跑）
     s = socket.socket()
@@ -135,24 +157,24 @@ def upload(port, src_bytes, name):
                   'mode': 'preview'})
     if st != 200 or not j.get('ok'):
         raise RuntimeError('upload 失败：{} {}'.format(st, j))
-    run_id = j['run_id']
+    task_id = j['task_id']
     for _ in range(300):
         _, s = http(port, '/api/status')
         if not s.get('running'):
-            return run_id, s
+            return task_id, s
         time.sleep(0.5)
     raise RuntimeError('upload 超时')
 
 
-def find_pdf_source():
-    """真实原件（source_file.content）里第一个 PDF，真链路上传字节来源。
+def find_pdf_file():
+    """真实原件（extract_file.content）里第一个 PDF，真链路上传字节来源。
     size>1KB 过滤：排除验收合成的假 PDF 行。"""
     page = 1
     while True:
-        b = catalog.list_sources(page=page, per_page=100)
+        b = catalog.list_files(page=page, per_page=100)
         for row in b['items']:
             if row['kind'] == 'pdf' and row['size_bytes'] > 1024:
-                s = catalog.get_source_content(row['id'])
+                s = catalog.get_file_content(row['id'])
                 s['id'] = row['id']
                 return s
         if page * 100 >= b['total']:
@@ -161,41 +183,57 @@ def find_pdf_source():
 
 
 def scratch_clean():
-    tmp = tempfile.gettempdir()
-    return not any(n.startswith(('c1_in_', 'c1_case_'))
-                   for n in os.listdir(tmp))
+    return not any(
+        n.startswith(('in_', 'case_'))
+        for d in (config.TMP_INPUT, config.TMP_WORK)
+        for n in os.listdir(d))
 
 
-def cleanup_runs(run_ids, source_ids):
-    """按 run id 先子后父：staging_record 无级联须显式删（field/lineage 随
-    record 级联）；artifact 随 run_file FK 级联；合成 source 只删本次新建的。"""
+def cleanup_tasks(task_ids, file_ids):
+    """按 task id 先子后父（无外键，全部显式删）：field/lineage→record→
+    artifact→quarantine→load_log→task_file→task；合成 file 只删本次新建的。"""
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            for rid in run_ids:
+            for tid in task_ids:
                 cur.execute(
-                    'DELETE sr FROM extract_staging_record sr'
-                    ' JOIN extract_run_file rf ON rf.id=sr.run_file_id'
-                    ' WHERE rf.run_id=%s', (rid,))
-                cur.execute('DELETE FROM extract_quarantine WHERE run_id=%s',
-                            (rid,))
-                cur.execute('DELETE FROM extract_load_log WHERE run_id=%s',
-                            (rid,))
-                cur.execute('DELETE FROM extract_run_file WHERE run_id=%s',
-                            (rid,))
-                cur.execute('DELETE FROM extract_run WHERE id=%s', (rid,))
-            if source_ids:
-                ph = ','.join(['%s'] * len(source_ids))
+                    'SELECT id FROM extract_task_file WHERE task_id=%s',
+                    (tid,))
+                tfs = [r[0] for r in cur.fetchall()]
+                for tf in tfs:
+                    cur.execute(
+                        'DELETE FROM extract_staging_field WHERE record_id IN'
+                        ' (SELECT id FROM extract_staging_record'
+                        '  WHERE task_file_id=%s)', (tf,))
+                    cur.execute(
+                        'DELETE FROM extract_staging_lineage WHERE record_id IN'
+                        ' (SELECT id FROM extract_staging_record'
+                        '  WHERE task_file_id=%s)', (tf,))
+                    cur.execute(
+                        'DELETE FROM extract_staging_record'
+                        ' WHERE task_file_id=%s', (tf,))
+                    cur.execute(
+                        'DELETE FROM extract_artifact WHERE task_file_id=%s',
+                        (tf,))
+                cur.execute('DELETE FROM extract_quarantine WHERE task_id=%s',
+                            (tid,))
+                cur.execute('DELETE FROM extract_load_log WHERE task_id=%s',
+                            (tid,))
+                cur.execute('DELETE FROM extract_task_file WHERE task_id=%s',
+                            (tid,))
+                cur.execute('DELETE FROM extract_task WHERE id=%s', (tid,))
+            if file_ids:
+                ph = ','.join(['%s'] * len(file_ids))
                 cur.execute(
-                    'DELETE FROM extract_source_file WHERE id IN ({})'
-                    .format(ph), source_ids)
-            # 真链路若误传合成字节会按真实 sha 新建 source 行（去重不命中
+                    'DELETE FROM extract_file WHERE id IN ({})'
+                    .format(ph), file_ids)
+            # 真链路若误传合成字节会按真实 sha 新建 file 行（去重不命中
             # 假 sha）：按合成内容 sha 兜底清理，只删未被引用的
             syn_shas = [hashlib.sha256(b'%PDF-1.4 accept').hexdigest(),
                         hashlib.sha256(b'%PDF-1.4 accept-two').hexdigest()]
             cur.execute(
-                'DELETE FROM extract_source_file WHERE sha256 IN (%s,%s)'
-                ' AND id NOT IN (SELECT source_file_id FROM extract_run_file)',
+                'DELETE FROM extract_file WHERE sha256 IN (%s,%s)'
+                ' AND id NOT IN (SELECT file_id FROM extract_task_file)',
                 syn_shas)
         conn.commit()
     finally:
@@ -203,7 +241,7 @@ def cleanup_runs(run_ids, source_ids):
 
 
 def main():
-    print('== records 入库验收（C1）· {} =='.format(
+    print('== records 入库验收（任务化）· {} =='.format(
         db.safe_detail(config.PLATFORM_DB_REF)))
     try:
         if not wait_db():
@@ -212,22 +250,22 @@ def main():
     except LookupError as e:
         print(str(e))
         return 1
-    db.connect().close()  # 触发 001-006 迁移门禁
-    syn_runs, syn_sids, up = [], [], []
+    db.connect().close()  # 触发 001 baseline 迁移门禁
+    syn_tasks, syn_fids, up = [], [], []
     try:
-        rc = _main(syn_runs, syn_sids, up)
+        rc = _main(syn_tasks, syn_fids, up)
     finally:
         print('清理临时产物')
-        cleanup_runs(syn_runs + up, syn_sids)
+        cleanup_tasks(syn_tasks + up, syn_fids)
     print('\n结论：{}'.format('六项全部 PASS' if not FAILS
                             else 'FAIL {} 项：{}'.format(len(FAILS), FAILS)))
     return rc
 
 
-def _main(syn_runs, syn_sids, up):
-    print('[1/6] 迁移门禁幂等 + 真实 run 投影往返一致')
+def _main(syn_tasks, syn_fids, up):
+    print('[1/6] 迁移门禁幂等 + 真实 task 投影往返一致')
     c0 = counts()
-    db._READY.clear()       # 强制重跑门禁：schema_version 已全，应零变更
+    db._READY.clear()       # 强制重跑门禁：baseline 已应用，应零变更
     conn = db.connect()
     try:
         with conn.cursor() as cur:
@@ -235,12 +273,13 @@ def _main(syn_runs, syn_sids, up):
             vers = [r[0] for r in cur.fetchall()]
     finally:
         conn.close()
-    check('门禁重跑零变更 + schema 1-6', counts() == c0 and vers == [1, 2, 3, 4, 5, 6],
+    check('门禁重跑零变更 + schema baseline [1]',
+          counts() == c0 and vers == [1],
           '{} vs {} · {}'.format(c0, counts(), vers))
     tv = catalog.get_template_version(name='原始透传')
     real = []
-    for run in catalog.list_runs():
-        doc = content_db.get_records(run['run_id'])
+    for task in catalog.list_tasks():
+        doc = content_db.get_records(task['task_id'])
         if doc and any(f['records'] for f in doc['files']):
             real.append(doc)
     if not real:
@@ -248,26 +287,26 @@ def _main(syn_runs, syn_sids, up):
         return 1
     src_real, field, real_kw = None, None, None
     for doc in real:
-        run_id = catalog.create_run('preview', tv['id'], {})
-        syn_runs.append(run_id)
+        task_id = catalog.create_task('preview', tv['id'], {})
+        syn_tasks.append(task_id)
         remap = json.loads(json.dumps(doc))
-        remap['run_id'] = run_id
+        remap['task_id'] = task_id
         for i, f in enumerate(remap['files']):
             fake = '{:064x}'.format(i + 1)
-            sid, dup = catalog.register_source(
+            fid, dup = catalog.register_file(
                 f['name'], 'pdf', 1, fake, b'%PDF-1.4 accept')
             if not dup:
-                syn_sids.append(sid)
-            f['source_file_id'] = sid
-            f['run_file_id'] = catalog.add_run_file(run_id, sid)
+                syn_fids.append(fid)
+            f['file_id'] = fid
+            f['task_file_id'] = catalog.add_task_file(task_id, fid)
         content_db.save_records(remap)
-        got = content_db.get_records(run_id)
+        got = content_db.get_records(task_id)
         ok = got is not None and len(got['files']) == len(doc['files'])
         if ok:
             for gf, wf in zip(got['files'], doc['files']):
                 ok = ok and gf['records'] == wf['records'] \
                     and gf['name'] == wf['name']
-        check('投影往返一致 run {}'.format(doc['run_id']), ok,
+        check('投影往返一致 task {}'.format(doc['task_id']), ok,
               '{} 条记录'.format(sum(len(f['records']) for f in doc['files'])))
         if src_real is None:
             for f in doc['files']:
@@ -279,17 +318,17 @@ def _main(syn_runs, syn_sids, up):
                                     if v not in (None, '')), '流水')
                     break
 
-    print('[2/6] 重跑级联替换（合成 run）')
-    run2 = catalog.create_run('preview', tv['id'], {})
-    syn_runs.append(run2)
-    sid, dup = catalog.register_source('accept.pdf', 'pdf', 22, '0' * 64,
-                                       b'%PDF-1.4 accept-two')
+    print('[2/6] 重跑级联替换（合成 task，应用层先删子表）')
+    task2 = catalog.create_task('preview', tv['id'], {})
+    syn_tasks.append(task2)
+    fid, dup = catalog.register_file('accept.pdf', 'pdf', 22, '0' * 64,
+                                     b'%PDF-1.4 accept-two')
     if not dup:
-        syn_sids.append(sid)
-    rf = catalog.add_run_file(run2, sid)
-    syn_doc = {'schema': 'c1-extract-records/1', 'run_id': run2,
+        syn_fids.append(fid)
+    tf = catalog.add_task_file(task2, fid)
+    syn_doc = {'schema': 'c1-extract-records/1', 'task_id': task2,
                'template': {'name': tv['name'], 'version': tv['version']},
-               'files': [{'run_file_id': rf, 'source_file_id': sid,
+               'files': [{'task_file_id': tf, 'file_id': fid,
                           'name': 'accept.pdf',
                           'records': json.loads(json.dumps(src_real))}]}
     content_db.save_records(syn_doc)
@@ -302,10 +341,13 @@ def _main(syn_runs, syn_sids, up):
     n2b = counts()
     check('2→1→2 级联', n1[0] == n2[0] - 1 and n2b == n2,
           '{}→{}→{}'.format(n2, n1, n2b))
+    orph = orphan_counts()
+    check('无孤儿 field/lineage/record（反查=0）', orph == (0, 0, 0),
+          'field/lineage/record 悬空={}'.format(orph))
 
     print('[3/6] patch_record 语义')
-    ok, rec = content.patch_record(run2, 0, 0, {field: 'ACCEPT_EDIT'})
-    back = content_db.get_records(run2)['files'][0]['records'][0]
+    ok, rec = content.patch_record(task2, 0, 0, {field: 'ACCEPT_EDIT'})
+    back = content_db.get_records(task2)['files'][0]['records'][0]
     check('edited+original 不变+DB 读回一致',
           ok and rec['review']['state'] == 'edited'
           and rec['original'] == src_real[0]['original']
@@ -313,32 +355,32 @@ def _main(syn_runs, syn_sids, up):
           and back['values'][field] == 'ACCEPT_EDIT'
           and back['review']['state'] == 'edited')
 
-    print('[4/6] 跨 run 查询')
+    print('[4/6] 跨 task 查询')
     hit = content_db.query_fields(field=field, q='ACCEPT_EDIT')
     hit2 = content_db.query_fields(q=real_kw)
-    check('field 投影命中', any(h['run_id'] == run2 for h in hit)
+    check('field 投影命中', any(h['task_id'] == task2 for h in hit)
           and len(hit2) > 0, 'syn={} real={}'.format(len(hit), len(hit2)))
 
-    print('[5/6] 真链路（临时服务 8799，上传字节取自 source_file.content）')
-    src = find_pdf_source()
+    print('[5/6] 真链路（临时服务 8799，上传字节取自 extract_file.content）')
+    src = find_pdf_file()
     if src is None:
-        print('  FAIL  source_file 无 PDF 原件，无法真链路验收')
+        print('  FAIL  extract_file 无 PDF 原件，无法真链路验收')
         return 1
     svc = start_service(8799)
     try:
-        run_id, st = upload(8799, src['data'], src['name'])
-        up.append(run_id)
+        task_id, st = upload(8799, src['data'], src['name'])
+        up.append(task_id)
         time.sleep(1)  # finally 清理 scratch 在 running=False 之后
-        rrun = catalog.get_run(run_id)
-        rf_id = rrun['files'][0]['run_file_id']
+        rtask = catalog.get_task(task_id)
+        tf_id = rtask['files'][0]['task_file_id']
         check('真链路 previewed',
-              st.get('error') is None and rrun['state'] == 'previewed'
-              and rrun['files'][0]['state'] == 'previewed',
-              'state={} rf_id={} err={}'.format(
-                  rrun['state'], rf_id, st.get('error')))
-        check('无持久 scratch 副本', scratch_clean())
-        stq, jq = http(8799, '/api/runs/{}/staging'.format(run_id))
-        n_rec = rrun['files'][0]['records_n']
+              st.get('error') is None and rtask['state'] == 'previewed'
+              and rtask['files'][0]['state'] == 'previewed',
+              'state={} tf_id={} err={}'.format(
+                  rtask['state'], tf_id, st.get('error')))
+        check('tmp/input+tmp/work 无 scratch 残留', scratch_clean())
+        stq, jq = http(8799, '/api/tasks/{}/staging'.format(task_id))
+        n_rec = rtask['files'][0]['records_n']
         check('暂存 API 记录数一致', stq == 200 and n_rec > 0
               and len(jq['files'][0]['records']) == n_rec,
               '{} 条'.format(n_rec))
@@ -357,10 +399,10 @@ def _main(syn_runs, syn_sids, up):
                                  'data': base64.b64encode(
                                      src['data']).decode()}],
                       'mode': 'preview'})
-        check('断库上传 503（不建 run）', st == 503, 'st={}'.format(st))
-        st, _j = http(8797, '/api/runs')
-        check('断库 runs 503', st == 503)
-        st, _j = http(8797, '/api/runs/{}/staging'.format(up[0]))
+        check('断库上传 503（不建 task）', st == 503, 'st={}'.format(st))
+        st, _j = http(8797, '/api/tasks')
+        check('断库 tasks 503', st == 503)
+        st, _j = http(8797, '/api/tasks/{}/staging'.format(up[0]))
         check('断库暂存读 503（无快照回落）', st == 503)
         st, _j = http(8797, '/api/templates')
         check('断库模板 503（不降级）', st == 503)

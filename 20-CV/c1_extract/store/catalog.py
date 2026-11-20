@@ -1,18 +1,19 @@
 """
-store/catalog.py — 目录元数据 repo（MySQL，design-c1-storage.md）。
-extract_source_file(+content) / extract_template(+version) / extract_run /
-extract_run_file / extract_quarantine。业务表统一 extract_ 前缀（002 迁移）。
+store/catalog.py — 目录元数据 repo（MySQL，design-task-schema.md）。
+extract_file(+content) / extract_template(+version) / extract_task /
+extract_task_file / extract_quarantine。业务表统一 extract_ 前缀。
 
 只经 db.connect 拿 DB-API 连接，SQL 全部收敛在本文件；DB 必选，错误上抛。
 JSON 列：写入 json.dumps，读出 json.loads（驱动无关，不依赖 MySQL JSON 函数）。
-source_file.content（原件 LONGBLOB）只在 get_source_content 里取，
+无外键约束：引用完整性归应用层（delete_file 引用守卫；级联删除见设计稿 §2）。
+extract_file.content（原件 LONGBLOB）只在 get_file_content 里取，
 列表/元数据查询一律排除该列，避免把字节拖进列表接口。
 """
 import json
 
 from . import db
 
-_SOURCE_COLS = ('id, name, sha256, kind, size_bytes, tags, note, created_at')
+_FILE_COLS = ('id, name, sha256, kind, size_bytes, tags, note, created_at')
 
 
 def _rows(cur):
@@ -26,20 +27,20 @@ def _j(v):
     return v
 
 
-# ---- extract_source_file ----
+# ---- extract_file ----
 
-def register_source(name, kind, size_bytes, sha256, content):
+def register_file(name, kind, size_bytes, sha256, content):
     """哈希去重登记：已存在回已有 id（dedup=True），字节不重复入库。"""
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT id FROM extract_source_file WHERE sha256=%s',
+            cur.execute('SELECT id FROM extract_file WHERE sha256=%s',
                         (sha256,))
             row = cur.fetchone()
             if row:
                 return row[0], True
             cur.execute(
-                'INSERT INTO extract_source_file (name, sha256, kind,'
+                'INSERT INTO extract_file (name, sha256, kind,'
                 ' size_bytes, content) VALUES (%s,%s,%s,%s,%s)',
                 (name, sha256, kind, size_bytes, content))
             conn.commit()
@@ -48,7 +49,7 @@ def register_source(name, kind, size_bytes, sha256, content):
         conn.close()
 
 
-def list_sources(q=None, kind=None, tag=None, page=1, per_page=20):
+def list_files(q=None, kind=None, tag=None, page=1, per_page=20):
     conn = db.connect()
     try:
         where, args = [], []
@@ -63,11 +64,11 @@ def list_sources(q=None, kind=None, tag=None, page=1, per_page=20):
             args.append('%{}%'.format(tag))
         w = ('WHERE ' + ' AND '.join(where)) if where else ''
         with conn.cursor() as cur:
-            cur.execute('SELECT COUNT(*) FROM extract_source_file ' + w, args)
+            cur.execute('SELECT COUNT(*) FROM extract_file ' + w, args)
             total = cur.fetchone()[0]
             cur.execute(
-                'SELECT {} FROM extract_source_file {} ORDER BY id DESC'
-                ' LIMIT %s OFFSET %s'.format(_SOURCE_COLS, w),
+                'SELECT {} FROM extract_file {} ORDER BY id DESC'
+                ' LIMIT %s OFFSET %s'.format(_FILE_COLS, w),
                 args + [per_page, (max(1, page) - 1) * per_page])
             items = _rows(cur)
         for it in items:
@@ -77,25 +78,25 @@ def list_sources(q=None, kind=None, tag=None, page=1, per_page=20):
         conn.close()
 
 
-def get_source(source_id):
+def get_file(file_id):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT {} FROM extract_source_file WHERE id=%s'
-                        .format(_SOURCE_COLS), (source_id,))
+            cur.execute('SELECT {} FROM extract_file WHERE id=%s'
+                        .format(_FILE_COLS), (file_id,))
             rows = _rows(cur)
         return rows[0] if rows else None
     finally:
         conn.close()
 
 
-def get_source_content(source_id):
+def get_file_content(file_id):
     """原件字节 + 路由所需元数据（/srcfiles/{id} 用）；不存在回 None。"""
     conn = db.connect()
     try:
         with conn.cursor() as cur:
             cur.execute('SELECT name, kind, sha256, content'
-                        ' FROM extract_source_file WHERE id=%s', (source_id,))
+                        ' FROM extract_file WHERE id=%s', (file_id,))
             row = cur.fetchone()
         if not row:
             return None
@@ -104,29 +105,28 @@ def get_source_content(source_id):
         conn.close()
 
 
-def delete_source(source_id):
-    """被 Run 引用禁删（血缘完整）；返回 (ok, reason)。字节随行删除。"""
+def delete_file(file_id):
+    """被任务引用禁删（血缘完整）；返回 (ok, reason)。字节随行删除。"""
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT COUNT(*) FROM extract_run_file'
-                        ' WHERE source_file_id=%s', (source_id,))
+            cur.execute('SELECT COUNT(*) FROM extract_task_file'
+                        ' WHERE file_id=%s', (file_id,))
             if cur.fetchone()[0]:
-                return False, '该文件已被运行引用，禁止删除（血缘完整）'
-            cur.execute('DELETE FROM extract_source_file WHERE id=%s',
-                        (source_id,))
+                return False, '该文件已被任务引用，禁止删除（血缘完整）'
+            cur.execute('DELETE FROM extract_file WHERE id=%s', (file_id,))
             conn.commit()
             return True, None
     finally:
         conn.close()
 
 
-def update_source_meta(source_id, tags=None, note=None):
+def update_file_meta(file_id, tags=None, note=None):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('UPDATE extract_source_file SET tags=%s, note=%s'
-                        ' WHERE id=%s', (tags, note, source_id))
+            cur.execute('UPDATE extract_file SET tags=%s, note=%s'
+                        ' WHERE id=%s', (tags, note, file_id))
             conn.commit()
     finally:
         conn.close()
@@ -180,14 +180,14 @@ def get_template_version(version_id=None, name=None):
         conn.close()
 
 
-# ---- extract_run / extract_run_file ----
+# ---- extract_task / extract_task_file ----
 
-def create_run(mode, template_version_id, params):
+def create_task(mode, template_version_id, params):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
             cur.execute(
-                'INSERT INTO extract_run (mode, template_version_id,'
+                'INSERT INTO extract_task (mode, template_version_id,'
                 ' params_json, state) VALUES (%s,%s,%s,%s)',
                 (mode, template_version_id,
                  json.dumps(params or {}, ensure_ascii=False), 'pending'))
@@ -197,68 +197,68 @@ def create_run(mode, template_version_id, params):
         conn.close()
 
 
-def set_run_state(run_id, state, error=None):
+def set_task_state(task_id, state, error=None):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('UPDATE extract_run SET state=%s, error=%s WHERE id=%s',
-                        (state, error, run_id))
+            cur.execute('UPDATE extract_task SET state=%s, error=%s WHERE id=%s',
+                        (state, error, task_id))
             conn.commit()
     finally:
         conn.close()
 
 
-def add_run_file(run_id, source_file_id):
+def add_task_file(task_id, file_id):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
             cur.execute(
-                'INSERT INTO extract_run_file (run_id, source_file_id)'
-                ' VALUES (%s,%s)', (run_id, source_file_id))
+                'INSERT INTO extract_task_file (task_id, file_id)'
+                ' VALUES (%s,%s)', (task_id, file_id))
             conn.commit()
             return cur.lastrowid
     finally:
         conn.close()
 
 
-def set_run_file_state(run_file_id, state):
+def set_task_file_state(task_file_id, state):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('UPDATE extract_run_file SET state=%s WHERE id=%s',
-                        (state, run_file_id))
+            cur.execute('UPDATE extract_task_file SET state=%s WHERE id=%s',
+                        (state, task_file_id))
             conn.commit()
     finally:
         conn.close()
 
 
-def _run_doc(cur, run_id):
-    """run 表投影（run.json 退役后的唯一 runs 数据源，形状兼容旧前端信封）。"""
+def _task_doc(cur, task_id):
+    """task 表投影（tasks API 的唯一数据源，无 task.json 附件）。"""
     cur.execute(
         'SELECT r.id, r.mode, r.state, r.error, r.params_json,'
         ' r.created_at, r.updated_at, t.name AS tpl_name, tv.version,'
         ' tv.id AS version_id'
-        ' FROM extract_run r'
+        ' FROM extract_task r'
         ' JOIN extract_template_version tv ON tv.id=r.template_version_id'
         ' JOIN extract_template t ON t.id=tv.template_id'
-        ' WHERE r.id=%s', (run_id,))
+        ' WHERE r.id=%s', (task_id,))
     rows = _rows(cur)
     if not rows:
         return None
     r = rows[0]
     cur.execute(
-        'SELECT rf.id, rf.source_file_id, rf.state, s.name,'
+        'SELECT tf.id, tf.file_id, tf.state, s.name,'
         ' (SELECT COUNT(*) FROM extract_staging_record sr'
-        '   WHERE sr.run_file_id=rf.id) AS records_n'
-        ' FROM extract_run_file rf'
-        ' JOIN extract_source_file s ON s.id=rf.source_file_id'
-        ' WHERE rf.run_id=%s ORDER BY rf.id', (run_id,))
+        '   WHERE sr.task_file_id=tf.id) AS records_n'
+        ' FROM extract_task_file tf'
+        ' JOIN extract_file s ON s.id=tf.file_id'
+        ' WHERE tf.task_id=%s ORDER BY tf.id', (task_id,))
     files = [{'name': f['name'], 'state': f['state'],
-              'source_file_id': f['source_file_id'],
-              'run_file_id': f['id'], 'records_n': f['records_n']}
+              'file_id': f['file_id'],
+              'task_file_id': f['id'], 'records_n': f['records_n']}
              for f in _rows(cur)]
     return {
-        'run_id': r['id'], 'mode': r['mode'],
+        'task_id': r['id'], 'mode': r['mode'],
         'template': {'name': r['tpl_name'], 'version': r['version'],
                      'version_id': r['version_id']},
         'params': _j(r['params_json']) or {},
@@ -269,33 +269,33 @@ def _run_doc(cur, run_id):
     }
 
 
-def get_run(run_id):
+def get_task(task_id):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            return _run_doc(cur, run_id)
+            return _task_doc(cur, task_id)
     finally:
         conn.close()
 
 
-def list_runs():
-    """运行列表（新 run 在前）：逐个表投影，P0 规模足够。"""
+def list_tasks():
+    """任务列表（新任务在前）：逐个表投影，P0 规模足够。"""
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT id FROM extract_run ORDER BY id DESC')
+            cur.execute('SELECT id FROM extract_task ORDER BY id DESC')
             ids = [r[0] for r in cur.fetchall()]
-            return [_run_doc(cur, i) for i in ids]
+            return [_task_doc(cur, i) for i in ids]
     finally:
         conn.close()
 
 
-def run_file_ids(run_id):
+def task_file_ids(task_id):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT id FROM extract_run_file'
-                        ' WHERE run_id=%s ORDER BY id', (run_id,))
+            cur.execute('SELECT id FROM extract_task_file'
+                        ' WHERE task_id=%s ORDER BY id', (task_id,))
             return [r[0] for r in cur.fetchall()]
     finally:
         conn.close()
@@ -303,15 +303,15 @@ def run_file_ids(run_id):
 
 # ---- extract_quarantine ----
 
-def add_quarantine(run_id, run_file_id, record_index, stage, reason, payload):
+def add_quarantine(task_id, task_file_id, record_index, stage, reason, payload):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
             cur.execute(
-                'INSERT INTO extract_quarantine (run_id, run_file_id,'
+                'INSERT INTO extract_quarantine (task_id, task_file_id,'
                 ' record_index, stage, reason, payload_json)'
                 ' VALUES (%s,%s,%s,%s,%s,%s)',
-                (run_id, run_file_id, record_index, stage, reason,
+                (task_id, task_file_id, record_index, stage, reason,
                  json.dumps(payload, ensure_ascii=False)))
             conn.commit()
             return cur.lastrowid
@@ -319,13 +319,13 @@ def add_quarantine(run_id, run_file_id, record_index, stage, reason, payload):
         conn.close()
 
 
-def list_quarantine(run_id=None, state=None):
+def list_quarantine(task_id=None, state=None):
     conn = db.connect()
     try:
         where, args = [], []
-        if run_id is not None:
-            where.append('run_id=%s')
-            args.append(run_id)
+        if task_id is not None:
+            where.append('task_id=%s')
+            args.append(task_id)
         if state:
             where.append('state=%s')
             args.append(state)

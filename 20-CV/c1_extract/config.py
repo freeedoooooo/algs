@@ -13,11 +13,15 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 # 数据根：默认 = 包根；服务器部署整体拷贝后设 C1_EXTRACT_DATA_ROOT 即可。
-# 只承载运维态目录（logs/ 运行日志、data/ 凭据）；业务数据全在 DB，
-# 提取期磁盘仅 tempfile scratch（跑完即清），无持久 input/output/sources。
+# 只承载运维态目录（logs/ 运行日志、data/ 凭据）与 tmp/ 运行期 scratch；
+# 业务数据全在 DB，无持久 input/output/sources。
 DATA_ROOT = os.path.abspath(os.getenv('C1_EXTRACT_DATA_ROOT', ROOT))
 LOG_DIR = os.path.join(DATA_ROOT, 'logs')
 DATA_DIR = os.path.join(DATA_ROOT, 'data')
+# scratch 收敛在包内 tmp/（跑完即清）：input=上传副本，work=提取工作区
+TMP_DIR = os.path.join(DATA_ROOT, 'tmp')
+TMP_INPUT = os.path.join(TMP_DIR, 'input')
+TMP_WORK = os.path.join(TMP_DIR, 'work')
 ASSETS_DIR = os.path.join(ROOT, 'extract_report', 'assets')
 TEMPLATES_DIR = os.path.join(ROOT, 'extract_report', 'templates')
 
@@ -57,17 +61,17 @@ BOXES_NAME = 'boxes.png'
 RAW_DIR = 'raw'
 EXTRACT_JSON = 'extract.json'
 RECORDS_JSON = 'records.json'
-# 对照报告：每 run_file 一份独立自包含 HTML，与 extract.json / 图片 / CSV 同入
+# 对照报告：每 task_file 一份独立自包含 HTML，与 extract.json / 图片 / CSV 同入
 # extract_artifact BLOB；模板（assets）只有一份，生成时内联。
 EXTRACT_REPORT_NAME = '对照报告.html'
 
 # ---- 平台目录库凭据引用名（解析顺序 env → data/secrets.json，见 store/db.py）----
 PLATFORM_DB_REF = 'C1_EXTRACT_DB'
 
-# 存储契约（design-c1-storage.md）：DB 是唯一事实源——目录/记录/血缘在关系表，
-# 原件字节在 source_file.content，产物字节在 extract_artifact BLOB（run_file 粒度）；
-# 磁盘仅运行期 scratch。审计/file:// 用 export_artifacts.py 按需导出。
+# 存储契约（design-task-schema.md）：DB 是唯一事实源——目录/记录/血缘在关系表，
+# 原件字节在 extract_file.content，产物字节在 extract_artifact BLOB（task_file 粒度）；
+# 磁盘仅 tmp/ 运行期 scratch。审计/file:// 用 export_artifacts.py 按需导出。
 # DB 不可用＝服务显式失败（503），不降级。
 
-for _d in (LOG_DIR, DATA_DIR):
+for _d in (LOG_DIR, DATA_DIR, TMP_INPUT, TMP_WORK):
     os.makedirs(_d, exist_ok=True)

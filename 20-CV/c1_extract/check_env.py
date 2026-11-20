@@ -6,7 +6,7 @@ c1_extract/check_env.py — 独立部署自检（只读，不加载任何模型�
 
 检查四件事：
     1) requirements.txt 里的包能否 import、装的是哪个版本
-    2) logs/ data/ 是否存在且可写（业务数据全在 DB，无持久 input/output）
+    2) logs/ data/ tmp/ 是否存在且可写（业务数据全在 DB，无持久 input/output）
     3) PaddleX 官方模型缓存是否就绪（没有→首次处理会联网下载）
     4) 平台库（MySQL）连通性 —— 必选项（DB 唯一事实源），连不上即 FAIL
 
@@ -67,6 +67,8 @@ def check_dirs():
     bad = []
     for label, path in (('logs', config.LOG_DIR),
                         ('data', config.DATA_DIR),
+                        ('tmp/input', config.TMP_INPUT),
+                        ('tmp/work', config.TMP_WORK),
                         ('assets', config.ASSETS_DIR),
                         ('templates', config.TEMPLATES_DIR)):
         ok = os.path.isdir(path) and (label in ('assets', 'templates')

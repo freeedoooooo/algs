@@ -7,18 +7,18 @@ c1_extract/app.py — Web 工具入口（FastAPI + uvicorn）。只负责路由�
 
 路由：
     GET  /              提取页（assets/upload.html + /static 资源）
-    GET  /sources       资料库页 · GET /runs 运行页 · GET /staging 暂存只读视图
+    GET  /sources       资料库页 · GET /tasks 任务页 · GET /staging 暂存只读视图
     GET  /healthz       健康检查
     POST /api/upload    上传（base64 JSON，不依赖 python-multipart）
     GET  /api/status    处理进度
-    GET  /extract-report   对照报告（重定向到最新 run_file 的报告真实地址）
-    /files/<run_file_id>/<path>   产物（DB BLOB，白名单，raw 403）
-    /srcfiles/<source_id>         原件（source_file.content BLOB）
+    GET  /extract-report   对照报告（重定向到最新 task_file 的报告真实地址）
+    /files/<task_file_id>/<path>   产物（DB BLOB，白名单，raw 403）
+    /srcfiles/<file_id>            原件（extract_file.content BLOB）
     /static/<path>      页面 css / js
 
-存储契约（design-c1-storage.md）：DB 唯一事实源——目录/记录/血缘关系表，
-原件字节 source_file.content，产物字节 extract_artifact（run_file 粒度）；
-磁盘仅运行期 scratch。DB 不可用显式 503/failed，不降级。
+存储契约（design-task-schema.md）：DB 唯一事实源——目录/记录/血缘关系表，
+原件字节 extract_file.content，产物字节 extract_artifact（task_file 粒度）；
+磁盘仅 tmp/ 运行期 scratch。DB 不可用显式 503/failed，不降级。
 审计/file:// 用 export_artifacts.py。提取逻辑在 pipeline/，报告在 extract_report/。
 """
 import os
@@ -110,7 +110,7 @@ def _blob_response(data, mime, sha, request):
 
 @app.get('/files/{path:path}')
 def files_db(path: str, request: Request):
-    """/files/<run_file_id>/<产物相对路径>：白名单 + raw 403。"""
+    """/files/<task_file_id>/<产物相对路径>：白名单 + raw 403。"""
     norm = unquote(path).replace('\\', '/')
     parts = [p for p in norm.split('/') if p not in ('', '.')]
     if not parts or '..' in parts:
@@ -132,12 +132,12 @@ def files_db(path: str, request: Request):
     return _blob_response(a['data'], a['mime'], a['sha'], request)
 
 
-@app.get('/srcfiles/{source_id:int}')
-def srcfiles_db(source_id: int, request: Request):
-    """/srcfiles/<source_id>：原件字节（source_file.content）。
+@app.get('/srcfiles/{file_id:int}')
+def srcfiles_db(file_id: int, request: Request):
+    """/srcfiles/<file_id>：原件字节（extract_file.content）。
     用 id 不用名字——同名不同字节是两行，名字会撞。"""
     try:
-        s = _load('store.catalog').get_source_content(source_id)
+        s = _load('store.catalog').get_file_content(file_id)
     except Exception as e:
         return _db_unavailable(e)
     if s is None:
@@ -166,7 +166,7 @@ STATE = {
     'params': {}, 'warnings': [],
     'logs': [], 'progress': 0, 'stage': '',
     'log_file': None,
-    'mode': 'preview', 'template': None, 'run_id': None,
+    'mode': 'preview', 'template': None, 'task_id': None,
 }
 LOCK = threading.Lock()
 
@@ -182,7 +182,7 @@ def step(msg, level='info', stage='batch'):
 
 
 def _on_log(row):
-    """RunLog 每条日志同步进 STATE，页面轮询 /api/status 即可看到。"""
+    """TaskLog 每条日志同步进 STATE，页面轮询 /api/status 即可看到。"""
     with LOCK:
         STATE['logs'].append(row)
         STATE['stage'] = row['stage']
@@ -212,13 +212,13 @@ def _kind_of(name):
     return 'text' if ext in config.TEXT_EXTS else 'image'
 
 
-def _register_source(name, data):
-    """sha256 去重登记，原件字节直接进 source_file.content。
+def _register_file(name, data):
+    """sha256 去重登记，原件字节直接进 extract_file.content。
     DB 必选：失败上抛（调用方回 503）。"""
     sha = hashlib.sha256(data).hexdigest()
-    sid, dedup = _load('store.catalog').register_source(
+    fid, dedup = _load('store.catalog').register_file(
         name, _kind_of(name), len(data), sha, data)
-    return {'source_file_id': sid, 'sha256': sha, 'dedup': dedup}
+    return {'file_id': fid, 'sha256': sha, 'dedup': dedup}
 
 
 def _resolve_template(version_id=None):
@@ -242,9 +242,9 @@ def sources_page():
     return HTMLResponse(asset('sources.html'))
 
 
-@app.get('/runs', response_class=HTMLResponse)
-def runs_page():
-    return HTMLResponse(asset('runs.html'))
+@app.get('/tasks', response_class=HTMLResponse)
+def tasks_page():
+    return HTMLResponse(asset('tasks.html'))
 
 
 @app.get('/staging', response_class=HTMLResponse)
@@ -302,8 +302,8 @@ async def upload(request: Request):
     # 调试参数：校验一次，非法值回退默认并把警告带回页面（不让整批失败）
     params, warns = params_mod.normalize(body.get('params'))
 
-    # 输入副本只落临时 scratch（字节事实源在 source_file.content），跑完即清
-    in_dir = tempfile.mkdtemp(prefix='c1_in_')
+    # 输入副本只落 tmp/input scratch（字节事实源在 extract_file.content），跑完即清
+    in_dir = tempfile.mkdtemp(prefix='in_', dir=config.TMP_INPUT)
     paths, used, ctx = [], set(), []
     for item in files:
         name = safe_name(item.get('name', ''))
@@ -330,7 +330,7 @@ async def upload(request: Request):
             f.write(data)
         paths.append(path)
         try:
-            info = _register_source(name, data)
+            info = _register_file(name, data)
         except Exception as e:
             return _db_unavailable(e)
         ctx.append(dict(info, name=name, path=path))
@@ -339,25 +339,25 @@ async def upload(request: Request):
 
 
 def _launch(paths, params, warns, ctx, mode='preview', tpl=None):
-    """登记 Run（DB 必选，失败整批 503）→ 建日志 → 重置 STATE → 起后台线程。"""
+    """登记任务（DB 必选，失败整批 503）→ 建日志 → 重置 STATE → 起后台线程。"""
     tpl = tpl or _resolve_template()
     catalog = _load('store.catalog')
     try:
-        run_id = catalog.create_run(mode, tpl['version_id'], params)
+        task_id = catalog.create_task(mode, tpl['version_id'], params)
         for f in ctx:
-            f['run_file_id'] = catalog.add_run_file(run_id, f['source_file_id'])
+            f['task_file_id'] = catalog.add_task_file(task_id, f['file_id'])
             f['state'] = 'pending'
     except Exception as e:
         return _db_unavailable(e)
-    label = 'run_{}'.format(run_id)
-    runlog = _load('runlog')
-    log = runlog.RunLog(label, log_path=os.path.join(config.LOG_DIR,
-                                                     label + '.log'),
-                        on_emit=_on_log)
-    run_ctx = {'run_id': run_id, 'mode': mode, 'template': tpl,
-               'files': ctx, 'created_at': _now()}
+    label = 'task_{}'.format(task_id)
+    tasklog = _load('tasklog')
+    log = tasklog.TaskLog(label, log_path=os.path.join(config.LOG_DIR,
+                                                       label + '.log'),
+                          on_emit=_on_log)
+    task_ctx = {'task_id': task_id, 'mode': mode, 'template': tpl,
+                'files': ctx, 'created_at': _now()}
     if paths:
-        run_ctx['in_scratch'] = os.path.dirname(paths[0])
+        task_ctx['in_scratch'] = os.path.dirname(paths[0])
     with LOCK:
         STATE.update(running=True, ready=False, error=None, steps=[],
                      cases=[], started=time.time(), elapsed=0,
@@ -365,17 +365,17 @@ def _launch(paths, params, warns, ctx, mode='preview', tpl=None):
                              if not k.startswith('_')}, warnings=warns,
                      logs=[], progress=0, stage='batch',
                      log_file=label + '.log',
-                     mode=mode, template=tpl, run_id=run_id)
-    log.stage('batch', '运行 {} · 收到 {} 个文件 · 模式 {} · 模板 {} v{}'.format(
-        run_id, len(paths), mode, tpl['name'], tpl['version']))
+                     mode=mode, template=tpl, task_id=task_id)
+    log.stage('batch', '任务 {} · 收到 {} 个文件 · 模式 {} · 模板 {} v{}'.format(
+        task_id, len(paths), mode, tpl['name'], tpl['version']))
     log.info('params', '生效参数：{}'.format(
         ', '.join('{}={}'.format(k, v) for k, v in params.items()
                   if not k.startswith('_'))))
     for w in warns:
         log.warn('params', w)
-    threading.Thread(target=run_batch, args=(paths, params, log, run_ctx),
+    threading.Thread(target=task_batch, args=(paths, params, log, task_ctx),
                      daemon=True).start()
-    return {'ok': True, 'count': len(paths), 'run_id': run_id,
+    return {'ok': True, 'count': len(paths), 'task_id': task_id,
             'warnings': warns}
 
 
@@ -387,29 +387,29 @@ def status():
 
 @app.get('/api/logs')
 def api_logs():
-    """下载当前运行的纯文本运行日志（结构化日志在 /api/status 的 logs 里）。"""
+    """下载当前任务的纯文本运行日志（结构化日志在 /api/status 的 logs 里）。"""
     rel = STATE.get('log_file')
     path = os.path.join(config.LOG_DIR, rel) if rel else None
     if not path or not os.path.isfile(path):
         return JSONResponse({'ok': False, 'error': '暂无日志'}, status_code=404)
     return FileResponse(path, media_type='text/plain; charset=utf-8',
-                        filename='run_{}.log'.format(STATE.get('run_id')))
+                        filename='task_{}.log'.format(STATE.get('task_id')))
 
 
 @app.get('/extract-report')
 def extract_report():
-    """对照报告：重定向到最新 run_file 的 对照报告.html 真实地址。
-    报告内资源全是相对路径，必须落在该 run_file 的 URL 下才能解析；
+    """对照报告：重定向到最新 task_file 的 对照报告.html 真实地址。
+    报告内资源全是相对路径，必须落在该 task_file 的 URL 下才能解析；
     file:// 直开用 export_artifacts.py 按需导出。"""
     from urllib.parse import quote
     try:
-        rf = _load('store.artifact_db').latest_run_file_with(
+        tf = _load('store.artifact_db').latest_task_file_with(
             config.EXTRACT_REPORT_NAME)
     except Exception as e:
         return _db_unavailable(e)
-    if rf is not None:
+    if tf is not None:
         return RedirectResponse('/files/{}/{}'.format(
-            rf, quote(config.EXTRACT_REPORT_NAME, safe='')))
+            tf, quote(config.EXTRACT_REPORT_NAME, safe='')))
     return HTMLResponse(
         '<h3>还没有对照报告</h3><p><a href="/">返回上传页</a>先上传一个文件。</p>')
 
@@ -429,7 +429,7 @@ _STAGE_FRAC = {
 }
 
 
-def _ingest_case(run_file_id, case_abs):
+def _ingest_case(task_file_id, case_abs):
     """scratch 目录全量产物入 extract_artifact（管线/报告生成零改动，
     它们照旧写文件，这里统一收编入库）。"""
     artifact = _load('store.artifact')
@@ -440,24 +440,24 @@ def _ingest_case(run_file_id, case_abs):
             p = os.path.join(root, fn)
             rel = os.path.relpath(p, case_abs).replace(os.sep, '/')
             with open(p, 'rb') as f:
-                artifact.save(run_file_id, rel, f.read())
+                artifact.save(task_file_id, rel, f.read())
 
 
-def run_batch(paths, params=None, log=None, run_ctx=None):
+def task_batch(paths, params=None, log=None, task_ctx=None):
     """后台线程：逐个提取 → raw/ + extract.json → 对照报告 → collect 记录入库
-    → 产物 ingest 入 BLOB。DB 必选：写失败整 run failed；scratch 跑完清尽。"""
-    run_ctx = run_ctx or {'run_id': None, 'mode': 'preview',
-                          'template': _resolve_template(),
-                          'files': [{'name': os.path.basename(p), 'path': p}
-                                    for p in paths],
-                          'created_at': _now()}
+    → 产物 ingest 入 BLOB。DB 必选：写失败整任务 failed；scratch 跑完清尽。"""
+    task_ctx = task_ctx or {'task_id': None, 'mode': 'preview',
+                            'template': _resolve_template(),
+                            'files': [{'name': os.path.basename(p), 'path': p}
+                                      for p in paths],
+                            'created_at': _now()}
     content = _load('store.content')
     collect = _load('collect')
     catalog = _load('store.catalog')
 
     def db(fn_name, *a):
-        # DB 必选：目录状态写失败上抛 → 整 run 显式 failed，不降级
-        if run_ctx.get('run_id') is None:
+        # DB 必选：目录状态写失败上抛 → 整任务显式 failed，不降级
+        if task_ctx.get('task_id') is None:
             return
         getattr(catalog, fn_name)(*a)
 
@@ -473,13 +473,14 @@ def run_batch(paths, params=None, log=None, run_ctx=None):
         total = len(paths)
         for i, path in enumerate(paths, 1):
             name = os.path.basename(path)
-            fc = next((f for f in run_ctx['files']
+            fc = next((f for f in task_ctx['files']
                        if f.get('name') == name or f.get('path') == path),
                       {})
             log.stage('case', '[{}/{}] 开始处理 {}'.format(i, total, name))
             progress(int((i - 1) / total * 100))
             # 磁盘只是 scratch（paddle 需要真实图片路径），产物最终入 BLOB
-            case_abs = fc.get('scratch') or tempfile.mkdtemp(prefix='c1_case_')
+            case_abs = fc.get('scratch') or tempfile.mkdtemp(
+                prefix='case_', dir=config.TMP_WORK)
             fc['scratch'] = case_abs
             os.makedirs(case_abs, exist_ok=True)
             frac = [0.0]
@@ -492,8 +493,8 @@ def run_batch(paths, params=None, log=None, run_ctx=None):
                         STATE['progress'] = int((_i - 1 + f) / total * 100)
                 log.emit(level, stage, msg, **kw)
 
-            if fc.get('run_file_id'):
-                db('set_run_file_state', fc['run_file_id'], 'extracting')
+            if fc.get('task_file_id'):
+                db('set_task_file_state', fc['task_file_id'], 'extracting')
             rec = pipeline.extract_one(path, case_abs, params, emit=emit)
             pages = rec.get('pages') or []
             tot_lines = sum((p.get('stats') or {}).get('lines', 0)
@@ -505,37 +506,37 @@ def run_batch(paths, params=None, log=None, run_ctx=None):
                 ' · 跨页合并 {} 张'.format(len(rec.get('stitched_tables') or []))
                 if rec.get('stitched_tables') else ''), case=name)
             # 报告只依赖 extract 层，先于 records 写库生成：
-            # 断库时引擎产物（extract+报告）仍完整，运行显式 failed
+            # 断库时引擎产物（extract+报告）仍完整，任务显式 failed
             report_mod.build([rec],
                              os.path.join(case_abs, config.EXTRACT_REPORT_NAME),
                              params=params)
             # L2 记录层：passthrough 收集 + 逐格血缘 → DB 三表（事实源）
-            tpl = run_ctx['template']
+            tpl = task_ctx['template']
             recs = collect.passthrough(rec)
             rdoc = collect.build_records_doc(
-                rec, recs, run_id=run_ctx.get('run_id'),
-                run_file_id=fc.get('run_file_id'),
-                source_file_id=fc.get('source_file_id'),
+                rec, recs, task_id=task_ctx.get('task_id'),
+                task_file_id=fc.get('task_file_id'),
+                file_id=fc.get('file_id'),
                 template={'name': tpl['name'], 'version': tpl['version']})
             content.save_records(rdoc)
             fc['records_n'] = len(recs)
             fc['state'] = 'previewed'
             log.ok('collect', '暂存记录 {} 条（passthrough · 逐格血缘）'.format(
                 len(recs)), case=name)
-            if fc.get('run_file_id'):
-                db('set_run_file_state', fc['run_file_id'], 'previewed')
-                _ingest_case(fc['run_file_id'], case_abs)
+            if fc.get('task_file_id'):
+                db('set_task_file_state', fc['task_file_id'], 'previewed')
+                _ingest_case(fc['task_file_id'], case_abs)
             shutil.rmtree(case_abs, ignore_errors=True)
             fc.pop('scratch', None)
             progress(int(i / total * 100))
-        db('set_run_state', run_ctx.get('run_id'), 'previewed')
+        db('set_task_state', task_ctx.get('task_id'), 'previewed')
         # 完成态最后发布：status 变 running=False 时 DB 必已写完
         with LOCK:
             STATE.update(running=False, ready=True,
                          cases=[{'file': f['name'],
-                                 'run_file_id': f.get('run_file_id'),
+                                 'task_file_id': f.get('task_file_id'),
                                  'records_n': f.get('records_n')}
-                                for f in run_ctx['files']],
+                                for f in task_ctx['files']],
                          elapsed=round(time.time()
                                        - (STATE['started'] or time.time()), 1),
                          progress=100, stage='done')
@@ -546,25 +547,25 @@ def run_batch(paths, params=None, log=None, run_ctx=None):
             log.error('error', '出错：' + str(e))
             log.error('error', traceback.format_exc(limit=3).strip())
         try:
-            db('set_run_state', run_ctx.get('run_id'), 'failed', str(e))
+            db('set_task_state', task_ctx.get('task_id'), 'failed', str(e))
         except Exception as e2:
             if log:
-                log.warn('store', 'run 状态写入失败：{}'.format(e2))
+                log.warn('store', '任务状态写入失败：{}'.format(e2))
         with LOCK:
             STATE.update(running=False, ready=False, error=str(e),
                          stage='error')
         print(traceback.format_exc(limit=3))
     finally:
-        for f in run_ctx.get('files') or []:
+        for f in task_ctx.get('files') or []:
             if f.get('scratch'):
                 shutil.rmtree(f['scratch'], ignore_errors=True)
-        if run_ctx.get('in_scratch'):
-            shutil.rmtree(run_ctx['in_scratch'], ignore_errors=True)
+        if task_ctx.get('in_scratch'):
+            shutil.rmtree(task_ctx['in_scratch'], ignore_errors=True)
 
 
-# ---- 数据链路 API（P0：资料库 / 模板 / 运行 / 预生成内容读取）----
+# ---- 数据链路 API（P0：资料库 / 模板 / 任务 / 预生成内容读取）----
 # 全部经 catalog / content / artifact repo 查 DB（DB 故障回 503）。
-# 运行以 run id 为键；文件以 run_file_id 为键；原件以 source_id 为键。
+# 任务以 task id 为键；文件以 task_file_id 为键；原件以 file_id 为键。
 
 def _db_unavailable(e):
     return JSONResponse({'ok': False, 'error': '平台库不可用：{}'.format(e)},
@@ -574,7 +575,7 @@ def _db_unavailable(e):
 @app.get('/api/sources')
 def api_sources(q: str = None, kind: str = None, tag: str = None, page: int = 1):
     try:
-        return _load('store.catalog').list_sources(q, kind, tag, page)
+        return _load('store.catalog').list_files(q, kind, tag, page)
     except Exception as e:
         return _db_unavailable(e)
 
@@ -602,16 +603,16 @@ async def api_sources_add(request: Request):
             {'ok': False, 'error': '{} 超过 {}MB'.format(name, config.MAX_FILE_MB)},
             status_code=400)
     try:
-        info = _register_source(name, data)
+        info = _register_file(name, data)
     except Exception as e:
         return _db_unavailable(e)
-    return {'ok': True, 'id': info['source_file_id'], 'dedup': info['dedup']}
+    return {'ok': True, 'id': info['file_id'], 'dedup': info['dedup']}
 
 
-@app.delete('/api/sources/{source_id}')
-def api_sources_del(source_id: int):
+@app.delete('/api/sources/{file_id}')
+def api_sources_del(file_id: int):
     try:
-        ok, reason = _load('store.catalog').delete_source(source_id)
+        ok, reason = _load('store.catalog').delete_file(file_id)
     except Exception as e:
         return _db_unavailable(e)
     if not ok:
@@ -627,47 +628,47 @@ def api_templates():
         return _db_unavailable(e)
 
 
-@app.get('/api/runs')
-def api_runs():
-    """运行列表：run/run_file/source 表投影（run.json 已退役）。"""
+@app.get('/api/tasks')
+def api_tasks():
+    """任务列表：task/task_file/file 表投影（无 run.json 附件）。"""
     try:
-        return {'items': _load('store.catalog').list_runs()}
+        return {'items': _load('store.catalog').list_tasks()}
     except Exception as e:
         return _db_unavailable(e)
 
 
-@app.get('/api/runs/{run_id}')
-def api_run_detail(run_id: int):
+@app.get('/api/tasks/{task_id}')
+def api_task_detail(task_id: int):
     try:
-        doc = _load('store.catalog').get_run(run_id)
+        doc = _load('store.catalog').get_task(task_id)
     except Exception as e:
         return _db_unavailable(e)
     if doc is None:
-        return JSONResponse({'ok': False, 'error': '运行不存在'},
+        return JSONResponse({'ok': False, 'error': '任务不存在'},
                             status_code=404)
     live = None
     with LOCK:
-        if STATE.get('run_id') == run_id:
+        if STATE.get('task_id') == task_id:
             live = {'running': STATE['running'], 'progress': STATE['progress'],
                     'stage': STATE['stage'], 'error': STATE['error']}
-    return {'run': doc, 'live': live}
+    return {'task': doc, 'live': live}
 
 
-def _rf_of(run_id, file):
-    """run 内选 run_file：file 指定则校验归属，否则取第一个。"""
-    rfs = _load('store.catalog').run_file_ids(run_id)
-    if not rfs:
+def _tf_of(task_id, file):
+    """任务内选 task_file：file 指定则校验归属，否则取第一个。"""
+    tfs = _load('store.catalog').task_file_ids(task_id)
+    if not tfs:
         return None
     if file:
-        return int(file) if int(file) in rfs else None
-    return rfs[0]
+        return int(file) if int(file) in tfs else None
+    return tfs[0]
 
 
-@app.get('/api/runs/{run_id}/extract')
-def api_run_extract(run_id: int, file: str = None):
+@app.get('/api/tasks/{task_id}/extract')
+def api_task_extract(task_id: int, file: str = None):
     try:
-        rf = _rf_of(run_id, file)
-        doc = _load('store.content').get_extract(rf) if rf else None
+        tf = _tf_of(task_id, file)
+        doc = _load('store.content').get_extract(tf) if tf else None
     except Exception as e:
         return _db_unavailable(e)
     if doc is None:
@@ -676,13 +677,13 @@ def api_run_extract(run_id: int, file: str = None):
     return doc
 
 
-@app.get('/api/runs/{run_id}/staging')
-def api_run_staging(run_id: int, file: str = None):
+@app.get('/api/tasks/{task_id}/staging')
+def api_task_staging(task_id: int, file: str = None):
     try:
-        doc = _load('store.content').get_records(run_id)
+        doc = _load('store.content').get_records(task_id)
         if doc and file:
             doc['files'] = [f for f in doc['files']
-                            if f['run_file_id'] == int(file)]
+                            if f['task_file_id'] == int(file)]
             if not doc['files']:
                 doc = None
     except Exception as e:
@@ -695,18 +696,18 @@ def api_run_staging(run_id: int, file: str = None):
 
 @app.get('/api/staging/query')
 def api_staging_query(field: str = None, q: str = None,
-                      run: str = None, state: str = None):
-    """跨 run 暂存查询：DB 直查 field 投影；DB down → 503。"""
+                      task: str = None, state: str = None):
+    """跨任务暂存查询：DB 直查 field 投影；DB down → 503。"""
     try:
-        rows = _load('store.content_db').query_fields(field, q, run, state)
+        rows = _load('store.content_db').query_fields(field, q, task, state)
     except Exception as e:
         return _db_unavailable(e)
     return {'ok': True, 'items': rows}
 
 
-@app.post('/api/runs')
-async def api_runs_create(request: Request):
-    """从资料库选文件发起运行（复用上传编排；字节直读 source_file.content）。"""
+@app.post('/api/tasks')
+async def api_tasks_create(request: Request):
+    """从资料库选文件发起任务（复用上传编排；字节直读 extract_file.content）。"""
     if STATE['running']:
         return JSONResponse({'ok': False, 'error': '已有任务正在处理'},
                             status_code=409)
@@ -715,13 +716,13 @@ async def api_runs_create(request: Request):
     except Exception:
         return JSONResponse({'ok': False, 'error': '请求体不是合法 JSON'},
                             status_code=400)
-    ids = body.get('source_file_ids') or []
+    ids = body.get('file_ids') or []
     if not ids:
         return JSONResponse({'ok': False, 'error': '未选择文件'},
                             status_code=400)
     try:
         catalog = _load('store.catalog')
-        rows = [catalog.get_source(int(i)) for i in ids]
+        rows = [catalog.get_file(int(i)) for i in ids]
     except Exception as e:
         return _db_unavailable(e)
     if any(r is None for r in rows):
@@ -732,26 +733,26 @@ async def api_runs_create(request: Request):
         tpl = _resolve_template(body.get('template_version_id'))
     except Exception as e:
         return _db_unavailable(e)
-    in_dir = tempfile.mkdtemp(prefix='c1_in_')
+    in_dir = tempfile.mkdtemp(prefix='in_', dir=config.TMP_INPUT)
     paths, used, ctx = [], set(), []
     for row in rows:
         name = _dedup_name(row['name'], used)
         used.add(name)
         try:
-            s = catalog.get_source_content(row['id'])
+            s = catalog.get_file_content(row['id'])
         except Exception as e:
             return _db_unavailable(e)
         if s is None:
             return JSONResponse(
                 {'ok': False,
-                 'error': '原件字节缺失：source {}'.format(row['id'])},
+                 'error': '原件字节缺失：file {}'.format(row['id'])},
                 status_code=409)
         path = os.path.join(in_dir, name)
         with open(path, 'wb') as fo:
             fo.write(s['data'])
         paths.append(path)
         ctx.append({'name': name, 'path': path,
-                    'source_file_id': row['id'], 'sha256': row['sha256'],
+                    'file_id': row['id'], 'sha256': row['sha256'],
                     'dedup': True})
     return _launch(paths, params, warns, ctx, 'preview', tpl)
 
