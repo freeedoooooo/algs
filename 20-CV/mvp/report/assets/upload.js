@@ -115,7 +115,7 @@ function add(fs){
 }
 function fileRow(name,size,url){
   return '<span class="fthumb">'+thumbHtml(name,url)+'</span>'+
-    '<span class="fname">'+escHtml(name)+'</span>'+
+    '<span class="fname" title="'+escHtml(name)+'">'+escHtml(name)+'</span>'+
     '<span class="fsize">'+(size/1024).toFixed(0)+' KB</span>';
 }
 function render(){

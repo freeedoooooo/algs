@@ -457,6 +457,10 @@ GET/POST  /api/quarantine                   # 隔离区列表 / 修复重放
 
 ## 7. 与现有 mvp 的映射（增量，不推倒）
 
+**分层边界**：DB 只接在编排层（app.py + store/）。`run_batch` 本就在 app.py，pipeline 只认注入的
+`emit` 回调与文件产物（11-17 解耦约定），不 import store、不写 DB ——「提取零改动」指 pipeline/
+算法模块，app.py 编排层需改（登记源文件、建 Run、emit 回调里更新状态、新路由）。
+
 | 已有资产 | 新链路角色 | 改动量 |
 |---|---|---|
 | pipeline 提取 + 官方 JSON | Extract 阶段 | 零改动 |

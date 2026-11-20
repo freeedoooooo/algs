@@ -16,21 +16,28 @@ h1{font-size:18px;font-weight:500;margin:0 0 4px}
 #drop.on{border-color:#2563eb;background:#f0f6ff;color:#2563eb}
 #drop b{display:block;color:#25324a;font-size:15px;font-weight:500;margin-bottom:6px}
 input[type=file]{display:none}
-.files{margin:14px 0 0;padding:0;list-style:none;font-size:13px}
-.files li{padding:6px 0;border-bottom:1px solid #f0f2f6;
-  display:flex;align-items:center;gap:10px}
-.files .fname{flex:1;word-break:break-all}
-.files .fsize{color:#8a94a6;white-space:nowrap}
+/* 文件记录：带边框容器 + 清晰分割线（与报告页 .panel/.tablewrap 同款 #e2e7f0），
+   行紧凑（28px 缩略图 + 单行省略文件名），删除键常态隐形、悬停显红。 */
+.files{margin:10px 0 0;padding:0;list-style:none;font-size:12px;
+  border:1px solid #e2e7f0;border-radius:8px;background:#fff;overflow:hidden}
+.files:empty{display:none}
+.files li{padding:5px 8px;border-bottom:1px solid #e2e7f0;
+  display:flex;align-items:center;gap:8px;transition:background .12s}
+.files li:last-child{border-bottom:0}
+.files li:hover{background:#f7f9fd}
+.files .fname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;color:#25324a}
+.files .fsize{color:#8a94a6;white-space:nowrap;font-size:11px;
+  font-variant-numeric:tabular-nums}
 .files .fthumb{flex:none;display:flex}
-.files .fthumb .thumb{width:40px;height:40px;border-radius:6px}
-.files .fthumb .thumb.file{font-size:10px}
-.fdel{flex:none;width:24px;height:24px;padding:0;border-radius:6px;
-  border:1px solid #e2e7f0;background:#fff;color:#8a94a6;font-size:15px;
-  line-height:1;cursor:pointer}
-.fdel:hover{border-color:#b42318;color:#b42318}
-.filebar{display:flex;align-items:center;gap:12px;margin-top:8px}
+.files .fthumb .thumb{width:28px;height:28px;border-radius:5px}
+.files .fthumb .thumb.file{font-size:9px}
+.fdel{flex:none;width:20px;height:20px;padding:0;border-radius:5px;
+  border:0;background:none;color:#8a94a6;font-size:14px;line-height:1;cursor:pointer}
+.fdel:hover{background:#fdecea;color:#b42318}
+.filebar{display:flex;align-items:center;gap:10px;margin-top:6px}
 .filebar[hidden]{display:none}
-#filecount{font-size:12px;color:#6b7688}
+#filecount{font-size:11px;color:#6b7688}
 .row{display:flex;align-items:center;gap:12px;margin-top:14px;flex-wrap:wrap}
 button{font:inherit;font-size:14px;padding:9px 20px;border-radius:8px;
   border:1px solid #2563eb;background:#2563eb;color:#fff;cursor:pointer}
