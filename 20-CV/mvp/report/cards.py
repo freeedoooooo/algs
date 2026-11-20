@@ -715,11 +715,13 @@ def stitch_content(file_rec, card_no):
     if not stitched:
         return '<div class="empty">本文件没有可合并的跨页续表</div>'
     parts = ['<div class="panel-body">',
-             '<p class="note">相邻页续表已合并（丢重复表头、数据顺接）。'
+             '<p class="note">相邻页续表已合并（重复表头丢弃；无表头续页的首行数据回收），'
+             '数据顺接、空列按主表补齐。'
              '悬停单元格自动切到它所在页的图并高亮，点击钉住。'
-             '<span class="hint" tabindex="0" data-tip="合并判据：相邻页 + 同列数 '
-             '+ 列边界对齐 + 表头相同（空白归一化）；不满足则保持各页独立，不强行合并。'
-             '一个文件可有多条跨页链，用下方子页签切换。">?</span>'
+             '<span class="hint" tabindex="0" data-tip="合并判据两条通路：① 重复表头＝相邻页 '
+             '+ 同列数 + 列边界对齐 + 表头相同（空白归一化）；② 无表头续页＝列位置子集对齐 '
+             '+ 续页贴顶 + 首行像数据（回收误标首行、末尾空列补齐）。不满足则保持各页独立，'
+             '不强行合并。一个文件可有多条跨页链，用下方子页签切换。">?</span>'
              '</p>']
     if len(stitched) > 1:
         tabs = ''.join(
@@ -736,13 +738,17 @@ def stitch_content(file_rec, card_no):
         csv_file = t.get('csv_file', 'stitched_{}.csv'.format(si + 1))
         parts.append('<div class="stitchpane" data-card="{}" data-stitch="{}"{}>'
                      .format(card_no, si, '' if si == 0 else ' hidden'))
+        rec = [str(pp['page']) for pp in (t.get('parts') or [])
+               if pp.get('header_recovered')]
+        rec_note = (' <span class="tag merge">无表头续页首行已回收 · 页 {}</span>'
+                    .format(esc('、'.join(rec)))) if rec else ''
         parts.append(
             '<div class="tbl-bar"><b>跨页合并表 {}</b>'
-            '<span class="meta">来源页 {} · {} 行 × {} 列</span>'
+            '<span class="meta">来源页 {} · {} 行 × {} 列</span>{}'
             '<a class="btn" href="{}" download="{}">下载完整 CSV</a>'
             '<a class="btn ghost" href="{}" target="_blank">打开 {}</a></div>'
             .format(si + 1, esc('、'.join(str(p) for p in t.get('source_pages') or [])),
-                    t.get('n_rows', 0), t.get('n_cols', 0),
+                    t.get('n_rows', 0), t.get('n_cols', 0), rec_note,
                     csv_data_uri(headers, rows), esc(csv_file),
                     file_url(file_rec['case'], csv_file), esc(csv_file)))
         if t.get('title'):

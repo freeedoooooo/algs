@@ -101,10 +101,12 @@ def export_csvs(structured, case_abs):
 
 
 # ---- 跨页表拼接：相邻页续表合并成一张逻辑表 ----
-# 确定性优先：只合并「相邻页 + 同列数 + 列 x 边界对齐 + 表头逐字重复」的续表，
-# 丢掉后续页的重复表头、数据行顺接。判据不满足一律不合并（宁可不拼，不误拼）。
-# 合并表每个单元格保留 {bbox, page, space}，报告据此做「页感知回溯」：
-# 悬停某格自动切到它所在页的图并高亮。
+# 确定性优先，两条通路：
+#   repeat    —— 同列数 + 列 x 对齐 + 表头逐字重复：丢后续页重复表头、数据顺接（原严格通路）。
+#   headerless—— 续页无重复表头（首行数据被误标表头）+ 末尾空列被裁：列位置子集对齐 +
+#                续页贴顶 + 首行像数据 → 回收首行作数据、按主表布局补齐空列。
+# 判据不满足一律不合并（宁可不拼，不误拼）。合并表每个单元格保留 {bbox, page, space}，
+# 报告据此做「页感知回溯」：悬停某格自动切到它所在页的图并高亮。
 
 def _col_left_edges(t):
     """取首个有效坐标行的各列左缘 x0（缺格为 None），用于列对齐判断。"""
@@ -127,18 +129,94 @@ def _norm_header(h):
     return [re.sub(r'\s+', ' ', str(c or '')).strip() for c in (h or [])]
 
 
-def _continues(a, b):
-    """b 是否为 a 的跨页续表（重复表头）。是→True，否→False。"""
-    if not a.get('n_cols') or a.get('n_cols') != b.get('n_cols'):
-        return False
+# 通用数据形态（不写死任何 case）：长数字串 / YYYYMMDD 日期 / 带小数点金额。
+_DATA_RE = re.compile(
+    r'\d{6,}|(?:19|20)\d{2}(?:0[1-9]|1[2])(?:0[1-9]|[12]\d|3[01])|\d+\.\d{1,2}')
+
+
+def _col_xs(t):
+    """每列左缘 x0：跨所有坐标行取首个非 None，比单行更完整（缺格列也能定位）。"""
+    xs = []
+    for row in t.get('cells') or []:
+        while len(xs) < len(row):
+            xs.append(None)
+        for j, b in enumerate(row):
+            if xs[j] is None and b and len(b) >= 4:
+                xs[j] = b[0]
+    return xs
+
+
+def _col_map(a, b, tol=12.0):
+    """续页列 → 主表列 的保序单射 x 匹配（贪心双指针）。
+
+    允许续页缺主表若干列（被裁的空列）；续页任何列在主表找不到位置 → None（不拼）。
+    返回 {cont_col: master_col}；匹配对 <2 → None。
+    """
+    ea, eb = _col_xs(a), _col_xs(b)
+    if not ea or not eb or any(x is None for x in eb):
+        return None
+    cmap, i = {}, 0
+    for j, x in enumerate(eb):
+        while i < len(ea) and (ea[i] is None or ea[i] < x - tol):
+            i += 1
+        if i >= len(ea) or ea[i] is None or abs(ea[i] - x) > tol:
+            return None
+        cmap[j] = i
+        i += 1
+    return cmap if len(cmap) >= 2 else None
+
+
+def _table_y0(t):
+    for row in t.get('cells') or []:
+        ys = [b[1] for b in row if b and len(b) >= 4]
+        if ys:
+            return min(ys)
+    return None
+
+
+def _data_like(row, master_headers, cmap):
+    """首行是否像数据：≥1 格命中数据形态，且对应主表头是非数字标签。"""
+    for j, v in enumerate(row):
+        s = str(v or '').strip()
+        if not s or not _DATA_RE.search(s):
+            continue
+        i = cmap.get(j)
+        if i is None or i >= len(master_headers):
+            continue
+        lab = str(master_headers[i] or '').strip()
+        if lab and not re.search(r'\d', lab):
+            return True
+    return False
+
+
+def _continues(a, b, page_h=None, master=None):
+    """b 是否为 a 的跨页续表。返回 (模式, 列映射) 或 None。
+
+    模式 'repeat'：原严格通路（同列数+列对齐+表头重复），列映射为恒等。
+    模式 'headerless'：子集对齐 + 续页贴顶 + 首行像数据（无重复表头）。
+    master 为链首主表（真表头/规范列布局）；headerless 链中直接前驱 a 的
+    「headers」可能已是数据，故 G2/G4 一律以 master 为参照，默认 master=a。
+    """
     if (a.get('coord') or {}).get('space') != (b.get('coord') or {}).get('space'):
-        return False
+        return None
     if not (a.get('coord') or {}).get('exact'):
-        return False
-    if not _cols_aligned(a, b):
-        return False
+        return None
     ha, hb = _norm_header(a.get('headers')), _norm_header(b.get('headers'))
-    return bool(ha) and bool(hb) and ha == hb
+    if (a.get('n_cols') and a.get('n_cols') == b.get('n_cols')
+            and _cols_aligned(a, b) and ha and hb and ha == hb):
+        n = b.get('n_cols') or len(hb)
+        return 'repeat', {j: j for j in range(n)}
+    m = master if master is not None else a
+    cmap = _col_map(m, b)
+    if cmap is None:
+        return None
+    y0 = _table_y0(b)
+    if not page_h or y0 is None or y0 > 0.10 * page_h:
+        return None
+    mh = _norm_header(m.get('headers'))
+    if not hb or not _data_like(hb, mh, cmap):
+        return None
+    return 'headerless', cmap
 
 
 def _annotate_cells(grid_rows, page, space):
@@ -147,26 +225,48 @@ def _annotate_cells(grid_rows, page, space):
             for row in grid_rows]
 
 
+def _pad_row(row, cmap, width, fill):
+    out = [fill] * width
+    for j, v in enumerate(row):
+        i = cmap.get(j)
+        if i is not None and i < width:
+            out[i] = v
+    return out
+
+
 def _build_stitched(chain, si):
-    p0, _ti0, a0 = chain[0]
+    p0, _ti0, a0, _m0, _c0 = chain[0]
     space = (a0.get('coord') or {}).get('space') or 'source'
     headers = list(a0.get('headers') or [])
     width = a0.get('n_cols') or len(headers)
-    rows = [list(r) for r in (a0.get('rows') or [])]
+    rows = [_pad_row(r, {j: j for j in range(width)}, width, '')
+            for r in (a0.get('rows') or [])]
     row_pages = [p0] * len(rows)
     a0_cells = a0.get('cells') or []
     cells = _annotate_cells(a0_cells[:1], p0, space)          # 表头行
     cells += _annotate_cells(a0_cells[1:1 + len(rows)], p0, space)
     parts = [{'page': p0, 'tbl': _ti0, 'header_dropped': False,
-              'n_rows': len(rows)}]
-    for p, ti, b in chain[1:]:
-        br = [list(r) for r in (b.get('rows') or [])]
-        rows += br
+              'header_recovered': False, 'n_rows': len(rows)}]
+    for p, ti, b, mode, cmap in chain[1:]:
+        b_rows = b.get('rows') or []
+        b_cells = b.get('cells') or []
+        if mode == 'headerless':
+            # 无重复表头：被误标成 headers 的首行其实是数据，回收进数据行
+            br = [list(b.get('headers') or [])] + [list(r) for r in b_rows]
+            bc = b_cells[:1 + len(b_rows)]
+            dropped, recovered = False, True
+        else:
+            br = [list(r) for r in b_rows]
+            bc = b_cells[1:1 + len(br)]                       # 丢重复表头行
+            dropped, recovered = True, False
+        bc = list(bc) + [[] for _ in range(max(0, len(br) - len(bc)))]
+        for r, crow in zip(br, bc):
+            rows.append(_pad_row(r, cmap, width, ''))
+            cells += _annotate_cells(
+                [_pad_row(crow, cmap, width, None)], p, space)
         row_pages += [p] * len(br)
-        bc = b.get('cells') or []
-        cells += _annotate_cells(bc[1:1 + len(br)], p, space)  # 丢重复表头行
-        parts.append({'page': p, 'tbl': ti, 'header_dropped': True,
-                      'n_rows': len(br)})
+        parts.append({'page': p, 'tbl': ti, 'header_dropped': dropped,
+                      'header_recovered': recovered, 'n_rows': len(br)})
     return {
         'id': si,
         'title': a0.get('title', ''),
@@ -176,7 +276,7 @@ def _build_stitched(chain, si):
         'cells': cells,
         'n_rows': len(rows),
         'n_cols': width,
-        'source_pages': [p for p, _t, _b in chain],
+        'source_pages': [p for p, _t, _b, _m, _c in chain],
         'parts': parts,
         'coord': {'mixed': True, 'space': 'per-cell', 'exact': True},
         'csv_file': 'stitched_{}.csv'.format(si),
@@ -187,8 +287,11 @@ def stitch_tables(pages):
     """pages（按页排序的 pageRec 列表）→ 跨页合并表列表（仅含 >=2 页的续表）。
 
     只从每页最后一张表起链，接下一页第一张表，逐页延伸；已被合并的表不再重复起链。
+    页高（image_size[1]）传进判据供「续页贴顶」闸使用。
     """
     by_page = {pg.get('page'): (pg.get('structured_tables') or [])
+               for pg in pages}
+    heights = {pg.get('page'): (pg.get('image_size') or [0, 0])[1]
                for pg in pages}
     used, stitched = set(), []
     for p in sorted(k for k in by_page if k is not None):
@@ -198,13 +301,17 @@ def stitch_tables(pages):
         ai = len(tabs) - 1
         if (p, ai) in used:
             continue
-        chain = [(p, ai, tabs[ai])]
+        chain = [(p, ai, tabs[ai], None, None)]
+        master = tabs[ai]
         cur, np = tabs[ai], p + 1
         while by_page.get(np):
             b = by_page[np][0]
-            if (np, 0) in used or not _continues(cur, b):
+            res = None if (np, 0) in used else _continues(
+                cur, b, heights.get(np), master)
+            if res is None:
                 break
-            chain.append((np, 0, b))
+            mode, cmap = res
+            chain.append((np, 0, b, mode, cmap))
             used.add((np, 0))
             cur, np = b, np + 1
         if len(chain) >= 2:
