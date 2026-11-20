@@ -4,6 +4,10 @@
 > [design-artifacts-db.md](design-artifacts-db.md)（DB-only 已实现）。
 > 本稿取代其 §4 表结构与 §5 接缝表述。
 >
+> **又被取代（2026-11-21）**：[design-task-schema.md](design-task-schema.md) 已落地——
+> run→task / run_file→task_file / source_file→file 全链条改名、去全部外键（级联归应用层）、
+> 001–006 压成 001_baseline.sql。本稿的 run_file 粒度思想保留，表名/列名/FK 表述以新稿为准。
+>
 > **落地注记（2026-11-21）**：
 > - 包名 `mvp/` → `c1_extract/`（git mv）；env 前缀 `C1_EXTRACT_*`；凭据键 `C1_EXTRACT_DB`。
 > - 005 为**数据保留迁移**（非清库）：source_file.content 从 sources 附件按 sha8_name

@@ -1,9 +1,20 @@
 # 设计稿 · 任务化命名 + 去外键 + 表注释完善 + tmp 收敛 + 脚本清理
 
-> 状态：**已批准**（2026-11-21 用户三项裁决：① run→task 全链条改；
+> 状态：**已批准并实现**（2026-11-21 用户三项裁决：① run→task 全链条改；
 > ② 目的表名 `extract_load_dest`；③ 历史迁移 001–006 压成单个 baseline）。
 > 前置：[design-c1-storage.md](design-c1-storage.md)（DB-only / run_file 粒度，已实现）。
 > 本稿取代其表名/列名与 FK 表述；DB-only 契约不变。
+>
+> **落地注记（2026-11-21）**：
+> - 配置库一次性升级已执行：先整库备份 `data/backup/pre_task_20261121011801.sql`，
+>   RENAME 四表＋逐列 CHANGE/注释/索引改名，FK 17→0，schema_version [1..6]→[1]，
+>   业务表行数守恒；升级脚本用完即删。新库直接走 001_baseline.sql。
+> - 全链条改名落地：表/列/API（/api/tasks）/URL（/tasks、/staging?task=）/日志
+>   （task_<id>.log）/导出（output/task_<id>/）/前端文案；无兼容 shim。
+> - 验收：accept_records_db.py / accept_artifacts_db.py 各 **6/6 PASS**（顺序跑）；
+>   浏览器验证（tasks 列表+详情抽屉 / staging 双文件+血缘+跨任务搜索 / sources /
+>   上传金路径→报告→预览数据）；用户 8765 已跑新代码并真实上传成功（task 41/42）。
+> - 模板名不硬编码：get_template_version() 无参取第一个模板的当前版本（用户可改名）。
 
 ## 0. 用户 6 项提议与裁决
 

@@ -7,6 +7,36 @@
 
 ---
 
+## 〇、最新一轮：任务化命名 + 去外键（2026-11-21，已完成，取代下文旧命名）
+
+设计稿 [design-task-schema.md](design-task-schema.md)（已批准并实现）。下文 §一~§三 的
+run / run_file / source_file / 001-006 等旧命名仅存档意义，**当前代码与库一律用新命名**：
+
+- 表：`extract_task` / `extract_task_file` / `extract_file` / `extract_load_dest`；
+  列 task_id / task_file_id / file_id / load_dest_id。**无外键**，级联归应用层
+  （save_records 重跑显式先删 field/lineage；清理先子后父；delete_file 引用守卫 409）。
+- 迁移：001–006 压成 **001_baseline.sql**（13 业务表全注释 + schema_version + 种子）。
+  配置库已一次性升级（备份 `data/backup/pre_task_20261121011801.sql`，FK 17→0，
+  schema_version=[1]，行数守恒），升级脚本用完即删。
+- API/URL：`/api/tasks`、`/tasks` 页、`/staging?task=&file=`、`/api/staging/query?task=`；
+  日志 `logs/task_<id>.log`；导出 `output/task_<id>/`、CLI `--task`。
+- scratch 收进包内 `tmp/input`（in_*）/ `tmp/work`（case_*），跑完即清；
+  app.py `_rmtree_retry` 应对 Windows 杀软瞬态句柄锁。
+- 模板名不硬编码：`catalog.get_template_version()` 无参取第一个模板当前版本
+  （用户已把种子模板改名「默认空模板」）。
+- 验收：两套脚本各 **6/6 PASS**（顺序跑，严禁并行）；浏览器验证 tasks/staging/
+  sources/上传金路径全过；用户 8765 跑新代码真实上传成功（task 41/42）。
+- **当前库态**：task 21/30/41/42 全 previewed；file 3/19/26（建行/交行/招行流水）。
+- **环境已知缺口**（与本轮无关，未修）：paddlex 3.7.2 缺 `[ocr]` extra，
+  **图片/扫描件路线 PP-StructureV3 建管线报 DependencyError**；有文本层 PDF 与
+  CSV/TXT 路线不受影响。修法：`pip install "paddlex[ocr]==3.7.2"`（须用户确认，
+  可能牵动 opencv 等锁版本）。
+- **git 历史凭据警告**：secrets.json 与 pre_005/pre_006 备份曾被 git 跟踪
+  （含 DB 密码与真实流水），已 `git rm --cached` + .gitignore 排除，但**历史仍在**；
+  仓库若公开应轮换凭据并清历史（filter-repo）。
+
+---
+
 ## 一、C1 已完成（已验证）
 
 用户 5 项演进（2026-11-20 提出，全部批准落地）：
@@ -86,6 +116,9 @@
 
 ## 四、下次上班入口
 
-1. C1 存储演进**已完成**：代码＋迁移＋验收＋浏览器＋文档全部收尾，无剩余动作。
-2. 新需求从 P1 校验台 / 模板管理页起步（staging review_state 与 quarantine 表已就位）。
-3. 其余沿用 §二挂起项。
+1. C1 存储演进 + 任务化命名/去外键**均已完成**：代码＋迁移＋验收＋浏览器＋文档全部收尾。
+2. 建议事项：① 用户 8765 方便时再重启一次（载入 `_rmtree_retry` scratch 修复，
+   当前进程启动早于该修复落盘）；② 图片路线 paddlex[ocr] 依赖缺口（见 §〇）；
+   ③ git 历史凭据清理（见 §〇）。
+3. 新需求从 P1 校验台 / 模板管理页起步（staging review_state 与 quarantine 表已就位）。
+4. 其余沿用 §二挂起项。

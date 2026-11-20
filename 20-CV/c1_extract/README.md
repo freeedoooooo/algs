@@ -2,11 +2,12 @@
 
 把 week-02 验证过的提取能力封装成一个**本地 Web 工具**：浏览器上传文件 → 后端提取 → 生成对照报告。
 **DB 是唯一事实源**（MySQL）：原件字节、产物附件、暂存记录全部入库，磁盘只有跑完即清的
-临时 scratch。每个 run_file 一份独立自包含的 `对照报告.html`（BLOB，经 `/files/<run_file_id>/`
+临时 scratch。每个 task_file 一份独立自包含的 `对照报告.html`（BLOB，经 `/files/<task_file_id>/`
 白名单路由访问），每次上传各自独立、互不覆盖；模板（assets）只有一份。
 支持**多页 PDF 逐页提取 + 报告翻页切换 + 跨页表格拼接**（页码留空 = 全部页）。
 `weekly/week-02/` 的代码与产物**完全不改动**，本目录自包含。
-存储设计见 [docs/design-c1-storage.md](./docs/design-c1-storage.md)。
+存储设计见 [docs/design-task-schema.md](./docs/design-task-schema.md)（任务化命名 + 去外键，
+取代 [design-c1-storage.md](./docs/design-c1-storage.md) 的表名/列名表述）。
 
 ## 启动
 
@@ -23,8 +24,8 @@ uvicorn c1_extract.app:app --host 0.0.0.0 --port 8765 --workers 1
 
 - **平台库必选**：凭据经 conn_ref `C1_EXTRACT_DB`（环境变量或 `data/secrets.json`，
   git 排除）解析，DSN 形如 `mysql://user:pass@host:3306/db`。首次连接自动跑迁移
-  （`store/migrations/001-006`，schema_version 门禁）。DB 不可达：上传 503 不建 run、
-  运行中写失败整 run failed、读端点 503，不降级。
+  （`store/migrations/001_baseline.sql`，schema_version 门禁）。DB 不可达：上传 503 不建任务、
+  运行中写失败整任务 failed、读端点 503，不降级。
 - 加载大模型的服务建议 **workers=1**：多 worker 会各自加载一份模型，内存翻倍；要扩容应横向起多实例，前面挂 Nginx 反代。
 - 内置 `GET /healthz` 健康检查；配置（端口、模型、阈值、路径）集中在 `config.py`。
 
@@ -105,12 +106,12 @@ c1_extract/
 ├── export_artifacts.py        DB → 磁盘树按需导出（file:// 直开 / 审计 / 迁移）
 ├── store/                     存储层（DB 唯一事实源）
 │   ├── db.py                  驱动接缝 + conn_ref 解析 + 迁移执行器
-│   ├── migrations/            001-006 编号 SQL（schema_version 门禁，首连自动跑）
-│   ├── catalog.py             source_file(+content) / template / run / run_file / quarantine
+│   ├── migrations/            001_baseline.sql 单基线（schema_version 门禁，首连自动跑）
+│   ├── catalog.py             file(+content) / template / task / task_file / quarantine
 │   ├── content.py             内容门面（extract 经 artifact，records 直委托 content_db）
 │   ├── content_db.py          staging 三表：get/save/patch/query_fields
 │   ├── artifact.py            附件门面（kind/mime 推断）
-│   └── artifact_db.py         extract_artifact BLOB（键＝run_file_id，FK 级联删）
+│   └── artifact_db.py         extract_artifact BLOB（键＝task_file_id，应用层级联删）
 ├── adapter/                   提取信封 → 模板记录的适配层（原始透传等）
 ├── pipeline/                  提取层
 │   ├── engines.py             模型单例（懒加载；表格模型按 doc_unwarp 分槽缓存）
@@ -123,48 +124,49 @@ c1_extract/
 │   └── runner.py              extract_one() 统一入口：逐页提取 + pages 信封编排
 ├── extract_report/            对照报告层
 │   ├── cards.py               数据准备 + 选模板（坐标 rect / 行 / 文档块 / data URI）
-│   ├── builder.py             组装对照报告（内联 assets，每 run_file 一份）
+│   ├── builder.py             组装对照报告（内联 assets，每 task_file 一份）
 │   ├── templates/             Jinja2 HTML 模板（autoescape，结构与逻辑分离）
-│   └── assets/                前端资源（upload / sources / runs / staging 四页 + shell 共用件）
+│   └── assets/                前端资源（upload / sources / tasks / staging 四页 + shell 共用件）
 ├── data/                      secrets.json（git 排除）/ backup/（迁移前整库备份）
-├── logs/                      运行日志（运行时生成，每次运行一个 run_<id>.log）
+├── logs/                      任务日志（运行时生成，每任务一个 task_<id>.log）
 └── docs/                      设计稿与交接文档
 ```
 
-### 存储模型：run / run_file id，无批次戳
+### 存储模型：task / task_file id，无批次戳、无外键
 
-一次上传 = 一个 **run**（`extract_run` 行），批内每个文件 = 一个 **run_file**。
+一次上传 = 一个 **task**（`extract_task` 行），批内每个文件 = 一个 **task_file**。
 没有批次时间戳、没有持久 input/output 目录：
 
-- 原件字节进 `extract_source_file.content`（sha256 去重，重复上传不重复入库）。
-- 产物附件进 `extract_artifact`（键＝run_file_id + 相对名，LONGBLOB，FK 级联删）。
+- 原件字节进 `extract_file.content`（sha256 去重，重复上传不重复入库）。
+- 产物附件进 `extract_artifact`（键＝task_file_id + 相对名，LONGBLOB，应用层级联删）。
 - 暂存记录进 staging 三表（record / field / lineage，field 是查询投影）。
-- 提取期间的工作目录与输入副本都是 tempfile scratch（`c1_in_` / `c1_case_`），跑完即清。
-- URL 全用 id：`/staging?run=<run_id>&file=<run_file_id>`、`/files/<run_file_id>/<产物>`、
-  `/srcfiles/<source_id>`。`GET /extract-report` 重定向到最新 run_file 的报告真实地址。
-- 重复上传同一文件不覆盖历史：新 run 新 run_file 新附件，旧 run 完整可回溯。
-  批内重名文件加 `-2` 区分。run id 在上传响应与 `/api/status` 的 `run_id` 字段可见。
+- 提取期间的工作目录与输入副本都是 tempfile scratch（`tmp/input/in_*` / `tmp/work/case_*`），跑完即清。
+- URL 全用 id：`/staging?task=<task_id>&file=<task_file_id>`、`/files/<task_file_id>/<产物>`、
+  `/srcfiles/<file_id>`。`GET /extract-report` 重定向到最新 task_file 的报告真实地址。
+- 重复上传同一文件不覆盖历史：新 task 新 task_file 新附件，旧 task 完整可回溯。
+  批内重名文件加 `-2` 区分。task id 在上传响应与 `/api/status` 的 `task_id` 字段可见。
+- **无外键约束**：引用完整性归应用层（delete_file 引用守卫；重跑覆盖显式先删子表）。
 
 **按需导出**（file:// 直开 / 审计 / 迁移出口）：
 
 ```bash
 D:\miniforge3\envs\paddle\python.exe c1_extract/export_artifacts.py --out D:/tmp/c1_export
-# 可选 --run <id> 只导一次运行
+# 可选 --task <id> 只导一次任务
 ```
 
 ```
-<out>/output/run_<id>/<源文件名>/…   产物 BLOB 原字节（对照报告.html 在树内，file:// 直开）
-<out>/output/run_<id>/records.json   DB 三表重建的 run 级信封
-<out>/sources/<源文件名>             原件字节（重名加 _<id> 区分）
+<out>/output/task_<id>/<源文件名>/…   产物 BLOB 原字节（对照报告.html 在树内，file:// 直开）
+<out>/output/task_<id>/records.json   DB 三表重建的任务级信封
+<out>/sources/<源文件名>              原件字节（重名加 _<id> 区分）
 ```
 
 **源码模块化，产物自包含**：`builder.py` 生成报告时会把 `report.css` / `report.js` / `lightbox.html`
 内联进 HTML，图片 / extract.json / CSV 链接一律**相对路径**，
-所以报告经 `/files/<run_file_id>/` 访问时资源全部成立；导出后**双击用 `file://` 直接打开也能正常显示图片与全部交互**；
+所以报告经 `/files/<task_file_id>/` 访问时资源全部成立；导出后**双击用 `file://` 直接打开也能正常显示图片与全部交互**；
 整份信封 JSON 以紧凑 `<script type="application/json">` 嵌在报告里（全报告仅一份，首次打开 tab 才美化），
 不依赖在线 fetch。上传页是线上页面，走 `/static/` 外链资源。
 **多文件批次**：上传页报告区顶部出现**文件页签**（单文件不显示），点击在下方 iframe 切换各文件自己的报告；
-`GET /extract-report` 重定向到最新 run_file 报告的 `/files/` 真实地址（相对路径资源需在该 run_file URL 下解析）。
+`GET /extract-report` 重定向到最新 task_file 报告的 `/files/` 真实地址（相对路径资源需在该 task_file URL 下解析）。
 
 HTML 结构全部在 `extract_report/templates/*.html`（Jinja2，**autoescape 默认开启**，
 不再手写转义），CSS / JS 在 assets/ 独立文件，Python 只做数据准备与模板选择——
@@ -180,7 +182,7 @@ IDE 高亮、改结构 / 样式不必碰 Python 逻辑。迁移经「重构前�
 | PDF 无文本层 | 同图片路线（逐页单次推理） | 同上 |
 | CSV / TXT / MD | 纯文本直读，不跑 OCR | `source.<ext>`、`table_N.csv`（CSV） |
 
-每个 run_file 固定有一份 `extract.json` 附件（**紧凑 JSON**），统一为**文件信封**：
+每个 task_file 固定有一份 `extract.json` 附件（**紧凑 JSON**），统一为**文件信封**：
 `file/kind/encoding/params_snapshot/page_count` + `pages:[pageRec…]` + `stitched_tables`。
 单页文件也是 `pages:[1]`（无双形态、无兼容 shim）。每页 `pageRec` 只存三样：官方 `parsing`（裁掉代码不读的死字段）+ `structured_tables`（加工后的表 + 单元格坐标）+ 该页元信息/诊断。
 文字投影 `texts/scores/boxes`、版面 `layout`、行数/均值**不落盘**，由 `viewmodel.hydrate()` 在渲染期**逐页**从 `parsing` 现算（官方 JSON 为唯一事实源，派生视图不重复存储）；raw 表中间态已删。
@@ -352,11 +354,11 @@ D:\miniforge3\envs\paddle\python.exe -u c1_extract/accept_records_db.py
 D:\miniforge3\envs\paddle\python.exe -u c1_extract/accept_artifacts_db.py
 ```
 
-各六项契约：records＝迁移门禁幂等+投影往返 / 重跑级联 / patch / 跨 run 查询 /
+各六项契约：records＝迁移门禁幂等+投影往返 / 重跑级联 / patch / 跨任务查询 /
 真链路（8799）/ 断库 503（8797 不可达 DSN）；artifacts＝门禁幂等+sha 自洽 /
-真链路无持久磁盘+BLOB / /files mime+ETag 304+raw 403 / runs+报告+暂存全查库 /
-导出逐字节一致+records 重建 / 断库 503。破坏性操作只落合成 run，验完按 id 清理
-（附件随 run_file FK 级联）；真实 run/source 只读；用户的 8765 全程不动。
+真链路无持久磁盘+BLOB / /files mime+ETag 304+raw 403 / tasks+报告+暂存全查库 /
+导出逐字节一致+records 重建 / 断库 503。破坏性操作只落合成 task，验完按 id 清理
+（应用层级联：先子表后父表）；真实 task/file 只读；用户的 8765 全程不动。
 
 ## 已知限制 / 下一步
 
