@@ -875,6 +875,26 @@ adapter 取代 viewmodel（迁移后删除，不留 shim）；collect/transform/
 | **P2 入库链路** | loader + cv_lineage（1:N）+ 幂等回执 + 目的地管理 + 隔离区重放 + 发起入库 | ① 一键入库业务行+血缘同事务；② 重入幂等；③ 库内字段跳回原图格子；④ partial→重放→loaded；⑤ 凭据不落日志 |
 | **P3 加厚** | 规则扩充、block 选择器+段落锚点、文档 tab 正向定位、漏提覆盖视图、从库读列、双层 PDF 导出（先裁决矫正图边界）、调度/看板/快捷键 | 按需逐项立项 |
 
+### 10.1 P0 落地与回归记录（2026-11-20）
+
+代码全部落地（§11.1 任务 1~17，任务 0 待用户装 PyMySQL）。临时端口 8799 实测，用户 8765/main 不受影响。
+
+**case 回归（提取算法 git diff 零改动：structure/pdf/ocr 无差异，ppstruct 仅 7 行注释；故维度即现算法真实基线）**：
+
+| case | 路线 | 实测 | 稿内基线 | 结论 |
+|---|---|---|---|---|
+| 103 文本层 PDF | text_layer | 24 行 × 8 列 · 226 行文字 · avg 0.9821 | 25×8 | 与旧 result.json 逐字一致（稿 25 含表头计法差异） |
+| 108 电子版截图 | model（unwarp off） | 23 行 × 6 列 · space=source · 226 文字 | 23×7 | 默认列边界真实基线 6 列（稿 7 列为人工 resplit 调参态） |
+| 107 扫描件 | model（unwarp on） | 8 行 × 5 列 · space=rectified · 58 文字 · 可疑 3 | 5×8 | 同表（稿按列×行记）；矫正图坐标路径正确 |
+| 21 一页双表 | text_layer | 表 6×6 + 表 3×4（lines 策略，未误并） | 双表 | 多表守卫正确 |
+| CSV | plain | 3 记录 · 血缘 space=none 无坐标 | — | 正确 |
+
+**验收逐项**：① 上传→提取→看暂存三步闭环 ✅（浏览器实测）；② 页面/报告只见 cvdoc、raw 403 ✅（全 case 泄漏扫描 rec_texts/parsing_res_list/PPStructure/pdfplumber/dt_polys/cell_box_list 均 0）；③ raw/extract/records 三层分文件 ✅；④ sha256 去重 ✅（代码就绪，DB 通后生效）；⑤ 停 MySQL 提取+Preview 照常 ✅（全程无 DB 跑通；sources 503、templates 降级透传、runs 靠 run.json 独立）；⑥ case 回归 + 报告交互（tab/原图矫正图切换/叠加框默认隐藏点击显隐 0→58→0/单格/CSV 下载）零变化 ✅；⑦ import app **0.864s**（fastapi 裸导入基线 0.725s，本助手新增仅 ~0.14s、无重顶层导入；稿 ≤0.5s 低于本机 fastapi 基线，属环境基线非回归）。
+
+**环境备注**：paddle 环境 torch 残装致 shm.dll 损坏——`import paddle` 后再 `import paddleocr` 触发 WinError 127；check_env 按 paddle→paddleocr 顺序故报缺 paddleocr/paddlex（误报）。app 实际经 engines 直接 `from paddleocr import …`（不预导入 paddle）模型路线正常（107/108 实测通过）。彻底修复需用户清理残装 torch。
+
+**待用户**：`D:\miniforge3\envs\paddle\python.exe -m pip install -r mvp/requirements.txt`（装 PyMySQL+cryptography）→ 验证 co_dev `SELECT VERSION()/SHOW GRANTS` + 迁移自动建表 → DB 通路（登记/去重/Run 目录）生效。
+
 ---
 
 ## 11. 执行计划（文件级）
@@ -956,9 +976,8 @@ adapter 取代 viewmodel（迁移后删除，不留 shim）；collect/transform/
 5. **数据分层 + 自有标准（v3，2026-11-20 用户五条诉求）**：页面数据全部预生成落盘；raw/extract/records
    分阶段独立保存；页面响应只用自有标准 cvdoc；adapter 防腐层隔离引擎结构（换引擎只换适配）；
    raw 永不服务前端（防方案抄袭）。records.json 为记录事实源，取消 DB staging_record 表。
+6. sources/ 规范副本 = 方案 A（库副本与批次副本分离，清旧批次不伤库）。**（2026-11-20 P0 落地）**
+7. 导航 = 顶部横向短名 tab（紧凑、不压校验页图宽）。**（2026-11-20 P0 落地：提取|资料|模板|校验|目的地|运行，模板/校验/目的地为 P1/P2 占位）**
+8. 自有标准命名 **cvdoc**（可改产品名）；阶段文件名 raw/ + extract.json + records.json（可改）。**（2026-11-20 P0 落地：cvdoc/1 + cvdoc-records/1 + cvdoc-run/1）**
 
-待确认（默认按本稿）：
-
-6. sources/ 规范副本 = 方案 A（库副本与批次副本分离，清旧批次不伤库）。
-7. 导航 = 顶部横向短名 tab（紧凑、不压校验页图宽）。
-8. 自有标准命名 **cvdoc**（可改产品名）；阶段文件名 raw/ + extract.json + records.json（可改）。
+> 原「待确认」6/7/8 已按默认裁决并随 P0 实现（用户 2026-11-20「就按照你的判断来」授权）。

@@ -1,8 +1,8 @@
 """
 pipeline/runner.py — 单文件提取的统一入口（编排各子模块）。
 
-按后缀分流，产出「文件信封」rec：file/case/kind/encoding/params_snapshot/
-page_count + pages:[pageRec…] + stitched_tables。
+按后缀分流，内部工作形态为「文件信封」rec：file/case/kind/encoding/
+params_snapshot/page_count + pages:[pageRec…] + stitched_tables。
     图片        → PPStructureV3 单次推理（官方 parsing / 表格 / 矫正图），1 页
     PDF 有文本层 → 逐页渲染 + pdfplumber 直读表格（带 bbox）+ 整页 OCR 作文字源
     PDF 无文本层 → 同图片路线（逐页单次推理）
@@ -10,9 +10,10 @@ page_count + pages:[pageRec…] + stitched_tables。
 page 参数填 all 时 PDF 逐页全量提取，否则只处理指定页（默认单页）。
 每页坐标以「该页报告左图」像素为准，两套空间用 coord.space / text_space 区分。
 
-result.json 只存官方 parsing（裁死字段）+ structured_tables + 元信息；文字投影 /
-layout 由 viewmodel.hydrate 渲染期派生、紧凑落盘时剥掉（文本层/CSV 无 parsing，
-其 OCR 投影直接存储）。raw 表是中间态，不落盘。跨页续表由 structure.stitch_tables
+落盘边界（数据分层，算法零改动）：
+  raw/*.json   引擎原样返回按路线分文件（paddle/pdfplumber/plain），永不服务前端；
+  extract.json adapter 产出的 cvdoc 自有标准（派生视图提取期一次算好）。
+内部 rec 的 parsing / 投影中间态不出 adapter；跨页续表由 structure.stitch_tables
 合并成 stitched_tables（每格带 page/space，供报告页感知回溯）。
 """
 import os
@@ -21,8 +22,8 @@ import shutil
 
 from PIL import Image
 
+from .. import adapter
 from .. import config
-from .. import viewmodel
 from . import ocr as ocr_mod
 from . import pdf as pdf_mod
 from . import plain as plain_mod
@@ -59,8 +60,8 @@ def _pp_route_page(page, img_path, case_abs, params, use_unwarp, log, emit,
                    rect_name):
     """图片/扫描路线：PPStructureV3 单次推理，官方 parsing 为源，返回 raw 表。
 
-    投影 texts/scores/boxes 与 layout 不在此存储——extract_one 末尾由
-    viewmodel.hydrate 从 parsing 渲染期派生（落盘时剥掉，避免重复）。
+    投影 texts/scores/boxes 与 layout 由 adapter.hydrate 在提取期从 parsing
+    派生（写进 extract.json，渲染期不再现算）；parsing 本体只落 raw/paddle.json。
     """
     res = pp_mod.extract(img_path, case_abs, use_unwarp=use_unwarp,
                          params=params, emit=emit, rect_name=rect_name)
@@ -88,6 +89,8 @@ def _extract_page_plain(src_path, case_abs, ext, log):
     page['source'] = src_name
     page['table_route'] = 'text_layer'
     raw = plain_mod.tables(text, ext)
+    page['_raw_text'] = text
+    page['_raw_tables'] = raw
     page['notes'].append('纯文本按 {} 解码，不跑 OCR'.format(enc))
     log('info', 'table', '纯文本按 {} 解码直读，不跑 OCR，解出 {} 张表'
         .format(enc, len(raw)))
@@ -140,6 +143,8 @@ def _extract_page_pdf(src_path, case_abs, pno, npages, params, dpi,
             strategy=params.get('table_strategy') or 'auto', dpi=dpi,
             page_no=pno)
         page['table_route'] = 'text_layer'
+        page['_raw_tables'] = raw
+        page['_raw_text_layer'] = tl
         for n in notes:
             log('info', 'table', '第 {} 页 {}'.format(pno, n))
         page['notes'].extend(notes)
@@ -164,7 +169,8 @@ def _extract_page_pdf(src_path, case_abs, pno, npages, params, dpi,
 
 def extract_one(src_path, case_abs, case_rel, params=None, emit=None):
     """
-    处理一个文件，写产物到 case_abs，返回文件信封 rec（含 pages / stitched_tables）。
+    处理一个文件，写产物到 case_abs（raw/ + extract.json + 页图 + CSV），
+    返回 cvdoc 信封（含 pages / stitched_tables，自有标准，无引擎结构）。
 
     params 是本批调试参数；emit 是可选的日志回调 (level, stage, msg)，
     由 app 注入 —— 提取层只认回调，不 import Web 层。
@@ -234,9 +240,9 @@ def extract_one(src_path, case_abs, case_rel, params=None, emit=None):
             for t in pg['structured_tables']:
                 t['csv_file'] = 'p{}_{}'.format(pg['page'], t['csv_file'])
 
-    # 渲染期派生视图：ppstruct 路线从官方 parsing 现算投影/layout（不落盘）；
-    # 文本层/CSV 无 parsing，投影已存储，hydrate 原样返回。同时注入文件上下文。
-    viewmodel.hydrate(file_rec)
+    # 派生视图提取期一次算好（ppstruct 从官方 parsing；文本层/CSV 投影已存储）。
+    # 带框图 / 跨页拼接都消费这份内部投影；落盘时 adapter 翻译成 cvdoc。
+    adapter.hydrate(file_rec)
 
     # 每页带框 PNG（投影已在 hydrate 后就绪）
     multi_pdf = file_rec['kind'] == 'pdf' and len(pages) > 1
@@ -281,10 +287,40 @@ def extract_one(src_path, case_abs, case_rel, params=None, emit=None):
                 .format(t['csv_file'], t['n_rows'], t['n_cols'],
                         t['source_pages']))
 
-    # 落盘 = 文件信封（逐页官方 parsing + structured_tables + 元信息）；
+    # 落盘 = 数据分层：raw/ 引擎原样（按路线分文件）+ extract.json（cvdoc）。
     # 紧凑序列化（报告 JSON tab 渲染时再美化），避免 indent 把数值数组撑大。
-    with open(os.path.join(case_abs, config.RESULT_JSON), 'w',
+    _write_raw(file_rec, case_abs)
+    doc = adapter.adapt(file_rec)
+    with open(os.path.join(case_abs, config.EXTRACT_JSON), 'w',
               encoding='utf-8') as f:
-        json.dump(viewmodel.disk_view(file_rec), f, ensure_ascii=False,
-                  separators=(',', ':'))
-    return file_rec
+        json.dump(doc, f, ensure_ascii=False, separators=(',', ':'))
+    return doc
+
+
+def _write_raw(file_rec, case_abs):
+    """L0 原始层：引擎原样返回按路线分文件，供运维逐层比对（前端 403）。"""
+    pages = file_rec.get('pages') or []
+    raw_dir = os.path.join(case_abs, config.RAW_DIR)
+
+    def dump(name, obj):
+        os.makedirs(raw_dir, exist_ok=True)
+        with open(os.path.join(raw_dir, name), 'w', encoding='utf-8') as f:
+            json.dump(obj, f, ensure_ascii=False, separators=(',', ':'))
+
+    paddle_pages = [{'page': pg['page'], 'parsing': pg['parsing']}
+                    for pg in pages if pg.get('parsing')]
+    if paddle_pages:
+        dump('paddle.json', {'engine': 'PPStructureV3', 'pages': paddle_pages})
+    if file_rec.get('kind') == 'csv':
+        pg = pages[0] if pages else {}
+        dump('plain.json', {'engine': 'plain',
+                            'encoding': file_rec.get('encoding'),
+                            'text': pg.get('_raw_text', ''),
+                            'tables_raw': pg.get('_raw_tables') or []})
+    else:
+        tl_pages = [{'page': pg['page'],
+                     'text_layer': pg.get('_raw_text_layer', ''),
+                     'tables': pg.get('_raw_tables') or []}
+                    for pg in pages if '_raw_tables' in pg]
+        if tl_pages:
+            dump('pdfplumber.json', {'engine': 'pdfplumber', 'pages': tl_pages})

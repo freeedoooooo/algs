@@ -82,6 +82,20 @@ fetch('/api/params').then(function(r){return r.json();}).then(function(j){
   if(j.schema) renderParams(j.schema);
 }).catch(function(){});
 
+/* 模板下拉：/api/templates（DB 降级时后端回内置「原始透传」）。
+   value = 模板版本 id；降级项无 id，提交时省略走后端默认。 */
+var tplsel=document.getElementById('tplsel');
+function tplFallback(){ tplsel.innerHTML='<option value="">原始透传 v1</option>'; }
+fetch('/api/templates').then(function(r){return r.json();}).then(function(j){
+  var items=j.items||[];
+  if(!items.length){ tplFallback(); return; }
+  tplsel.innerHTML=items.map(function(t){
+    return '<option value="'+(t.current_version_id||'')+'">'+
+      escHtml((t.name||'原始透传')+' v'+(t.current_version||1))+'</option>';
+  }).join('');
+}).catch(tplFallback);
+function tplVersionId(){ return tplsel.value||null; }
+
 document.getElementById('resetparams').onclick=function(e){
   e.preventDefault();
   paramSchema.forEach(function(p){
@@ -298,6 +312,7 @@ function poll(){
     if(s.ready){
       msg.textContent='完成。改参数后直接重测。';
       go.disabled=false;
+      showStgLink(s.batch);
       showResult(s.cases);
     }
   }).catch(function(){timer=setTimeout(poll,1200);});
@@ -308,7 +323,14 @@ var reportFrame=document.getElementById('reportFrame'),
     logbtn=document.getElementById('logbtn'),
     logclose=document.getElementById('logclose'),
     filetabs=document.getElementById('filetabs'),
-    reportcol=document.querySelector('.reportcol');
+    reportcol=document.querySelector('.reportcol'),
+    stglink=document.getElementById('stglink');
+/* 完成提示：跳暂存只读视图（批次键，DB 无关） */
+function showStgLink(batch){
+  if(!batch) return;
+  stglink.href='/staging?batch='+encodeURIComponent(batch);
+  stglink.hidden=false;
+}
 /* 右侧报告区三态：idle 占位 / run 进度 / done 报告（+「查看日志」浮钮） */
 function rightState(st){
   reportempty.hidden=(st!=='idle');
@@ -365,6 +387,7 @@ logclose.onclick=function(){
 go.onclick=async function(){
   go.disabled=true;msg.textContent='读取文件…';
   rightState('run');
+  stglink.hidden=true;
   log.innerHTML='';
   document.getElementById('runfill').style.width='0%';
   document.getElementById('runpct').textContent='0%';
@@ -381,7 +404,8 @@ go.onclick=async function(){
     var res=await fetch('/api/upload',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({files:files,params:collectParams()})
+      body:JSON.stringify({files:files,params:collectParams(),
+        mode:'preview',template_version_id:tplVersionId()})
     });
     var j=await res.json();
     if(!j.ok) throw new Error(j.error||'上传失败');
@@ -398,9 +422,105 @@ fetch('/api/status').then(function(r){return r.json();}).then(function(s){
   if(s.running){ rightState('run'); say(s.logs,s.steps); progress(s); poll(); }
   else if(s.ready){
     /* 刷新页面直接进完成态：日志/进度也要补渲染，否则「查看日志」抽屉是空的 */
-    say(s.logs,s.steps); progress(s); showResult(s.cases);
+    say(s.logs,s.steps); progress(s); showStgLink(s.batch); showResult(s.cases);
   }
 });
+
+/* ---- 从资料库选择：抽屉多选已登记文件 → POST /api/runs（不再收 base64） ---- */
+var srcdrawer=document.getElementById('srcdrawer'),
+    srclist=document.getElementById('srclist'),
+    srcgo=document.getElementById('srcgo'),
+    srcSel={}, srcQ='', srcTimer=null;
+function srcCount(){
+  var n=Object.keys(srcSel).filter(function(k){return srcSel[k];}).length;
+  document.getElementById('srccount').textContent='已选 '+n+' 个';
+  srcgo.disabled=n===0;
+}
+function renderSrcList(items,preId){
+  srclist.innerHTML=items.map(function(r){
+    var base=String(r.rel_path||'').split('/').pop();
+    var url='/srcfiles/'+encodeURIComponent(base);
+    var checked=srcSel[r.id]||(preId&&r.id===preId);
+    if(checked) srcSel[r.id]=true;
+    return '<li><label><input type="checkbox" data-id="'+r.id+'"'+
+      (checked?' checked':'')+'>'+thumbHtml(r.name,url)+
+      '<span class="nm" title="'+escHtml(r.name)+'">'+escHtml(r.name)+'</span>'+
+      '<span class="sz">'+fmtSize(r.size_bytes)+'</span></label></li>';
+  }).join('');
+  document.getElementById('srcempty').hidden=items.length>0;
+  srcCount();
+}
+function loadSrcList(preId){
+  fetch('/api/sources?page=1&q='+encodeURIComponent(srcQ)).then(function(r){
+    if(r.status===503){
+      document.getElementById('srcdegraded').hidden=false;
+      renderSrcList([]); return null;
+    }
+    document.getElementById('srcdegraded').hidden=true;
+    return r.json();
+  }).then(function(j){
+    if(j) renderSrcList(j.items||[],preId);
+  }).catch(function(){
+    document.getElementById('srcdegraded').hidden=false; renderSrcList([]);
+  });
+}
+function openSrcDrawer(preId){
+  srcdrawer.hidden=false;
+  loadSrcList(preId);
+}
+function closeSrcDrawer(){ srcdrawer.hidden=true; }
+document.getElementById('fromsrc').onclick=function(){ openSrcDrawer(); };
+document.getElementById('srcclose').onclick=closeSrcDrawer;
+srcdrawer.addEventListener('click',function(e){ if(e.target===srcdrawer) closeSrcDrawer(); });
+document.addEventListener('keydown',function(e){
+  if(!srcdrawer.hidden&&e.key==='Escape') closeSrcDrawer();
+});
+document.getElementById('srcq').addEventListener('input',function(){
+  var v=this.value.trim();
+  clearTimeout(srcTimer);
+  srcTimer=setTimeout(function(){ srcQ=v; loadSrcList(); },300);
+});
+srclist.addEventListener('change',function(e){
+  var c=e.target.closest?e.target.closest('input[data-id]'):null;
+  if(!c) return;
+  srcSel[c.getAttribute('data-id')]=c.checked;
+  srcCount();
+});
+srclist.addEventListener('click',function(e){
+  var t=e.target.closest?e.target.closest('img.thumb'):null;
+  if(t){ e.preventDefault(); openLb(t.getAttribute('data-full')); }
+});
+srcgo.onclick=async function(){
+  var ids=Object.keys(srcSel).filter(function(k){return srcSel[k];}).map(Number);
+  if(!ids.length) return;
+  srcgo.disabled=true;
+  try{
+    saveParams(collectParams());
+    var res=await fetch('/api/runs',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({source_file_ids:ids,params:collectParams(),
+        template_version_id:tplVersionId()})
+    });
+    var j=await res.json();
+    if(!j.ok) throw new Error(j.error||'发起失败');
+    closeSrcDrawer();
+    stglink.hidden=true;
+    rightState('run');
+    log.innerHTML='';
+    document.getElementById('runfill').style.width='0%';
+    document.getElementById('runpct').textContent='0%';
+    document.getElementById('runstage').textContent='准备中…';
+    msg.textContent='处理中…';
+    poll();
+  }catch(e){
+    msg.innerHTML='<span class="err">'+escHtml(e.message)+'</span>';
+    srcgo.disabled=false;
+  }
+};
+/* 资料页「提取」跳转：/?from_source=<id> → 打开抽屉并预选 */
+var fromSrc=new URLSearchParams(location.search).get('from_source');
+if(fromSrc) openSrcDrawer(+fromSrc);
 
 /* ---- 左栏宽度拖拽：gutter 拖动改 .console 宽，存 localStorage，双击复位 ----
    拖拽时把 iframe pointer-events 关掉，否则鼠标移进报告区事件被 iframe 吞掉。 */

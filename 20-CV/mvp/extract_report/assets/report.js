@@ -282,7 +282,7 @@ function loadFileJson(card){
     var pretty=JSON.stringify(JSON.parse(src.textContent),null,2);
     fjCache.set(fc,pretty); fill(pretty);
   }catch(e){
-    pre.textContent='完整 JSON 解析失败：请点上方「下载」查看 result.json。';
+    pre.textContent='完整 JSON 解析失败：请点上方「下载」查看 extract.json。';
   }
 }
 

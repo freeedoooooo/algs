@@ -6,11 +6,11 @@ pipeline/ppstruct.py — 图片 / 扫描件的「单次推理」路线（升级�
   · table_res_list      → _TableParser → raw 表（下游 resplit/structure 零改动）
   · doc_preprocessor    → rectified.png（仅 unwarp=on）
 
-文字投影 texts/scores/boxes 与版面 layout **不在这里算、也不落盘**：
-它们由 viewmodel.hydrate() 在渲染期从 parsing 现算（官方 overall_ocr_res /
-parsing_res_list 的薄视图）。parsing 经 _slim_parsing 裁掉代码从不读取的
-死字段（table_ocr_pred / rec_boxes / rec_polys 重复 / layout_det_res /
-参数回显 / 本机 input_path），保留官方语义源。
+文字投影 texts/scores/boxes 与版面 layout **不在这里算**：
+它们由 adapter.hydrate() 在提取期从 parsing 一次算好（官方 overall_ocr_res /
+parsing_res_list 的薄视图），随 extract.json 预生成落盘。parsing 经 _slim_parsing
+裁掉代码从不读取的死字段（table_ocr_pred / rec_boxes / rec_polys 重复 /
+layout_det_res / 参数回显 / 本机 input_path），原样落 raw/paddle.json。
 
 坐标空间：内部 OCR 与 cell_box 都基于矫正图。unwarp=on → text_space='rectified'；
 off 时矫正图与原图逐像素一致 → text_space='source'。与 cell_grid 的 coord.space 一致。
@@ -53,7 +53,7 @@ def _slim_parsing(p):
 
     保留语义源：parsing_res_list、overall_ocr_res.{rec_texts,rec_scores,dt_polys}、
     table_res_list.{pred_html,cell_box_list}、width/height、doc_preprocessor_res.angle。
-    这些正是 viewmodel.hydrate 派生投影 / layout 与 raw 表溯源所需的全部。
+    这些正是 adapter 派生投影 / layout 与 raw 表溯源所需的全部。
     """
     for k in ('input_path', 'model_settings', 'page_index', 'page_count',
               'layout_det_res'):
@@ -191,7 +191,7 @@ def extract(img_path, case_abs, use_unwarp=True, params=None, emit=None,
             rect_name=None):
     """单次推理，返回 parsing（裁死字段）/raw/notes/rect_size/text_space/elapsed。
 
-    投影与 layout 不在此计算——由 viewmodel.hydrate 渲染期从 parsing 派生。
+    投影与 layout 不在此计算——由 adapter.hydrate 在提取期从 parsing 派生。
     rect_name 决定矫正图落盘名（多页逐页传 p{n}_rectified.png，避免互相覆盖）。
     """
     rect_name = rect_name or config.RECTIFIED_NAME

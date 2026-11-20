@@ -4,8 +4,11 @@ extract_report/builder.py — 组装对照报告（每个 case 一份独立自�
 结构模板在 templates/report.html；CSS / JS / lightbox 是 assets/ 下的独立文件
 （方便维护、IDE 高亮），生成报告时把它们**内联**进 HTML —— 产出的
 对照报告.html 仍是自包含的。报告直接落在该 case 的 output/<批次戳_文件名>/
-目录里，与 result.json / 图片 / CSV 同级，每次上传各自独立、互不覆盖。
+目录里，与 extract.json / 图片 / CSV 同级，每次上传各自独立、互不覆盖。
 一份报告只含一个文件，多文件批次由上传页顶部的文件页签切换各自的报告。
+
+消费契约 = cvdoc（extract.json 同形态）：派生视图已由 adapter 预生成，
+渲染期不再现算任何内容数据。
 """
 import os
 
@@ -13,7 +16,6 @@ from markupsafe import Markup
 
 from .. import config
 from .. import params as params_mod
-from .. import viewmodel
 from . import cards
 
 
@@ -32,11 +34,10 @@ def _asset(name):
 
 
 def build(records, out_path, params=None):
-    # 磁盘 result.json 只存官方 parsing（ppstruct 路线），渲染前派生投影/layout
-    records = [viewmodel.hydrate(r) for r in records]
-    total_lines = sum(p.get('lines', 0)
+    # records 已是 cvdoc（adapter 产物）：投影/统计预生成，直接消费。
+    total_lines = sum((p.get('stats') or {}).get('lines', 0)
                       for r in records for p in (r.get('pages') or []))
-    total_tables = sum(len(p.get('structured_tables') or [])
+    total_tables = sum(len(p.get('tables') or [])
                        for r in records for p in (r.get('pages') or []))
     total_stitch = sum(len(r.get('stitched_tables') or []) for r in records)
 

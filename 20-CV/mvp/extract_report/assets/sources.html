@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>资料文件 · CV 数据链路</title>
+<link rel="stylesheet" href="/static/shell.css">
+</head>
+<body>
+<nav class="topnav">
+  <span class="brand">CV 数据链路</span>
+  <a href="/">提取</a>
+  <a href="/sources" class="on">资料</a>
+  <a class="off" title="P1 开放">模板</a>
+  <a class="off" title="P1 开放">校验</a>
+  <a class="off" title="P2 开放">目的地</a>
+  <a href="/runs">运行</a>
+  <span class="spacer"></span>
+  <span class="navnote">P0 · 预览链路</span>
+</nav>
+<div class="pagebody">
+  <div class="pagehead">
+    <h1>资料文件</h1>
+    <span class="sub">上传即登记（sha256 去重），提取从这里选文件</span>
+    <span class="spacer"></span>
+    <div class="toolbar">
+      <input type="search" id="q" placeholder="搜索文件名…">
+      <select id="kind">
+        <option value="">全部类型</option>
+        <option value="image">图片</option>
+        <option value="pdf">PDF</option>
+        <option value="text">文本</option>
+      </select>
+      <button type="button" class="btn" id="upbtn">上传登记</button>
+      <input type="file" id="picker" multiple hidden
+        accept=".png,.jpg,.jpeg,.bmp,.webp,.tif,.tiff,.pdf,.csv,.txt,.md">
+    </div>
+  </div>
+  <div class="banner warn" id="degraded" hidden>
+    平台库未连接：资料目录暂不可用。提取页上传仍会自动留档副本，连上后重传即可登记。
+  </div>
+  <div class="banner info" id="upmsg" hidden></div>
+  <div class="panel">
+    <table class="list">
+      <thead><tr>
+        <th>文件名</th><th>类型</th><th>大小</th><th>sha256</th>
+        <th>标签</th><th>上传时间</th><th>操作</th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="empty" hidden>
+      <b>还没有登记的文件</b>
+      点右上「上传登记」，或直接在提取页上传（会自动登记到这里）。
+    </div>
+    <div class="pager" id="pager" hidden>
+      <span id="pginfo"></span>
+      <button type="button" id="prev">上一页</button>
+      <button type="button" id="next">下一页</button>
+    </div>
+  </div>
+</div>
+<div class="lightbox" id="lb" hidden>
+  <button type="button" class="lbclose">关闭 (Esc)</button>
+  <img alt="预览">
+</div>
+<script src="/static/shell.js"></script>
+<script src="/static/sources.js"></script>
+</body>
+</html>

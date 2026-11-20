@@ -1,0 +1,37 @@
+/* extract_report/assets/staging.css — 暂存只读视图：记录表 + 血缘侧栏 */
+.pagebody.wide{max-width:1500px}
+.filetabs{display:flex;align-items:center;gap:4px;margin-bottom:10px;
+  overflow-x:auto;padding-bottom:2px}
+.filetabs[hidden]{display:none}
+.ftab{flex:none;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font:inherit;font-size:12px;padding:4px 12px;border-radius:999px;cursor:pointer;
+  border:1px solid #d8e0ed;background:#fff;color:#5a6a85;transition:.15s}
+.ftab:hover{border-color:#2563eb;color:#2563eb}
+.ftab.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.stgwrap{display:flex;gap:12px;align-items:flex-start}
+.stgmain{flex:1;min-width:0;overflow:auto;max-height:calc(100vh - 210px)}
+.stgmain table.list th{position:sticky;top:0;z-index:2}
+.stgmain table.list td{max-width:260px;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+.stgmain tbody tr{cursor:pointer}
+.stgmain tbody tr.sel{background:#e7f0ff}
+.stgmain tbody tr.sel:hover{background:#dbe8ff}
+.idx{color:#8a94a6;font-variant-numeric:tabular-nums}
+/* 血缘侧栏：点记录行展开，逐字段列出锚点（页/表/bbox/空间/原文） */
+.lineage{flex:none;width:330px;max-height:calc(100vh - 210px);
+  display:flex;flex-direction:column;position:sticky;top:12px}
+.lineage[hidden]{display:none}
+.lhead{display:flex;align-items:center;gap:8px;padding:9px 12px;
+  border-bottom:1px solid #e2e7f0;font-size:13px;color:#25324a}
+.lhead b{flex:1;font-weight:600}
+.lbody{overflow:auto;padding:8px 12px;font-size:12px}
+.litem{border-bottom:1px solid #eef2f8;padding:7px 0}
+.litem:last-child{border-bottom:0}
+.litem .k{color:#2563eb;font-weight:500}
+.litem .v{color:#25324a;word-break:break-all;margin:2px 0}
+.litem .a{color:#8a94a6;font-family:Consolas,Monaco,monospace;font-size:11px;
+  word-break:break-all}
+@media(max-width:1000px){
+  .stgwrap{flex-direction:column}
+  .lineage{width:100%;position:static;max-height:40vh}
+}

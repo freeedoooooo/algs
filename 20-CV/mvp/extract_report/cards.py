@@ -3,9 +3,12 @@ extract_report/cards.py — 卡片渲染的薄层：准备数据 + 选模板。
 
 HTML 结构全部在 templates/*.html（Jinja2，autoescape 默认开启），
 样式在 assets/report.css，交互在 assets/report.js。本文件只做：
-  · 从 pageRec / 文件信封里挑出渲染所需的数据（坐标 rect、行、表格、文档块）
+  · 从 cvdoc 页 / 信封里挑出渲染所需的数据（坐标 rect、行、表格、文档块）
   · 生成自包含 data URI（CSV / Markdown 下载）
   · 调 render() 产出 HTML 片段（Markup，供上层模板安全内嵌）
+
+消费契约 = adapter 产出的 cvdoc（extract.json）：页面与报告只见自有标准，
+引擎结构不出适配层（raw/ 前端 403）。
 """
 import io
 import os
@@ -18,7 +21,6 @@ from jinja2 import Environment, FileSystemLoader
 from markupsafe import Markup
 
 from .. import config
-from .. import viewmodel
 
 _ENV = Environment(
     loader=FileSystemLoader(config.TEMPLATES_DIR),
@@ -63,7 +65,7 @@ def md_data_uri(text):
 def _cell_rects(rec, space):
     """某坐标空间下的单元格 rect 数据，与表格 data-cell 一一对应。"""
     out = []
-    for ti, t in enumerate(rec.get('structured_tables') or []):
+    for ti, t in enumerate(rec.get('tables') or []):
         coord = t.get('coord') or {}
         if coord.get('space') != space or not coord.get('exact'):
             continue
@@ -109,32 +111,32 @@ def _stitch_rects(stitched, page_no, space):
 def image_views(rec, card_no, stitched=None, page_no=None, pager=''):
     """左图区：每个 view 各自一个 .imgwrap，保证 img+svg 1:1。
     pager（多页文件的翻页组件）悬浮在本 stage 底缘——锚定「看源文件」视图而非整页底部。"""
-    # CSV / TXT 也留了 source.<ext> 副本，但那不是图片，不能当 <img> 渲染
-    if not rec.get('image_size') or rec.get('kind') == 'csv':
+    # CSV / TXT 无图像载体（size 为空），不能当 <img> 渲染
+    if not rec.get('size'):
         return render('image_views.html', empty=True, pager=pager)
-    w, h = rec.get('image_size') or [0, 0]
+    w, h = rec.get('size') or [0, 0]
     polys = []
-    for i, box in enumerate(rec.get('boxes') or []):
-        pts = [(float(p[0]), float(p[1])) for p in box]
+    for i, t in enumerate(rec.get('texts') or []):
+        pts = [(float(p[0]), float(p[1])) for p in (t.get('box') or [])]
         if len(pts) < 3:
             continue
-        score = (rec.get('scores') or [1.0])[i]
+        score = t.get('score', 1.0)
         polys.append({
             'low': score < config.LOW_SCORE, 'idx': i,
             'points': ' '.join('{:.1f},{:.1f}'.format(x, y) for x, y in pts),
-            'tip': (rec.get('texts') or [''])[i], 'score': score})
-    tspace = rec.get('text_space') or 'source'
-    if tspace == 'rectified' and not rec.get('rectified'):
+            'tip': t.get('text', ''), 'score': score})
+    tspace = rec.get('space') or 'source'
+    if tspace == 'rectified' and not rec.get('rectified_image'):
         tspace = 'source'
     rect = None
-    if rec.get('rectified'):
+    if rec.get('rectified_image'):
         rw, rh = rec.get('rectified_size') or [0, 0]
-        rect = {'src': file_url(rec['rectified']), 'rw': rw, 'rh': rh,
+        rect = {'src': file_url(rec['rectified_image']), 'rw': rw, 'rh': rh,
                 'rar': (rw / rh) if rh else 1.5,
                 'cells': _cell_rects(rec, 'rectified'),
                 'stitch': _stitch_rects(stitched, page_no, 'rectified')}
     return render('image_views.html', empty=False, pager=pager, card=card_no,
-                  src=file_url(rec['source']), w=w, h=h,
+                  src=file_url(rec['image']), w=w, h=h,
                   ar=(w / h) if h else 1.5, page_no=page_no,
                   polys_src=polys if tspace == 'source' else [],
                   polys_rect=polys if tspace == 'rectified' else [],
@@ -145,11 +147,10 @@ def image_views(rec, card_no, stitched=None, page_no=None, pager=''):
 
 def text_pane(rec, card_no):
     texts = rec.get('texts') or []
-    scores = rec.get('scores') or []
     rows = []
-    for i, text in enumerate(texts):
-        s = scores[i] if i < len(scores) else 1.0
-        rows.append({'idx': i, 'text': text, 's': s,
+    for i, t in enumerate(texts):
+        s = t.get('score', 1.0)
+        rows.append({'idx': i, 'text': t.get('text', ''), 's': s,
                      'low': s < config.LOW_SCORE,
                      'width': max(0, min(100, s * 100))})
     plain = rec.get('plain_text') or ''
@@ -158,15 +159,19 @@ def text_pane(rec, card_no):
         pctx = {'aid': 'aux-plain-{}'.format(card_no), 'n': len(plain),
                 'text': plain[:20000]}
     # 页头瘦身：可疑行数 / 带框图 原在页头，现整合进文字 tab 头
-    n_low = rec.get('low_score_lines') or sum(1 for r in rows if r['low'])
-    boxes = file_url(rec['boxes_png']) if rec.get('boxes_png') else None
+    stats = rec.get('stats') or {}
+    n_low = stats.get('low_score_lines') or sum(1 for r in rows if r['low'])
+    boxes = file_url(rec['boxes_image']) if rec.get('boxes_image') else None
     return render('text_pane.html', card=card_no, n=len(texts), rows=rows,
-                  tspace=rec.get('text_space') or 'source', plain=pctx,
+                  tspace=rec.get('space') or 'source', plain=pctx,
                   n_low=n_low, boxes=boxes)
 
 
+_SOURCE_LABELS = {'model': '表格模型', 'text_layer': '文本层', 'csv': '纯文本'}
+
+
 def tables_section(rec, card_no, stitched=None):
-    tables = rec.get('structured_tables') or []
+    tables = rec.get('tables') or []
     # 被并入跨页合并表的逐页表 (page, 表下标) → 合并表下标。一个文件可有多条链。
     merged = {}
     for si, st in enumerate(stitched or []):
@@ -175,7 +180,7 @@ def tables_section(rec, card_no, stitched=None):
     # 同为 space='source'，文本层 PDF 与「关闭矫正的表格模型」来源不同，
     # 标签要说清是字符 bbox 还是模型框，别让用户把近似坐标当精确看。
     src_label = ('预览图（字符 bbox）'
-                 if rec.get('table_route') == 'text_layer'
+                 if rec.get('route') == 'text_layer'
                  else '原图（模型框）')
     spaces = []
     for t in tables:
@@ -190,14 +195,15 @@ def tables_section(rec, card_no, stitched=None):
         ti = idx - 1
         headers = t.get('headers') or []
         rows = t.get('rows') or []
-        si = merged.get((rec.get('page', 1), ti))
+        si = merged.get((rec.get('index', 1), ti))
         tctx.append({
             'ti': ti, 'idx': idx, 'hidden': ti != 0,
             'space': (t.get('coord') or {}).get('space') or 'none',
             'headers': headers, 'rows': rows,
             'csv_file': t.get('csv_file', 'table_{}.csv'.format(idx)),
             'csv_uri': csv_data_uri(headers, rows),
-            'page': t.get('page', 1), 'source': t.get('source', '?'),
+            'page': t.get('page', 1),
+            'source': _SOURCE_LABELS.get(t.get('source'), t.get('source', '?')),
             'strategy': t.get('strategy', '?'),
             'n_rows': t.get('n_rows', 0), 'n_cols': t.get('n_cols', 0),
             'fill_ratio': t.get('fill_ratio', 0), 'title': t.get('title'),
@@ -206,7 +212,7 @@ def tables_section(rec, card_no, stitched=None):
                                      (stitched[si].get('source_pages') or []))
                             if si is not None else '')})
     return render('tables.html', card=card_no,
-                  route=rec.get('table_route', '-'), n=len(tables),
+                  route=rec.get('route', '-'), n=len(tables),
                   notes=rec.get('notes') or [],
                   has_coord=any((t.get('coord') or {}).get('exact')
                                 for t in tables),
@@ -228,15 +234,21 @@ def _table_union(t):
     return [min(xs1), min(ys1), max(xs2), max(ys2)]
 
 
+def _line_center(texts, i):
+    pts = (texts[i].get('box') or []) if i < len(texts) else []
+    ys = [float(p[1]) for p in pts] or [0.0]
+    xs = [float(p[0]) for p in pts] or [0.0]
+    return sum(xs) / len(xs), sum(ys) / len(ys)
+
+
 def _doc_blocks_ysort(rec):
-    """无 layout 语义时的回退：OCR 行与 source 空间表格按 y 穿插，其余表格置底。
+    """无 blocks 语义时的回退：OCR 行与 source 空间表格按 y 穿插，其余表格置底。
 
     落在表格并集框内的 OCR 行被过滤（内容由表格块承载，避免重复）。
     返回 [{'kind':'line','idx':i} | {'kind':'table','ti':i,'trailing':bool}]
     """
     texts = rec.get('texts') or []
-    boxes = rec.get('boxes') or []
-    tables = rec.get('structured_tables') or []
+    tables = rec.get('tables') or []
     unions = {}
     for ti, t in enumerate(tables):
         coord = t.get('coord') or {}
@@ -246,13 +258,12 @@ def _doc_blocks_ysort(rec):
                 unions[ti] = u
     items = []
     for i in range(len(texts)):
-        pts = boxes[i] if i < len(boxes) else []
-        ys = [float(p[1]) for p in pts] or [0.0]
-        xs = [float(p[0]) for p in pts] or [0.0]
-        cy, cx = sum(ys) / len(ys), sum(xs) / len(xs)
+        cx, cy = _line_center(texts, i)
         if any(u[0] <= cx <= u[2] and u[1] <= cy <= u[3]
                for u in unions.values()):
             continue
+        pts = texts[i].get('box') or []
+        ys = [float(p[1]) for p in pts] or [0.0]
         items.append((min(ys), 0, {'kind': 'line', 'idx': i}))
     trailing = []
     for ti in range(len(tables)):
@@ -264,15 +275,8 @@ def _doc_blocks_ysort(rec):
     return [it[2] for it in items] + trailing
 
 
-_TITLE_LABELS = {'doc_title', 'paragraph_title', 'title'}
-_VISUAL_LABELS = {'image', 'chart', 'formula', 'seal', 'figure'}
-
-
-def _line_center(boxes, i):
-    pts = boxes[i] if i < len(boxes) else []
-    ys = [float(p[1]) for p in pts] or [0.0]
-    xs = [float(p[0]) for p in pts] or [0.0]
-    return sum(xs) / len(xs), sum(ys) / len(ys)
+_TITLE_ROLES = {'title'}
+_VISUAL_ROLES = {'figure', 'formula', 'seal'}
 
 
 def _in_bbox(cx, cy, bbox):
@@ -282,39 +286,38 @@ def _in_bbox(cx, cy, bbox):
 
 
 def _doc_blocks_layout(rec):
-    """有 layout 语义时直读：官方阅读顺序 + 标题角色 + 表格块。
+    """有 blocks 语义时直读：阅读顺序 + 标题角色 + 表格块。
 
     文字仍落到行级（data-idx 复用既有回溯通路）：每个文本块收集落在其
-    block_bbox 内的投影行；表格块按出现顺序映射 structured_tables。
+    bbox 内的投影行；表格块按出现顺序映射 tables。
     返回 [{'kind':'head'|'para','lines':[idx]} | {'kind':'table','ti':i}]
     """
     texts = rec.get('texts') or []
-    boxes = rec.get('boxes') or []
-    tables = rec.get('structured_tables') or []
-    layout = rec.get('layout') or []
-    centers = [_line_center(boxes, i) for i in range(len(texts))]
+    tables = rec.get('tables') or []
+    blocks = rec.get('blocks') or []
+    centers = [_line_center(texts, i) for i in range(len(texts))]
     assigned = set()
     out = []
     ti = 0
-    for lb in layout:
-        label = str(lb.get('label') or '').lower()
+    for lb in blocks:
+        role = str(lb.get('role') or '').lower()
         bbox = lb.get('bbox')
         inside = [i for i in range(len(texts))
                   if i not in assigned and _in_bbox(*centers[i], bbox)]
-        if 'table' in label:
+        if role == 'table':
             assigned.update(inside)
             if ti < len(tables):
                 out.append({'kind': 'table', 'ti': ti})
             ti += 1
             continue
-        if label in _VISUAL_LABELS:
+        if role in _VISUAL_ROLES:
             assigned.update(inside)
             continue
         if not inside:
             continue
         assigned.update(inside)
         inside.sort(key=lambda i: (centers[i][1], centers[i][0]))
-        out.append({'kind': 'head' if label in _TITLE_LABELS else 'para',
+        out.append({'kind': 'head' if role in _TITLE_ROLES else 'para',
                     'lines': inside})
     stray = [i for i in range(len(texts)) if i not in assigned]
     if stray:
@@ -324,7 +327,7 @@ def _doc_blocks_layout(rec):
 
 
 def doc_blocks(rec):
-    if rec.get('layout'):
+    if rec.get('blocks'):
         return _doc_blocks_layout(rec)
     return _doc_blocks_ysort(rec)
 
@@ -343,14 +346,14 @@ def _md_cell(v):
 def blocks_markdown(rec, blocks):
     """与文档视图同序的纯 Markdown（坐标信息丢弃，供下载）。"""
     texts = rec.get('texts') or []
-    tables = rec.get('structured_tables') or []
+    tables = rec.get('tables') or []
     parts = []
     if not texts and rec.get('plain_text'):
         parts.append(rec['plain_text'].strip())
     for b in blocks:
         if b['kind'] in ('line', 'head', 'para'):
             idxs = _block_lines(rec, b)
-            txt = '\n'.join(texts[i] for i in idxs if i < len(texts))
+            txt = '\n'.join(texts[i]['text'] for i in idxs if i < len(texts))
             if not txt:
                 continue
             if b['kind'] == 'head':
@@ -376,10 +379,9 @@ def blocks_markdown(rec, blocks):
     return '\n\n'.join(p for p in parts if p) + '\n'
 
 
-def md_pane(rec, card_no):
+def md_pane(rec, card_no, fname='doc'):
     texts = rec.get('texts') or []
-    scores = rec.get('scores') or []
-    tables = rec.get('structured_tables') or []
+    tables = rec.get('tables') or []
     blocks = doc_blocks(rec)
     items = []
     if not texts and rec.get('plain_text'):
@@ -392,9 +394,9 @@ def md_pane(rec, card_no):
             for i in _block_lines(rec, b):
                 if i >= len(texts):
                     continue
-                s = scores[i] if i < len(scores) else 1.0
+                s = texts[i].get('score', 1.0)
                 lines.append({'idx': i, 'low': s < config.LOW_SCORE,
-                              'text': texts[i]})
+                              'text': texts[i]['text']})
             if lines:
                 items.append({'kind': 'lines', 'head': b['kind'] == 'head',
                               'lines': lines})
@@ -409,22 +411,23 @@ def md_pane(rec, card_no):
                       'title': t.get('title'),
                       'headers': t.get('headers') or [],
                       'rows': t.get('rows') or []})
-    stem = os.path.splitext(rec.get('file', 'doc'))[0]
+    stem = os.path.splitext(fname)[0]
     n_line = sum(len(_block_lines(rec, b)) for b in blocks
                  if b['kind'] in ('line', 'head', 'para'))
-    order_tip = ('按官方版面顺序组织（标题/段落/表格）'
-                 if rec.get('layout') else '表格按 y 坐标穿插进文字流')
+    order_tip = ('按版面阅读顺序组织（标题/段落/表格）'
+                 if rec.get('blocks') else '表格按 y 坐标穿插进文字流')
     return render('md_pane.html', card=card_no, n_line=n_line,
                   n_tbl=len(tables),
                   dl_uri=md_data_uri(blocks_markdown(rec, blocks)),
                   stem=stem, order_tip=order_tip,
-                  tspace=rec.get('text_space') or 'source', items=items)
+                  tspace=rec.get('space') or 'source', items=items)
 
 
-def json_section(rec, href=None, label='result.json', title='完整 JSON', opened=True):
-    # 展示落盘形态（ppstruct 剥掉派生投影），渲染时美化。
+def json_section(rec, href=None, label='extract.json', title='完整 JSON',
+                 opened=True):
+    # 展示 cvdoc 落盘形态（自有标准），渲染时美化。
     # href 给出时带下载链接（单页=完整信封，与下载一致）；多页页卡片只展示本页切片。
-    text = json.dumps(viewmodel.disk_view(rec), ensure_ascii=False, indent=2)
+    text = json.dumps(rec, ensure_ascii=False, indent=2)
     return render('json_panel.html', opened=opened, label=label, title=title,
                   href=href, text=text)
 
@@ -433,32 +436,35 @@ def _render_card(pg, card_no, file_rec, single=True, page_no=None,
                  stitched=None, title_suffix='', hidden=False, pager=''):
     """渲染一个页卡片（单页文件=整张卡片；多页文件=其中一页）。复用既有全部区块。"""
     labels = {'image': '图片', 'pdf': 'PDF', 'csv': '纯文本'}
+    finfo = file_rec.get('file') or {}
+    fname = finfo.get('name', '(未知)')
     has_stitch = (not single) and bool(stitched)
     # 多页：本页 JSON 与完整信封 JSON 各占一个独立 tab；完整信封紧凑嵌在
     # filecard 的 <script type="application/json">（全报告仅一份），首次打开
     # tab 时才美化（report.js loadFileJson）——不逐页内联（平方级膨胀），
     # 也不 fetch（file:// 直开时浏览器禁止 fetch 本地文件）。
     if single:
-        json_html = json_section(file_rec, href=file_url(config.RESULT_JSON))
+        json_html = json_section(file_rec, href=file_url(config.EXTRACT_JSON))
     else:
         json_html = json_section(
             pg, label='pages[{}]'.format((page_no or 1) - 1), title='本页 JSON')
+    stats = pg.get('stats') or {}
     return render(
         'card.html', card=card_no, single=single, page_no=page_no,
-        hidden=hidden, textspace=pg.get('text_space') or 'source',
-        name=pg.get('file', '(未知)'), title_suffix=title_suffix,
-        kind_label=labels.get(pg.get('kind'), pg.get('kind', '?')),
+        hidden=hidden, textspace=pg.get('space') or 'source',
+        name=fname, title_suffix=title_suffix,
+        kind_label=labels.get(finfo.get('kind'), finfo.get('kind', '?')),
         image_views=image_views(pg, card_no, stitched, page_no, pager),
-        n_text=pg.get('lines', 0),
-        n_tbl=len(pg.get('structured_tables') or []),
+        n_text=stats.get('lines', 0),
+        n_tbl=len(pg.get('tables') or []),
         has_stitch=has_stitch, n_stitch=len(stitched or []),
         json_label='完整 JSON' if single else '本页 JSON',
         text_html=text_pane(pg, card_no),
         tables_html=tables_section(pg, card_no, stitched),
-        md_html=md_pane(pg, card_no),
+        md_html=md_pane(pg, card_no, fname),
         stitch_html=stitch_content(file_rec, card_no) if has_stitch else '',
         json_html=json_html,
-        result_href=quote(config.RESULT_JSON, safe=''))
+        result_href=quote(config.EXTRACT_JSON, safe=''))
 
 
 def stitch_content(file_rec, card_no):
@@ -490,8 +496,7 @@ def stitch_content(file_rec, card_no):
 def _filejson_src(file_rec):
     """完整信封的紧凑 JSON（嵌入 <script type="application/json">，全报告仅一份）。
     `</` 转义成 `<\\/`（JSON 合法转义），防文字内容里的 </script> 提前闭合标签。"""
-    text = json.dumps(viewmodel.disk_view(file_rec), ensure_ascii=False,
-                      separators=(',', ':'))
+    text = json.dumps(file_rec, ensure_ascii=False, separators=(',', ':'))
     return text.replace('</', '<\\/')
 
 
@@ -499,20 +504,21 @@ def _multi_card(file_rec, idx):
     pages = file_rec.get('pages') or []
     stitched = file_rec.get('stitched_tables') or []
     labels = {'image': '图片', 'pdf': 'PDF', 'csv': '纯文本'}
+    finfo = file_rec.get('file') or {}
     # 翻页组件（窗口式页码）渲染进每个页卡片的 stage，只显示激活页那组；
     # 页码窗口 / 首末页 / 跳页由 report.js renderPager 按 data-pages 动态生成。
-    page_nums = [p.get('page') for p in pages]
+    page_nums = [p.get('index') for p in pages]
     pager = render('pager.html', idx=idx, n=len(pages),
                    nums=','.join(str(x) for x in page_nums),
                    first=page_nums[0] if page_nums else 1)
     cards_html = [
-        _render_card(p, '{}p{}'.format(idx, p.get('page')), file_rec,
-                     single=False, page_no=p.get('page'), stitched=stitched,
+        _render_card(p, '{}p{}'.format(idx, p.get('index')), file_rec,
+                     single=False, page_no=p.get('index'), stitched=stitched,
                      hidden=(i > 0), pager=pager)
         for i, p in enumerate(pages)]
     return render('filecard.html', idx=idx,
-                  name=file_rec.get('file', '(未知)'),
-                  kind_label=labels.get(file_rec.get('kind'), '?'),
+                  name=finfo.get('name', '(未知)'),
+                  kind_label=labels.get(finfo.get('kind'), '?'),
                   n_pages=len(pages), n_stitch=len(stitched),
                   filejson=Markup(_filejson_src(file_rec)), cards=cards_html)
 

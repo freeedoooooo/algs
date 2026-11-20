@@ -12,11 +12,26 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 # 兜底：即使有旧脚本用顶层 `import config` 也能找到（新代码统一走包相对导入）
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
-INPUT_DIR = os.path.join(ROOT, 'input')
-OUTPUT_DIR = os.path.join(ROOT, 'output')
-LOG_DIR = os.path.join(ROOT, 'logs')
+# 数据根：默认 = mvp/ 根；服务器部署整体拷贝后设 CV_MVP_DATA_ROOT 即可，代码零改动。
+# DB 与 JSON 只存相对路径（正斜杠），to_abs/to_rel 是唯一换算点。
+DATA_ROOT = os.path.abspath(os.getenv('CV_MVP_DATA_ROOT', ROOT))
+INPUT_DIR = os.path.join(DATA_ROOT, 'input')
+OUTPUT_DIR = os.path.join(DATA_ROOT, 'output')
+LOG_DIR = os.path.join(DATA_ROOT, 'logs')
+SOURCES_DIR = os.path.join(DATA_ROOT, 'sources')
+DATA_DIR = os.path.join(DATA_ROOT, 'data')
 ASSETS_DIR = os.path.join(ROOT, 'extract_report', 'assets')
 TEMPLATES_DIR = os.path.join(ROOT, 'extract_report', 'templates')
+
+
+def to_abs(rel):
+    """相对路径（正斜杠）→ 本机绝对路径。"""
+    return os.path.normpath(os.path.join(DATA_ROOT, rel.replace('/', os.sep)))
+
+
+def to_rel(path):
+    """本机绝对路径 → 相对 DATA_ROOT 的正斜杠路径（落盘 / 入库统一形态）。"""
+    return os.path.relpath(path, DATA_ROOT).replace(os.sep, '/')
 
 # 官方模型首次推理时下载到 ${PADDLE_PDX_CACHE_HOME:-~/.paddlex}/official_models。
 # 离线部署：先在联网机器跑一次把模型下全，再把该目录随代码一起拷到目标机，
@@ -56,13 +71,19 @@ TEXT_ENCODINGS = ('utf-8-sig', 'gbk', 'latin-1')
 BATCH_TS_FMT = '%Y%m%d%H%M%S'
 CASE_NAME_MAX = 80
 
-# ---- 产物文件名 ----
+# ---- 产物文件名（数据分层：raw/ 引擎原样 → extract.json 自有标准 → records.json 记录事实源）----
 RECTIFIED_NAME = 'rectified.png'
 BOXES_NAME = 'boxes.png'
-RESULT_JSON = 'result.json'
+RAW_DIR = 'raw'
+EXTRACT_JSON = 'extract.json'
+RECORDS_JSON = 'records.json'
+RUN_JSON = 'run.json'
 # 对照报告：每批次一份独立自包含 HTML，直接放在该批次的 output/<批次戳_文件名>/
-# 目录里，与 result.json / 图片 / CSV 同级；模板（assets）只有一份，生成时内联。
+# 目录里，与 extract.json / 图片 / CSV 同级；模板（assets）只有一份，生成时内联。
 EXTRACT_REPORT_NAME = '对照报告.html'
 
-for _d in (INPUT_DIR, OUTPUT_DIR, LOG_DIR):
+# ---- 平台目录库凭据引用名（解析顺序 env → data/secrets.json，见 store/db.py）----
+PLATFORM_DB_REF = 'CV_PLATFORM_DB'
+
+for _d in (INPUT_DIR, OUTPUT_DIR, LOG_DIR, SOURCES_DIR, DATA_DIR):
     os.makedirs(_d, exist_ok=True)
