@@ -14,7 +14,7 @@
     {% endif %}
     <div class="views">
         <div class="view" data-card="{{ card }}" data-view="orig" data-space="source">
-            <div class="imgwrap" style="--ar:{{ ar|f4 }}"><img src="{{ src }}" alt="原图" title="点空白处放大；表格/跨页 tab 下点单元格反向定位">
+            <div class="imgwrap" style="--ar:{{ ar|f4 }}"><img src="{{ src }}" alt="原图" title="单击：定位（右上可切「点图：放大」）；双击：放大">
                 <svg viewBox="0 0 {{ w }} {{ h }}" preserveAspectRatio="none">{{ mc.polys(card, polys_src) }}</svg>
                 {% if cell_src or stitch_src %}
                 <svg class="cellsvg" viewBox="0 0 {{ w }} {{ h }}" preserveAspectRatio="none">{{ mc.cell_rects(card,
@@ -22,17 +22,23 @@
                 </svg>
                 {% endif %}
                 <button type="button" class="boxtoggle on" data-card="{{ card }}">显示叠加框</button>
+                <button type="button" class="clickmode" data-card="{{ card }}"
+                        title="切换单击原图的行为：定位＝点内容反向追溯（命中优先级 跨页合并＞表格＞文本，未命中给提示）；放大＝单击全屏">点图：定位
+                </button>
             </div>
         </div>
         {% if rect %}
         <div class="view" data-card="{{ card }}" data-view="rect" data-space="rectified" hidden>
             <div class="imgwrap" style="--ar:{{ rect.rar|f4 }}"><img src="{{ rect.src }}" alt="矫正图"
-                                                                     title="点空白处放大；表格/跨页 tab 下点单元格反向定位">
+                                                                     title="单击：定位（右上可切「点图：放大」）；双击：放大">
                 <svg class="cellsvg" viewBox="0 0 {{ rect.rw }} {{ rect.rh }}" preserveAspectRatio="none">{{
                     mc.cell_rects(card, rect.cells) }}{{ mc.polys(card, polys_rect) }}{{ mc.stitch_rects(card, page_no,
                     rect.stitch) }}
                 </svg>
                 <button type="button" class="boxtoggle on" data-card="{{ card }}">显示叠加框</button>
+                <button type="button" class="clickmode" data-card="{{ card }}"
+                        title="切换单击原图的行为：定位＝点内容反向追溯（命中优先级 跨页合并＞表格＞文本，未命中给提示）；放大＝单击全屏">点图：定位
+                </button>
             </div>
         </div>
         {% endif %}

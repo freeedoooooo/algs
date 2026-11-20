@@ -39,6 +39,19 @@ function clearHover(card){
 function clearPin(card){
   card.querySelectorAll('.pin').forEach(function(x){x.classList.remove('pin');});
 }
+/* 追溯不到时的轻提示：底部居中 toast，2.4s 自动消失 */
+var toastEl=null,toastTimer=null;
+function toast(msg){
+  if(!toastEl){
+    toastEl=document.createElement('div');
+    toastEl.id='trace-toast';
+    document.body.appendChild(toastEl);
+  }
+  toastEl.textContent=msg;
+  toastEl.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(function(){toastEl.classList.remove('on');},2400);
+}
 /* 反向定位公共件：图框 → 数据侧。先激活对应 tab/子页签（切换会清 pin，须先做），再滚动到位 */
 function matchingCells(card,el){
   return card.querySelectorAll('.cell[data-card="'+el.getAttribute('data-card')+'"]'+
@@ -78,11 +91,23 @@ document.querySelectorAll('[data-card][data-idx]').forEach(function(el){
     var card=cardOf(el),was=el.classList.contains('pin');
     clearPin(card);clearHover(card);
     if(was) return;
-    /* 从图上的识别框反向点入：切到文字 tab 并滚动到对应行（tab 切换会清 pin，先做） */
+    /* 从图上的识别框反向点入：切到文字 tab 并滚动到对应行（tab 切换会清 pin，先做）；
+       文档 tab 下则就地滚动到 md 行，不把用户拽离文档视图 */
     if(el.tagName==='polygon'){
-      activateTab(card,'text');
-      var row=card.querySelector('.tabpanel[data-tab="text"] tr[data-idx="'+el.getAttribute('data-idx')+'"]');
-      if(row) row.scrollIntoView({block:'nearest',inline:'nearest'});
+      var tp=card.querySelector('.tabpanel:not([hidden])');
+      var tt=tp?tp.getAttribute('data-tab'):'';
+      if(tt==='md'){
+        var ml=card.querySelector('.tabpanel[data-tab="md"] .mdline[data-idx="'+el.getAttribute('data-idx')+'"]');
+        if(ml) ml.scrollIntoView({block:'nearest',inline:'nearest'});
+      }else{
+        activateTab(card,'text');
+        var row=card.querySelector('.tabpanel[data-tab="text"] tr[data-idx="'+el.getAttribute('data-idx')+'"]');
+        if(row) row.scrollIntoView({block:'nearest',inline:'nearest'});
+      }
+    }
+    if(!card.querySelector('polygon.box[data-idx="'+el.getAttribute('data-idx')+'"]')){
+      toast('该行没有图像识别框，无法回溯到图');
+      return;
     }
     ensureViewFor(card,elSpace(el));
     matches().forEach(function(x){x.classList.add('pin');});
@@ -179,6 +204,10 @@ document.querySelectorAll('td.cell,th.cell').forEach(function(el){
     var card=cardOf(el),was=el.classList.contains('pin');
     clearPin(card);clearHover(card);
     if(was) return;
+    if(!matchingRects(card,el).length){
+      toast('该单元格没有图像坐标，无法回溯到图');
+      return;
+    }
     ensureViewFor(card,elSpace(el));
     el.classList.add('pin');
     matchingRects(card,el).forEach(function(r){r.classList.add('pin');});
@@ -270,42 +299,76 @@ document.querySelectorAll('.copyjson').forEach(function(btn){
   });
 });
 
-/* 图片点击命中测试：表格/跨页 tab 下，点单元格区域即反向定位（叠加框隐藏时也生效）；
-   点空白处保持原「点击放大」行为。只测当前激活表的框；坐标按 viewBox 1:1 换算，
-   重叠框取面积最小者（最内层格）。 */
+/* 图片点击命中测试（定位模式）：按数据侧优先级取目标，与当前 tab 无关——
+   ① 跨页合并格框 stitchbox → 跨页合并 tab；② 单格框 cellbox → 表格 tab；
+   ③ 识别框 polygon（四边形射线法）→ 文本/文档 tab。同级重叠取面积最小者（最内层）。
+   合并表区域的格框与单格框几何重合，靠优先级保证先跳跨页合并。叠加框隐藏时也生效。
+   坐标按 viewBox 1:1 换算。命中返回图框元素（其 click 处理器负责切 tab/钉住），未命中 null。 */
 function hitCell(img,e){
   var card=cardOf(img);
-  var tp=card.querySelector('.tabpanel:not([hidden])');
-  var tab=tp?tp.getAttribute('data-tab'):'';
-  if(tab!=='tables'&&tab!=='stitch') return null;
   var view=img.closest('.view');
-  var svg=view&&view.querySelector('.cellsvg');
+  var svg=view&&view.querySelector('svg');
   if(!svg||!svg.viewBox||!svg.viewBox.baseVal||!svg.viewBox.baseVal.width) return null;
   var vb=svg.viewBox.baseVal,r=img.getBoundingClientRect();
   if(!r.width||!r.height) return null;
   var x=(e.clientX-r.left)/r.width*vb.width,y=(e.clientY-r.top)/r.height*vb.height;
-  var rects;
-  if(tab==='tables'){
-    rects=svg.querySelectorAll('.cellbox:not(.off)');
-  }else{
-    var on=card.querySelector('.stitchtab.on');
-    var si=on?on.getAttribute('data-stitch'):null;
-    rects=svg.querySelectorAll('.stitchbox');
-    if(si!=null) rects=Array.prototype.filter.call(rects,function(b){
-      return b.getAttribute('data-stitch')===si;
+  function bestRect(list){
+    var best=null,bestA=Infinity;
+    Array.prototype.forEach.call(list,function(b){
+      var bx=+b.getAttribute('x'),by=+b.getAttribute('y'),
+          bw=+b.getAttribute('width'),bh=+b.getAttribute('height');
+      if(x>=bx&&x<=bx+bw&&y>=by&&y<=by+bh&&bw*bh<bestA){bestA=bw*bh;best=b;}
     });
+    return best;
+  }
+  var cellSvg=view.querySelector('.cellsvg');
+  if(cellSvg){
+    var s=bestRect(cellSvg.querySelectorAll('.stitchbox'));
+    if(s) return s;
+    var c=bestRect(cellSvg.querySelectorAll('.cellbox'));
+    if(c) return c;
   }
   var best=null,bestA=Infinity;
-  Array.prototype.forEach.call(rects,function(b){
-    var bx=+b.getAttribute('x'),by=+b.getAttribute('y'),
-        bw=+b.getAttribute('width'),bh=+b.getAttribute('height');
-    if(x>=bx&&x<=bx+bw&&y>=by&&y<=by+bh){
-      var a=bw*bh;
-      if(a<bestA){bestA=a;best=b;}
+  view.querySelectorAll('polygon.box').forEach(function(p){
+    var pts=(p.getAttribute('points')||'').trim().split(/\s+/).map(function(s){
+      var xy=s.split(',');return [+xy[0],+xy[1]];
+    });
+    if(pts.length<3) return;
+    var inside=false,minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+    for(var i=0,j=pts.length-1;i<pts.length;j=i++){
+      var xi=pts[i][0],yi=pts[i][1],xj=pts[j][0],yj=pts[j][1];
+      if(xi<minX)minX=xi;
+      if(xi>maxX)maxX=xi;
+      if(yi<minY)minY=yi;
+      if(yi>maxY)maxY=yi;
+      if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi) inside=!inside;
     }
+    if(inside&&(maxX-minX)*(maxY-minY)<bestA){bestA=(maxX-minX)*(maxY-minY);best=p;}
   });
+  if(best){
+    var tp=card.querySelector('.tabpanel:not([hidden])');
+    var tt=tp?tp.getAttribute('data-tab'):'';
+    /* 文档 tab 下表格 cell 的文字没有 md 行：不拽去文本 tab，给提示（格框通常已在②命中） */
+    if(tt==='md'&&!card.querySelector(
+      '.tabpanel[data-tab="md"] .mdline[data-idx="'+best.getAttribute('data-idx')+'"]')) return null;
+  }
   return best;
 }
+
+/* 点图行为开关：定位（命中测试反向追溯，未命中给提示）/ 放大（单击直接全屏）。
+   与 boxtoggle 同款角标、同套同步机制：stage.clickzoom，原图/矫正图两副本一致。
+   定位模式下双击仍可放大，作为不切开关的快捷逃生口。 */
+document.querySelectorAll('.clickmode').forEach(function(btn){
+  btn.addEventListener('click',function(e){
+    e.stopPropagation();
+    var card=cardOf(btn),stage=card.querySelector('.stage');
+    var zoom=stage.classList.toggle('clickzoom');
+    card.querySelectorAll('.clickmode').forEach(function(b){
+      b.classList.toggle('on',zoom);
+      b.textContent=zoom?'点图：放大':'点图：定位';
+    });
+  });
+});
 
 /* 点击图片全屏放大：克隆整个 .imgwrap，叠加框按同一 viewBox 1:1 跟随 */
 (function(){
@@ -378,11 +441,17 @@ function hitCell(img,e){
     stage.classList.remove('dragging');
   }
   document.querySelectorAll('.stage .imgwrap img').forEach(function(img){
-    img.setAttribute('title','点空白处放大；表格/跨页 tab 下点单元格反向定位');
+    img.setAttribute('title','单击：定位（右上可切「点图：放大」）；双击：放大');
     img.addEventListener('click',function(e){
       e.stopPropagation();
+      var card=cardOf(img);
+      if(card.querySelector('.stage').classList.contains('clickzoom')){open(img);return;}
       var hit=hitCell(img,e);
       if(hit){hit.dispatchEvent(new MouseEvent('click',{bubbles:true}));return;}
+      toast('点击处没有可定位的文字框或单元格');
+    });
+    img.addEventListener('dblclick',function(e){
+      e.stopPropagation();
       open(img);
     });
   });
@@ -699,6 +768,11 @@ document.querySelectorAll('.filecard').forEach(function(fc){
     var el=t&&t.closest?t.closest('.scell'):null;
     if(!el)return;
     var was=el.classList.contains('pin');
+    if(!fc.querySelector('.stitchbox[data-stitch="'+el.getAttribute('data-stitch')+'"]'+
+      '[data-cell="'+el.getAttribute('data-cell')+'"]')){
+      toast('该合并格没有图像坐标，无法回溯到图');
+      return;
+    }
     var pc=scellReveal(fc,el);if(!pc)return;
     clearPin(fc);clearScellHover(fc);
     lastKey=null;

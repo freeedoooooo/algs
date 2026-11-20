@@ -54,12 +54,14 @@ header .sub{color:#6b7688;font-size:12px;display:flex;align-items:center;gap:6px
 /* 只藏常显识别框；悬停文字行的回显高亮 .hl 仍要显示 */
 .stage.noboxes .box:not(.hl):not(.pin){display:none}
 /* 叠加框开关：半透明角标叠在原图右上角，不单独占行（imgwrap line-height:0 需复位） */
-.imgwrap .boxtoggle{position:absolute;top:6px;right:6px;z-index:3;
+.imgwrap .boxtoggle,.imgwrap .clickmode{position:absolute;top:6px;right:6px;z-index:3;
   padding:3px 9px;font-size:11px;line-height:1.4;border-radius:6px;
   background:rgba(15,23,38,.55);color:#fff;border:1px solid rgba(255,255,255,.35);
   backdrop-filter:blur(2px)}
-.imgwrap .boxtoggle:hover{background:rgba(15,23,38,.78)}
-.imgwrap .boxtoggle.on{background:rgba(37,99,235,.8);border-color:rgba(255,255,255,.5)}
+/* 点图行为开关叠在叠加框开关正下方，避免与左上视图切换相撞 */
+.imgwrap .clickmode{top:32px}
+.imgwrap .boxtoggle:hover,.imgwrap .clickmode:hover{background:rgba(15,23,38,.78)}
+.imgwrap .boxtoggle.on,.imgwrap .clickmode.on{background:rgba(37,99,235,.8);border-color:rgba(255,255,255,.5)}
 /* 视图切换悬浮在图左上角（与右上「隐藏叠加框」对称），不占行、不把图往下压 */
 .stage .viewbar{position:absolute;top:16px;left:16px;z-index:4;gap:4px;margin:0}
 .stage .viewbar .viewbtn{padding:3px 9px;font-size:11px;line-height:1.4;border-radius:6px;
@@ -67,7 +69,12 @@ header .sub{color:#6b7688;font-size:12px;display:flex;align-items:center;gap:6px
   backdrop-filter:blur(2px)}
 .stage .viewbar .viewbtn:hover{background:rgba(15,23,38,.78)}
 .stage .viewbar .viewbtn.on{background:rgba(37,99,235,.8);border-color:rgba(255,255,255,.5)}
-.lb-content .boxtoggle{display:none}
+.lb-content .boxtoggle,.lb-content .clickmode{display:none}
+/* 追溯失败提示：底部居中轻提示，不占版面、不挡操作 */
+#trace-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:80;
+  background:rgba(15,23,38,.92);color:#fff;font-size:13px;padding:8px 14px;
+  border-radius:6px;pointer-events:none;opacity:0;transition:opacity .18s;max-width:80vw}
+#trace-toast.on{opacity:1}
 .view[hidden]{display:none}
 /* 右栏：文字行 / 表格 / JSON 切 tab；图在左栏吸顶，切到表格悬停单元格即时可见高亮 */
 .contentcol{min-width:0;padding:10px 14px}
