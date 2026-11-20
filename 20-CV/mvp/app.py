@@ -70,6 +70,16 @@ app = FastAPI(title='CV 提取 MVP', version='0.1', lifespan=lifespan)
 app.mount('/files', StaticFiles(directory=config.OUTPUT_DIR), name='files')
 app.mount('/static', StaticFiles(directory=config.ASSETS_DIR), name='static')
 
+
+@app.middleware('http')
+async def no_cache(request, call_next):
+    """本地调试工具：禁止浏览器启发式缓存。StaticFiles/FileResponse 带 ETag/
+    Last-Modified，no-cache 让每次使用前先校验（未变 304、变了 200），
+    避免「改了 css/js 或重启服务后页面仍是旧样式」——缓存发生在浏览器侧，重启服务无效。"""
+    resp = await call_next(request)
+    resp.headers['Cache-Control'] = 'no-cache'
+    return resp
+
 # 单任务串行：模型单例不是线程安全的，也没必要并发加载第二份大模型
 STATE = {
     'running': False, 'ready': False, 'error': None,
