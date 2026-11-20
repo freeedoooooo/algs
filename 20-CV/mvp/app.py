@@ -10,11 +10,11 @@ mvp/app.py — Web 工具入口（FastAPI + uvicorn）。只负责路由与任�
     GET  /healthz       健康检查
     POST /api/upload    上传（base64 JSON，不依赖 python-multipart）
     GET  /api/status    处理进度
-    GET  /extract-report   提取报告（最新 case，报告在其 output 目录里）
+    GET  /extract-report   对照报告（重定向到最新 case 的报告真实地址）
     /files/<path>       各 case 的产物
     /static/<path>      上传页的 css / js
 
-提取逻辑在 pipeline/，提取报告生成在 report/，配置在 config.py。
+提取逻辑在 pipeline/，对照报告生成在 extract_report/，配置在 config.py。
 """
 import os
 import re
@@ -47,7 +47,8 @@ def _load(name):
 config = _load('config')           # 必须在 paddle 相关导入之前：设置模型源环境变量
 params_mod = _load('params')       # 调试参数 schema / 校验（纯 Python，不碰模型）
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import (HTMLResponse, JSONResponse, FileResponse,
+                               RedirectResponse)
 from fastapi.staticfiles import StaticFiles
 
 
@@ -263,15 +264,19 @@ def api_logs():
 
 @app.get('/extract-report')
 def extract_report():
-    """提取报告：看最新 case 的 提取报告.html（就在该 case 的 output 目录里，
-    与 result.json 同级）。历史批次直接打开各自 output 目录里的报告文件。"""
+    """对照报告：重定向到最新 case 的 对照报告.html 真实地址（/files/<case>/…）。
+    报告内资源全是相对路径，必须落在 case 目录的 URL 下才能解析；
+    历史批次直接打开各自 output 目录里的报告文件（file:// 同样可用）。"""
+    from urllib.parse import quote
     for name in sorted(os.listdir(config.OUTPUT_DIR), reverse=True):
         path = os.path.join(config.OUTPUT_DIR, name,
                             config.EXTRACT_REPORT_NAME)
         if os.path.isfile(path):
-            return FileResponse(path, media_type='text/html; charset=utf-8')
+            return RedirectResponse('/files/{}/{}'.format(
+                quote(name, safe=''),
+                quote(config.EXTRACT_REPORT_NAME, safe='')))
     return HTMLResponse(
-        '<h3>还没有提取报告</h3><p><a href="/">返回上传页</a>先上传一个文件。</p>')
+        '<h3>还没有对照报告</h3><p><a href="/">返回上传页</a>先上传一个文件。</p>')
 
 
 # 阶段 → 单文件内的进度占比（只增不减）。长耗时的模型加载/推理与 OCR
@@ -290,7 +295,7 @@ _STAGE_FRAC = {
 
 
 def run_batch(paths, params=None, log=None):
-    """后台线程：逐个提取 → 落 result.json → 在各自 output 目录生成提取报告。"""
+    """后台线程：逐个提取 → 落 result.json → 在各自 output 目录生成对照报告。"""
     try:
         def progress(v):
             with LOCK:
@@ -299,7 +304,7 @@ def run_batch(paths, params=None, log=None):
         log.stage('load', '加载提取流水线（首次会导入 cv2 / pdfplumber）…')
         progress(1)
         pipeline = _load('pipeline')
-        report_mod = _load('report.builder')
+        report_mod = _load('extract_report.builder')
         records = []
         total = len(paths)
         for i, path in enumerate(paths, 1):
@@ -337,7 +342,8 @@ def run_batch(paths, params=None, log=None):
             progress(int(i / total * 100))
         with LOCK:
             STATE.update(running=False, ready=True,
-                         cases=[r['file'] for r in records],
+                         cases=[{'file': r['file'], 'case': r['case']}
+                                for r in records],
                          elapsed=round(time.time()
                                        - (STATE['started'] or time.time()), 1),
                          progress=100, stage='done')

@@ -78,7 +78,7 @@ extract_one(src) ── 按 page 参数决定 page_list（all → 全部页；�
 - **拼接判据（保守，宁可不拼不误拼）**：只合并**相邻页**（p 末表 ↔ p+1 首表），且同时满足 ① 列数相同且非零 ② 坐标空间相同（`coord.space`）③ 来源精确（`coord.exact`）④ 列 x 边界对齐（≥2 对有效列、容差 12px）⑤ 表头空白归一化后相同（重复表头丢弃、行连续）。`used` 集防止重复起链，**一个文件可有多条独立跨页链**。
 - 合并表 `stitched_tables[i]`：`headers/rows/row_pages/cells/n_rows/n_cols/source_pages/parts/csv_file=stitched_{i}.csv`，`coord={mixed:true, space:'per-cell', exact:true}`；**每格 `cells[r][c]={bbox,page,space}`** 保留来源页与空间，报告据此做页感知回溯（悬停自动切页 + 高亮）。
 - **下载按 tab 分口径 + 碎片全部落盘**（2026-11-20）：提取层**逐页碎片 CSV 全部落盘**（`p{n}_table_{i}.csv`）；**表格 tab** 的下载/预览只给当前页这张表（被并入合并表的页表保留「跨页合并 N」徽标与分段说明），**跨页合并 tab** 的下载/预览给完整合并表 `stitched_{i}.csv`。
-- **报告呈现**：合并表收进**每个页卡片的「跨页合并」tab**（非独立底部面板），多链以子页签区分；**整份信封 JSON 独立成「整份 JSON」tab**（与本页 JSON/文字/表格/文档同款面板），不再塞在跨页 tab 底部；内容**首次打开 tab 时按需 fetch 落盘 result.json**（不内联进每个页卡片，避免多页大文件报告平方级膨胀）。翻页组件为**窗口式页码胶囊**（首末页+当前页±1 常显、其余收进 …，« ‹ › » + 跳页输入），**悬浮叠在源图底缘之上**（不占布局、不压缩图宽；`alignPagers` 按当前 imgwrap 实测位置锚定，伸缩/切页/切视图后仍贴源图）；页头为**单一文件级单行整合头**，做成色带+左 accent 竖条+2px 下边线以区分文件与内容（左=标题+类型/页数/跨页合并标签，右=路线/行数/表格/可疑行(仅>0)/图链接/result.json，多页右侧 `.pagehead-slot` 切页时由 `<template>` 注入更新；平均置信度/耗时等诊断不进页头），切页保留激活 tab 与合并表子页签、同步合并表滚动位置。文字叠加框默认隐藏。`stitched_tables` 仍是文件信封的落盘字段（数据模型不变），只是 UI 不再单列面板。
+- **报告呈现**：合并表收进**每个页卡片的「跨页合并」tab**（非独立底部面板），多链以子页签区分；**整份信封 JSON 独立成「整份 JSON」tab**（与本页 JSON/文字/表格/文档同款面板），不再塞在跨页 tab 底部；内容以紧凑 JSON **嵌在 filecard 的 `<script type="application/json">` 里（全报告仅一份），首次打开 tab 时才解析美化**（不逐页卡片内联，避免多页大文件报告平方级膨胀；也不 fetch，`file://` 直开同样可用）。翻页组件为**窗口式页码胶囊**（首末页+当前页±1 常显、其余收进 …，« ‹ › » + 跳页输入），**悬浮叠在源图底缘之上**（不占布局、不压缩图宽；`alignPagers` 按当前 imgwrap 实测位置锚定，伸缩/切页/切视图后仍贴源图）；页头为**单一文件级单行整合头**，做成色带+左 accent 竖条+2px 下边线以区分文件与内容（左=标题+类型/页数/跨页合并标签，右=路线/行数/表格/可疑行(仅>0)/图链接/result.json，多页右侧 `.pagehead-slot` 切页时由 `<template>` 注入更新；平均置信度/耗时等诊断不进页头），切页保留激活 tab 与合并表子页签、同步合并表滚动位置。文字叠加框默认隐藏。`stitched_tables` 仍是文件信封的落盘字段（数据模型不变），只是 UI 不再单列面板。
 
 ---
 
@@ -230,7 +230,7 @@ assert r['lines'] == len(r['texts'])
 ```
 
 清理前代码 0 引用死字段计数（`grep -rn --include=*.py <kw> pipeline report`）：
-`table_ocr_pred:0  rec_boxes:0  layout_det_res:0  textline_orientation_angles:0  model_settings:0  input_path:0`；`parsing` 在 report/ 0 命中（纯存档）。
+`table_ocr_pred:0  rec_boxes:0  layout_det_res:0  textline_orientation_angles:0  model_settings:0  input_path:0`；`parsing` 在 extract_report/（原 report/）0 命中（纯存档）。
 
 清理后 parsing 子字段体量（108，紧凑）：
 

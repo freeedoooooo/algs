@@ -551,7 +551,7 @@ mvp/
 ├── collect.py        # Mapping 引擎：result.json → 原始记录集（§5.2）
 ├── transform.py      # Transform 引擎：规则链 + 类型化（§5.3）
 ├── loader.py         # Load 执行器：upsert + cv_lineage + 回执（§5.5）
-└── report/assets/    # 新页面静态资源（沿用独立 css/js/html 结构）
+└── extract_report/assets/    # 新页面静态资源（沿用独立 css/js/html 结构）
 ```
 
 app.py 只增路由与编排胶水；pipeline/、现有 report 生成逻辑零改动。
@@ -684,7 +684,7 @@ flowchart LR
 - 缩略图**内嵌文件名行**（40×40），不做独立缩略图网格；图片点击 lightbox 全屏（滚轮缩放/拖拽/1:1/适应窗口）。
 - 叠加框默认隐藏，hover 显示、点击钉住；悬浮控件不占布局、不压图宽。
 - 信息去重：同一状态只在一处呈现；能用一行提示的不做弹窗。
-- 新页面静态资源放 report/assets（独立 css/js/html），纯前端改动刷新即生效。
+- 新页面静态资源放 extract_report/assets（独立 css/js/html），纯前端改动刷新即生效。
 
 ### 6.1 资料提取 Extract（现上传页增强，不重做）
 
@@ -916,7 +916,7 @@ POST /api/quarantine/{id}/ignore           → {ok}
 | 模块 | 改动 | 对旧功能风险 |
 |---|---|---|
 | pipeline/ 提取算法 | 零改动 | 无 |
-| report/ 报告生成 | 零改动（assets 只增文件） | 无 |
+| extract_report/ 报告生成 | 零改动（assets 只增文件） | 无 |
 | config.py | DATA_ROOT 派生 + to_abs/to_rel + 平台库 conn_ref 常量，默认路径不变 | 低（check_env + 实测验证） |
 | app.py | 旧路由加登记（try/except 降级）+ 新路由 | 唯一实质风险面，两道保险见下 |
 | 前端 | 新 tab / 新页面，旧页面不碰 | 低 |

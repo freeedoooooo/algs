@@ -1,4 +1,4 @@
-/* report/assets/report.js — 提取报告交互（生成时内联进每批次 <批次戳>.html） */
+/* extract_report/assets/report.js — 对照报告交互（生成时内联进每份 对照报告.html） */
 function cardOf(el){ return el.closest('.card'); }
 function activeSpace(card){
   var tp=card.querySelector('.tabpanel:not([hidden])');
@@ -158,26 +158,25 @@ document.querySelectorAll('td.cell,th.cell').forEach(function(el){
   });
 });
 
-/* 整份 JSON 首次打开时 fetch 落盘 result.json 并美化；按 URL 缓存美化结果，
-   同一文件的多个页卡片共享，不重复下载/格式化。file:// 打开时 fetch 不可用，
-   提示走「下载」链接（报告内图片本就依赖 /files/ 服务路径）。 */
-var fjCache={};
+/* 整份 JSON：紧凑信封嵌在 filecard 的 <script type="application/json"> 里
+   （全报告仅一份，不逐页内联——平方级膨胀），首次打开 tab 时才解析美化。
+   不用 fetch：file:// 直开时浏览器禁止 fetch 本地文件，嵌入则两种打开都成立。
+   美化结果按 filecard 缓存，多个页卡片副本共享。 */
+var fjCache=new Map();
 function loadFileJson(card){
-  var pre=card.querySelector('.tabpanel[data-tab="filejson"] .jsonpre[data-src]');
+  var pre=card.querySelector('.tabpanel[data-tab="filejson"] .jsonpre');
   if(!pre||pre.getAttribute('data-loaded')) return;
-  var src=pre.getAttribute('data-src');
   function fill(text){ pre.textContent=text; pre.setAttribute('data-loaded','1'); }
-  if(fjCache[src]){ fill(fjCache[src]); return; }
-  pre.textContent='加载中…';
-  fetch(src).then(function(r){
-    if(!r.ok) throw new Error(r.status);
-    return r.text();
-  }).then(function(t){
-    var pretty=JSON.stringify(JSON.parse(t),null,2);
-    fjCache[src]=pretty; fill(pretty);
-  }).catch(function(){
-    pre.textContent='在线加载失败：请点上方「下载」查看 result.json。';
-  });
+  var fc=card.closest('.filecard');
+  if(fjCache.has(fc)){ fill(fjCache.get(fc)); return; }
+  var src=fc&&fc.querySelector('script.filejson-src');
+  if(!src){ pre.textContent='未找到整份 JSON 数据。'; return; }
+  try{
+    var pretty=JSON.stringify(JSON.parse(src.textContent),null,2);
+    fjCache.set(fc,pretty); fill(pretty);
+  }catch(e){
+    pre.textContent='整份 JSON 解析失败：请点上方「下载」查看 result.json。';
+  }
 }
 
 /* JSON 复制：多页卡片有「本页 / 整份」两份 jsonpre，按按钮所在面板取，避免复制错对象 */

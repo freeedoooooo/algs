@@ -1,7 +1,7 @@
 # CV 提取 MVP
 
-把 week-02 验证过的提取能力封装成一个**本地 Web 工具**：浏览器上传文件 → 后端提取 → 生成提取报告。
-**每个 case 一份独立自包含的 `提取报告.html`**，直接落在该 case 的 output 目录里，
+把 week-02 验证过的提取能力封装成一个**本地 Web 工具**：浏览器上传文件 → 后端提取 → 生成对照报告。
+**每个 case 一份独立自包含的 `对照报告.html`**，直接落在该 case 的 output 目录里，
 与 result.json / 图片 / CSV 同级，每次上传各自独立、互不覆盖；模板（assets）只有一份。
 支持**多页 PDF 逐页提取 + 报告翻页切换 + 跨页表格拼接**（页码留空 = 全部页）。
 `weekly/week-02/` 的代码与产物**完全不改动**，本目录自包含。
@@ -98,16 +98,16 @@ mvp/
 │   ├── resplit.py             图片人工列边界：切黏连格 + 子格重 OCR 归位
 │   ├── structure.py           表头分离 / cells 网格 / CSV 导出 / 跨页续表拼接
 │   └── runner.py              extract_one() 统一入口：逐页提取 + pages 信封编排
-├── report/                    提取报告层
+├── extract_report/            对照报告层
 │   ├── cards.py               各区块 HTML（图片 / 文字 / 表格 / JSON）
-│   ├── builder.py             组装提取报告（内联 assets，每 case 一份）
+│   ├── builder.py             组装对照报告（内联 assets，每 case 一份）
 │   └── assets/                前端资源，独立文件可单独编辑
 │       ├── report.css / report.js / lightbox.html
 │       └── upload.html / upload.css / upload.js
 ├── input/                     上传文件落盘（运行时生成，带批次时间戳前缀）
 ├── logs/                      运行日志（运行时生成，每批次一个 <批次戳>.log）
 └── output/                    产物（运行时生成，与 input 同名去后缀）
-    └── <时间戳_文件名>/       每个文件一个自包含目录（含 提取报告.html）
+    └── <时间戳_文件名>/       每个文件一个自包含目录（含 对照报告.html）
 ```
 
 ### 命名规则：一次上传 = 一个批次戳
@@ -117,7 +117,7 @@ mvp/
 ```
 input/20261116160231_103_real_bank_statement_textlayer.pdf
 output/20261116160231_103_real_bank_statement_textlayer/
-       ├── 提取报告.html  result.json  boxes.png  source.png  table_1.csv   # 单页（page=1）
+       ├── 对照报告.html  result.json  boxes.png  source.png  table_1.csv   # 单页（page=1）
        └── pages/p1.png
 ```
 
@@ -125,7 +125,7 @@ output/20261116160231_103_real_bank_statement_textlayer/
 
 ```
 output/<批次_文件名>/
-       ├── 提取报告.html                 本 case 的独立自包含报告
+       ├── 对照报告.html                 本 case 的独立自包含报告
        ├── result.json                 文件信封：pages:[每页…] + stitched_tables
        ├── stitched_1.csv              跨页合并表（如有）
        └── pages/
@@ -138,14 +138,17 @@ output/<批次_文件名>/
 - 重复上传同一个文件**不会覆盖**上一次：新批次有新前缀，历史产物全部保留，方便对比两次调试结果。
 - 同一秒内再次上传加 `-2` / `-3`；同一批里出现重名文件也加 `-2` 区分。
 - 批次号可在 `GET /api/status` 的 `batch` 字段看到，上传接口也直接返回。
-- **每个 case 一份独立提取报告**：`output/<批次戳_文件名>/提取报告.html`，与 result.json 同级，
+- **每个 case 一份独立对照报告**：`output/<批次戳_文件名>/对照报告.html`，与 result.json 同级，
   不再反复覆盖同一个文件。`GET /extract-report` 看最新 case 的报告；
-  **历史批次直接打开各自 output 目录里的 `提取报告.html`**。
+  **历史批次直接打开各自 output 目录里的 `对照报告.html`**。
 
 **源码模块化，产物自包含**：`builder.py` 生成报告时会把 `report.css` / `report.js` / `lightbox.html`
-内联进 HTML，所以 `提取报告.html` 单独拷走、用 `file://` 打开也能正常显示与交互
-（图片仍走 `/files/` 服务路径，`file://` 下不显示属预期）。
-上传页是线上页面，走 `/static/` 外链资源。
+内联进 HTML，图片 / result.json / CSV 链接一律**相对路径**（报告就放在 case 目录里、与产物同级），
+所以 `对照报告.html` 单独拷走、**双击用 `file://` 直接打开也能正常显示图片与全部交互**；
+整份信封 JSON 以紧凑 `<script type="application/json">` 嵌在报告里（全报告仅一份，首次打开 tab 才美化），
+不依赖在线 fetch。上传页是线上页面，走 `/static/` 外链资源。
+**多文件批次**：上传页报告区顶部出现**文件页签**（单文件不显示），点击在下方 iframe 切换各文件自己的报告；
+`GET /extract-report` 重定向到最新 case 报告的 `/files/` 真实地址（相对路径资源需在 case 目录 URL 下解析）。
 
 单个 Python 文件最大约 290 行，CSS / JS / HTML 各在独立文件里，IDE 高亮、改样式不必碰 Python。
 
@@ -212,7 +215,7 @@ output/<批次_文件名>/
 - **提取内容**：逐行 OCR 文字 + 置信度条，与左图识别框双向高亮；有文本层 / 纯文本另给全文折叠区。**文字叠加框默认隐藏**（报告初始干净不画常显框，点图右上角「显示叠加框」开启）；悬停文字行仍即时高亮对应框、点击钉住，全屏放大默认跟随内联的隐藏状态。
 - **表格内容**：带表头的 HTML 表格、多表 tab 切换；下载 CSV 仅本页这张表（自包含 data URI），「预览 CSV」弹窗直接看表（不下载）。
 - **单元格坐标回溯**：默认一个框都不画，悬停只高亮那一格、点击钉住（再点取消），并自动切到该表的坐标宿主视图；「显示整表网格」是默认关闭的调试开关。
-- **完整 JSON**：折叠查看、下载 `result.json`、一键复制。单页卡片 JSON tab 展示**文件信封落盘形态**（`disk_view`：含 pages/stitched_tables，ppstruct 页含 parsing、不含派生投影）；多页给「本页 JSON」tab 展示该页 `pageRec`、另给独立「整份 JSON」tab 展示文件信封（不再塞跨页 tab 底部）；**整份 JSON 首次打开 tab 时按需 fetch 落盘 result.json**（不内联进每个页卡片，避免多页大文件报告平方级膨胀），按 URL 缓存、多页卡片共享；复制按钮按所在面板取 `jsonpre`，多份不串。磁盘紧凑存储，tab 渲染时再 `indent=2` 美化。
+- **完整 JSON**：折叠查看、下载 `result.json`、一键复制。单页卡片 JSON tab 展示**文件信封落盘形态**（`disk_view`：含 pages/stitched_tables，ppstruct 页含 parsing、不含派生投影）；多页给「本页 JSON」tab 展示该页 `pageRec`、另给独立「整份 JSON」tab 展示文件信封（不再塞跨页 tab 底部）；**整份信封以紧凑 JSON 嵌在 filecard 的 `<script type="application/json">` 里（全报告仅一份），首次打开 tab 时才解析美化**——不逐页卡片内联（避免多页大文件报告平方级膨胀），也不 fetch（`file://` 直开时浏览器禁止 fetch 本地文件）；美化结果按 filecard 缓存、多页卡片共享；复制按钮按所在面板取 `jsonpre`，多份不串。磁盘紧凑存储，tab 渲染时再 `indent=2` 美化。
 
 三套坐标来源严格互斥，用 `coord.space` 区分：文本层 bbox 与 OCR 框基于 `source.<ext>`；
 表格模型**开矫正**时单元格框基于 `pages/rectified.png`（转正 + 去扭曲，1:1 无需逆变换）；
@@ -304,7 +307,7 @@ x=0.1~910（贴满整页），而真实表格只到 x≈882；`<td>` 还多出 2
 
 | 位置 | 写法 | 作用 |
 |---|---|---|
-| `pipeline/*.py`、`report/*.py` | `from .. import config` | 包内相对导入，静态分析器按目录层级就能解析 |
+| `pipeline/*.py`、`extract_report/*.py` | `from .. import config` | 包内相对导入，静态分析器按目录层级就能解析 |
 | `app.py`、`check_env.py` | `importlib.import_module(PKG + '.config')` 等动态加载 | 入口文件不再有静态的顶层绝对导入；`PKG` 取 `os.path.basename(ROOT)` |
 
 关键是让所有内部模块**始终以「包」方式加载**：相对导入才成立，静态分析器也无需把 `mvp/`

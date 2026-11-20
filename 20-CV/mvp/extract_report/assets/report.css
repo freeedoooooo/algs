@@ -1,4 +1,4 @@
-/* report/assets/report.css — 提取报告样式（生成时内联进每批次 <批次戳>.html） */
+/* extract_report/assets/report.css — 对照报告样式（生成时内联进每份 对照报告.html） */
 :root{--line:#e2e7f0;--accent:#2563eb;--muted:#6b7688}
 *{box-sizing:border-box}
 body{margin:0;background:#f4f6fa;color:#1f2738;
@@ -6,10 +6,6 @@ body{margin:0;background:#f4f6fa;color:#1f2738;
 header{background:#fff;border-bottom:1px solid #e2e7f0;padding:12px 18px}
 header h1{font-size:18px;font-weight:500;margin:0 0 3px}
 header .sub{color:#6b7688;font-size:12px;display:flex;align-items:center;gap:6px}
-.nav{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;font-size:12px}
-.nav a{padding:4px 11px;border:1px solid #d8e0ed;border-radius:20px;
-  background:#f7f9fd;color:#33507f;text-decoration:none}
-.nav a:hover{background:#e7f0ff}
 .wrap{max-width:none;padding:14px}
 .card{background:#fff;border:1px solid #c9d4e4;border-radius:12px;
   margin:0 0 26px;overflow:hidden;box-shadow:0 1px 3px rgba(20,30,60,.06)}

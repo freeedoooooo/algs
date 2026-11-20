@@ -1,4 +1,4 @@
-/* report/assets/hint.js — 共享「?」悬浮说明：.hint[data-tip] 悬停/聚焦显示气泡。
+/* extract_report/assets/hint.js — 共享「?」悬浮说明：.hint[data-tip] 悬停/聚焦显示气泡。
    事件委托，动态渲染的参数项也生效；fixed 定位 + 视口内收敛，滚动时隐藏。 */
 (function(){
   var tip=document.createElement('div');

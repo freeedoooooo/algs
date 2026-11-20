@@ -1,4 +1,4 @@
-/* report/assets/hint.css — 共享「?」悬浮说明组件（上传页 + 报告页同一套）。
+/* extract_report/assets/hint.css — 共享「?」悬浮说明组件（上传页 + 报告页同一套）。
    气泡 fixed 定位挂 body，不被 console / tablewrap 等 overflow 容器裁剪。 */
 .hint{display:inline-flex;align-items:center;justify-content:center;flex:none;
   width:16px;height:16px;border-radius:50%;border:1px solid #cbd5e1;

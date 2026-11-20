@@ -1,4 +1,4 @@
-/* report/assets/upload.css — 上传页样式 */
+/* extract_report/assets/upload.css — 上传页样式 */
 *{box-sizing:border-box}
 body{margin:0;background:#f4f6fa;color:#1f2738;
   font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
@@ -144,6 +144,23 @@ body.picking .lbwrap img{cursor:crosshair}
   background:#fff;color:#2563eb;box-shadow:0 1px 4px rgba(20,30,60,.12)}
 .logbtn[hidden]{display:none}
 .logbtn:hover{border-color:#2563eb}
+/* 多文件批次：顶部文件切换条（每个文件一份独立报告，点页签在下方 iframe 切换）。
+   单文件不显示，保持干净。条高固定 38px，iframe 与日志浮钮同步让位。 */
+.filetabs{position:absolute;top:0;left:0;right:0;z-index:12;height:38px;
+  box-sizing:border-box;display:flex;align-items:center;gap:4px;padding:0 10px;
+  background:#fff;border-bottom:1px solid #e2e7f0;overflow-x:auto;overflow-y:hidden}
+.filetabs[hidden]{display:none}
+.ftab{flex:none;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font:inherit;font-size:12px;padding:4px 12px;border-radius:999px;cursor:pointer;
+  border:1px solid #d8e0ed;background:#f7f9fd;color:#5a6a85;transition:.15s}
+.ftab:hover{border-color:#2563eb;color:#2563eb}
+.ftab.on{background:#2563eb;border-color:#2563eb;color:#fff}
+/* iframe 是替换元素：height:auto 不会在 top/bottom 间拉伸，而是回退固有 150px
+   （只露出报告页头的 bug 根因），必须显式 calc 高度。 */
+.reportcol.hastabs .reportframe{top:38px;height:calc(100% - 38px)}
+/* 有页签条时「查看日志」收进条内右端，不再悬浮压住报告内容 */
+.reportcol.hastabs .filetabs{padding-right:96px}
+.reportcol.hastabs .logbtn{top:6px;right:10px;padding:4px 12px;line-height:1.4;box-shadow:none}
 @media(max-width:900px){
   .app{flex-direction:column;height:auto;overflow:visible}
   .console{width:auto!important;height:auto;overflow:visible;border-right:0;

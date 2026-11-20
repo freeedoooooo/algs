@@ -1,5 +1,5 @@
 """
-report/cards.py — 卡片各区块的 HTML 渲染（只管结构，样式在 assets/report.css）。
+extract_report/cards.py — 卡片各区块的 HTML 渲染（只管结构，样式在 assets/report.css）。
 
 每个文件一张卡片：
     图片区（原图 / 矫正图） · 文字内容 · 表格内容 · 完整 JSON
@@ -21,8 +21,9 @@ def esc(v):
 
 
 def file_url(case, rel):
-    return '/files/{}/{}'.format(quote(case, safe=''),
-                                 quote(rel, safe='/'))
+    # 报告 HTML 就放在 case 目录里、与产物同级：一律相对路径。
+    # file:// 直开与 /files/<case>/对照报告.html 在线打开都成立。
+    return quote(rel, safe='/')
 
 
 def csv_data_uri(headers, rows):
@@ -686,9 +687,10 @@ def _render_card(pg, card_no, file_rec, single=True, page_no=None,
         json_html = json_section(
             pg, href=None, label='本页 JSON · pages[{}]'.format(
                 (page_no or 1) - 1))
-    # 整份信封 JSON 首次打开 tab 时按需 fetch 落盘文件（report.js loadFileJson）：
-    # 若逐页卡片内联，多页大文件会把报告撑成平方级体积（实测 362 页 → 2.9GB）。
-    fj_href = file_url(file_rec['case'], config.RESULT_JSON)
+    # 整份信封 JSON 在 filecard 里嵌一份紧凑 <script type="application/json">
+    # （_multi_card），首次打开 tab 时才美化渲染（report.js loadFileJson）。
+    # 不逐页卡片内联（平方级膨胀，实测 362 页 → 2.9GB），也不 fetch：
+    # file:// 直开时浏览器禁止 fetch 本地文件，嵌入一份两种打开方式都成立。
     filejson_html = (
         '<div class="tabpanel" data-card="{}" data-tab="filejson" hidden>'
         '<details class="panel" open>'
@@ -699,9 +701,9 @@ def _render_card(pg, card_no, file_rec, single=True, page_no=None,
         'onclick="event.stopPropagation()">下载</a>'
         '<button type="button" class="copyjson btn ghost" '
         'onclick="event.stopPropagation()">复制 JSON</button></summary>'
-        '<div class="panel-body"><pre class="jsonpre" data-src="{}">'
+        '<div class="panel-body"><pre class="jsonpre">'
         '首次打开时加载…</pre></div></details></div>'.format(
-            card_no, fj_href, fj_href)
+            card_no, quote(config.RESULT_JSON, safe=''))
         if not single else '')
     stitch_panel_html = (
         '<div class="tabpanel" data-card="{}" data-tab="stitch" hidden>{}</div>'
@@ -814,6 +816,14 @@ def stitch_content(file_rec, card_no):
         '{}</details>'.format(len(stitched), ''.join(parts)))
 
 
+def _filejson_src(file_rec):
+    """整份信封的紧凑 JSON（嵌入 <script type="application/json">，全报告仅一份）。
+    `</` 转义成 `<\\/`（JSON 合法转义），防文字内容里的 </script> 提前闭合标签。"""
+    text = json.dumps(viewmodel.disk_view(file_rec), ensure_ascii=False,
+                      separators=(',', ':'))
+    return text.replace('</', '<\\/')
+
+
 def _multi_card(file_rec, idx):
     pages = file_rec.get('pages') or []
     stitched = file_rec.get('stitched_tables') or []
@@ -851,8 +861,10 @@ def _multi_card(file_rec, idx):
                      hidden=(i > 0), pager=pager)
         for i, p in enumerate(pages))
     return (
-        '<section class="filecard" data-file="{}">{}{}</section>'.format(
-            idx, head, cards_html))
+        '<section class="filecard" data-file="{}">{}'
+        '<script type="application/json" class="filejson-src">{}</script>'
+        '{}</section>'.format(
+            idx, head, _filejson_src(file_rec), cards_html))
 
 
 def card(file_rec, idx):

@@ -1,4 +1,4 @@
-/* report/assets/upload.js — 上传页交互：参数面板 + base64 上传 + 进度轮询 */
+/* extract_report/assets/upload.js — 上传页交互：参数面板 + base64 上传 + 进度轮询 */
 var picked=[],timer=null,paramSchema=[];
 var drop=document.getElementById('drop'),picker=document.getElementById('picker');
 var list=document.getElementById('filelist'),go=document.getElementById('go');
@@ -6,7 +6,7 @@ var log=document.getElementById('log'),msg=document.getElementById('msg');
 var paramgroups=document.getElementById('paramgroups');
 var lb=document.getElementById('lightbox'),lbimg=document.getElementById('lbimg');
 
-/* 参数持久化：上传完看提取报告再回来不丢已填值。存浏览器 localStorage，
+/* 参数持久化：上传完看对照报告再回来不丢已填值。存浏览器 localStorage，
    与后端默认值解耦（后端 schema 仍是唯一真相源，这里只记用户上次的选择）。 */
 var PKEY='cv_mvp_params';
 function loadSaved(){
@@ -296,7 +296,7 @@ function poll(){
     if(s.ready){
       msg.textContent='完成。改参数后直接重测。';
       go.disabled=false;
-      showResult();
+      showResult(s.cases);
     }
   }).catch(function(){timer=setTimeout(poll,1200);});
 }
@@ -304,7 +304,9 @@ var reportFrame=document.getElementById('reportFrame'),
     reportempty=document.getElementById('reportempty'),
     runpanel=document.getElementById('runpanel'),
     logbtn=document.getElementById('logbtn'),
-    logclose=document.getElementById('logclose');
+    logclose=document.getElementById('logclose'),
+    filetabs=document.getElementById('filetabs'),
+    reportcol=document.querySelector('.reportcol');
 /* 右侧报告区三态：idle 占位 / run 进度 / done 报告（+「查看日志」浮钮） */
 function rightState(st){
   reportempty.hidden=(st!=='idle');
@@ -313,11 +315,38 @@ function rightState(st){
   logclose.hidden=true;
   reportFrame.hidden=(st!=='done');
   logbtn.hidden=(st!=='done');
+  if(st!=='done'){ filetabs.hidden=true; reportcol.classList.remove('hastabs'); }
 }
-function showResult(){
+/* 每个文件一份独立报告（在各自 output 目录里）。多文件批次顶部给文件页签，
+   点击在下方 iframe 切换；单文件直接看报告，不显示页签。 */
+function reportUrl(c){
+  return '/files/'+encodeURIComponent(c)+'/'+encodeURIComponent('对照报告.html');
+}
+function showResult(cases){
   rightState('done');
-  /* 报告就在最新 case 的 output 目录里（提取报告.html），路由直接取最新 */
-  reportFrame.src='/extract-report?t='+Date.now();
+  cases=cases||[];
+  filetabs.innerHTML='';
+  if(cases.length>1){
+    reportcol.classList.add('hastabs');
+    filetabs.hidden=false;
+    cases.forEach(function(c,i){
+      var b=document.createElement('button');
+      b.type='button'; b.className='ftab'+(i===0?' on':'');
+      /* 页签只显示原文件名（去掉批次戳前缀），悬停 title 保留全名 */
+      b.textContent=c.file.replace(/^\d{14}(-\d+)?_/,''); b.title=c.file;
+      b.onclick=function(){
+        filetabs.querySelectorAll('.ftab').forEach(function(x){
+          x.classList.toggle('on',x===b);
+        });
+        reportFrame.src=reportUrl(c.case)+'?t='+Date.now();
+      };
+      filetabs.appendChild(b);
+    });
+    reportFrame.src=reportUrl(cases[0].case)+'?t='+Date.now();
+  }else{
+    /* 单文件（或未知 cases）：路由重定向到最新 case 的报告真实地址 */
+    reportFrame.src='/extract-report?t='+Date.now();
+  }
 }
 /* 完成后点「查看日志」：进度卡作为抽屉叠加在报告上，「关闭」收回 */
 logbtn.onclick=function(){
@@ -365,7 +394,10 @@ go.onclick=async function(){
 
 fetch('/api/status').then(function(r){return r.json();}).then(function(s){
   if(s.running){ rightState('run'); say(s.logs,s.steps); progress(s); poll(); }
-  else if(s.ready){ showResult(); }
+  else if(s.ready){
+    /* 刷新页面直接进完成态：日志/进度也要补渲染，否则「查看日志」抽屉是空的 */
+    say(s.logs,s.steps); progress(s); showResult(s.cases);
+  }
 });
 
 /* ---- 左栏宽度拖拽：gutter 拖动改 .console 宽，存 localStorage，双击复位 ----

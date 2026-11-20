@@ -15,7 +15,7 @@ if ROOT not in sys.path:
 INPUT_DIR = os.path.join(ROOT, 'input')
 OUTPUT_DIR = os.path.join(ROOT, 'output')
 LOG_DIR = os.path.join(ROOT, 'logs')
-ASSETS_DIR = os.path.join(ROOT, 'report', 'assets')
+ASSETS_DIR = os.path.join(ROOT, 'extract_report', 'assets')
 
 # 官方模型首次推理时下载到 ${PADDLE_PDX_CACHE_HOME:-~/.paddlex}/official_models。
 # 离线部署：先在联网机器跑一次把模型下全，再把该目录随代码一起拷到目标机，
@@ -59,9 +59,9 @@ CASE_NAME_MAX = 80
 RECTIFIED_NAME = 'rectified.png'
 BOXES_NAME = 'boxes.png'
 RESULT_JSON = 'result.json'
-# 提取报告：每批次一份独立自包含 HTML，直接放在该批次的 output/<批次戳_文件名>/
+# 对照报告：每批次一份独立自包含 HTML，直接放在该批次的 output/<批次戳_文件名>/
 # 目录里，与 result.json / 图片 / CSV 同级；模板（assets）只有一份，生成时内联。
-EXTRACT_REPORT_NAME = '提取报告.html'
+EXTRACT_REPORT_NAME = '对照报告.html'
 
 for _d in (INPUT_DIR, OUTPUT_DIR, LOG_DIR):
     os.makedirs(_d, exist_ok=True)
