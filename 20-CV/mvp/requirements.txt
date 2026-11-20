@@ -11,6 +11,7 @@
 # ---- Web 服务 ----
 fastapi==0.139.0
 uvicorn==0.40.0
+jinja2==3.1.6                     # 对照报告 HTML 模板渲染（extract_report/templates/，autoescape）
 # 上传走 base64 JSON（await request.json()），因此不需要 python-multipart；
 # StaticFiles / FileResponse 在 Starlette 1.x 用 anyio，也不需要 aiofiles。
 

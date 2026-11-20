@@ -1,0 +1,59 @@
+{% import 'macros.html' as mc %}
+{% if not stitched %}
+<div class="empty">本文件没有可合并的跨页续表</div>
+{% else %}
+<details class="panel" open>
+    <summary class="panel-head"><span class="panel-title">跨页合并表</span><span class="cnt">{{ n }}</span><span
+            class="spacer"></span></summary>
+    <div class="panel-body"><p class="note">相邻页续表已合并（重复表头丢弃；无表头续页的首行数据回收），数据顺接、空列按主表补齐。悬停单元格自动切到它所在页的图并高亮，点击钉住。<span
+            class="hint" tabindex="0"
+            data-tip="合并判据两条通路：① 重复表头＝相邻页 + 同列数 + 列边界对齐 + 表头相同（空白归一化）；② 无表头续页＝列位置子集对齐 + 续页贴顶 + 首行像数据（回收误标首行、末尾空列补齐）。不满足则保持各页独立，不强行合并。一个文件可有多条跨页链，用下方子页签切换。">?</span>
+    </p>
+        {% if stitched|length > 1 %}
+        <div class="tbltabs">{% for t in stitched %}
+            <button type="button" class="stitchtab{{ ' on' if loop.first else '' }}" data-card="{{ card }}"
+                    data-stitch="{{ t.si }}">合并表 {{ t.si + 1 }} · {{ t.n_rows }}×{{ t.n_cols }}
+            </button>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% for t in stitched %}
+        <div class="stitchpane" data-card="{{ card }}" data-stitch="{{ t.si }}" {% if t.hidden %} hidden{% endif %}>
+            <div class="tbl-bar"><b>跨页合并表 {{ t.si + 1 }}</b><span class="meta">来源页 {{ t.source_pages }} · {{ t.n_rows }} 行 × {{ t.n_cols }} 列</span>{%
+                if t.rec_pages %} <span class="tag merge">无表头续页首行已回收 · 页 {{ t.rec_pages }}</span>{% endif
+                %}<a class="btn" href="{{ t.csv_uri }}" download="{{ t.csv_file }}">下载完整 CSV</a>{{
+                mc.csv_btn('aux-csv-' ~ card ~ '-s' ~ t.si, '预览 ' ~ t.csv_file ~ '（跨页合并）') }}
+            </div>
+            {% if t.title %}<p class="note">标题：{{ t.title }}</p>{% endif %}
+            <div class="tablewrap scrollbox">
+                <table>{% if t.headers %}
+                    <thead>
+                    <tr>{% for v in t.headers %}{% set c = loop.index0 %}{% set cell = (t.cells[0][c] if t.cells|length
+                        > 0 and c < t.cells[0]|length else none) %}
+                        <th class="scell" data-card="{{ card }}" data-stitch="{{ t.si }}" data-cell="0_{{ c }}"
+                            data-page="{{ cell.page if cell else '' }}"
+                            data-space="{{ (cell.space if cell else '') or 'source' }}">{{ v }}
+                        </th>
+                        {% endfor %}
+                    </tr>
+                    </thead>
+                    {% endif %}
+                    <tbody>{% for row in t.rows %}{% set r = loop.index %}
+                    <tr>{% for v in row %}{% set c = loop.index0 %}{% set cell = (t.cells[r][c] if r < t.cells|length
+                        and c < t.cells[r]|length else none) %}
+                        <td class="scell" data-card="{{ card }}" data-stitch="{{ t.si }}" data-cell="{{ r }}_{{ c }}"
+                            data-page="{{ cell.page if cell else '' }}"
+                            data-space="{{ (cell.space if cell else '') or 'source' }}">{{ v }}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {{ mc.csv_src('aux-csv-' ~ card ~ '-s' ~ t.si, t.headers, t.rows) }}
+        {% endfor %}
+    </div>
+</details>
+{% endif %}

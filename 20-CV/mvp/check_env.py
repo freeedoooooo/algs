@@ -29,6 +29,7 @@ config = importlib.import_module(PKG + '.config')
 PACKAGES = [
     ('fastapi', 'fastapi', 'Web 框架'),
     ('uvicorn', 'uvicorn', 'ASGI 服务器'),
+    ('jinja2', 'jinja2', '对照报告模板渲染'),
     ('paddlepaddle', 'paddle', 'Paddle 运行时'),
     ('paddleocr', 'paddleocr', 'OCR / 表格模型'),
     ('paddlex', 'paddlex', '模型管线'),
@@ -62,8 +63,9 @@ def check_dirs():
     for label, path in (('input', config.INPUT_DIR),
                         ('output', config.OUTPUT_DIR),
                         ('logs', config.LOG_DIR),
-                        ('assets', config.ASSETS_DIR)):
-        ok = os.path.isdir(path) and (label == 'assets'
+                        ('assets', config.ASSETS_DIR),
+                        ('templates', config.TEMPLATES_DIR)):
+        ok = os.path.isdir(path) and (label in ('assets', 'templates')
                                       or os.access(path, os.W_OK))
         print('  {:<7} {:<8} {}'.format('OK' if ok else 'FAIL',
                                         label, path))

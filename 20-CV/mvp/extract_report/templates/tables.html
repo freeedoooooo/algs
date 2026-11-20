@@ -1,0 +1,53 @@
+{% import 'macros.html' as mc %}
+<details class="panel" open>
+    <summary class="panel-head"><span class="panel-title">表格内容</span><span class="cnt">{{ n }} 张</span><span
+            class="meta">路线：{{ route }}</span><span class="spacer"></span>{% if has_coord %}
+        <button type="button" class="allcells" data-card="{{ card }}">显示整表网格</button>
+        {% endif %}{% if notes %}
+        <button type="button" class="auxbtn" data-aux="aux-diag-{{ card }}"
+                data-title="提取诊断（{{ notes|length }} 条）">提取诊断 {{ notes|length }}
+        </button>
+        {% endif %}
+    </summary>
+    <div class="panel-body">
+        {% if not tables %}
+        <div class="empty">未检测到表格，路线 {{ route }}</div>
+        {% else %}
+        <p class="note">坐标宿主：{{ spaces }} <span class="hint" tabindex="0"
+                                                    data-tip="悬停高亮单格，点击钉住（再点取消）。">?</span></p>
+        {% if tables|length > 1 %}
+        <div class="tbltabs">{% for t in tables %}
+            <button type="button" class="tbltab{{ ' on' if loop.first else '' }}" data-card="{{ card }}"
+                    data-tbl="{{ t.ti }}">表 {{ t.idx }} · {{ t.n_rows }}×{{ t.n_cols }}
+            </button>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% for t in tables %}
+        <div class="tblpane" data-card="{{ card }}" data-tbl="{{ t.ti }}" data-space="{{ t.space }}" {% if t.hidden %}
+             hidden{% endif %}>
+            <div class="tbl-bar"><b>表 {{ t.idx }}</b>{% if t.merge_si is not none %}<span class="tag merge">跨页合并 {{ t.merge_si + 1 }}</span>{%
+                endif %}<span class="meta">第 {{ t.page }} 页 · {{ t.source }} · {{ t.strategy }} · {{ t.n_rows }} 行 × {{ t.n_cols }} 列 · 填充率 {{ t.fill_ratio }}</span><a
+                        class="btn" href="{{ t.csv_uri }}" download="{{ t.csv_file }}">下载 CSV</a>{{
+                mc.csv_btn('aux-csv-' ~ card ~ '-' ~ t.ti, '预览 ' ~ t.csv_file ~ '（第 ' ~ t.page ~ ' 页）') }}
+            </div>
+            {% if t.merge_si is not none %}<p class="note">本页是「跨页合并表 {{ t.merge_si + 1 }}」的一段（来源页 {{
+            t.merge_pages }}）；此处下载/预览仅本页片段，完整合并表见「跨页合并」tab。</p>{% endif %}{% if t.title %}<p
+                class="note">标题：{{ t.title }}</p>{% endif %}
+            <div class="tablewrap scrollbox">
+                <table>{{ mc.grid(card, t.ti, t.headers, t.rows) }}</table>
+            </div>
+        </div>
+        {{ mc.csv_src('aux-csv-' ~ card ~ '-' ~ t.ti, t.headers, t.rows) }}
+        {% endfor %}
+        {% endif %}
+        {% if notes %}
+        <div class="aux-src" id="aux-diag-{{ card }}" hidden>
+            <ul>{% for nt in notes %}
+                <li>{{ nt }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+</details>

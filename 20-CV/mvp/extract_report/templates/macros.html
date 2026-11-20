@@ -1,0 +1,64 @@
+{# 复用片段：SVG 叠加框 / 表格网格 / CSV 预览 / 页头右侧。全部 autoescape。 #}
+
+{% macro cell_rects(card, rects) %}{% for b in rects %}
+<rect class="cellbox{{ ' off' if b.off else '' }}" data-card="{{ card }}" data-tbl="{{ b.ti }}"
+      data-cell="{{ b.r }}_{{ b.c }}" x="{{ b.x|f1 }}" y="{{ b.y|f1 }}" width="{{ b.w|f1 }}" height="{{ b.h|f1 }}">
+    <title>表 {{ b.ti + 1 }} · 行 {{ b.r }} 列 {{ b.c + 1 }} · {{ b.text }}</title></rect>{% endfor %}{% endmacro %}
+
+{% macro stitch_rects(card, page, rects) %}{% for b in rects %}
+<rect class="stitchbox" data-card="{{ card }}" data-stitch="{{ b.si }}" data-cell="{{ b.r }}_{{ b.c }}"
+      data-page="{{ page }}" x="{{ b.x|f1 }}" y="{{ b.y|f1 }}" width="{{ b.w|f1 }}" height="{{ b.h|f1 }}"><title>跨页表
+    {{ b.si + 1 }} · 行 {{ b.r }} 列 {{ b.c + 1 }} · 第 {{ page }} 页</title></rect>{% endfor %}{% endmacro %}
+
+{% macro polys(card, items) %}{% for p in items %}
+<polygon class="{{ 'box low' if p.low else 'box' }}" data-card="{{ card }}" data-idx="{{ p.idx }}"
+         points="{{ p.points }}"><title>#{{ p.idx + 1 }} {{ p.tip }} (score={{ p.score|f2 }})</title>
+</polygon>{% endfor %}{% endmacro %}
+
+{% macro grid(card, ti, headers, rows) %}{% if headers %}
+<thead>
+<tr>{% for v in headers %}
+    <th class="cell" data-card="{{ card }}" data-tbl="{{ ti }}" data-cell="0_{{ loop.index0 }}">{{ v }}</th>
+    {% endfor %}
+</tr>
+</thead>{% endif %}
+<tbody>{% for row in rows %}{% set r = loop.index %}
+<tr>{% for v in row %}
+    <td class="cell" data-card="{{ card }}" data-tbl="{{ ti }}" data-cell="{{ r }}_{{ loop.index0 }}">{{ v }}</td>
+    {% endfor %}
+</tr>
+{% endfor %}
+</tbody>{% endmacro %}
+
+{% macro csv_btn(aid, title) %}
+<button type="button" class="auxbtn" data-aux="{{ aid }}" data-title="{{ title }}">预览 CSV</button>{% endmacro %}
+
+{% macro csv_src(aid, headers, rows) %}
+<div class="aux-src" id="{{ aid }}" hidden>
+    <div class="tablewrap scrollbox">
+        <table>{% if headers %}
+            <thead>
+            <tr>{% for v in headers %}
+                <th>{{ v }}</th>
+                {% endfor %}
+            </tr>
+            </thead>
+            {% endif %}
+            <tbody>{% for row in rows %}
+            <tr>{% for v in row %}
+                <td>{{ v }}</td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>{% endmacro %}
+
+{% macro head_right(m, links) %}
+<div class="metrics"><span>行数 <b>{{ m.lines }}</b></span><span>表格 <b>{{ m.tables }}</b></span>{% if m.low %}<span
+        class="warn">可疑 <b>{{ m.low }}</b></span>{% endif %}
+</div>
+<div class="desc">{% for l in links %}<a href="{{ l.href }}" target="_blank">{{ l.label }}</a>{% if not loop.last %} ·
+    {% endif %}{% endfor %}
+</div>{% endmacro %}

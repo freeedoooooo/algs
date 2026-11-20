@@ -1,0 +1,10 @@
+<details class="panel" {% if opened %} open{% endif %}>
+    <summary class="panel-head"><span class="panel-title">完整 JSON</span><span class="meta">{{ label }}</span><span
+            class="spacer"></span>{% if href %}<a class="btn ghost" href="{{ href }}" target="_blank"
+                                                  onclick="event.stopPropagation()">下载</a>{% endif %}
+        <button type="button" class="copyjson btn ghost" onclick="event.stopPropagation()">复制 JSON</button>
+    </summary>
+    <div class="panel-body">
+        <pre class="jsonpre">{{ text }}</pre>
+    </div>
+</details>

@@ -1,0 +1,38 @@
+<details class="panel" open>
+    <summary class="panel-head"><span class="panel-title">文字内容</span><span class="cnt">{{ n }} 行</span><span
+            class="spacer"></span>{% if plain %}
+        <button type="button" class="auxbtn" data-aux="{{ plain.aid }}" data-title="纯文本原文（{{ plain.n }} 字符）">
+            文本原文
+        </button>
+        {% endif %}
+    </summary>
+    <div class="panel-body">{% if rows %}
+        <div class="scrollbox">
+            <table>
+                <thead>
+                <tr>
+                    <th>#</th>
+                    <th>识别文字</th>
+                    <th>置信度</th>
+                </tr>
+                </thead>
+                <tbody>{% for r in rows %}
+                <tr data-card="{{ card }}" data-idx="{{ r.idx }}" data-space="{{ tspace }}"
+                    class="{{ 'low' if r.low else '' }}">
+                    <td class="num">{{ r.idx + 1 }}</td>
+                    <td class="txt">{{ r.text }}</td>
+                    <td class="score"><span class="bar"><i style="width:{{ r.width|f0 }}%"></i></span>{{ r.s|f2 }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty">无 OCR 文字行</div>
+        {% endif %}{% if plain %}
+        <div class="aux-src" id="{{ plain.aid }}" hidden>
+            <pre>{{ plain.text }}</pre>
+        </div>
+        {% endif %}
+    </div>
+</details>

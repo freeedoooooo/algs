@@ -1,0 +1,31 @@
+{% import 'macros.html' as mc %}
+<details class="panel" open>
+    <summary class="panel-head"><span class="panel-title">文档视图</span><span class="cnt">{{ n_line }} 行 · {{ n_tbl }} 表</span><span
+            class="spacer"></span><a class="btn" href="{{ dl_uri }}" download="{{ stem }}.md"
+                                     onclick="event.stopPropagation()">下载 Markdown</a></summary>
+    <div class="panel-body"><p class="note">悬停文字回溯左图识别框；悬停单元格回溯单格，点击钉住。<span class="hint"
+                                                                                                     tabindex="0"
+                                                                                                     data-tip="{{ order_tip }}；矫正图空间的内容点击后会自动切换左图视图。">?</span>
+    </p>
+        <div class="mdview scrollbox">
+            {% if not items %}
+            <div class="empty">无文档内容</div>
+            {% endif %}
+            {% for it in items %}
+            {% if it.kind == 'plain' %}{% for ln in it.lines %}<p class="mdline">{{ ln }}</p>{% endfor %}
+            {% elif it.kind == 'lines' %}{% for ln in it.lines %}<p
+                class="mdline{{ ' mdhead' if it.head else '' }}{{ ' low' if ln.low else '' }}" data-card="{{ card }}"
+                data-idx="{{ ln.idx }}" data-space="{{ tspace }}">{{ ln.text }}</p>{% endfor %}
+            {% else %}
+            <div class="mdtbl" data-space="{{ it.space }}">{% if it.trailing %}<p class="note">表 {{ it.ti + 1 }}（坐标：{{
+                it.trailing_label }}，无法按位置穿插，置底显示）</p>{% endif %}{% if it.title %}<p class="mdtbl-title">{{
+                it.title }}</p>{% endif %}
+                <div class="tablewrap">
+                    <table>{{ mc.grid(card, it.ti, it.headers, it.rows) }}</table>
+                </div>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+</details>

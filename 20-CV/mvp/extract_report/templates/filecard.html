@@ -1,0 +1,13 @@
+<section class="filecard" data-file="{{ idx }}">
+    <div class="card-head filehead">
+        <div class="fh-left"><h2 id="case-{{ idx }}" title="{{ name }}">{{ name }}</h2><span class="tag">{{ kind_label }}</span><span
+                class="tag">{{ n_pages }} 页</span>{% if n_stitch %}<span
+                class="tag merge">跨页合并 {{ n_stitch }}</span>{% endif %}
+        </div>
+        <div class="fh-right pagehead-slot"></div>
+    </div>
+    <script type="application/json" class="filejson-src">{{
+        filejson
+    }}</script>
+    {% for c in cards %}{{ c }}{% endfor %}
+</section>

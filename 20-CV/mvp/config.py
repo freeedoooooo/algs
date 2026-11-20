@@ -16,6 +16,7 @@ INPUT_DIR = os.path.join(ROOT, 'input')
 OUTPUT_DIR = os.path.join(ROOT, 'output')
 LOG_DIR = os.path.join(ROOT, 'logs')
 ASSETS_DIR = os.path.join(ROOT, 'extract_report', 'assets')
+TEMPLATES_DIR = os.path.join(ROOT, 'extract_report', 'templates')
 
 # 官方模型首次推理时下载到 ${PADDLE_PDX_CACHE_HOME:-~/.paddlex}/official_models。
 # 离线部署：先在联网机器跑一次把模型下全，再把该目录随代码一起拷到目标机，

@@ -1,0 +1,41 @@
+{% import 'macros.html' as mc %}
+{% if empty %}
+<div class="stage empty">{{ pager }}纯文本输入：没有图像可显示，右侧是解析出的文字与表格</div>
+{% else %}
+<div class="stage noboxes">{{ pager }}{% if rect %}
+    <div class="viewbar">
+        <button type="button" class="viewbtn on" data-card="{{ card }}" data-view="orig"
+                title="原始上传图（矫正路线下无叠加框，仅作对照）">原图
+        </button>
+        <button type="button" class="viewbtn" data-card="{{ card }}" data-view="rect"
+                title="单元格 / 文字框的坐标基准图">矫正图
+        </button>
+    </div>
+    {% endif %}
+    <div class="views">
+        <div class="view" data-card="{{ card }}" data-view="orig" data-space="source">
+            <div class="imgwrap" style="--ar:{{ ar|f4 }}"><img src="{{ src }}" alt="原图" title="点击放大查看">
+                <svg viewBox="0 0 {{ w }} {{ h }}" preserveAspectRatio="none">{{ mc.polys(card, polys_src) }}</svg>
+                {% if cell_src or stitch_src %}
+                <svg class="cellsvg" viewBox="0 0 {{ w }} {{ h }}" preserveAspectRatio="none">{{ mc.cell_rects(card,
+                    cell_src) }}{{ mc.stitch_rects(card, page_no, stitch_src) }}
+                </svg>
+                {% endif %}
+                <button type="button" class="boxtoggle on" data-card="{{ card }}">显示叠加框</button>
+            </div>
+        </div>
+        {% if rect %}
+        <div class="view" data-card="{{ card }}" data-view="rect" data-space="rectified" hidden>
+            <div class="imgwrap" style="--ar:{{ rect.rar|f4 }}"><img src="{{ rect.src }}" alt="矫正图"
+                                                                     title="点击放大查看">
+                <svg class="cellsvg" viewBox="0 0 {{ rect.rw }} {{ rect.rh }}" preserveAspectRatio="none">{{
+                    mc.cell_rects(card, rect.cells) }}{{ mc.polys(card, polys_rect) }}{{ mc.stitch_rects(card, page_no,
+                    rect.stitch) }}
+                </svg>
+                <button type="button" class="boxtoggle on" data-card="{{ card }}">显示叠加框</button>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}

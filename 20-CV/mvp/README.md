@@ -46,6 +46,7 @@ uvicorn app:app --host 0.0.0.0 --port 8765 --workers 1    # 生产式
 - `cv2` 来自 `opencv-contrib-python==4.10.0.84`（paddlex 的 `ocr-core` extra 指定），**不是** `opencv-python`，两个都装会冲突。
 - 上传走 base64 JSON，所以不需要 `python-multipart`；Starlette 1.x 的静态文件也不需要 `aiofiles`。
 - `pdfplumber` / `PyMuPDF` 是本项目自己用的，paddle 不带，别漏。
+- `jinja2` 渲染报告 HTML 模板（`extract_report/templates/`），纯 Python 无二进制依赖。
 
 **离线 / 内网部署**：PaddleX 官方模型在首次推理时联网下载到 `${PADDLE_PDX_CACHE_HOME:-~/.paddlex}/official_models`（数百 MB）。先在联网机器跑一次把模型下全，再把该目录一起拷贝，并设置 `PADDLE_PDX_CACHE_HOME` 指向其**上级**目录。`check_env.py` 会检查缓存是否就绪。
 
@@ -99,8 +100,9 @@ mvp/
 │   ├── structure.py           表头分离 / cells 网格 / CSV 导出 / 跨页续表拼接
 │   └── runner.py              extract_one() 统一入口：逐页提取 + pages 信封编排
 ├── extract_report/            对照报告层
-│   ├── cards.py               各区块 HTML（图片 / 文字 / 表格 / JSON）
+│   ├── cards.py               数据准备 + 选模板（坐标 rect / 行 / 文档块 / data URI）
 │   ├── builder.py             组装对照报告（内联 assets，每 case 一份）
+│   ├── templates/             Jinja2 HTML 模板（autoescape，结构与逻辑分离）
 │   └── assets/                前端资源，独立文件可单独编辑
 │       ├── report.css / report.js / lightbox.html
 │       └── upload.html / upload.css / upload.js
@@ -150,7 +152,10 @@ output/<批次_文件名>/
 **多文件批次**：上传页报告区顶部出现**文件页签**（单文件不显示），点击在下方 iframe 切换各文件自己的报告；
 `GET /extract-report` 重定向到最新 case 报告的 `/files/` 真实地址（相对路径资源需在 case 目录 URL 下解析）。
 
-单个 Python 文件最大约 290 行，CSS / JS / HTML 各在独立文件里，IDE 高亮、改样式不必碰 Python。
+HTML 结构全部在 `extract_report/templates/*.html`（Jinja2，**autoescape 默认开启**，
+不再手写转义），CSS / JS 在 assets/ 独立文件，Python 只做数据准备与模板选择——
+IDE 高亮、改结构 / 样式不必碰 Python 逻辑。迁移经「重构前后 DOM 逐节点对比」
+验证（15 个真实 case + 3 个合成边界 case 全部等价），交互零回归。
 
 ## 支持格式与产物
 
