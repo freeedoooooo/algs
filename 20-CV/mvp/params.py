@@ -31,21 +31,21 @@ SCHEMA = [
          default='auto', options=['auto', 'lines', 'text'],
          order=2, group='② 表格能不能抽到',
          help='仅「有文本层的电子 PDF」生效；扫描件 / 图片走模型，不看此项。\n'
-              'auto：自动回退（推荐）。依次试 人工/自动列边界 → 真实框线 → '
-              '文字对齐，取第一个抽出表的。\n'
+              'auto：自动回退（推荐）。\n'
+              '依次试 人工/自动列边界 → 真实框线 → 文字对齐，取第一个抽出表的。\n'
               'lines：强制按 PDF 真实框线切。适合框线完整、或一页多表。\n'
               'text：强制按文字列对齐切。适合无线框表（只有横线 / 空格对齐）。\n'
-              '人工列边界：填下方 column_lines 即可，auto 会自动优先用，'
-              '无需单独选策略。'),
+              '人工列边界：填下方 column_lines 即可，\n'
+              'auto 会自动优先用，无需单独选策略。'),
     dict(key='column_lines', label='人工列边界（x 坐标）', type='str', default='',
          order=3, group='② 表格能不能抽到',
-         help='竖线 x 坐标，逗号/空格分隔，需 ≥1 个且递增。'
-              '图片/扫描件用原图像素（仅 doc_unwarp=off 生效），单条即可切开黏连格；'
+         help='竖线 x 坐标，逗号/空格分隔，需 ≥1 个且递增。\n'
+              '图片/扫描件用原图像素（仅 doc_unwarp=off 生效），单条即可切开黏连格。\n'
               '文本层 PDF 用点坐标。留空则 PDF 自动推断、图片不重切。'),
     dict(key='det_thresh', label='文字检测阈值', type='float',
          default=DET_DEFAULT, min=0.05, max=0.95, step=0.05,
          order=6, group='④ 文字识别',
-         help='调低救漏检、可能增误检。默认 0.3，按次覆盖不重建模型。'),
+         help='调低救漏检、可能增误检。\n默认 0.3，按次覆盖不重建模型。'),
     dict(key='box_thresh', label='文字框阈值', type='float',
          default=BOX_DEFAULT, min=0.05, max=0.95, step=0.05,
          order=7, group='④ 文字识别',
@@ -53,11 +53,11 @@ SCHEMA = [
     dict(key='det_unclip', label='检测框外扩比例', type='float',
          default=UNCLIP_DEFAULT, min=1.0, max=3.0, step=0.1,
          order=8, group='④ 文字识别',
-         help='DBNet 框外扩系数。调大救被切边的字，但易把相邻字并进同框。默认 1.5。'),
+         help='DBNet 框外扩系数。调大救被切边的字，但易把相邻字并进同框。\n默认 1.5。'),
     dict(key='det_limit_side_len', label='检测分辨率边长', type='int',
          default=LIMIT_SIDE_DEFAULT, min=32, max=4000, step=32,
          order=9, group='④ 文字识别',
-         help='配合下一项：min 时调大=放大图救小字；max 时调小=缩小提速。默认 64。'),
+         help='配合下一项：\nmin 时调大＝放大图救小字；max 时调小＝缩小提速。\n默认 64。'),
     dict(key='det_limit_type', label='检测分辨率方向', type='select',
          default=LIMIT_TYPE_DEFAULT, options=['min', 'max'],
          order=10, group='④ 文字识别',

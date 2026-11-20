@@ -1,6 +1,8 @@
 # 详细设计：文档 ETL 数据链路（Sources → Extract → Template → Staging → Review → Load）
 
-> 状态：**详细设计稿（待批准，未动代码）**，2026-11-20。本文件是唯一设计源（取代同名早稿）。
+> 状态：**详细设计稿（待批准）**，2026-11-20。本文件是唯一设计源（取代同名早稿）。
+> 前置准备已完成：requirements 锁 PyMySQL==1.2.4 + cryptography==50.0.2；测试库凭据入 data/secrets.json（git 排除）；
+> 10.0.6.161:3306 连通验证通过（MySQL 8.0.36，测试 schema co_dev）。业务代码未动。
 > 范围：产品主干六步 + 人工校验 / 血缘追溯 / 异常隔离区；全链路模块设计、页面布局与交互、API 细则、分期验收。
 > 选型：数据库 **MySQL**（平台状态库与目标业务库统一 MySQL、同实例分 schema；实现层驱动无关，已裁决）；
 > 文件存储 **本地目录 + 相对路径**（DATA_ROOT 可整体迁移）。
@@ -949,7 +951,7 @@ POST /api/quarantine/{id}/ignore           → {ok}
 | **P0 最小闭环** | 源文件库 + Run 模型 + Preview（passthrough） | source_file / template(+种子) / template_version / run / run_file；store/ 骨架；sources/；资料页 + 提取页增强 + 运行页(只读) | ① 上传→提取→看暂存数据三步闭环；② 哈希去重生效；③ DB 故障降级：提取照常；④ 现有 case 回归（103 25×8 / 107 5×8 / 108 23×7 / 21 双表 / CSV）零变化；⑤ import app 启动指标不退化 |
 | **P1 模板与校验** | Mapping/Transform 引擎 + 模板编辑页 + Review 校验台 | staging_record；collect.py / transform.py；staging.json 快照；模板页 + 校验页 | ① 银行流水模板：样例拾取配映射 + 日期/金额清洗出类型化记录；② 双向联动：点字段亮格、点格亮字段，跨页正确；③ 改值留 original；④ 转换失败进隔离区不阻塞；⑤ 规则引擎单测覆盖全部 op |
 | **P2 入库链路** | Destination 管理 + Load(upsert) + 血缘表 + 隔离区重放 | destination / load_mapping / load_log / quarantine；loader.py + MySQL 驱动（PyMySQL）；目的地页 + 运行页隔离面板 | ① 校验后一键入库，业务行 + cv_lineage 同事务；② 同记录重入幂等（回执跳过/更新）；③ 库内字段跳回原图格子；④ 部分失败 partial + 重放成功；⑤ 凭据不落日志 |
-| **P3 加厚** | 规则 op 扩充、block 选择器、从库读列、批量调度、看板统计、键盘快捷键 | — | 按需立项 |
+| **P3 加厚** | 规则 op 扩充（concat/split/lookup）、block 选择器 + 段落锚点、文档 tab 块级正向定位、漏提覆盖视图、从库读列、双层 PDF 导出（先裁决矫正图边界）、批量调度、看板统计、键盘快捷键 | — | 按需逐项立项 |
 
 每期动手前按惯例出该期细化改动清单待批准；P0 完成即有端到端真链路。
 
@@ -974,3 +976,78 @@ POST /api/quarantine/{id}/ignore           → {ok}
 6. **导航 = 顶部横向短名 tab**（提取/资料/模板/校验/目的地/运行，嵌单行色带页头）：
    紧凑、与现有 mvp 页头及报告页签风格一致，校验页左图右表吃满全宽。
    备选左侧竖向菜单栏（后台管理式）页面多时好扩展，但常驻吃 ~180px 图宽，六页量级不推荐。
+
+---
+
+## 11. 执行计划（文件级）
+
+### 11.0 节奏与协作约定
+
+- 每期流程：**该期细化改动清单批准 → 实现 → 回归 → 用户验收**；git 分支 `feat/data-pipeline`，按期提交。
+- 用户 8765 服务跑 main 不受影响；助手实测另起临时端口、测完即停；安装命令由用户执行。
+- 待确认项按默认执行：sources/ 方案 A、顶部 tab（§10）；如有异议在 P0 批准前提出。
+- 规模记号：S（<100 行）/ M（100~400 行）/ L（>400 行或多文件）。
+
+### 11.1 P0 最小闭环（上传 → 提取 → 看暂存数据）
+
+| # | 任务 | 文件 | 规模 | 依赖 | 验证 |
+|---|---|---|---|---|---|
+| 0 | 装 PyMySQL + 完整认证验证（co_dev 权限、建表权限） | requirements 已就绪 | S | 用户执行安装 | SELECT VERSION()、SHOW GRANTS |
+| 1 | DATA_ROOT + to_abs/to_rel + 平台库 conn_ref 常量 | config.py | S | — | 默认路径与现状逐字一致 |
+| 2 | 薄驱动接口 + PyMySQL 实现 + conn_ref 解析（env→secrets）+ 懒加载连接 + 迁移执行器（schema_version） | store/db.py | M | 1 | 连 co_dev 成功；重复启动迁移幂等 |
+| 3 | 001_init.sql（11 表）+ 种子「原始透传」模板 | store/migrations/ | M | 2 | 表/索引/外键齐全；种子可查 |
+| 4 | P0 repo 子集：source / template / run / staging | store/repo.py | M | 3 | CRUD 冒烟；删除保护生效 |
+| 5 | sources/ 登记 + sha256 去重（上传即登记，副本 <sha8>_<名>） | app.py 上传路径 | S | 4 | 重复上传返回已有 id，不重复存 |
+| 6 | Run 编排：_launch 建 Run/RunFile；emit 回调映射状态；**try/except 降级隔离** | app.py | M | 4,5 | 停 MySQL 提取照常跑（降级演练） |
+| 7 | collect.py passthrough：result.json → 记录 + 单元格锚点 lineage（数组形态） | collect.py（新） | M | — | 103/107/108 记录数与 bbox 正确 |
+| 8 | staging 落库 + staging.json 快照导出 | app.py + repo | S | 7 | 快照可从 DB 再生 |
+| 9 | 新路由：/api/sources、/api/templates、/api/runs（含 staging 读取） | app.py | M | 4~8 | API 冒烟全过 |
+| 10 | 前端：顶部 tab 导航 + 资料页 + 提取页增强（模式/模板/从库选）+ 运行页（只读）+ 暂存数据表格视图 | report/assets | L | 9 | 浏览器实测三步闭环 |
+| 11 | check_env 加 MySQL 检查项（缺失降级提示，不报致命） | check_env.py | S | 2 | 无 MySQL 时旧检查项不受影响 |
+| 12 | 全量回归 + 启动指标 | — | — | 全部 | 103 25×8 / 107 5×8 / 108 23×7 / 21 双表 / CSV 零变化；import app ≤0.5s |
+
+P0 暂存视图是只读表格（P1 由校验工作台取代）；模板仅种子透传，配置 UI 在 P1。
+
+### 11.2 P1 模板与校验
+
+| # | 任务 | 文件 | 规模 | 验证 |
+|---|---|---|---|---|
+| 1 | collect 完整选择器（table index/header_contains × column name/index）+ 落空 warning | collect.py | M | 多表/列名匹配/落空不静默 |
+| 2 | transform 规则引擎：6 op + 隐式 cast + 失败清单 | transform.py（新） | M | unittest 全 op 覆盖（标准库，零新依赖） |
+| 3 | 模板版本 API + staging PATCH/review API（original 审计） | app.py + repo | M | 改值留 original；批量确认只作用 pending/edited |
+| 4 | 模板管理页：三段编辑器 + **从样例拾取** + 版本历史 | report/assets | L | 点表头生成选择器；保存=新版本 |
+| 5 | 校验工作台：左图右表 + **双向联动** + 内联编辑 + 确认/拒绝 + 跨页 | report/assets | L | 点字段亮格/点格亮字段；跨页 ensureView 正确 |
+| 6 | 隔离区（transform/review 阶段）+ 运行页入口 | app.py + 前端 | M | 失败不阻塞整批 |
+| 7 | 端到端验收：银行流水模板（拾取配映射 + 日期/金额清洗 + 改值确认）+ 全量回归 | — | — | 类型化记录正确；回归零变化 |
+
+### 11.3 P2 入库链路
+
+| # | 任务 | 文件 | 规模 | 验证 |
+|---|---|---|---|---|
+| 1 | loader：驱动复用 + SELECT-then-write upsert + 单记录事务 | loader.py（新） | M | 事务回滚演练 |
+| 2 | cv_lineage 自动建表 + lineage_json 展开（1:N 行、region_seq）+ 业务表 staging_record_id 列 | loader.py | M | 血缘行数=字段×区域数 |
+| 3 | load_log 幂等回执（跳过/更新分支） | loader.py + repo | S | 同记录重入不重复 |
+| 4 | destination/load_mapping CRUD + 测试连接（脱敏）+ conn_ref 解析 | app.py + repo | M | 凭据不落日志不回显 |
+| 5 | 隔离区 load 阶段 + 重放/忽略全流程 | app.py + 前端 | M | partial → 重放 → loaded |
+| 6 | 目的地页 + 运行页隔离面板 + 发起入库弹窗（previewed/reviewed 补绑） | report/assets | L | 浏览器实测 |
+| 7 | 端到端验收：校验后一键入库；库内字段跳回原图格子；重跑幂等；全量回归 | — | — | 业务行+血缘同事务一致 |
+
+### 11.4 P3 项目池（按需逐项立项，每项独立出小设计）
+
+| 项 | 内容 | 前置裁决 |
+|---|---|---|
+| 规则扩充 | concat/split/lookup 等 op | concat 需多源锚点（已支持） |
+| 段落锚点 | block 选择器 + 文档 tab 块级正向定位 | 块级先行，字符级按需 |
+| 漏提覆盖视图 | 提取 bbox 差集着色，审计验收 | 无 |
+| 从库读列 | 映射编辑拉目标表实际列 | 无 |
+| 双层 PDF 导出 | PyMuPDF 写不可见文本层（零新依赖） | **矫正图 case 导不导**（UVDoc 不可逆变换） |
+| 批量调度 / 看板 / 快捷键 | 运营增强 | 无 |
+| 服务器化 | 多用户 reviewed_by、凭据加密、部署脚本 | 部署形态确定后 |
+
+### 11.5 跨期保障（每期验收必查）
+
+1. 现有 case 回归基线：103 25×8 / 107 5×8 / 108 23×7 / 21 双表 / CSV，零变化；
+2. 降级演练：MySQL 不可用时提取链路照常（P0 起每期抽查）；
+3. 启动指标：import app 不退化（store 懒加载）；
+4. 回退：main 分支始终可用，回退 = 切分支；
+5. 凭据：secrets.json 始终 git 排除，日志/接口不回显。

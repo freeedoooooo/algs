@@ -5,7 +5,7 @@
 <div class="stage noboxes">{{ pager }}{% if rect %}
     <div class="viewbar">
         <button type="button" class="viewbtn on" data-card="{{ card }}" data-view="orig"
-                title="原始上传图（矫正路线下无叠加框，仅作对照）">原图
+                title="原始上传图&#10;矫正路线下无叠加框，仅作对照">原图
         </button>
         <button type="button" class="viewbtn" data-card="{{ card }}" data-view="rect"
                 title="单元格 / 文字框的坐标基准图">矫正图
@@ -14,7 +14,7 @@
     {% endif %}
     <div class="views">
         <div class="view" data-card="{{ card }}" data-view="orig" data-space="source">
-            <div class="imgwrap" style="--ar:{{ ar|f4 }}"><img src="{{ src }}" alt="原图" title="单击：定位（空白处放大）；Alt+单击 / 双击：放大">
+            <div class="imgwrap" style="--ar:{{ ar|f4 }}"><img src="{{ src }}" alt="原图" title="单击：定位单元格 / 文字行&#10;空白处单击：放大图片&#10;Alt+单击：强制放大">
                 <svg viewBox="0 0 {{ w }} {{ h }}" preserveAspectRatio="none">{{ mc.polys(card, polys_src) }}</svg>
                 {% if cell_src or stitch_src %}
                 <svg class="cellsvg" viewBox="0 0 {{ w }} {{ h }}" preserveAspectRatio="none">{{ mc.cell_rects(card,
@@ -27,7 +27,7 @@
         {% if rect %}
         <div class="view" data-card="{{ card }}" data-view="rect" data-space="rectified" hidden>
             <div class="imgwrap" style="--ar:{{ rect.rar|f4 }}"><img src="{{ rect.src }}" alt="矫正图"
-                                                                     title="单击：定位（空白处放大）；Alt+单击 / 双击：放大">
+                                                                     title="单击：定位单元格 / 文字行&#10;空白处单击：放大图片&#10;Alt+单击：强制放大">
                 <svg class="cellsvg" viewBox="0 0 {{ rect.rw }} {{ rect.rh }}" preserveAspectRatio="none">{{
                     mc.cell_rects(card, rect.cells) }}{{ mc.polys(card, polys_rect) }}{{ mc.stitch_rects(card, page_no,
                     rect.stitch) }}

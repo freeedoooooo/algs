@@ -441,7 +441,7 @@ function hideCursorHint(){ if(hintEl) hintEl.classList.remove('on'); }
     stage.classList.remove('dragging');
   }
   document.querySelectorAll('.stage .imgwrap img').forEach(function(img){
-    img.setAttribute('title','单击：定位（空白处放大）；Alt+单击 / 双击：放大');
+    img.setAttribute('title','单击：定位单元格 / 文字行\n空白处单击：放大图片\nAlt+单击：强制放大');
     img.addEventListener('mousemove',function(e){
       var hit=hitCell(img,e);
       var zoom=e.altKey||!hit;
@@ -462,10 +462,6 @@ function hideCursorHint(){ if(hintEl) hintEl.classList.remove('on'); }
       if(e.altKey){open(img);return;}
       var hit=hitCell(img,e);
       if(hit){hit.dispatchEvent(new MouseEvent('click',{bubbles:true}));return;}
-      open(img);
-    });
-    img.addEventListener('dblclick',function(e){
-      e.stopPropagation();
       open(img);
     });
   });
