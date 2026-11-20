@@ -25,19 +25,20 @@
     </div>
     <div class="row">
       <button id="go" disabled>开始提取</button>
+      <span class="hint" tabindex="0" data-tip="首次加载模型约 20~40 秒，之后复用更快。">?</span>
       <span id="msg"></span>
     </div>
-    <div class="params" id="parampanel">
-      <div class="params-head">
+    <details class="params" id="parampanel">
+      <summary class="params-head">
         <span class="params-title">参数</span>
         <span class="pbadge" id="parambadge">默认</span>
-        <span class="hint" tabindex="0" data-tip="按优先级排，留默认即可；仅影响本次上传。">?</span>
+        <span class="hint" tabindex="0" onclick="event.preventDefault()"
+              data-tip="按优先级排，留默认即可；仅影响本次上传。">?</span>
         <span class="spacer"></span>
         <button type="button" class="mini" id="resetparams">恢复默认</button>
-      </div>
+      </summary>
       <div class="param-groups" id="paramgroups"></div>
-    </div>
-    <p class="tip">首次加载模型约 20~40 秒，之后复用更快。</p>
+    </details>
   </aside>
   <div class="gutter" id="gutter" title="拖动调整左栏宽度&#10;双击恢复默认"></div>
   <main class="reportcol">
@@ -68,8 +69,8 @@
 <div class="lightbox" id="lightbox" hidden>
   <div class="lbtop">
     <button type="button" id="lbPick">取 x 坐标</button>
+    <span class="hint" tabindex="0" data-tip="取数=原图像素&#10;适用 doc_unwarp=off">?</span>
     <button type="button" id="lbZoom">1:1 像素</button>
-    <span class="lbnote">取数=原图像素，适用 doc_unwarp=off</span>
     <span class="spacer"></span>
     <button type="button" id="lbClose">关闭 (Esc)</button>
   </div>

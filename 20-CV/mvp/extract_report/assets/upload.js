@@ -82,7 +82,8 @@ fetch('/api/params').then(function(r){return r.json();}).then(function(j){
   if(j.schema) renderParams(j.schema);
 }).catch(function(){});
 
-document.getElementById('resetparams').onclick=function(){
+document.getElementById('resetparams').onclick=function(e){
+  e.preventDefault();
   paramSchema.forEach(function(p){
     var el=document.getElementById('pf_'+p.key);
     if(el) el.value=p.default;
@@ -225,6 +226,7 @@ pickbar.addEventListener('click',function(e){
   if(a==='fill'){
     var el=document.getElementById('pf_column_lines');
     if(el&&pickVals.length){
+      document.getElementById('parampanel').open=true;
       el.value=pickVals.join(',');
       el.dispatchEvent(new Event('input',{bubbles:true}));
       el.scrollIntoView({block:'nearest',behavior:'smooth'});

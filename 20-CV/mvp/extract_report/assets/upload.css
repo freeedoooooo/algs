@@ -46,7 +46,6 @@ a{color:#2563eb;text-decoration:none}
 .ghost{background:#fff;color:#2563eb;padding:9px 16px;border:1px solid #2563eb;
   border-radius:8px;font-size:14px}
 #msg{font-size:13px;color:#6b7688}
-.tip{margin-top:14px;color:#6b7688;font-size:12px;line-height:1.7}
 /* 运行进度：右侧报告区居中卡片；完成后点「查看日志」作为抽屉叠加在报告上 */
 .runpanel{position:absolute;inset:0;display:flex;align-items:center;
   justify-content:center;padding:24px;z-index:10}
@@ -74,8 +73,14 @@ a.mini-link,button.mini-link{font:inherit;font-size:12px;color:#2563eb;text-deco
 .lv-warn .tx{color:#fde68a}.lv-error .tx{color:#fecaca}.lv-ok .tx{color:#bbf7d0}
 code{background:#eef2f8;padding:1px 5px;border-radius:4px}
 .err{color:#b42318}
-/* 参数区：常显、紧凑单行（label + 控件 + ?），不折叠，说明都在 ? 气泡里 */
+/* 参数区：默认折叠（details），需要时展开；说明都在 ? 气泡里 */
 .params{margin-top:12px}
+.params>summary{cursor:pointer;list-style:none;user-select:none}
+.params>summary::-webkit-details-marker{display:none}
+.params>summary::before{content:'▸';color:#8a94a6;font-size:11px;flex:none;
+  transition:transform .15s}
+.params[open]>summary::before{transform:rotate(90deg)}
+.params:not([open])>summary{margin-bottom:0}
 .params-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
 .params-title{font-size:13px;font-weight:500;color:#25324a}
 .params-head .spacer{flex:1}
@@ -111,7 +116,6 @@ img.thumb:hover{border-color:#2563eb}
   border-radius:7px;border:1px solid #46506a;background:#2a3245;color:#e8ecf4}
 .lbtop button:hover{background:#3a4560}
 .lbtop button.on{background:#2563eb;border-color:#2563eb;color:#fff}
-.lbnote{color:#9aa6bd}
 .lbstage{flex:1;min-height:0;overflow:auto;display:flex;align-items:center;
   justify-content:center;padding:14px}
 .lbstage.zoom{align-items:flex-start;justify-content:flex-start}
