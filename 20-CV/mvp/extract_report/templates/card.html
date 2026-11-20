@@ -5,11 +5,9 @@
     <div class="card-head">
         <div class="fh-left"><h2 id="case-{{ card }}" title="{{ name }}">{{ name }}{{ title_suffix }}</h2><span
                 class="tag">{{ kind_label }}</span></div>
-        <div class="fh-right"><span class="tag">路线 {{ route }}</span>{{ mc.head_right(m, links) }}</div>
     </div>
     {% else %}
-    <template class="pagehead-tpl" data-page="{{ page_no }}"><span class="tag">第 {{ page_no }} 页</span><span
-            class="tag">路线 {{ route }}</span>{{ mc.head_right(m, links) }}
+    <template class="pagehead-tpl" data-page="{{ page_no }}"><span class="tag">第 {{ page_no }} 页</span>
     </template>
     {% endif %}
     <div class="grid">{{ image_views }}

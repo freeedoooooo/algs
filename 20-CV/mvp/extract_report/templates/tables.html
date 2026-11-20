@@ -14,7 +14,7 @@
         <div class="empty">未检测到表格，路线 {{ route }}</div>
         {% else %}
         <p class="note">坐标宿主：{{ spaces }} <span class="hint" tabindex="0"
-                                                    data-tip="悬停高亮单格，点击钉住（再点取消）。反向：在图上点单元格区域（叠加框隐藏时也可）或悬停/点击可见格框，定位并钉住本格。点图命中优先级：跨页合并＞表格＞文本。单击原图的行为可用图右上「点图」开关切换定位/放大，双击始终放大。">?</span></p>
+                                                    data-tip="悬停高亮单格，点击钉住（再点取消）。反向：在图上点单元格区域（叠加框隐藏时也可）或悬停/点击可见格框，定位并钉住本格。点图命中优先级：跨页合并＞表格＞文本；光标悬停实时提示单击是定位还是放大，Alt+单击 / 双击强制放大。">?</span></p>
         {% if tables|length > 1 %}
         <div class="tbltabs">{% for t in tables %}
             <button type="button" class="tbltab{{ ' on' if loop.first else '' }}" data-card="{{ card }}"

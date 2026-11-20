@@ -355,20 +355,19 @@ function hitCell(img,e){
   return best;
 }
 
-/* 点图行为开关：定位（命中测试反向追溯，未命中给提示）/ 放大（单击直接全屏）。
-   与 boxtoggle 同款角标、同套同步机制：stage.clickzoom，原图/矫正图两副本一致。
-   定位模式下双击仍可放大，作为不切开关的快捷逃生口。 */
-document.querySelectorAll('.clickmode').forEach(function(btn){
-  btn.addEventListener('click',function(e){
-    e.stopPropagation();
-    var card=cardOf(btn),stage=card.querySelector('.stage');
-    var zoom=stage.classList.toggle('clickzoom');
-    card.querySelectorAll('.clickmode').forEach(function(b){
-      b.classList.toggle('on',zoom);
-      b.textContent=zoom?'点图：放大':'点图：定位';
-    });
-  });
-});
+/* 点图行为跟随光标（无持久开关）：悬停命中内容→十字光标，单击定位、Alt+单击放大；
+   悬停空白→放大光标，单击放大。光标旁的小 pill 实时提示当前单击会做什么，
+   把「定位 / 放大」的选择摆在鼠标操作的那一刻，而不是一个常驻按钮。 */
+var hintEl=null;
+function cursorHint(){
+  if(!hintEl){
+    hintEl=document.createElement('div');
+    hintEl.id='cursor-hint';
+    document.body.appendChild(hintEl);
+  }
+  return hintEl;
+}
+function hideCursorHint(){ if(hintEl) hintEl.classList.remove('on'); }
 
 /* 点击图片全屏放大：克隆整个 .imgwrap，叠加框按同一 viewBox 1:1 跟随 */
 (function(){
@@ -401,6 +400,7 @@ document.querySelectorAll('.clickmode').forEach(function(btn){
     scale=fit;tx=0;ty=0;apply();
   }
   function open(img){
+    hideCursorHint();
     var wrap=img.closest('.imgwrap');
     if(!wrap) return;
     var view=img.closest('.view');
@@ -441,14 +441,28 @@ document.querySelectorAll('.clickmode').forEach(function(btn){
     stage.classList.remove('dragging');
   }
   document.querySelectorAll('.stage .imgwrap img').forEach(function(img){
-    img.setAttribute('title','单击：定位（右上可切「点图：放大」）；双击：放大');
+    img.setAttribute('title','单击：定位（空白处放大）；Alt+单击 / 双击：放大');
+    img.addEventListener('mousemove',function(e){
+      var hit=hitCell(img,e);
+      var zoom=e.altKey||!hit;
+      img.style.cursor=zoom?'zoom-in':'crosshair';
+      var h=cursorHint();
+      h.textContent=e.altKey?'单击：放大（Alt）':(hit?'单击：定位 · Alt+单击：放大':'单击：放大');
+      h.style.left=Math.min(e.clientX+14,window.innerWidth-190)+'px';
+      h.style.top=Math.min(e.clientY+18,window.innerHeight-34)+'px';
+      h.classList.add('on');
+    });
+    img.addEventListener('mouseleave',function(){
+      hideCursorHint();
+      img.style.cursor='';
+    });
     img.addEventListener('click',function(e){
       e.stopPropagation();
-      var card=cardOf(img);
-      if(card.querySelector('.stage').classList.contains('clickzoom')){open(img);return;}
+      hideCursorHint();
+      if(e.altKey){open(img);return;}
       var hit=hitCell(img,e);
       if(hit){hit.dispatchEvent(new MouseEvent('click',{bubbles:true}));return;}
-      toast('点击处没有可定位的文字框或单元格');
+      open(img);
     });
     img.addEventListener('dblclick',function(e){
       e.stopPropagation();
@@ -551,8 +565,8 @@ function activeStitchOf(fc){
 /* 切页保留当前激活 tab：在「跨页合并」tab 翻页时合并表不丢；悬停合并格切页同理。
    合并表内容渲染在每个页卡片的 stitch tab 里，切页后点亮新卡片的同一 tab 即可无缝衔接。
    多条跨页链时一并保留选中的合并表子页签，避免切页后高亮落在隐藏链上。 */
-/* 单一整合页头：切页时把激活页的「页相关片段」模板注入文件级 .pagehead-slot，
-   文件级汇总不动，只有当前页码/路线/统计/链接随页更新（不再每页各一个可见页头）。 */
+/* 单一整合页头：切页时把激活页的「页码片段」模板注入文件级 .pagehead-slot，
+   文件级汇总不动，只有当前页码随页更新（路线/统计/链接已整合进右侧 tab，页头不再重复）。 */
 function updatePageHead(fc){
   if(!fc) return;
   var slot=fc.querySelector('.pagehead-slot');

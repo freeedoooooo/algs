@@ -54,11 +54,3 @@
         </table>
     </div>
 </div>{% endmacro %}
-
-{% macro head_right(m, links) %}
-<div class="metrics"><span>行数 <b>{{ m.lines }}</b></span><span>表格 <b>{{ m.tables }}</b></span>{% if m.low %}<span
-        class="warn">可疑 <b>{{ m.low }}</b></span>{% endif %}
-</div>
-<div class="desc">{% for l in links %}<a href="{{ l.href }}" target="_blank">{{ l.label }}</a>{% if not loop.last %} ·
-    {% endif %}{% endfor %}
-</div>{% endmacro %}

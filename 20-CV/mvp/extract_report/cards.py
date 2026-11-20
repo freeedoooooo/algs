@@ -157,8 +157,12 @@ def text_pane(rec, card_no):
     if plain:
         pctx = {'aid': 'aux-plain-{}'.format(card_no), 'n': len(plain),
                 'text': plain[:20000]}
+    # 页头瘦身：可疑行数 / 带框图 原在页头，现整合进文字 tab 头
+    n_low = rec.get('low_score_lines') or sum(1 for r in rows if r['low'])
+    boxes = file_url(rec['boxes_png']) if rec.get('boxes_png') else None
     return render('text_pane.html', card=card_no, n=len(texts), rows=rows,
-                  tspace=rec.get('text_space') or 'source', plain=pctx)
+                  tspace=rec.get('text_space') or 'source', plain=pctx,
+                  n_low=n_low, boxes=boxes)
 
 
 def tables_section(rec, card_no, stitched=None):
@@ -429,14 +433,6 @@ def _render_card(pg, card_no, file_rec, single=True, page_no=None,
                  stitched=None, title_suffix='', hidden=False, pager=''):
     """渲染一个页卡片（单页文件=整张卡片；多页文件=其中一页）。复用既有全部区块。"""
     labels = {'image': '图片', 'pdf': 'PDF', 'csv': '纯文本'}
-    links = []
-    if pg.get('source'):
-        links.append({'href': file_url(pg['source']), 'label': '原图'})
-    if pg.get('boxes_png'):
-        links.append({'href': file_url(pg['boxes_png']), 'label': '带框图'})
-    if pg.get('rectified'):
-        links.append({'href': file_url(pg['rectified']), 'label': '矫正图'})
-    links.append({'href': file_url(config.RESULT_JSON), 'label': 'result.json'})
     has_stitch = (not single) and bool(stitched)
     # 多页：本页 JSON 与整份信封 JSON 各占一个独立 tab；整份信封紧凑嵌在
     # filecard 的 <script type="application/json">（全报告仅一份），首次打开
@@ -452,11 +448,6 @@ def _render_card(pg, card_no, file_rec, single=True, page_no=None,
         hidden=hidden, textspace=pg.get('text_space') or 'source',
         name=pg.get('file', '(未知)'), title_suffix=title_suffix,
         kind_label=labels.get(pg.get('kind'), pg.get('kind', '?')),
-        route=pg.get('table_route', '-'),
-        m={'lines': pg.get('lines', 0),
-           'tables': len(pg.get('structured_tables') or []),
-           'low': pg.get('low_score_lines', 0)},
-        links=links,
         image_views=image_views(pg, card_no, stitched, page_no, pager),
         n_text=pg.get('lines', 0),
         n_tbl=len(pg.get('structured_tables') or []),

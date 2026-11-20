@@ -163,7 +163,7 @@ RunFile（一次 Run 可含多文件，逐文件状态）：
 | record_index | int | 表内行序，UNIQUE(run_file_id, record_index) |
 | values_json | JSON | 当前值（已类型化；校验修改后更新这里） |
 | original_json | JSON | 首次转换产出值，**修改不覆盖原值**，审计可查 |
-| lineage_json | JSON | 每字段 → `{source_file_id, page(1起), table_index, cell_bbox, coord_space, raw_text, score}` |
+| lineage_json | JSON | 每字段 → **引用数组** `[{source_file_id, page(1起), table_index, cell_bbox 或 block 引用, coord_space, raw_text, score}]`；单元格=单元素，段落/多段落=多元素（块锚点） |
 | review_state | enum | pending / confirmed / edited / rejected |
 | reviewed_at | datetime 可空 | |
 
@@ -263,6 +263,11 @@ flowchart LR
 ```
 
 - 本地侧：lineage_json 随暂存记录存；坐标体系沿用 `coord.space`、页码 1 起。
+- **一字段多源区域（1:N 锚点，业内标准）**：字段值可对应一个或多个段落/单元格——
+  Google Document AI 的 textSegments/pageRefs、Azure 的 boundingRegions 均为数组。
+  lineage_json 统一数组形态；cv_lineage 同一 (record_pk, field) 写 N 行、`region_seq` 保序；
+  段落字段用 layout block 锚点（块序号/角色 + bbox + 文本区间，parsing_res_list 现成），
+  对应 §5.2 的 block 选择器（P3）。UI 点字段 → 全部源区域高亮，跨页沿用页签圆点 + 循环跳转。
 - 目标库侧：独立血缘表 `cv_lineage`，业务表只加一列 `staging_record_id`（列名可在 LoadMapping 配置）：
 
 ```sql
@@ -276,6 +281,8 @@ CREATE TABLE cv_lineage (
   page          INT,
   table_index   INT,
   field         VARCHAR(128),
+  region_seq    INT NOT NULL DEFAULT 0,       -- 一字段多源区域保序（1:N 锚点）
+  block_index   INT,                          -- 段落字段：layout 块锚点（与 cell_bbox 二选一）
   cell_bbox     VARCHAR(128),               -- JSON [x0,y0,x1,y1]
   coord_space   VARCHAR(16),
   raw_text      TEXT,

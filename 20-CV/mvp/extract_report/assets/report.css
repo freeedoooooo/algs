@@ -23,16 +23,11 @@ header .sub{color:#6b7688;font-size:12px;display:flex;align-items:center;gap:6px
 .fh-right{margin-left:auto;display:flex;align-items:center;gap:10px;
   flex:none;flex-wrap:wrap;justify-content:flex-end}
 .fh-right .tag{margin-right:0}
-.fh-right .metrics{margin:0;gap:10px}
-.fh-right .desc{margin:0;display:flex;align-items:center;gap:6px}
-.metrics .warn{color:#a85a12}
-.metrics .warn b{color:#a85a12}
+/* 可疑行数整合进文字 tab 头（页头已瘦身） */
+.panel-head .warn{color:#a85a12;font-size:12px}
+.panel-head .warn b{color:#a85a12;font-weight:600}
 .tag{display:inline-block;background:#eef2f8;color:#5a6a85;border-radius:5px;
   padding:1px 8px;font-size:12px;margin-right:6px}
-.metrics{display:flex;flex-wrap:wrap;gap:14px;margin-top:8px;font-size:12px;color:#6b7688}
-.metrics b{color:#1f2738;font-size:13px;font-weight:500}
-.desc{font-size:12px;color:#6b7688;margin-top:4px}
-.desc a{color:#2563eb;text-decoration:none}
 .grid{display:grid;grid-template-columns:minmax(300px,44%) minmax(0,1fr);
   align-items:start}
 .stage{position:sticky;top:12px;background:#eceff3;padding:10px;
@@ -54,14 +49,21 @@ header .sub{color:#6b7688;font-size:12px;display:flex;align-items:center;gap:6px
 /* 只藏常显识别框；悬停文字行的回显高亮 .hl 仍要显示 */
 .stage.noboxes .box:not(.hl):not(.pin){display:none}
 /* 叠加框开关：半透明角标叠在原图右上角，不单独占行（imgwrap line-height:0 需复位） */
-.imgwrap .boxtoggle,.imgwrap .clickmode{position:absolute;top:6px;right:6px;z-index:3;
+.imgwrap .boxtoggle{position:absolute;top:6px;right:6px;z-index:3;
   padding:3px 9px;font-size:11px;line-height:1.4;border-radius:6px;
   background:rgba(15,23,38,.55);color:#fff;border:1px solid rgba(255,255,255,.35);
   backdrop-filter:blur(2px)}
-/* 点图行为开关叠在叠加框开关正下方，避免与左上视图切换相撞 */
-.imgwrap .clickmode{top:32px}
-.imgwrap .boxtoggle:hover,.imgwrap .clickmode:hover{background:rgba(15,23,38,.78)}
-.imgwrap .boxtoggle.on,.imgwrap .clickmode.on{background:rgba(37,99,235,.8);border-color:rgba(255,255,255,.5)}
+.imgwrap .boxtoggle:hover{background:rgba(15,23,38,.78)}
+.imgwrap .boxtoggle.on{background:rgba(37,99,235,.8);border-color:rgba(255,255,255,.5)}
+/* 整表网格开关与叠加框同款「有底色」胶囊，不再白底描边 */
+.allcells{background:rgba(15,23,38,.55);color:#fff;border-color:transparent}
+.allcells:hover{background:rgba(15,23,38,.78)}
+.allcells.on{background:#2563eb;border-color:#2563eb;color:#fff}
+/* 光标跟随提示：点图「定位/放大」选择在鼠标操作那一刻可见，不占版面 */
+#cursor-hint{position:fixed;z-index:70;pointer-events:none;white-space:nowrap;
+  background:rgba(15,23,38,.85);color:#fff;font-size:11px;padding:3px 8px;
+  border-radius:5px;opacity:0;transition:opacity .12s}
+#cursor-hint.on{opacity:1}
 /* 视图切换悬浮在图左上角（与右上「隐藏叠加框」对称），不占行、不把图往下压 */
 .stage .viewbar{position:absolute;top:16px;left:16px;z-index:4;gap:4px;margin:0}
 .stage .viewbar .viewbtn{padding:3px 9px;font-size:11px;line-height:1.4;border-radius:6px;
@@ -69,7 +71,7 @@ header .sub{color:#6b7688;font-size:12px;display:flex;align-items:center;gap:6px
   backdrop-filter:blur(2px)}
 .stage .viewbar .viewbtn:hover{background:rgba(15,23,38,.78)}
 .stage .viewbar .viewbtn.on{background:rgba(37,99,235,.8);border-color:rgba(255,255,255,.5)}
-.lb-content .boxtoggle,.lb-content .clickmode{display:none}
+.lb-content .boxtoggle{display:none}
 /* 追溯失败提示：底部居中轻提示，不占版面、不挡操作 */
 #trace-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:80;
   background:rgba(15,23,38,.92);color:#fff;font-size:13px;padding:8px 14px;
@@ -244,7 +246,7 @@ a{color:#2563eb}
 .filecard>.card{margin:0;border:0;border-radius:0;box-shadow:none}
 .filecard>.card[hidden]{display:none}
 /* 多页页头右侧动态片段 = .fh-right.pagehead-slot：布局走 .fh-right（右对齐单行），
-   切页时由 JS 注入当前页的 第N页/路线/行数/表格/可疑/链接。空时隐藏。 */
+   切页时由 JS 注入当前页的 第N页 标签（路线/统计/链接已整合进右侧 tab）。空时隐藏。 */
 .pagehead-slot:empty{display:none}
 /* 翻页组件=窗口式页码胶囊，**悬浮叠在源图底缘之上**（绝对定位、不占布局、不压缩图宽）。
    默认 left/bottom 给一个兜底位；report.js alignPagers 再按当前 imgwrap
