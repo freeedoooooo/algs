@@ -132,7 +132,7 @@ document.querySelectorAll('.boxtoggle').forEach(function(btn){
     var card=cardOf(btn),stage=card.querySelector('.stage');
     var off=stage.classList.toggle('noboxes');
     card.querySelectorAll('.boxtoggle').forEach(function(b){
-      b.classList.toggle('on',off);
+      b.classList.toggle('on',!off);
       b.textContent=off?'显示叠加框':'隐藏叠加框';
     });
   });
@@ -147,7 +147,7 @@ document.querySelectorAll('.ctab').forEach(function(btn){
     card.querySelectorAll('.tabpanel').forEach(function(p){
       p.hidden=(p.getAttribute('data-tab')!==t);
     });
-    /* 整份 JSON 按需加载：信封不内联进每个页卡片（多页大文件会平方级膨胀） */
+    /* 完整 JSON 按需加载：信封不内联进每个页卡片（多页大文件会平方级膨胀） */
     if(t==='filejson') loadFileJson(card);
     /* 文档面板多表同屏：放开全部单格框；切回表格面板恢复「只显选中表」 */
     if(t==='md'){
@@ -265,7 +265,7 @@ document.querySelectorAll('.stitchbox').forEach(function(r){
   });
 });
 
-/* 整份 JSON：紧凑信封嵌在 filecard 的 <script type="application/json"> 里
+/* 完整 JSON：紧凑信封嵌在 filecard 的 <script type="application/json"> 里
    （全报告仅一份，不逐页内联——平方级膨胀），首次打开 tab 时才解析美化。
    不用 fetch：file:// 直开时浏览器禁止 fetch 本地文件，嵌入则两种打开都成立。
    美化结果按 filecard 缓存，多个页卡片副本共享。 */
@@ -277,16 +277,16 @@ function loadFileJson(card){
   var fc=card.closest('.filecard');
   if(fjCache.has(fc)){ fill(fjCache.get(fc)); return; }
   var src=fc&&fc.querySelector('script.filejson-src');
-  if(!src){ pre.textContent='未找到整份 JSON 数据。'; return; }
+  if(!src){ pre.textContent='未找到完整 JSON 数据。'; return; }
   try{
     var pretty=JSON.stringify(JSON.parse(src.textContent),null,2);
     fjCache.set(fc,pretty); fill(pretty);
   }catch(e){
-    pre.textContent='整份 JSON 解析失败：请点上方「下载」查看 result.json。';
+    pre.textContent='完整 JSON 解析失败：请点上方「下载」查看 result.json。';
   }
 }
 
-/* JSON 复制：多页卡片有「本页 / 整份」两份 jsonpre，按按钮所在面板取，避免复制错对象 */
+/* JSON 复制：多页卡片有「本页 / 完整」两份 jsonpre，按按钮所在面板取，避免复制错对象 */
 document.querySelectorAll('.copyjson').forEach(function(btn){
   btn.addEventListener('click',function(){
     var host=btn.closest('.panel')||cardOf(btn);
@@ -537,7 +537,7 @@ function hideCursorHint(){ if(hintEl) hintEl.classList.remove('on'); }
   });
 })();
 
-/* 多页文件：页签切换（只显示激活页卡片）；跨页合并表收进各页卡片 tab，整份 JSON 常驻下方 */
+/* 多页文件：页签切换（只显示激活页卡片）；跨页合并表收进各页卡片 tab，完整 JSON 常驻下方 */
 function fileCardOf(el){ return el.closest('.filecard'); }
 function showPage(fc,p){
   if(!fc) return false;

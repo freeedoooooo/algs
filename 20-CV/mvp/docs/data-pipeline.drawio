@@ -10,16 +10,16 @@
         <mxCell id="n2" value="资料提取 Extract&#10;现 mvp pipeline，零改动" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
           <mxGeometry x="320" y="170" width="260" height="60" as="geometry"/>
         </mxCell>
-        <mxCell id="a1" value="result.json 官方 JSON（唯一事实源）" style="shape=mxgraph.flowchart.document;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+        <mxCell id="a1" value="L0 raw/*.json 引擎原样返回&#10;永不服务前端（403）" style="shape=mxgraph.flowchart.document;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
           <mxGeometry x="660" y="160" width="240" height="80" as="geometry"/>
         </mxCell>
         <mxCell id="tpl" value="模板 Template（版本化）&#10;&#10;Schema 字段定义&#10;Mapping 字段映射&#10;Transform 转换规则&#10;&#10;不含任何入库信息" style="rounded=1;whiteSpace=wrap;align=left;spacingLeft=10;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
           <mxGeometry x="20" y="270" width="220" height="140" as="geometry"/>
         </mxCell>
-        <mxCell id="n4" value="字段映射 Mapping + 数据转换 Transform&#10;无配置 = passthrough 整表透传" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
-          <mxGeometry x="320" y="300" width="260" height="60" as="geometry"/>
+        <mxCell id="n4" value="adapter 适配层 → extract.json（cvdoc 自有标准）&#10;字段映射 Mapping + 数据转换 Transform（只消费 cvdoc）&#10;无配置 = passthrough 整表透传" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="320" y="290" width="260" height="80" as="geometry"/>
         </mxCell>
-        <mxCell id="n5" value="暂存数据 Staging Records&#10;标准化中间记录&#10;DB 为系统记录 + staging.json 快照" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+        <mxCell id="n5" value="L2 records.json 暂存数据（事实源）&#10;values + original + lineage + review&#10;PATCH 原子重写，页面只读预生成文件" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
           <mxGeometry x="320" y="430" width="260" height="70" as="geometry"/>
         </mxCell>
         <mxCell id="n6" value="数据校验 Review&#10;确认 / 修改 / 拒绝&#10;对照原图，单格坐标回溯（复用现成能力）" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
@@ -133,7 +133,7 @@
         <mxCell id="o_rf" value="run_file 运行文件&#10;&#10;id / run_id / source_file_id&#10;state / output_rel_dir&#10;UNIQUE(run_id, source_file_id)" style="rounded=0;whiteSpace=wrap;align=left;spacingLeft=10;verticalAlign=top;spacingTop=6;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
           <mxGeometry x="360" y="460" width="240" height="110" as="geometry"/>
         </mxCell>
-        <mxCell id="o_stg" value="staging_record 暂存记录&#10;&#10;id / run_id / run_file_id / record_index&#10;values_json / original_json（审计）&#10;lineage_json（字段级血缘）&#10;review_state / reviewed_at" style="rounded=0;whiteSpace=wrap;align=left;spacingLeft=10;verticalAlign=top;spacingTop=6;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+        <mxCell id="o_stg" value="records.json（文件 · 事实源）&#10;&#10;run_file_id / index 引用键&#10;values / original（审计）&#10;lineage（字段级 1:N 锚点）&#10;review.state / at · 不在 DB" style="rounded=0;whiteSpace=wrap;align=left;spacingLeft=10;verticalAlign=top;spacingTop=6;dashed=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
           <mxGeometry x="360" y="650" width="240" height="130" as="geometry"/>
         </mxCell>
         <mxCell id="o_q" value="quarantine 隔离区&#10;&#10;id / run_id&#10;staging_record_id 可空&#10;stage / reason / payload_json&#10;state(open|replayed|ignored)" style="rounded=0;whiteSpace=wrap;align=left;spacingLeft=10;verticalAlign=top;spacingTop=6;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
@@ -188,7 +188,7 @@
         <mxCell id="f10" value="已校验记录入库" style="edgeStyle=orthogonalEdgeStyle;rounded=1;exitX=1;exitY=0.75;entryX=0;entryY=0.75;" edge="1" parent="1" source="o_stg" target="o_ll">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
-        <mxCell id="note1" value="MySQL 平台库 cv_pipeline（与业务库同实例分 schema）· 所有 SQL 收敛在 mvp/store/ · 驱动无关可换 · JSON 原生类型 · 相对路径以 DATA_ROOT 为基准" style="text;align=center;fontStyle=2;fontColor=#666666;" vertex="1" parent="1">
+        <mxCell id="note1" value="MySQL 只管目录元数据 · 记录内容在 records.json（保存方式接缝 store/content.py）· 引擎结构不出 adapter · raw 前端 403 · 相对路径以 DATA_ROOT 为基准" style="text;align=center;fontStyle=2;fontColor=#666666;" vertex="1" parent="1">
           <mxGeometry x="140" y="830" width="820" height="30" as="geometry"/>
         </mxCell>
       </root>

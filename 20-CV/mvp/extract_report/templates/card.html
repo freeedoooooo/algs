@@ -23,7 +23,7 @@
                 {% endif %}
                 <button type="button" class="ctab" data-card="{{ card }}" data-tab="json">{{ json_label }}</button>
                 {% if not single %}
-                <button type="button" class="ctab" data-card="{{ card }}" data-tab="filejson">整份 JSON</button>
+                <button type="button" class="ctab" data-card="{{ card }}" data-tab="filejson">完整 JSON</button>
                 {% endif %}
             </div>
             <div class="tabpanel" data-card="{{ card }}" data-tab="text">{{ text_html }}</div>
@@ -36,7 +36,7 @@
             {% if not single %}
             <div class="tabpanel" data-card="{{ card }}" data-tab="filejson" hidden>
                 <details class="panel" open>
-                    <summary class="panel-head"><span class="panel-title">完整 JSON</span><span class="meta">整份 result.json（含 stitched_tables）</span><span
+                    <summary class="panel-head"><span class="panel-title">完整 JSON</span><span class="meta">result.json（含 stitched_tables）</span><span
                             class="spacer"></span><a class="btn ghost" href="{{ result_href }}" target="_blank"
                                                      onclick="event.stopPropagation()">下载</a>
                         <button type="button" class="copyjson btn ghost" onclick="event.stopPropagation()">复制 JSON

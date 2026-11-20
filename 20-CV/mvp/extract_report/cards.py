@@ -421,11 +421,11 @@ def md_pane(rec, card_no):
                   tspace=rec.get('text_space') or 'source', items=items)
 
 
-def json_section(rec, href=None, label='result.json', opened=True):
+def json_section(rec, href=None, label='result.json', title='完整 JSON', opened=True):
     # 展示落盘形态（ppstruct 剥掉派生投影），渲染时美化。
-    # href 给出时带下载链接（单页=整份信封，与下载一致）；多页页卡片只展示本页切片。
+    # href 给出时带下载链接（单页=完整信封，与下载一致）；多页页卡片只展示本页切片。
     text = json.dumps(viewmodel.disk_view(rec), ensure_ascii=False, indent=2)
-    return render('json_panel.html', opened=opened, label=label,
+    return render('json_panel.html', opened=opened, label=label, title=title,
                   href=href, text=text)
 
 
@@ -434,7 +434,7 @@ def _render_card(pg, card_no, file_rec, single=True, page_no=None,
     """渲染一个页卡片（单页文件=整张卡片；多页文件=其中一页）。复用既有全部区块。"""
     labels = {'image': '图片', 'pdf': 'PDF', 'csv': '纯文本'}
     has_stitch = (not single) and bool(stitched)
-    # 多页：本页 JSON 与整份信封 JSON 各占一个独立 tab；整份信封紧凑嵌在
+    # 多页：本页 JSON 与完整信封 JSON 各占一个独立 tab；完整信封紧凑嵌在
     # filecard 的 <script type="application/json">（全报告仅一份），首次打开
     # tab 时才美化（report.js loadFileJson）——不逐页内联（平方级膨胀），
     # 也不 fetch（file:// 直开时浏览器禁止 fetch 本地文件）。
@@ -442,7 +442,7 @@ def _render_card(pg, card_no, file_rec, single=True, page_no=None,
         json_html = json_section(file_rec, href=file_url(config.RESULT_JSON))
     else:
         json_html = json_section(
-            pg, label='本页 JSON · pages[{}]'.format((page_no or 1) - 1))
+            pg, label='pages[{}]'.format((page_no or 1) - 1), title='本页 JSON')
     return render(
         'card.html', card=card_no, single=single, page_no=page_no,
         hidden=hidden, textspace=pg.get('text_space') or 'source',
@@ -452,7 +452,7 @@ def _render_card(pg, card_no, file_rec, single=True, page_no=None,
         n_text=pg.get('lines', 0),
         n_tbl=len(pg.get('structured_tables') or []),
         has_stitch=has_stitch, n_stitch=len(stitched or []),
-        json_label='JSON' if single else '本页 JSON',
+        json_label='完整 JSON' if single else '本页 JSON',
         text_html=text_pane(pg, card_no),
         tables_html=tables_section(pg, card_no, stitched),
         md_html=md_pane(pg, card_no),
@@ -488,7 +488,7 @@ def stitch_content(file_rec, card_no):
 
 
 def _filejson_src(file_rec):
-    """整份信封的紧凑 JSON（嵌入 <script type="application/json">，全报告仅一份）。
+    """完整信封的紧凑 JSON（嵌入 <script type="application/json">，全报告仅一份）。
     `</` 转义成 `<\\/`（JSON 合法转义），防文字内容里的 </script> 提前闭合标签。"""
     text = json.dumps(viewmodel.disk_view(file_rec), ensure_ascii=False,
                       separators=(',', ':'))
