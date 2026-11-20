@@ -625,3 +625,45 @@ if(!batch){
     renderTabs(); loadStaging();
   }).catch(function(e){ showErr(e.message); });
 }
+
+/* 跨批搜索（选项 B）：/api/staging/query 直查 DB field 投影，与当前批次无关 */
+(function(){
+  var go=document.getElementById('xs-go');
+  if(!go) return;
+  go.addEventListener('click',function(){
+    var p=new URLSearchParams();
+    var f=document.getElementById('xs-field').value.trim();
+    var q=document.getElementById('xs-q').value.trim();
+    var st=document.getElementById('xs-state').value;
+    if(f) p.set('field',f);
+    if(q) p.set('q',q);
+    if(st) p.set('state',st);
+    var err=document.getElementById('xs-err');
+    err.hidden=true;
+    fetch('/api/staging/query?'+p.toString()).then(function(r){
+      return r.json().then(function(j){ return {status:r.status,j:j}; });
+    }).then(function(o){
+      var tbl=document.getElementById('xs-table'),
+          em=document.getElementById('xs-empty'),
+          tb=document.getElementById('xs-rows');
+      if(o.status!==200||!o.j.ok){
+        err.textContent=(o.j&&o.j.error)||('查询失败 HTTP '+o.status);
+        err.hidden=false; tbl.hidden=true; em.hidden=true; return;
+      }
+      var items=o.j.items||[];
+      tb.innerHTML=items.map(function(it){
+        return '<tr><td class="mono">'+escHtml(it.batch_tag)+'</td><td>'+
+          escHtml(it.case)+'</td><td class="num">'+it.record_index+
+          '</td><td>'+escHtml(it.field_name)+'</td><td>'+
+          escHtml(it.value_text)+'</td><td>'+escHtml(it.review_state)+
+          '</td><td><a class="btn ghost mini" href="/staging?batch='+
+          encodeURIComponent(it.batch_tag)+'&file='+
+          encodeURIComponent(it.case)+'">预览</a></td></tr>';
+      }).join('');
+      tbl.hidden=!items.length;
+      em.hidden=!!items.length;
+    }).catch(function(e){
+      err.textContent='查询失败：'+e; err.hidden=false;
+    });
+  });
+})();

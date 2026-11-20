@@ -143,3 +143,16 @@ td.cell.pin,th.cell.pin{background:#fff0d9!important;
   .lineage{width:100%;max-width:none;position:static;max-height:none}
   .lineage .stage{max-height:60vh}
 }
+/* 跨批搜索（选项 B，design-records-db.md §5） */
+.xsearch{margin:0 0 12px}
+.xsearch summary{cursor:pointer;padding:10px 14px;font-size:13px;font-weight:500;
+  color:#33415e;list-style:none}
+.xsearch summary::-webkit-details-marker{display:none}
+.xsearch summary::before{content:'▸ ';color:#8a94a6}
+.xsearch[open] summary::before{content:'▾ '}
+.xs-bar{display:flex;gap:8px;padding:0 14px 12px;flex-wrap:wrap}
+.xs-bar input,.xs-bar select{font-size:13px;padding:6px 10px;border:1px solid #e2e7f0;
+  border-radius:7px;background:#fff;color:#33415e}
+.xs-bar input{flex:1;min-width:140px}
+.xsearch .listwrap{max-height:320px;overflow:auto;border-top:1px solid #eef2f8}
+.xsearch .banner{margin:0 14px 10px}

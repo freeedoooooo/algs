@@ -528,18 +528,36 @@ def run_batch(paths, params=None, log=None, run_ctx=None):
                 run_file_id=fc.get('run_file_id'),
                 source_file_id=fc.get('source_file_id'),
                 template={'name': tpl['name'], 'version': tpl['version']})
-            content.save_records(case_rel, rdoc)
-            fc['records_n'] = len(recs)
-            fc['state'] = 'previewed'
-            log.ok('collect', '暂存记录 {} 条（passthrough · 逐格血缘）→ {}'
-                   .format(len(recs), config.RECORDS_JSON), case=name)
-            if fc.get('run_file_id'):
-                db('set_run_file_state', fc['run_file_id'], 'previewed')
+            try:
+                content.save_records(case_rel, rdoc)
+            except Exception as e:
+                if config.RECORDS_STORE != 'db':
+                    raise
+                # D1：引擎层照常，暂存显式失败（不静默回落文件写）
+                fc['state'] = 'staging_failed'
+                log.error('collect', '暂存写入失败（D1 显式降级）：{}'.format(e),
+                          case=name)
+                if fc.get('run_file_id'):
+                    db('set_run_file_state', fc['run_file_id'],
+                       'staging_failed')
+            else:
+                fc['records_n'] = len(recs)
+                fc['state'] = 'previewed'
+                log.ok('collect', '暂存记录 {} 条（passthrough · 逐格血缘）→ {}'
+                       .format(len(recs), config.RECORDS_JSON), case=name)
+                if fc.get('run_file_id'):
+                    db('set_run_file_state', fc['run_file_id'], 'previewed')
             # 报告与 extract.json 同级，落在该 case 自己的 output 目录里
             report_mod.build([rec],
                              os.path.join(case_abs, config.EXTRACT_REPORT_NAME),
                              params=params)
             progress(int(i / total * 100))
+        any_failed = any(f.get('state') == 'staging_failed'
+                         for f in run_ctx['files'])
+        db('set_run_state', run_ctx.get('run_id'),
+           'partial' if any_failed else 'previewed')
+        _save_run_snapshot(run_ctx, 'previewed', content)
+        # 完成态最后发布：status 变 running=False 时 run.json 必已落盘
         with LOCK:
             STATE.update(running=False, ready=True,
                          cases=[{'file': r['file']['name'], 'case': r['case'],
@@ -550,19 +568,17 @@ def run_batch(paths, params=None, log=None, run_ctx=None):
                          elapsed=round(time.time()
                                        - (STATE['started'] or time.time()), 1),
                          progress=100, stage='done')
-        db('set_run_state', run_ctx.get('run_id'), 'previewed')
-        _save_run_snapshot(run_ctx, 'previewed', content)
         log.ok('done', '完成，共 {} 个文件，耗时 {}s'.format(
             len(records), STATE['elapsed']))
     except Exception as e:
         if log:
             log.error('error', '出错：' + str(e))
             log.error('error', traceback.format_exc(limit=3).strip())
+        db('set_run_state', run_ctx.get('run_id'), 'failed', str(e))
+        _save_run_snapshot(run_ctx, 'failed', content, error=str(e))
         with LOCK:
             STATE.update(running=False, ready=False, error=str(e),
                          stage='error')
-        db('set_run_state', run_ctx.get('run_id'), 'failed', str(e))
-        _save_run_snapshot(run_ctx, 'failed', content, error=str(e))
         print(traceback.format_exc(limit=3))
 
 
@@ -719,6 +735,21 @@ def api_run_staging(batch: str, file: str = None):
         return JSONResponse({'ok': False, 'error': 'records.json 不存在'},
                             status_code=404)
     return doc
+
+
+@app.get('/api/staging/query')
+def api_staging_query(field: str = None, q: str = None,
+                      batch: str = None, state: str = None):
+    """跨批暂存查询（选项 B）：DB 直查 field 投影；未启用 / DB down → 503。"""
+    if config.RECORDS_STORE != 'db':
+        return JSONResponse(
+            {'ok': False, 'error': '跨批查询需 CV_MVP_RECORDS_STORE=db'},
+            status_code=503)
+    try:
+        rows = _load('store.content_db').query_fields(field, q, batch, state)
+    except Exception as e:
+        return _db_unavailable(e)
+    return {'ok': True, 'items': rows}
 
 
 @app.post('/api/runs')

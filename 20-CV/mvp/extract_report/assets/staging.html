@@ -30,6 +30,28 @@
   </div>
   <div class="banner info">只读预览 · 提取出的记录（暂存事实源）。编辑 / 确认 / 拒绝在校验页 P1 开放。</div>
   <div class="banner err" id="err" hidden></div>
+  <details class="panel xsearch">
+    <summary>跨批搜索（暂存记录 · DB 直查）</summary>
+    <div class="xs-bar">
+      <input id="xs-field" placeholder="字段名（如 摘要）">
+      <input id="xs-q" placeholder="值关键词（如 报销）">
+      <select id="xs-state">
+        <option value="">全部状态</option>
+        <option value="pending">pending</option>
+        <option value="edited">edited</option>
+        <option value="confirmed">confirmed</option>
+      </select>
+      <button type="button" class="btn" id="xs-go">搜索</button>
+    </div>
+    <div class="banner err" id="xs-err" hidden></div>
+    <div class="listwrap">
+      <table class="list" id="xs-table" hidden>
+        <thead><tr><th>批次</th><th>文件</th><th>行</th><th>字段</th><th>值</th><th>状态</th><th></th></tr></thead>
+        <tbody id="xs-rows"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="xs-empty" hidden>无匹配记录</div>
+  </details>
   <div class="filetabs" id="filetabs" hidden></div>
   <div class="stgwrap">
     <div class="panel stgmain">

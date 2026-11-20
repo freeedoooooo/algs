@@ -41,10 +41,20 @@ def save_extract(case_rel, doc):
 
 
 def get_records(case_rel):
+    if config.RECORDS_STORE == 'db':
+        from . import content_db
+        try:
+            return content_db.get_records(case_rel)
+        except Exception:
+            pass  # D1：DB 故障只读降级，回落派生快照
     return _read(_path(case_rel, config.RECORDS_JSON))
 
 
 def save_records(case_rel, doc):
+    if config.RECORDS_STORE == 'db':
+        from . import content_db
+        content_db.save_records(case_rel, doc)
+        return
     atomic_write_json(_path(case_rel, config.RECORDS_JSON), doc)
 
 
@@ -59,6 +69,9 @@ def save_run(case_rel, doc):
 def patch_record(case_rel, file_index, index, values):
     """校验改值（P1 校验台用）：values 差量合并，original 永不覆盖，
     review.state=edited；整文件原子重写。返回 (ok, record_or_error)。"""
+    if config.RECORDS_STORE == 'db':
+        from . import content_db
+        return content_db.patch_record(case_rel, file_index, index, values)
     doc = get_records(case_rel)
     if not doc:
         return False, 'records.json 不存在'
