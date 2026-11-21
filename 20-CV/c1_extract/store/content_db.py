@@ -189,6 +189,10 @@ def patch_record(task_id, file_index, index, values):
                 return False, '记录下标越界'
             rid, vj = row
             vals = json.loads(vj)
+            unknown = set(values) - set(vals)
+            if unknown:
+                conn.rollback()
+                return False, '未知字段：{}'.format('、'.join(sorted(unknown)))
             vals.update(values)
             cur.execute(
                 'UPDATE extract_staging_record SET values_json=%s,'
@@ -209,6 +213,39 @@ def patch_record(task_id, file_index, index, values):
     rec = next((r for r in doc['files'][file_index]['records']
                 if r['index'] == index), None)
     return True, rec
+
+
+def set_review(task_id, file_index, indexes, state):
+    """批量确认/拒绝（P1 校验台）：单事务置 review_state/review_at。
+
+    state 仅 confirmed/rejected；original/lineage 不动。
+    返回 (ok, 更新条数或错误信息)。
+    """
+    if state not in ('confirmed', 'rejected'):
+        return False, '非法校验状态：{}'.format(state)
+    if not indexes:
+        return False, '未选择记录'
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            tfs = _task_files(cur, task_id)
+            if file_index >= len(tfs):
+                return False, '文件下标越界'
+            ph = ','.join(['%s'] * len(indexes))
+            cur.execute(
+                'UPDATE extract_staging_record SET review_state=%s,'
+                ' review_at=%s WHERE task_file_id=%s'
+                ' AND record_index IN ({})'.format(ph),
+                [state, datetime.strptime(_now(), _TS),
+                 tfs[file_index]['id']] + list(indexes))
+            n = cur.rowcount
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+    return True, n
 
 
 def query_fields(field=None, q=None, task=None, state=None, limit=200):

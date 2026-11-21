@@ -110,7 +110,7 @@ c1_extract/
 │   ├── migrations/            001_baseline.sql 单基线（schema_version 门禁，首连自动跑）
 │   ├── catalog.py             file(+content) / template / task / task_file / quarantine
 │   ├── content.py             内容门面（extract 经 artifact，records 直委托 content_db）
-│   ├── content_db.py          staging 三表：get/save/patch/query_fields
+│   ├── content_db.py          staging 三表：get/save/patch/set_review/query_fields
 │   ├── artifact.py            附件门面（kind/mime 推断）
 │   └── artifact_db.py         extract_artifact BLOB（键＝task_file_id，应用层级联删）
 ├── adapter/                   提取信封 → 模板记录的适配层（原始透传等）
@@ -141,6 +141,9 @@ c1_extract/
 - 原件字节进 `extract_file.content`（sha256 去重，重复上传不重复入库）。
 - 产物附件进 `extract_artifact`（键＝task_file_id + 相对名，LONGBLOB，应用层级联删）。
 - 暂存记录进 staging 三表（record / field / lineage，field 是查询投影）。
+- **校验台**（`/staging`，P1a）：双击格改值→edited，✓ 确认 / ✗ 拒绝（review_state），
+  状态筛选＋批量确认待审；改值格琥珀标记（title 显原值），original 永不覆盖；
+  loaded 任务只读（前端横幅＋后端 409）。无 task 参数时渲染任务选择器。
 - 提取期间的工作目录与输入副本都是 tempfile scratch（`tmp/input/in_*` / `tmp/work/case_*`），跑完即清。
 - URL 全用 id：`/staging?task=<task_id>&file=<task_file_id>`、`/files/<task_file_id>/<产物>`、
   `/srcfiles/<file_id>`。`GET /extract-report` 重定向到最新 task_file 的报告真实地址。

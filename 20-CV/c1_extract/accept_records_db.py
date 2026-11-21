@@ -5,8 +5,8 @@ design-task-schema.md：DB 唯一事实源，task_id / task_file_id 粒度，无
 前置：C1_EXTRACT_DB 已配置（env 或 data/secrets.json，用户配置的库）。
 用法（从 20-CV）：D:/miniforge3/envs/paddle/python.exe -u c1_extract/accept_records_db.py
 
-1 迁移门禁幂等+真实 task 投影往返一致 · 2 重跑级联替换（应用层）· 3 patch_record ·
-4 跨 task 查询 · 5 真链路（临时服务 8799）· 6 断库显式 503（临时服务 8797）。
+1 迁移门禁幂等+真实 task 投影往返一致 · 2 重跑级联替换（应用层）· 3 patch/set_review ·
+4 跨 task 查询 · 5 真链路（临时服务 8799，含 P1 校验路由冒烟）· 6 断库显式 503（临时服务 8797）。
 上传字节取自 extract_file.content；断库用不可达 DSN 的临时服务模拟，
 全程不触碰真实库的可用性。破坏性操作只落合成 task（验完按 id 清理，
 无外键：field/lineage/artifact 等子表须显式先删）；真实 task / file 只读。
@@ -50,11 +50,12 @@ def check(name, ok, detail=''):
         FAILS.append(name)
 
 
-def http(port, path, body=None, timeout=30):
+def http(port, path, body=None, timeout=30, method=None):
     req = urllib.request.Request(
         'http://127.0.0.1:{}{}'.format(port, path),
         data=json.dumps(body).encode() if body is not None else None,
-        headers={'Content-Type': 'application/json'})
+        headers={'Content-Type': 'application/json'},
+        method=method)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.status, json.loads(r.read().decode())
@@ -334,7 +335,8 @@ def _main(syn_tasks, syn_fids, up):
               '{} 条记录'.format(sum(len(f['records']) for f in doc['files'])))
         if src_real is None:
             for f in doc['files']:
-                if f['records']:
+                # 级联验收需 ≥2 条：单记录 task（如截图）会让 2→1→2 退化
+                if len(f['records']) >= 2:
                     src_real = f['records'][:2]
                     vals = src_real[0]['values']
                     field = next(iter(vals))
@@ -369,7 +371,7 @@ def _main(syn_tasks, syn_fids, up):
     check('无孤儿 field/lineage/record（反查=0）', orph == (0, 0, 0),
           'field/lineage/record 悬空={}'.format(orph))
 
-    print('[3/6] patch_record 语义')
+    print('[3/6] patch_record / set_review 语义')
     ok, rec = content.patch_record(task2, 0, 0, {field: 'ACCEPT_EDIT'})
     back = content_db.get_records(task2)['files'][0]['records'][0]
     check('edited+original 不变+DB 读回一致',
@@ -378,6 +380,17 @@ def _main(syn_tasks, syn_fids, up):
           and rec['values'][field] == 'ACCEPT_EDIT'
           and back['values'][field] == 'ACCEPT_EDIT'
           and back['review']['state'] == 'edited')
+    ok2, n2r = content.set_review(task2, 0, [0], 'confirmed')
+    back = content_db.get_records(task2)['files'][0]['records'][0]
+    check('set_review confirmed', ok2 and n2r == 1
+          and back['review']['state'] == 'confirmed')
+    ok3, n3r = content.set_review(task2, 0, [0], 'rejected')
+    back = content_db.get_records(task2)['files'][0]['records'][0]
+    hitr = content_db.query_fields(task=task2, state='rejected')
+    check('set_review rejected + 状态查询命中', ok3 and n3r == 1
+          and back['review']['state'] == 'rejected' and len(hitr) > 0)
+    bad, err = content.patch_record(task2, 0, 0, {'不存在的字段': 'x'})
+    check('patch 未知键拒绝', not bad and '未知字段' in str(err), str(err))
 
     print('[4/6] 跨 task 查询')
     hit = content_db.query_fields(field=field, q='ACCEPT_EDIT')
@@ -412,6 +425,30 @@ def _main(syn_tasks, syn_fids, up):
                        urllib.request.quote(real_kw))
         check('查询 API 200', stq == 200 and jq.get('ok')
               and len(jq.get('items', [])) > 0)
+        # P1 校验台路由冒烟：PATCH 改值 → 未知键 400 → POST 确认 → loaded 409
+        stq, jq = http(8799, '/api/tasks/{}/staging'.format(task_id))
+        r0 = jq['files'][0]['records'][0]
+        k0 = next(iter(r0['values']))
+        stp, jp = http(8799, '/api/tasks/{}/staging/{}/{}'.format(
+            task_id, tf_id, r0['index']),
+            {'values': {k0: 'ACCEPT_P1'}}, method='PATCH')
+        check('PATCH 改值→edited', stp == 200 and jp.get('ok')
+              and jp['record']['values'][k0] == 'ACCEPT_P1'
+              and jp['record']['review']['state'] == 'edited')
+        stb, _jb = http(8799, '/api/tasks/{}/staging/{}/{}'.format(
+            task_id, tf_id, r0['index']),
+            {'values': {'不存在的字段': 'x'}}, method='PATCH')
+        check('PATCH 未知键 400', stb == 400)
+        stv, jv = http(8799, '/api/tasks/{}/staging/{}/review'.format(
+            task_id, tf_id),
+            {'indexes': [r0['index']], 'state': 'confirmed'})
+        check('POST review confirmed', stv == 200 and jv.get('updated') == 1)
+        catalog.set_task_state(task_id, 'loaded')
+        stl, _jl = http(8799, '/api/tasks/{}/staging/{}/review'.format(
+            task_id, tf_id),
+            {'indexes': [r0['index']], 'state': 'rejected'})
+        check('loaded 写操作 409', stl == 409)
+        catalog.set_task_state(task_id, 'previewed')
     finally:
         svc.kill()
 

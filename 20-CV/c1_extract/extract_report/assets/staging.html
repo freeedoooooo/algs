@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>数据预览 · 结构化平台</title>
+<title>校验台 · 结构化平台</title>
 <link rel="stylesheet" href="/static/shell.css">
 <link rel="stylesheet" href="/static/staging.css">
 </head>
@@ -12,24 +12,31 @@
   <span class="brand">结构化平台</span>
   <a href="/">提取</a>
   <a href="/sources">资料</a>
-  <a class="off" title="P1 开放">模板</a>
-  <a class="off" title="P1 开放">校验</a>
+  <a class="off" title="P1b 开放">模板</a>
+  <a href="/staging" class="on">校验</a>
   <a class="off" title="P2 开放">入库</a>
-  <a href="/tasks" class="on">记录</a>
+  <a href="/tasks">记录</a>
   <span class="spacer"></span>
-  <span class="navnote">P0 · 预览链路</span>
+  <span class="navnote">P1 · 校验台</span>
 </nav>
 <div class="pagebody wide">
   <div class="pagehead">
-    <h1>数据预览</h1>
+    <h1>校验台</h1>
     <span class="mono" id="tasktag"></span>
     <span id="tplbadge"></span>
     <span class="spacer"></span>
     <span id="filelinks"></span>
     <a class="btn ghost mini" id="tasklink" href="/tasks">返回记录</a>
   </div>
-  <div class="banner info">只读预览 · 提取出的记录（暂存事实源）。编辑 / 确认 / 拒绝在校验页 P1 开放。</div>
+  <div class="banner info" id="modebanner">双击单元格改值（自动转已修改）· ✓ 确认 · ✗ 拒绝 · 单击/悬停血缘回溯不变</div>
   <div class="banner err" id="err" hidden></div>
+  <div class="panel" id="taskpick" hidden>
+    <div class="pickbar">
+      <b>选择要校验的任务</b>
+      <select id="picksel"><option value="">加载中…</option></select>
+      <span class="hint">也可从「记录」页的任务抽屉进入</span>
+    </div>
+  </div>
   <details class="panel xsearch">
     <summary>跨任务搜索（暂存记录 · DB 直查）</summary>
     <div class="xs-bar">
@@ -40,6 +47,7 @@
         <option value="pending">pending</option>
         <option value="edited">edited</option>
         <option value="confirmed">confirmed</option>
+        <option value="rejected">rejected</option>
       </select>
       <button type="button" class="btn" id="xs-go">搜索</button>
     </div>
@@ -53,6 +61,11 @@
     <div class="empty" id="xs-empty" hidden>无匹配记录</div>
   </details>
   <div class="filetabs" id="filetabs" hidden></div>
+  <div class="reviewbar" id="reviewbar" hidden>
+    <div class="chips" id="chips"></div>
+    <span class="spacer"></span>
+    <button type="button" class="btn mini" id="bulk-confirm">确认全部待审 (0)</button>
+  </div>
   <div class="stgwrap">
     <div class="panel stgmain">
       <table class="list" id="rectable">

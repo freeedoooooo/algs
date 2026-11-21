@@ -720,6 +720,89 @@ def api_staging_query(field: str = None, q: str = None,
     return {'ok': True, 'items': rows}
 
 
+def _review_target(task_id, task_file_id):
+    """校验台写操作公共守卫：返回 (file_index, 错误响应)。
+
+    task 不存在 / 文件不属于 task → 404；已入库 → 409（P2 前置守卫）。
+    files 序与 content_db._task_files 的 ORDER BY tf.id 一致。
+    """
+    try:
+        t = _load('store.catalog').get_task(task_id)
+    except Exception as e:
+        return None, _db_unavailable(e)
+    if t is None:
+        return None, JSONResponse({'ok': False, 'error': '任务不存在'},
+                                  status_code=404)
+    if t['state'] == 'loaded':
+        return None, JSONResponse(
+            {'ok': False, 'error': '任务已入库，记录只读'}, status_code=409)
+    fi = next((i for i, f in enumerate(t['files'])
+               if f['task_file_id'] == task_file_id), None)
+    if fi is None:
+        return None, JSONResponse(
+            {'ok': False, 'error': '文件不属于该任务'}, status_code=404)
+    return fi, None
+
+
+@app.patch('/api/tasks/{task_id}/staging/{task_file_id}/{index}')
+async def api_staging_patch(task_id: int, task_file_id: int, index: int,
+                            request: Request):
+    """校验改值：values 差量合并→edited，original 永不覆盖。"""
+    fi, err = _review_target(task_id, task_file_id)
+    if err:
+        return err
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({'ok': False, 'error': '请求体不是合法 JSON'},
+                            status_code=400)
+    values = body.get('values')
+    if not isinstance(values, dict) or not values:
+        return JSONResponse({'ok': False, 'error': 'values 须为非空对象'},
+                            status_code=400)
+    try:
+        ok, rec = _load('store.content').patch_record(
+            task_id, fi, index, values)
+    except Exception as e:
+        return _db_unavailable(e)
+    if not ok:
+        code = 404 if '越界' in rec else 400
+        return JSONResponse({'ok': False, 'error': rec}, status_code=code)
+    return {'ok': True, 'record': rec}
+
+
+@app.post('/api/tasks/{task_id}/staging/{task_file_id}/review')
+async def api_staging_review(task_id: int, task_file_id: int,
+                             request: Request):
+    """批量确认/拒绝：indexes（记录内下标）＋ state。"""
+    fi, err = _review_target(task_id, task_file_id)
+    if err:
+        return err
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({'ok': False, 'error': '请求体不是合法 JSON'},
+                            status_code=400)
+    indexes = body.get('indexes')
+    state = body.get('state')
+    if not isinstance(indexes, list) or not indexes \
+            or not all(isinstance(i, int) for i in indexes):
+        return JSONResponse(
+            {'ok': False, 'error': 'indexes 须为非空整数数组'},
+            status_code=400)
+    if state not in ('confirmed', 'rejected'):
+        return JSONResponse(
+            {'ok': False, 'error': 'state 仅支持 confirmed/rejected'},
+            status_code=400)
+    try:
+        ok, n = _load('store.content').set_review(task_id, fi, indexes, state)
+    except Exception as e:
+        return _db_unavailable(e)
+    if not ok:
+        return JSONResponse({'ok': False, 'error': n}, status_code=400)
+    return {'ok': True, 'updated': n}
+
+
 @app.post('/api/tasks')
 async def api_tasks_create(request: Request):
     """从资料库选文件发起任务（复用上传编排；字节直读 extract_file.content）。"""

@@ -1,11 +1,12 @@
-/* extract_report/assets/staging.js — 数据预览：DB 暂存记录表 + 源图血缘回溯。
-   右侧舞台忠实复刻对照报告（report.js 舞台逻辑移植）：默认零框，悬停/点击揭示单格，
-   点图走 hitCell 命中测试可定位任意记录行/格（不限选中行），窗口式翻页、原图/矫正图
-   切换、叠加框开关、光标跟随提示、全屏浮层。匹配键用 data-i（记录序）/data-key（字段）。
+/* extract_report/assets/staging.js — 校验台（P1）：DB 暂存记录表 + 编辑/确认/拒绝
+   + 源图血缘回溯。右侧舞台忠实复刻对照报告（report.js 舞台逻辑移植）：默认零框，
+   悬停/点击揭示单格，点图走 hitCell 命中测试可定位任意记录行/格（不限选中行），
+   窗口式翻页、原图/矫正图切换、叠加框开关、光标跟随提示、全屏浮层。
+   匹配键用 data-i（记录序）/data-key（字段）。单击=血缘钉住，双击=改值（P1）。
    数据经 /api/tasks/<id>/staging|extract 读 DB；图片经 /files/<task_file_id>/…。 */
 var task=new URLSearchParams(location.search).get('task')||'';
 var curFile=new URLSearchParams(location.search).get('file')||'';
-var taskDoc=null, records=[], keys=[], selIdx=-1, selKey=null;
+var taskDoc=null, records=[], keys=[], selIdx=-1, selKey=null, stateFilter='';
 var pageMap={}, allAnchors=[], pagesPresent=[], curPage=null, curView=null, allOn=false;
 
 function showErr(t){
@@ -45,23 +46,60 @@ function collectKeys(){
   });
   return out;
 }
+function readOnly(){ return !!(taskDoc&&taskDoc.state==='loaded'); }
+function recState(r){ return (r.review||{}).state||'pending'; }
 function renderTable(){
   keys=collectKeys();
+  var ro=readOnly();
   document.getElementById('rechead').innerHTML='<tr><th>#</th>'+
     keys.map(function(k){return '<th>'+escHtml(k)+'</th>';}).join('')+
-    '<th>状态</th></tr>';
+    '<th>状态</th>'+(ro?'':'<th>操作</th>')+'</tr>';
+  var shown=0;
   document.getElementById('recrows').innerHTML=records.map(function(r,i){
+    var st=recState(r);
+    if(stateFilter&&st!==stateFilter) return '';
+    shown++;
+    var orig=r.original||{};
     return '<tr data-i="'+i+'"><td class="idx">'+(r.index==null?i:r.index)+'</td>'+
       keys.map(function(k){
         var v=(r.values||{})[k];
-        return '<td class="cell" data-i="'+i+'" data-key="'+escHtml(k)+'" title="'+
-          escHtml(v)+'">'+escHtml(v==null?'':v)+'</td>';
+        var ed=orig[k]!==undefined&&
+          String(v==null?'':v)!==String(orig[k]==null?'':orig[k]);
+        var tip=ed?('原值：'+orig[k]+'\n现值：'+(v==null?'':v)):(v==null?'':v);
+        return '<td class="cell'+(ed?' edited':'')+'" data-i="'+i+'" data-key="'+
+          escHtml(k)+'" title="'+escHtml(tip)+'">'+escHtml(v==null?'':v)+'</td>';
       }).join('')+
-      '<td>'+stateBadge((r.review||{}).state||'pending')+'</td></tr>';
+      '<td>'+stateBadge(st)+'</td>'+
+      (ro?'':'<td class="acts">'+
+        (st==='confirmed'?'':'<button type="button" class="rowbtn ok" data-act="confirmed" data-i="'+i+'" title="确认">✓</button>')+
+        (st==='rejected'?'':'<button type="button" class="rowbtn no" data-act="rejected" data-i="'+i+'" title="拒绝">✗</button>')+
+      '</td>')+'</tr>';
   }).join('');
   document.getElementById('empty').hidden=records.length>0;
   document.getElementById('summary').textContent=
-    '共 '+records.length+' 条记录 · '+keys.length+' 个字段 · 点图定位记录，点行/格高亮回溯框';
+    '共 '+records.length+' 条记录 · '+keys.length+' 个字段'+
+    (stateFilter?(' · 筛选后 '+shown+' 条'):'')+
+    ' · 点图定位记录，点行/格高亮回溯框'+(ro?'':'，双击格改值');
+  renderChips();
+}
+function renderChips(){
+  var bar=document.getElementById('reviewbar');
+  bar.hidden=!records.length;
+  if(!records.length) return;
+  var counts={pending:0,edited:0,confirmed:0,rejected:0};
+  records.forEach(function(r){
+    var s=recState(r); if(counts[s]!=null) counts[s]++;
+  });
+  var defs=[['','全部',records.length],['pending','待校验',counts.pending],
+            ['edited','已修改',counts.edited],['confirmed','已确认',counts.confirmed],
+            ['rejected','已拒绝',counts.rejected]];
+  document.getElementById('chips').innerHTML=defs.map(function(d){
+    return '<button type="button" class="chip'+(stateFilter===d[0]?' on':'')+
+      '" data-state="'+d[0]+'">'+d[1]+' '+d[2]+'</button>';
+  }).join('');
+  var n=counts.pending+counts.edited, bb=document.getElementById('bulk-confirm');
+  bb.textContent='确认全部待审 ('+n+')';
+  bb.disabled=!n||readOnly();
 }
 
 /* ---- 右侧：源图舞台（复刻对照报告） ---- */
@@ -277,6 +315,9 @@ function hideLineage(){
 /* ---- 事件委托（容器静态、内容动态重建，委托 survive rebuild） ---- */
 /* 左侧表：点格钉住字段；点行选中整行；悬停双向高亮 */
 document.getElementById('recrows').addEventListener('click',function(e){
+  var b=e.target.closest?e.target.closest('button[data-act]'):null;
+  if(b){ e.stopPropagation();
+    reviewRows([+b.getAttribute('data-i')],b.getAttribute('data-act')); return; }
   var td=e.target.closest?e.target.closest('td.cell'):null;
   if(td){ pinField(td.getAttribute('data-key'),+td.getAttribute('data-i')); return; }
   var tr=e.target.closest?e.target.closest('tr[data-i]'):null;
@@ -289,6 +330,82 @@ document.getElementById('recrows').addEventListener('mouseover',function(e){
 document.getElementById('recrows').addEventListener('mouseout',function(e){
   var td=e.target.closest?e.target.closest('td.cell'):null;
   if(td) hoverCell(+td.getAttribute('data-i'),td.getAttribute('data-key'),false);
+});
+
+/* ---- P1 校验：双击改值 / ✓✗ / 筛选 / 批量确认 ---- */
+document.getElementById('recrows').addEventListener('dblclick',function(e){
+  if(readOnly()) return;
+  var td=e.target.closest?e.target.closest('td.cell'):null;
+  if(!td||td.querySelector('input')) return;
+  startEdit(td);
+});
+function startEdit(td){
+  var i=+td.getAttribute('data-i'),key=td.getAttribute('data-key');
+  var r=records[i]; if(!r) return;
+  var old=(r.values||{})[key]; old=old==null?'':String(old);
+  var inp=document.createElement('input');
+  inp.className='celledit'; inp.value=old;
+  td.textContent=''; td.appendChild(inp); inp.focus(); inp.select();
+  var done=false;
+  function finish(commit){
+    if(done) return; done=true;
+    if(commit&&inp.value!==old) patchCell(i,key,inp.value);
+    else{ renderTable(); applySelection(); }
+  }
+  inp.addEventListener('keydown',function(ev){
+    ev.stopPropagation();
+    if(ev.key==='Enter'){ ev.preventDefault(); finish(true); }
+    else if(ev.key==='Escape'){ ev.preventDefault(); finish(false); }
+  });
+  inp.addEventListener('blur',function(){ finish(true); });
+  inp.addEventListener('click',function(ev){ ev.stopPropagation(); });
+}
+function reviewBase(){
+  return '/api/tasks/'+encodeURIComponent(task)+'/staging/'+encodeURIComponent(curFile);
+}
+function patchCell(i,key,val){
+  var body={values:{}}; body.values[key]=val;
+  var idx=records[i].index==null?i:records[i].index;
+  fetch(reviewBase()+'/'+idx,{method:'PATCH',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
+  }).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j};});})
+  .then(function(o){
+    if(!o.ok||!o.j.ok) toast('保存失败：'+((o.j&&o.j.error)||''));
+    else{ records[i]=o.j.record; toast('已保存 · 转为已修改，须重新确认'); }
+    renderTable(); applySelection();
+  }).catch(function(e){ toast('保存失败：'+e); renderTable(); applySelection(); });
+}
+function reviewRows(idxs,state){
+  var indexes=idxs.map(function(i){
+    return records[i].index==null?i:records[i].index;
+  });
+  fetch(reviewBase()+'/review',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({indexes:indexes,state:state})
+  }).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j};});})
+  .then(function(o){
+    if(!o.ok||!o.j.ok){ toast('操作失败：'+((o.j&&o.j.error)||'')); return; }
+    idxs.forEach(function(i){
+      records[i].review={state:state,at:(records[i].review||{}).at};
+    });
+    renderTable(); applySelection();
+    toast((state==='confirmed'?'已确认 ':'已拒绝 ')+o.j.updated+' 条');
+  }).catch(function(e){ toast('操作失败：'+e); });
+}
+document.getElementById('chips').addEventListener('click',function(e){
+  var c=e.target.closest?e.target.closest('.chip'):null;
+  if(!c) return;
+  stateFilter=c.getAttribute('data-state');
+  renderTable(); applySelection();
+});
+document.getElementById('bulk-confirm').addEventListener('click',function(){
+  var idxs=[];
+  records.forEach(function(r,i){
+    var s=recState(r); if(s==='pending'||s==='edited') idxs.push(i);
+  });
+  if(!idxs.length||readOnly()) return;
+  if(!confirm('确认当前文件全部待审记录（'+idxs.length+' 条）？\n含已修改但未确认的记录。')) return;
+  reviewRows(idxs,'confirmed');
 });
 /* 右侧图框：可见态（悬停/钉住/整表网格）才可交互；悬停同步高亮，点击定位左侧 */
 document.getElementById('views').addEventListener('mouseover',function(e){
@@ -577,6 +694,14 @@ var closeLb=function(){};
 /* ---- 加载 ---- */
 function loadStaging(){
   document.getElementById('err').hidden=true;
+  var mb=document.getElementById('modebanner');
+  if(readOnly()){
+    mb.className='banner warn';
+    mb.textContent='任务已入库 · 记录只读（改值 / 确认 / 拒绝已锁定）';
+  }else{
+    mb.className='banner info';
+    mb.textContent='双击单元格改值（自动转已修改）· ✓ 确认 · ✗ 拒绝 · 单击/悬停血缘回溯不变';
+  }
   var u='/api/tasks/'+encodeURIComponent(task)+'/staging'+
     (curFile?('?file='+encodeURIComponent(curFile)):'');
   var eu='/api/tasks/'+encodeURIComponent(task)+'/extract'+
@@ -611,7 +736,22 @@ function loadStaging(){
 document.getElementById('tasktag').textContent=task?('任务 #'+task):'（未指定任务）';
 document.getElementById('tasklink').href=task?('/tasks?task='+encodeURIComponent(task)):'/tasks';
 if(!task){
-  showErr('缺少任务参数。请从记录详情或提取完成提示进入。');
+  /* 无任务参数：校验台独立入口，渲染任务选择器（/api/tasks 新任务在前） */
+  document.getElementById('modebanner').hidden=true;
+  document.getElementById('taskpick').hidden=false;
+  fetch('/api/tasks').then(function(r){return r.json();}).then(function(j){
+    var sel=document.getElementById('picksel'), items=j.items||[];
+    if(!items.length){ sel.innerHTML='<option value="">暂无任务</option>'; return; }
+    sel.innerHTML='<option value="">请选择…</option>'+items.map(function(t){
+      var tpl=t.template||{};
+      return '<option value="'+t.task_id+'">#'+t.task_id+' · '+
+        escHtml(tpl.name||'')+' v'+(tpl.version||1)+' · '+
+        ((STATE_LABEL[t.state]||[t.state||'—'])[0])+' · '+(t.files||[]).length+' 文件</option>';
+    }).join('');
+    sel.addEventListener('change',function(){
+      if(sel.value) location.href='/staging?task='+encodeURIComponent(sel.value);
+    });
+  }).catch(function(e){ showErr('读取任务列表失败：'+e.message); });
 }else{
   fetch('/api/tasks/'+encodeURIComponent(task)).then(function(r){
     if(!r.ok) throw new Error('任务不存在');

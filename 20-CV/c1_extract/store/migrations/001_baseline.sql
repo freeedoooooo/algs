@@ -114,7 +114,7 @@ CREATE TABLE IF NOT EXISTS extract_staging_record (
   id            BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '暂存记录 ID',
   task_file_id  BIGINT NOT NULL COMMENT '所属任务文件 ID（引用 extract_task_file.id，应用层维护）',
   record_index  INT NOT NULL COMMENT '记录在文件内下标（引用键的一半）',
-  review_state  VARCHAR(16) NOT NULL DEFAULT 'pending' COMMENT '校验状态：pending/edited/confirmed',
+  review_state  VARCHAR(16) NOT NULL DEFAULT 'pending' COMMENT '校验状态：pending/edited/confirmed/rejected',
   review_at     DATETIME NULL COMMENT '校验时间（UTC）',
   values_json   MEDIUMTEXT NOT NULL COMMENT '当前值全保真 body（API 重建用）',
   original_json MEDIUMTEXT NOT NULL COMMENT '提取原值，永不覆盖',

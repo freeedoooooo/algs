@@ -32,10 +32,37 @@ run / run_file / source_file / 001-006 等旧命名仅存档意义，**当前代
   `pip install "paddlex[ocr]==3.7.2"` 补齐 13 缺失包，requirements.txt 同步改
   `paddlex[ocr]`；paddlepaddle/numpy/opencv-contrib 锁版本零变动。
   **运行中的 8765 进程须重启才生效**（deps.is_dep_available 有 lru_cache，
-  旧进程缓存了「缺包」判定）。
-- **git 历史凭据警告**：secrets.json 与 pre_005/pre_006 备份曾被 git 跟踪
-  （含 DB 密码与真实流水），已 `git rm --cached` + .gitignore 排除，但**历史仍在**；
-  仓库若公开应轮换凭据并清历史（filter-repo）。
+  旧进程缓存了「缺包」判定）——当日已获授权重启并 Web 验证（task 57，合成已清）。
+- **git 历史凭据**：secrets.json 与 pre_005/pre_006 备份曾在 git 历史（已推到公开仓库
+  origin/feat-extract-pipeline）。**用户裁决（2026-11-21）：DB 密钥无所谓，不清历史、
+  不轮换**——此事项关闭，不再提醒。
+
+---
+
+## 〇.5、P1a 校验台（2026-11-22，已完成；下一步 P1b）
+
+设计稿 [design-p1-review.md](design-p1-review.md)（已批准并实现）。用户裁决：
+P1a 先做；拒绝＝`review_state='rejected'`（不进 quarantine，隔离表只管引擎级失败）；
+P1b 模板消费＝选择器＋重命名（transform 留 P2）。
+
+- staging 页原地升级校验台（不另起页，血缘舞台整套复用）：双击改值（PATCH→edited）、
+  ✓ 确认 / ✗ 拒绝（POST review 批量）、状态筛选 chips＋批量确认待审（仅当前文件
+  pending+edited）、改值格琥珀标记（title 显原值）、loaded 只读（横幅＋409）、
+  无 task 参数渲染任务选择器；各页 nav「校验」启用。
+- 新路由：`PATCH /api/tasks/{id}/staging/{tf}/{index}`、
+  `POST /api/tasks/{id}/staging/{tf}/review`；store 加 `set_review`，
+  `patch_record` 拒未知键。**零 DDL**（VARCHAR 无枚举约束；baseline 注释补
+  rejected，线上库注释未动——装饰性，不 ALTER 共享库）。
+- 验收：两套脚本顺序跑各 **6/6 PASS**；浏览器金路径全过（8799 临时服务＋合成
+  task，验完清净）。修了一处测试数据依赖：[1/6] src_real 改要求 ≥2 条记录
+  （用户新增单记录 task 53–56 居 DESC 首位会让 2→1→2 级联退化 1→1→1）。
+- **当前库态**：task 21/30/41/42/51–56（51/52 failed＝修复前依赖错误；
+  53–56＝用户截图 jpg previewed）；file 3/19/26/33；records 126 / field 1819 /
+  lineage 1819 / artifact 90。合成数据全清，用户数据零变动。
+- **8765 已跑 P1a 代码**：用户 2026-11-21 13:31 自行以 `python app.py` 重启
+  （PID 19696，取代 agent 上轮的 uvicorn 后台进程）；PATCH 路由探针证实新代码在跑。
+- 下一步 **P1b**：模板管理页（CRUD＋版本）＋ collect 选择器/重命名——模板三段
+  JSON 现存而无人消费（collect.py 仍 P0 透传），管理页与消费须同轮做。
 
 ---
 
@@ -89,7 +116,7 @@ run / run_file / source_file / 001-006 等旧命名仅存档意义，**当前代
 - **108 案例**：首行 / 错字问题挂起（见项目记忆 mvp-deferred-todos）。
 - **曾问未立项**：Word 输出、双层 PDF 导出、漏提覆盖视图（11-20 问过，未立项）。
 - **环境**：torch 残装 `shm.dll WinError127`（实为 paddle↔torch 加载顺序冲突，11-20 已修 check_env，torch 不能卸）。
-- **P1**：模板管理页 / 校验台（编辑/确认/拒绝，staging 已留 review_state）；**P2**：入库模式。
+- **P1a 校验台已完成**（2026-11-22，见 §〇.5）；**P1b**：模板管理页＋collect 选择器/重命名；**P2**：入库模式。
 - 快照简化决策已被 C1 吞并（run.json 退役、records 三表为事实源、export 按需导出）。
 
 ---
@@ -122,5 +149,5 @@ run / run_file / source_file / 001-006 等旧命名仅存档意义，**当前代
 2. 建议事项：① 用户 8765 方便时再重启一次（载入 `_rmtree_retry` scratch 修复，
    当前进程启动早于该修复落盘）；② 图片路线 paddlex[ocr] 依赖缺口（见 §〇）；
    ③ git 历史凭据清理（见 §〇）。
-3. 新需求从 P1 校验台 / 模板管理页起步（staging review_state 与 quarantine 表已就位）。
+3. 新需求从 P1b 模板管理＋collect 消费起步（P1a 校验台已落地，见 §〇.5）。
 4. 其余沿用 §二挂起项。
