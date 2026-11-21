@@ -409,6 +409,51 @@ P1b 模板消费＝选择器＋重命名（transform 留 P2）。
 
 ---
 
+## 〇.14、B 结构清理轮（2026-11-21，已完成；零功能变更）
+
+用户质疑「工程代码与业务模型没有对应、前端全在 extract_report」→ 诊断两个真实
+坏味道：catalog.py 935 行上帝模块（7 域混杂）＋extract_report 历史名误导（页面
+资产混在报告生成器里）。给 A（垂直功能模块，更彻底/业内现代趋势）vs B（保层
+结构清理，推荐）；用户裁决「先按照 B 搞…先保证功能啥的不受影响」。**A/混合
+（共享核心＋域分组）留作未来轮，设计先行**。
+
+1. **catalog.py → store/catalog/ 包**（按域拆）：files.py（6 函数）/templates.py
+   （10）/tasks.py（10 含 quarantine）/load.py（18）＋_common.py（_rows/_j）。
+   `__init__.py` 全量重导出 37 个公开函数＝**包门面**，~60 处调用
+   （`catalog.xxx()`/`from . import catalog`）零改动——非兼容 shim，标准做法。
+   **AST 逐字验证**：删旧文件前对 45 个函数（含私有映射到子模块）逐一
+   ast.dump 对比，零差异；旧 catalog.py＋陈旧 pyc 已删。
+2. **前端资产 extract_report/assets → web/**（25 文件平铺）：六页
+   （upload/sources/templates/staging/load/tasks）＋shell＋共享 hint.css/js
+   （上传页＋报告）＋stage.css/js（校验台＋报告）＋报告专用 report.css/js＋
+   lightbox.html。HTML 引用全是绝对路径 `/static/<file>` → **HTML 零改动**；
+   仅 config（ASSETS_DIR→WEB_DIR）/app（mount＋asset()）/builder._asset/
+   check_env 四处路径常量改。extract_report 缩为纯报告生成器
+   （builder/cards/templates），**内联耦合保留**（套件 B item5 导出字节级
+   一致＋file:// 报告自包含渲染证明）。18 个文件头路径注释同步。
+3. **docs/feature-map.md**（新）：目录树＋页面→路由→引擎函数→store→表→
+   前端文件映射表（7 行含报告）＋web/ 资产归属（页面私有/页面共享/报告专用
+   内联）＋表名→模块反查＋命令表＋跨功能共享件（STATE/LOCK、conn_ref vs
+   connect_direct、errors→HTTP）。README 树同步。
+4. **验证**：36 单测 OK；两套验收顺序 **7/7＋6/6 全 PASS**（基线守恒
+   135/1867/1867＋98/14870953；item7 P2b 全链；导出字节级一致；断库 503×5）；
+   浏览器 8799 六页 200＋真实数据（upload 10 控件 16 hints/sources 5/templates
+   默认空模板/staging 台账 19 行/load 数据源列表＋抽屉回填＋0 映射无锁/tasks
+   11 基线 ids）＋报告 BLOB 自包含渲染＋控制台零错。8799/8797 free、tmp 空、
+   scratch 已删。
+5. **发现（待用户答复，未动）**：extract_load_datasource 多一行
+   **(2,'产品库2')**，与产品库同 host/port/db（10.0.6.161:3306/co_dev），
+   **两行 created_at 同为迁移秒 2026-11-21 20:12:40**；load_tables 0、无任务
+   引用。早于本轮套件（纯代码移动不写库），疑迁移脚本重复插入或用户在 DB
+   GUI 复制行。基线是守恒式对比故套件 PASS 不受影响。**未经批准不删**；
+   「datasources=1」旧基线预期已过期，现＝2。
+- **8765**：须用户再重启一次载入本轮（web/ 静态挂载＋catalog 包）。累计未重启
+  载入：A 轮错误分类＋台账任务级＋B 拆分＋P1b＋P2＋P2b＋**B 结构清理轮**。
+  重启前旧进程 /static 挂载的 extract_report/assets 已移走 → 静态 404
+  （页面样式/脚本缺失）。
+
+---
+
 ## 一、C1 已完成（已验证）
 
 用户 5 项演进（2026-11-20 提出，全部批准落地）：
@@ -490,14 +535,17 @@ P1b 模板消费＝选择器＋重命名（transform 留 P2）。
 
 1. C1 存储演进＋任务化命名/去外键＋P1a 校验台＋小重构轮（A/B）＋UI 打磨轮
    ＋任务级台账/报告打磨/B 编排拆分轮＋校验台两处打磨轮＋三页紧凑规整统一轮
-   ＋P1b 模板管理＋collect 选择器消费轮＋P2 入库模式轮＋**P2b 入库数据源重构轮**
-   均已完成：代码＋验收＋浏览器＋文档全部收尾（见 §〇.6–§〇.13）。
+   ＋P1b 模板管理＋collect 选择器消费轮＋P2 入库模式轮＋P2b 入库数据源重构轮
+   ＋**B 结构清理轮（catalog 按域拆包＋web/ 资产迁移＋feature-map）**
+   均已完成：代码＋验收＋浏览器＋文档全部收尾（见 §〇.6–§〇.14）。
 2. 建议事项：**用户 8765 重启一次**——载入 A 轮错误分类＋台账任务级形状
    /api/staging/ledger＋B 拆分（app.py 路由 / service.py 引擎）＋P1b（模板 CRUD
    路由＋/templates 页＋collect 消费）＋P2（load 路由＋入库按钮＋回执抽屉）＋
-   **P2b（数据源/映射新路由＋/load 左右页＋upload 新契约键）**。重启前校验入口
-   台账报读取失败、nav「模板」「入库」404 或旧页、选模板不生效、上传页入库模式
-   报 400（旧契约键）；其余页面正常。
+   P2b（数据源/映射新路由＋/load 左右页＋upload 新契约键）＋**B 结构清理
+   （web/ 静态挂载＋catalog 包）**。重启前校验入口台账报读取失败、nav「模板」
+   「入库」404 或旧页、选模板不生效、上传页入库模式报 400（旧契约键）、
+   **/static 404（资产已迁 web/，页面样式脚本缺失）**；其余页面正常。
+   另：**「产品库2」数据源行来源待用户确认**（§〇.14.5，未动不删）。
 3. 新需求候选（设计先行，用户确认后执行）：**B 轮审计平台化**（reviewer 身份首补，
    load_log 记「谁入的库」）／隔离区解决 UI／多表 union／引擎升级研究
    （Docling vs MinerU，未立项）。对外文案用「字段级溯源/审计追溯」，
