@@ -144,7 +144,8 @@ c1_extract/
 - 暂存记录进 staging 三表（record / field / lineage，field 是查询投影）。
 - **校验台**（`/staging`，P1a）：双击格改值→edited，✓ 确认 / ✗ 拒绝（review_state），
   状态筛选＋批量确认待审；改值格琥珀标记（title 显原值），original 永不覆盖；
-  loaded 任务只读（前端横幅＋后端 409）。无 task 参数时渲染任务选择器。
+  loaded 任务只读（前端横幅＋后端 409）。无 task 参数时渲染**文件级校验台账**
+  （`/api/staging/ledger`：每文件记录数＋待校验/已修改/已确认/已拒绝计数，点行进入）。
 - 提取期间的工作目录与输入副本都是 tempfile scratch（`tmp/input/in_*` / `tmp/work/case_*`），跑完即清。
 - URL 全用 id：`/staging?task=<task_id>&file=<task_file_id>`、`/files/<task_file_id>/<产物>`、
   `/srcfiles/<file_id>`。`GET /extract-report` 重定向到最新 task_file 的报告真实地址。

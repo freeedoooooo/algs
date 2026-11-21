@@ -187,6 +187,20 @@ body.picking .lbwrap img{cursor:crosshair}
   border:1px solid #d8e0ed;background:#f7f9fd;color:#5a6a85;transition:.15s}
 .ftab:hover{border-color:#2563eb;color:#2563eb}
 .ftab.on{background:#2563eb;border-color:#2563eb;color:#fff}
+/* 历史报告切换条：done 态常显顶栏（38px），多文件时 filetabs 再下移一层 */
+.histbar{position:absolute;top:0;left:0;right:0;z-index:13;height:38px;
+  box-sizing:border-box;display:flex;align-items:center;gap:8px;padding:0 10px;
+  background:#fff;border-bottom:1px solid #e2e7f0;font-size:12px}
+.histbar[hidden]{display:none}
+.histbar label{color:#6b7688;flex:none}
+.histbar select{font:inherit;font-size:12px;padding:4px 8px;border:1px solid #cbd5e1;
+  border-radius:6px;background:#fff;color:#1f2738;max-width:460px;min-width:0}
+.reportcol.has-hist .reportframe{top:38px;height:calc(100% - 38px)}
+.reportcol.has-hist .filetabs{top:38px}
+.reportcol.has-hist.hastabs .reportframe{top:76px;height:calc(100% - 76px)}
+.reportcol.has-hist .histbar{padding-right:96px}
+.reportcol.has-hist .logbtn{top:6px;right:10px;padding:4px 12px;line-height:1.4;box-shadow:none}
+.reportcol.has-hist.hastabs .filetabs{padding-right:10px}
 /* iframe 是替换元素：height:auto 不会在 top/bottom 间拉伸，而是回退固有 150px
    （只露出报告页头的 bug 根因），必须显式 calc 高度。 */
 .reportcol.hastabs .reportframe{top:38px;height:calc(100% - 38px)}

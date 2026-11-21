@@ -279,3 +279,50 @@ def query_fields(field=None, q=None, task=None, state=None, limit=200):
             return _rows(cur)
     finally:
         conn.close()
+
+
+def ledger():
+    """校验台账（只读）：按 task_file 聚合记录数与四态校验进度，新文件在前。
+
+    只列有暂存记录的文件（INNER JOIN record）；failed/无记录任务不出现。
+    """
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT tf.id AS task_file_id, tf.task_id,'
+                ' s.name, t.state AS task_state, t.created_at,'
+                ' tpl.name AS tpl_name, tv.version,'
+                ' COUNT(sr.id) AS records_n,'
+                " SUM(sr.review_state='pending') AS pending_n,"
+                " SUM(sr.review_state='edited') AS edited_n,"
+                " SUM(sr.review_state='confirmed') AS confirmed_n,"
+                " SUM(sr.review_state='rejected') AS rejected_n"
+                ' FROM extract_task_file tf'
+                ' JOIN extract_task t ON t.id=tf.task_id'
+                ' JOIN extract_file s ON s.id=tf.file_id'
+                ' JOIN extract_template_version tv'
+                ' ON tv.id=t.template_version_id'
+                ' JOIN extract_template tpl ON tpl.id=tv.template_id'
+                ' JOIN extract_staging_record sr ON sr.task_file_id=tf.id'
+                ' GROUP BY tf.id, tf.task_id, s.name, t.state, t.created_at,'
+                ' tpl.name, tv.version'
+                ' ORDER BY tf.id DESC')
+            out = []
+            for r in _rows(cur):
+                out.append({
+                    'task_id': r['task_id'],
+                    'task_file_id': r['task_file_id'],
+                    'name': r['name'], 'task_state': r['task_state'],
+                    'template': {'name': r['tpl_name'],
+                                 'version': r['version']},
+                    'records_n': int(r['records_n']),
+                    'pending_n': int(r['pending_n'] or 0),
+                    'edited_n': int(r['edited_n'] or 0),
+                    'confirmed_n': int(r['confirmed_n'] or 0),
+                    'rejected_n': int(r['rejected_n'] or 0),
+                    'created_at': str(r['created_at']),
+                })
+            return out
+    finally:
+        conn.close()

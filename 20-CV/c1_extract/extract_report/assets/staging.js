@@ -571,22 +571,33 @@ function loadStaging(){
 document.getElementById('tasktag').textContent=task?('任务 #'+task):'（未指定任务）';
 document.getElementById('tasklink').href=task?('/tasks?task='+encodeURIComponent(task)):'/tasks';
 if(!task){
-  /* 无任务参数：校验台独立入口，渲染任务选择器（/api/tasks 新任务在前） */
+  /* 无任务参数：校验台独立入口，渲染文件级台账（/api/staging/ledger，新文件在前） */
   document.getElementById('modebanner').hidden=true;
+  document.querySelector('.stgwrap').hidden=true;
+  document.getElementById('summary').hidden=true;
   document.getElementById('taskpick').hidden=false;
-  fetch('/api/tasks').then(function(r){return r.json();}).then(function(j){
-    var sel=document.getElementById('picksel'), items=j.items||[];
-    if(!items.length){ sel.innerHTML='<option value="">暂无任务</option>'; return; }
-    sel.innerHTML='<option value="">请选择…</option>'+items.map(function(t){
-      var tpl=t.template||{};
-      return '<option value="'+t.task_id+'">#'+t.task_id+' · '+
-        escHtml(tpl.name||'')+' v'+(tpl.version||1)+' · '+
-        ((STATE_LABEL[t.state]||[t.state||'—'])[0])+' · '+(t.files||[]).length+' 文件</option>';
+  fetch('/api/staging/ledger').then(function(r){
+    if(!r.ok) return r.json().then(function(j){throw new Error(j.error||('HTTP '+r.status));});
+    return r.json();
+  }).then(function(j){
+    var items=j.items||[];
+    document.getElementById('ledger').hidden=!items.length;
+    document.getElementById('ledgerempty').hidden=items.length>0;
+    document.getElementById('ledgerrows').innerHTML=items.map(function(r){
+      var tpl=r.template||{};
+      return '<tr data-task="'+r.task_id+'" data-file="'+r.task_file_id+'">'+
+        '<td class="mono">#'+r.task_id+'</td>'+
+        '<td><span class="nm" title="'+escHtml(r.name)+'">'+escHtml(shortName(r.name))+'</span></td>'+
+        '<td>'+escHtml((tpl.name||'原始透传')+' v'+(tpl.version||1))+'</td>'+
+        '<td class="num">'+r.records_n+'</td>'+
+        '<td class="num">'+r.pending_n+'</td>'+
+        '<td class="num'+(r.edited_n?' led-edited':'')+'">'+r.edited_n+'</td>'+
+        '<td class="num">'+r.confirmed_n+'</td>'+
+        '<td class="num">'+r.rejected_n+'</td>'+
+        '<td>'+stateBadge(r.task_state)+'</td>'+
+        '<td class="num">'+fmtTime(r.created_at)+'</td></tr>';
     }).join('');
-    sel.addEventListener('change',function(){
-      if(sel.value) location.href='/staging?task='+encodeURIComponent(sel.value);
-    });
-  }).catch(function(e){ showErr('读取任务列表失败：'+e.message); });
+  }).catch(function(e){ showErr('读取校验台账失败：'+e.message); });
 }else{
   fetch('/api/tasks/'+encodeURIComponent(task)).then(function(r){
     if(!r.ok) throw new Error('任务不存在');
@@ -601,43 +612,9 @@ if(!task){
   }).catch(function(e){ showErr(e.message); });
 }
 
-/* 跨任务搜索：/api/staging/query 直查 DB field 投影，与当前任务无关 */
-(function(){
-  var go=document.getElementById('xs-go');
-  if(!go) return;
-  go.addEventListener('click',function(){
-    var p=new URLSearchParams();
-    var f=document.getElementById('xs-field').value.trim();
-    var q=document.getElementById('xs-q').value.trim();
-    var st=document.getElementById('xs-state').value;
-    if(f) p.set('field',f);
-    if(q) p.set('q',q);
-    if(st) p.set('state',st);
-    var err=document.getElementById('xs-err');
-    err.hidden=true;
-    fetch('/api/staging/query?'+p.toString()).then(function(r){
-      return r.json().then(function(j){ return {status:r.status,j:j}; });
-    }).then(function(o){
-      var tbl=document.getElementById('xs-table'),
-          em=document.getElementById('xs-empty'),
-          tb=document.getElementById('xs-rows');
-      if(o.status!==200||!o.j.ok){
-        err.textContent=(o.j&&o.j.error)||('查询失败 HTTP '+o.status);
-        err.hidden=false; tbl.hidden=true; em.hidden=true; return;
-      }
-      var items=o.j.items||[];
-      tb.innerHTML=items.map(function(it){
-        return '<tr><td class="mono">#'+it.task_id+'</td><td>'+
-          escHtml(it.source_name)+'</td><td class="num">'+it.record_index+
-          '</td><td>'+escHtml(it.field_name)+'</td><td>'+
-          escHtml(it.value_text)+'</td><td>'+escHtml(it.review_state)+
-          '</td><td><a class="btn ghost mini" href="/staging?task='+
-          it.task_id+'&file='+it.task_file_id+'">预览</a></td></tr>';
-      }).join('');
-      tbl.hidden=!items.length;
-      em.hidden=!!items.length;
-    }).catch(function(e){
-      err.textContent='查询失败：'+e; err.hidden=false;
-    });
-  });
-})();
+/* 台账行点击 → 进入该文件的校验台 */
+document.getElementById('ledgerrows').addEventListener('click',function(e){
+  var tr=e.target.closest?e.target.closest('tr[data-task]'):null;
+  if(tr) location.href='/staging?task='+tr.getAttribute('data-task')+
+    '&file='+tr.getAttribute('data-file');
+});

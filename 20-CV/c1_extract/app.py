@@ -700,6 +700,12 @@ def api_staging_query(field: str = None, q: str = None,
     return {'ok': True, 'items': rows}
 
 
+@app.get('/api/staging/ledger')
+def api_staging_ledger():
+    """校验台账：按 task_file 聚合记录数与校验进度；DB down → 503。"""
+    return {'ok': True, 'items': _load('store.content_db').ledger()}
+
+
 def _review_target(task_id, task_file_id):
     """校验台写操作公共守卫：返回 file_index。
 

@@ -1,5 +1,5 @@
 /* extract_report/assets/staging.css — 校验台（P1）页面特有样式：记录表 + 编辑/确认/拒绝
-   + 源图回溯框双向血缘侧栏 + 筛选 chips / 任务选择器 / 跨批搜索。
+   + 源图回溯框双向血缘侧栏 + 筛选 chips / 文件级校验台账。
    舞台公共样式（框/视图切换/翻页胶囊/全屏浮层/光标提示）在 stage.css，先于本文件加载。 */
 .pagebody.wide{max-width:1500px}
 .filetabs{display:flex;align-items:center;gap:4px;margin-bottom:10px;
@@ -41,21 +41,13 @@
   .lineage{width:100%;max-width:none;position:static;max-height:none}
   .lineage .stage{max-height:60vh}
 }
-/* 跨批搜索（选项 B，design-records-db.md §5） */
-.xsearch{margin:0 0 12px}
-.xsearch summary{cursor:pointer;padding:10px 14px;font-size:13px;font-weight:500;
-  color:#33415e;list-style:none}
-.xsearch summary::-webkit-details-marker{display:none}
-.xsearch summary::before{content:'▸ ';color:#8a94a6}
-.xsearch[open] summary::before{content:'▾ '}
-.xs-bar{display:flex;gap:8px;padding:0 14px 12px;flex-wrap:wrap}
-.xs-bar input,.xs-bar select{font-size:13px;padding:6px 10px;border:1px solid #e2e7f0;
-  border-radius:7px;background:#fff;color:#33415e}
-.xs-bar input{flex:1;min-width:140px}
-.xsearch .listwrap{max-height:320px;overflow:auto;border-top:1px solid #eef2f8}
-.xsearch .banner{margin:0 14px 10px}
+/* 文件级校验台账（无 task 参数入口） */
+.ledgerwrap{max-height:62vh;overflow:auto;border-top:1px solid #eef2f8}
+#ledgerrows tr{cursor:pointer}
+#ledgerrows tr:hover{background:#f3f7fd}
+#ledgerrows td.led-edited{color:#b45309;font-weight:600}
 
-/* P1 校验台：筛选 chips / 批量确认 / 双击改值 / 改值标记 / 行操作 / 任务选择器 */
+/* P1 校验台：筛选 chips / 批量确认 / 双击改值 / 改值标记 / 行操作 / 台账入口 */
 .reviewbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px}
 .reviewbar[hidden]{display:none}
 .reviewbar .spacer{flex:1}
@@ -74,6 +66,4 @@ td.cell.edited{box-shadow:inset 0 -2px 0 #d8970a}
 .rowbtn.no:hover{border-color:#b42318;color:#b42318;background:#fdecea}
 #taskpick{margin-bottom:12px}
 .pickbar{display:flex;align-items:center;gap:10px;padding:12px 14px;font-size:13px;flex-wrap:wrap}
-.pickbar select{font:inherit;font-size:13px;padding:6px 10px;border:1px solid #e2e7f0;
-  border-radius:7px;background:#fff;color:#33415e;min-width:320px}
 .pickbar .hint{font-size:12px;color:#8a94a6}

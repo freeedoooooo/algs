@@ -16,7 +16,7 @@
   <a class="off" title="P1b 开放">模板</a>
   <a href="/staging" class="on">校验</a>
   <a class="off" title="P2 开放">入库</a>
-  <a href="/tasks">记录</a>
+  <a href="/tasks">任务</a>
   <span class="spacer"></span>
   <span class="navnote">P1 · 校验台</span>
 </nav>
@@ -27,40 +27,28 @@
     <span id="tplbadge"></span>
     <span class="spacer"></span>
     <span id="filelinks"></span>
-    <a class="btn ghost mini" id="tasklink" href="/tasks">返回记录</a>
+    <a class="btn ghost mini" id="tasklink" href="/tasks">返回任务</a>
   </div>
   <div class="banner info" id="modebanner">双击单元格改值（自动转已修改）· ✓ 确认 · ✗ 拒绝 · 单击/悬停血缘回溯不变</div>
   <div class="banner err" id="err" hidden></div>
   <div class="panel" id="taskpick" hidden>
     <div class="pickbar">
-      <b>选择要校验的任务</b>
-      <select id="picksel"><option value="">加载中…</option></select>
-      <span class="hint">也可从「记录」页的任务抽屉进入</span>
+      <b>校验台账</b>
+      <span class="hint">按文件列出暂存记录与校验进度 · 点行进入校验台 · 也可从「任务」页详情进入</span>
     </div>
-  </div>
-  <details class="panel xsearch">
-    <summary>跨任务搜索（暂存记录 · DB 直查）</summary>
-    <div class="xs-bar">
-      <input id="xs-field" placeholder="字段名（如 摘要）">
-      <input id="xs-q" placeholder="值关键词（如 报销）">
-      <select id="xs-state">
-        <option value="">全部状态</option>
-        <option value="pending">pending</option>
-        <option value="edited">edited</option>
-        <option value="confirmed">confirmed</option>
-        <option value="rejected">rejected</option>
-      </select>
-      <button type="button" class="btn" id="xs-go">搜索</button>
-    </div>
-    <div class="banner err" id="xs-err" hidden></div>
-    <div class="listwrap">
-      <table class="list" id="xs-table" hidden>
-        <thead><tr><th>任务</th><th>文件</th><th>行</th><th>字段</th><th>值</th><th>状态</th><th></th></tr></thead>
-        <tbody id="xs-rows"></tbody>
+    <div class="listwrap ledgerwrap">
+      <table class="list" id="ledger" hidden>
+        <thead><tr>
+          <th>任务</th><th>文件</th><th>模板</th><th class="num">记录</th>
+          <th class="num">待校验</th><th class="num">已修改</th>
+          <th class="num">已确认</th><th class="num">已拒绝</th>
+          <th>状态</th><th>时间</th>
+        </tr></thead>
+        <tbody id="ledgerrows"></tbody>
       </table>
     </div>
-    <div class="empty" id="xs-empty" hidden>无匹配记录</div>
-  </details>
+    <div class="empty" id="ledgerempty" hidden><b>暂无可校验的记录</b>先到「提取」页上传文件。</div>
+  </div>
   <div class="filetabs" id="filetabs" hidden></div>
   <div class="reviewbar" id="reviewbar" hidden>
     <div class="chips" id="chips"></div>

@@ -288,6 +288,7 @@ function poll(){
       go.disabled=false;
       showStgLink(s.task_id);
       showResult(s.cases);
+      loadHistory(s.task_id,true);
     }
   }).catch(function(){timer=setTimeout(poll,1200);});
 }
@@ -297,6 +298,8 @@ var reportFrame=document.getElementById('reportFrame'),
     logbtn=document.getElementById('logbtn'),
     logclose=document.getElementById('logclose'),
     filetabs=document.getElementById('filetabs'),
+    histbar=document.getElementById('histbar'),
+    histsel=document.getElementById('histsel'),
     reportcol=document.querySelector('.reportcol'),
     stglink=document.getElementById('stglink');
 /* 完成提示：跳数据预览（task id 键） */
@@ -313,6 +316,8 @@ function rightState(st){
   logclose.hidden=true;
   reportFrame.hidden=(st!=='done');
   logbtn.hidden=(st!=='done');
+  histbar.hidden=(st!=='done');
+  reportcol.classList.toggle('has-hist',st==='done');
   if(st!=='done'){ filetabs.hidden=true; reportcol.classList.remove('hastabs'); }
 }
 /* 每个文件一份独立报告（各自 task_file 命名空间）。多文件任务顶部给文件页签，
@@ -341,8 +346,8 @@ function showResult(cases){
     });
     reportFrame.src=reportUrl(cases[0].task_file_id)+'?t='+Date.now();
   }else{
-    /* 单文件（或未知 cases）：路由重定向到最新 task_file 的报告真实地址 */
-    reportFrame.src='/extract-report?t='+Date.now();
+    /* 单文件：直接落该 task_file 报告；cases 未知才走最新报告重定向 */
+    reportFrame.src=(cases.length?reportUrl(cases[0].task_file_id):'/extract-report')+'?t='+Date.now();
   }
 }
 /* 完成后点「查看日志」：进度卡作为抽屉叠加在报告上，「关闭」收回 */
@@ -356,6 +361,42 @@ logclose.onclick=function(){
   runpanel.classList.remove('drawer');
   logclose.hidden=true;
 };
+
+/* ---- 历史报告：默认最新有报告的任务，下拉切换历史任务 ---- */
+var histItems=[];
+function histLabel(t){
+  var names=(t.files||[]).map(function(f){return f.name;}).join('、');
+  return '#'+t.task_id+' · '+shortName(names)+' · '+fmtTime(t.created_at);
+}
+function showTaskReport(t){
+  showResult((t.files||[]).filter(function(f){return f.task_file_id;})
+    .map(function(f){return {file:f.name,task_file_id:f.task_file_id};}));
+}
+/* skipRender=true：只刷新下拉选项并选中（报告已由完成流渲染，避免重复加载） */
+function loadHistory(selectId,skipRender){
+  fetch('/api/tasks').then(function(r){return r.ok?r.json():null;}).then(function(j){
+    histItems=((j&&j.items)||[]).filter(function(t){
+      return (t.state==='previewed'||t.state==='loaded')&&
+        (t.files||[]).some(function(f){return f.task_file_id;});
+    });
+    histsel.innerHTML=histItems.map(function(t){
+      return '<option value="'+t.task_id+'">'+escHtml(histLabel(t))+'</option>';
+    }).join('');
+    if(!histItems.length) return;
+    var pick=null;
+    for(var i=0;i<histItems.length;i++){
+      if(String(histItems[i].task_id)===String(selectId)){pick=histItems[i];break;}
+    }
+    pick=pick||histItems[0];
+    histsel.value=String(pick.task_id);
+    if(!skipRender) showTaskReport(pick);
+  }).catch(function(){});
+}
+histsel.addEventListener('change',function(){
+  for(var i=0;i<histItems.length;i++){
+    if(String(histItems[i].task_id)===histsel.value){ showTaskReport(histItems[i]); return; }
+  }
+});
 
 go.onclick=async function(){
   go.disabled=true;msg.textContent='读取文件…';
@@ -396,7 +437,9 @@ fetch('/api/status').then(function(r){return r.json();}).then(function(s){
   else if(s.ready){
     /* 刷新页面直接进完成态：日志/进度也要补渲染，否则「查看日志」抽屉是空的 */
     say(s.logs,s.steps); progress(s); showStgLink(s.task_id); showResult(s.cases);
+    loadHistory(s.task_id,true);
   }
+  else loadHistory();
 });
 
 /* ---- 从资料库选择：抽屉多选已登记文件 → POST /api/tasks（不再收 base64） ---- */
