@@ -101,18 +101,18 @@ function currentTplId(){
   return o?(o.getAttribute('data-tpl')||''):'';
 }
 
-/* ---- P2 入库模式：预登记目的地＋映射（按所选模板过滤）；
+/* ---- P2b 入库模式：预登记数据源＋映射（按所选模板过滤）；
    执行＝提取校验全部确认后，在任务详情/校验台手动点「入库」。 ---- */
-var destsel=document.getElementById('destsel'), mapsel=document.getElementById('mapsel');
+var dssel=document.getElementById('dssel'), mapsel=document.getElementById('mapsel');
 var loadMaps=[];
 function modeVal(){
   var r=document.querySelector('input[name=mode]:checked');
   return r?r.value:'preview';
 }
 function refreshMapSel(){
-  var tid=currentTplId(), did=destsel.value, keep=mapsel.value;
+  var tid=currentTplId(), did=dssel.value, keep=mapsel.value;
   var list=loadMaps.filter(function(m){
-    return String(m.template_id)===String(tid)&&String(m.load_dest_id)===String(did);
+    return String(m.template_id)===String(tid)&&String(m.datasource_id)===String(did);
   });
   mapsel.innerHTML=list.length?list.map(function(m){
     return '<option value="'+m.id+'">'+escHtml(m.target_table+' · '+m.write_mode)+'</option>';
@@ -131,26 +131,26 @@ Array.prototype.forEach.call(document.querySelectorAll('input[name=mode]'),funct
   r.addEventListener('change',syncMode);
 });
 tplsel.addEventListener('change',function(){ if(modeVal()==='load') refreshMapSel(); });
-destsel.addEventListener('change',refreshMapSel);
+dssel.addEventListener('change',refreshMapSel);
 Promise.all([
-  fetch('/api/load/dests').then(function(r){return r.json();}),
-  fetch('/api/load/mappings').then(function(r){return r.json();})
+  fetch('/api/load/datasources').then(function(r){return r.json();}),
+  fetch('/api/load/tables').then(function(r){return r.json();})
 ]).then(function(res){
-  var dests=res[0].items||[]; loadMaps=res[1].items||[];
-  destsel.innerHTML=dests.length?dests.map(function(d){
-    return '<option value="'+d.id+'">'+escHtml(d.name)+'</option>';
-  }).join(''):'<option value="">暂无目的地（到入库页新建）</option>';
+  var ds=res[0].items||[]; loadMaps=res[1].items||[];
+  dssel.innerHTML=ds.length?ds.map(function(d){
+    return '<option value="'+d.id+'">'+escHtml(d.name+' · '+d.host+'/'+d.db_name)+'</option>';
+  }).join(''):'<option value="">暂无数据源（到入库页新建）</option>';
   refreshMapSel();
 }).catch(function(){
-  destsel.innerHTML='<option value="">平台库未连接</option>';
+  dssel.innerHTML='<option value="">平台库未连接</option>';
   mapsel.innerHTML='<option value="">平台库未连接</option>';
 });
 function loadFields(){
   if(modeVal()!=='load') return {mode:'preview'};
-  if(!destsel.value||!mapsel.value)
-    throw new Error('入库模式须选择目的地与映射（到入库页配置）');
-  return {mode:'load',load_dest_id:Number(destsel.value),
-          load_mapping_id:Number(mapsel.value)};
+  if(!dssel.value||!mapsel.value)
+    throw new Error('入库模式须选择数据源与映射（到入库页配置）');
+  return {mode:'load',load_datasource_id:Number(dssel.value),
+          load_table_id:Number(mapsel.value)};
 }
 
 document.getElementById('resetparams').onclick=function(e){

@@ -96,12 +96,14 @@ def resolve_template(version_id=None):
 
 def launch(paths, params, warns, ctx, mode='preview', tpl=None, load=None):
     """登记任务（DB 必选，失败上抛 503）→ 建日志 → 重置 STATE → 起后台线程。
-    load={'dest_id','mapping_id'}：mode=load 的预登记入库意图（执行须手动点入库）。"""
+    load={'datasource_id','load_table_id'}：mode=load 的预登记入库意图
+    （执行须手动点入库）。"""
     tpl = tpl or resolve_template()
     catalog = _load('store.catalog')
     task_id = catalog.create_task(mode, tpl['version_id'], params)
     if load:
-        catalog.set_task_load(task_id, load['dest_id'], load['mapping_id'])
+        catalog.set_task_load(task_id, load['datasource_id'],
+                              load['load_table_id'])
     for f in ctx:
         f['task_file_id'] = catalog.add_task_file(task_id, f['file_id'])
         f['state'] = 'pending'
@@ -130,8 +132,8 @@ def launch(paths, params, warns, ctx, mode='preview', tpl=None, load=None):
     for w in warns:
         log.warn('params', w)
     if load:
-        log.info('load', '入库预登记：目的地 {} · 映射 {}（全部确认后手动入库）'
-                 .format(load['dest_id'], load['mapping_id']))
+        log.info('load', '入库预登记：数据源 {} · 映射 {}（全部确认后手动入库）'
+                 .format(load['datasource_id'], load['load_table_id']))
     threading.Thread(target=task_batch, args=(paths, params, log, task_ctx),
                      daemon=True).start()
     return {'ok': True, 'count': len(paths), 'task_id': task_id,
@@ -325,9 +327,12 @@ def launch_load(task_id):
         raise errors.Conflict('入库进行中')
     if state not in ('previewed', 'partial'):
         raise errors.Conflict('任务状态 {} 不可入库（须先提取完成）'.format(state))
-    mapping = catalog.get_mapping(task['load']['mapping_id'])
-    if mapping is None:
+    lt = catalog.get_load_table(task['load']['load_table_id'])
+    if lt is None:
         raise errors.NotFound('入库映射不存在')
+    ds = catalog.get_datasource(task['load']['datasource_id'])
+    if ds is None:
+        raise errors.NotFound('数据源不存在')
     tpl = resolve_template(task['template']['version_id'])
     sj = tpl.get('schema_json')
     fields = ([f.get('name') for f in sj.get('fields') or []]
@@ -336,9 +341,8 @@ def launch_load(task_id):
     if not fields:
         raise errors.BadRequest('透传模板无固定目标字段，不可入库')
     loader = _load('store.loader')
-    loader.preflight(mapping['conn_ref'], mapping['target_table'],
-                     mapping['column_map_json'], mapping['write_mode'],
-                     mapping['business_key_json'], fields)
+    loader.preflight(ds, lt['target_table'], lt['fields'],
+                     lt['write_mode'], fields)
     doc = _load('store.content').get_records(task_id)
     recs = [r for f in (doc['files'] if doc else []) for r in f['records']]
     if not recs:
@@ -361,15 +365,16 @@ def launch_load(task_id):
                      params={}, warnings=[], logs=[], progress=0,
                      stage='load', log_file=label + '.log',
                      mode='load', template=tpl, task_id=task_id)
-    log.stage('load', '任务 {} 入库 → {}（{} · 共 {} 条）'.format(
-        task_id, mapping['target_table'], mapping['write_mode'], len(recs)))
+    log.stage('load', '任务 {} 入库 → {}.{}（{} · 共 {} 条）'.format(
+        task_id, ds['db_name'], lt['target_table'], lt['write_mode'],
+        len(recs)))
     threading.Thread(target=run_load,
-                     args=(task_id, task, mapping, tpl, log),
+                     args=(task_id, task, ds, lt, tpl, log),
                      daemon=True).start()
     return {'ok': True, 'task_id': task_id}
 
 
-def run_load(task_id, task, mapping, tpl, log):
+def run_load(task_id, task, ds, lt, tpl, log):
     """后台线程：逐记录 回执跳过→transform→写目标库→回执/隔离。
     单条数据级错误→隔离继续；连接级失败→中止（已写回执保留）→partial。
     平台库写失败→整任务 failed（DB 必选）。完成态最后发布。"""
@@ -377,10 +382,10 @@ def run_load(task_id, task, mapping, tpl, log):
     content = _load('store.content')
     loader = _load('store.loader')
     import pymysql
-    dest_id = task['load']['dest_id']
-    table = mapping['target_table']
-    cm, wm = mapping['column_map_json'], mapping['write_mode']
-    bk = mapping['business_key_json']
+    datasource_id = task['load']['datasource_id']
+    table = lt['target_table']
+    cm, bk = loader.fields_to_map(lt['fields'])
+    wm = lt['write_mode']
     transform = tpl.get('transform_json')
     try:
         catalog.set_task_state(task_id, 'loading')
@@ -392,7 +397,7 @@ def run_load(task_id, task, mapping, tpl, log):
         total = sum(len(f['records']) for f in doc['files'])
         written = skipped = quarantined = done = 0
         aborted = None
-        conn = loader.connect_dest(mapping['conn_ref'])
+        conn = loader.connect_datasource(ds)
         try:
             for f in doc['files']:
                 for rec in f['records']:
@@ -450,7 +455,7 @@ def run_load(task_id, task, mapping, tpl, log):
                         log.error('load', '目标库连接中断，中止：{}'.format(aborted))
                         break
                     catalog.add_load_log(task_id, f['task_file_id'],
-                                         rec['index'], dest_id, table,
+                                         rec['index'], datasource_id, table,
                                          pk, action)
                     written += 1
                 if aborted:

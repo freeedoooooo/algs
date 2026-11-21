@@ -285,7 +285,7 @@ P1b 模板消费＝选择器＋重命名（transform 留 P2）。
 
 ---
 
-## 〇.12、P2 入库模式（2026-11-21，已完成）
+## 〇.12、P2 入库模式（2026-11-21，已完成；dest/mapping 形状已被 §〇.13 P2b 取代）
 
 设计稿 [design-p2-load.md](design-p2-load.md) 已批准并实现。用户拍板 6 项：
 ① 触发＝**上传时选 mode=load**＋目的地＋映射（预登记入库意图）；② 执行＝**校验完
@@ -343,6 +343,69 @@ P1b 模板消费＝选择器＋重命名（transform 留 P2）。
   无回滚/删除已入库数据；单目的地单表（无多表 union/多目的地扇出）。
 - **8765**：须用户重启一次载入 P2（load 路由＋/load 页＋upload mode＋入库按钮）。
   重启前 nav「入库」404、上传页无入库模式。
+
+---
+
+## 〇.13、P2b 入库数据源重构（2026-11-21，已完成；取代 §〇.12 的 dest/mapping 形状）
+
+设计稿 [design-p2b-datasource.md](design-p2b-datasource.md) 已批准并实现。用户三裁决：
+① **数据源含库名（扁平）**——一个数据源＝一个库，左列表主从布局，不做两级树；
+② **默认数据源明文落行**——迁移解析 C1_EXTRACT_DB 写「产品库」行（host/账号/密码
+明文，与手建同形态、页面可编辑；secrets 轮换后过期需手动同步，接受）；
+③ **extract_load_table＝映射绑定**——一行＝数据源×表×模板＋write_mode，同物理表
+可被不同模板各建一行（UNIQUE 三元组），字段行＝模板字段→目标列＋is_business_key。
+**明文例外范围**：只覆盖 load 数据源密码（存库明文、页面可见可编辑）；日志永不打印
+凭据、测试连接回显仅 host:port/库名；**平台库自身凭据仍走 conn_ref 不变**。
+
+1. **表**（001 重写）：`extract_load_dest`→`extract_load_datasource`（name UNIQUE/
+   host/port/user/password/db_name）；`extract_load_mapping`→`extract_load_table`
+   （UNIQUE ds×tpl×table）＋`extract_load_table_field`（UNIQUE table×field、
+   table×column）；`extract_task.load_datasource_id/load_table_id`；
+   `extract_load_log.datasource_id`＋UNIQUE(task_file_id,record_index,
+   datasource_id,target_table)——数据源身份锁定，回执无需 db_name 列。
+2. **迁移**（零成本窗口：旧 3 表 0 行＋task 无引用）：先查状态→整库逻辑备份 31.8MB
+   `data/backup/pre_load_ds_20261121_201236.sql`（**本机无 mysqldump**，Python
+   SHOW CREATE TABLE＋INSERT、BLOB→X'hex'）→DROP/CREATE/ALTER→种产品库→基线守恒
+   →脚本用完即删。**坑**：升级脚本漏重建 extract_load_log（DROP 了没 CREATE），
+   套件首跑发现、按 001 原 DDL 补建（空表）——迁移脚本须逐表对照 001 清单。
+3. **db.connect_direct(p)**：数据源行直连（不 migrate、utf8mb4、connect_timeout=5）；
+   平台库 connect 门禁不变。catalog.ensure_default_datasource 幂等种子（尽力而为，
+   断库启动不炸）。
+4. **契约**：loader.validate_fields 改字段行形（全覆盖/无重复列/无重复字段/
+   upsert·update 须业务键；列存在性归 preflight）；fields_to_map→(cm,bk)；
+   write_record/transform/gate/回执跳过/错误分类**全不动**。
+   **两条新审计规则**：数据源被映射引用→host/port/db_name 锁定 409（账号密码可改，
+   换目标＝新建）；映射被任务引用→只读 409（PATCH/DELETE 均禁，回执语义）。
+5. **前端**：/load 左数据源列表（试连/编辑/删除＋映射数 badge、选中高亮）右映射列表；
+   数据源抽屉（密码 type=text 明文＋目标锁定 hint）；宽映射抽屉（模板→introspection
+   目标表→列 select＋业务键 checkbox；编辑回填字段行 data-col；任务引用→全禁用＋
+   只读 hint）；upload destsel→dssel（选项「名称 · host/库名」），loadFields→
+   load_datasource_id/load_table_id；tasks 详情「入库数据源」行（datasource_name＋
+   db_name＋目标表）；shell.js 回执抽屉零改动。
+6. **单测**：test_load_rules column_map→validate_fields 12 项（字段行形）＋
+   transform/gate/write_record 不变＋collect 11＝**36 OK**。
+
+- **验证**：两套验收顺序 **7/7＋6/6 全 PASS**（records item7 重写：产品库种子/
+  数据源 CRUD＋试连/introspection/映射×2 同表不同模板/字段行详情/契约 400×2/
+  重复映射 409/目标锁定 409＋密码可改 200/上传预检 400×3/无引用可删可编辑/
+  门禁 409（pending·rejected）/全确认→loaded/回执逐条/loaded 重入 409＋只读 409/
+  被引用禁删禁改 409/transform＋隔离→partial/重试幂等/跨 task upsert→update；
+  清理后基线守恒）。浏览器金路径（8799）：/load 左右布局＋种子自动选中→抽屉建
+  数据源（凭据程序内自种子行复制、不回显）→试连回显 host:port/库名→映射抽屉
+  introspection→字段行＋业务键→保存→编辑回填正确→合成 task 201（2 条 confirmed）
+  →任务详情门禁通过＋入库按钮→点击入库→loaded→回执抽屉 2 条 insert（trim 消费）
+  ＋隔离 0→映射编辑只读锁/数据源编辑目标锁 UI 全对→upload mode=load dssel/mapsel
+  模板＋数据源双过滤→控制台无错。合成 task 201/file 162/tf 217 child-first 清净
+  （**staging field/lineage 键＝record_id**，须子查询先清）＋ds3/lt4/tpl11 删除＋
+  DROP _browser_p2b_load（用户批准），**基线全还原**（135/1867/1867＋98/14870953
+  ＋5 files＋tasks 21/30/41/42/51–56/80＋task_file 12＋templates 1/versions 1＋
+  数据源仅产品库 id1＋load 三表/回执/隔离全 0＋schema [1]）；8799/8797 free、
+  tmp/input+tmp/work 空。
+- **已知缺口（不预埋）**：沿用 §〇.12（reviewer 身份 B 轮/隔离处置 UI/loaded 回滚/
+  多表 union/扇出）；新增：数据源密码明文（裁决接受，加密未立项）；secrets 轮换后
+  产品库行需手动同步。
+- **8765**：须用户再重启一次载入 P2b。累计未重启载入：A 轮错误分类＋台账任务级＋
+  B 拆分＋P1b＋P2＋P2b。
 
 ---
 
@@ -427,13 +490,14 @@ P1b 模板消费＝选择器＋重命名（transform 留 P2）。
 
 1. C1 存储演进＋任务化命名/去外键＋P1a 校验台＋小重构轮（A/B）＋UI 打磨轮
    ＋任务级台账/报告打磨/B 编排拆分轮＋校验台两处打磨轮＋三页紧凑规整统一轮
-   ＋P1b 模板管理＋collect 选择器消费轮＋**P2 入库模式轮**
-   均已完成：代码＋验收＋浏览器＋文档全部收尾（见 §〇.6–§〇.12）。
+   ＋P1b 模板管理＋collect 选择器消费轮＋P2 入库模式轮＋**P2b 入库数据源重构轮**
+   均已完成：代码＋验收＋浏览器＋文档全部收尾（见 §〇.6–§〇.13）。
 2. 建议事项：**用户 8765 重启一次**——载入 A 轮错误分类＋台账任务级形状
    /api/staging/ledger＋B 拆分（app.py 路由 / service.py 引擎）＋P1b（模板 CRUD
-   路由＋/templates 页＋collect 消费）＋**P2（load 路由＋/load 页＋upload mode=load
-   ＋任务/校验台入库按钮＋回执抽屉）**。重启前校验入口台账报读取失败、
-   nav「模板」「入库」404、选模板不生效、上传页无入库模式；其余页面正常。
+   路由＋/templates 页＋collect 消费）＋P2（load 路由＋入库按钮＋回执抽屉）＋
+   **P2b（数据源/映射新路由＋/load 左右页＋upload 新契约键）**。重启前校验入口
+   台账报读取失败、nav「模板」「入库」404 或旧页、选模板不生效、上传页入库模式
+   报 400（旧契约键）；其余页面正常。
 3. 新需求候选（设计先行，用户确认后执行）：**B 轮审计平台化**（reviewer 身份首补，
    load_log 记「谁入的库」）／隔离区解决 UI／多表 union／引擎升级研究
    （Docling vs MinerU，未立项）。对外文案用「字段级溯源/审计追溯」，

@@ -18,110 +18,124 @@
   <a href="/load" class="on">入库</a>
   <a href="/tasks">任务</a>
   <span class="spacer"></span>
-  <span class="navnote">P2 · 入库配置</span>
+  <span class="navnote">P2b · 入库配置</span>
 </nav>
 <div class="pagebody">
   <div class="pagehead">
     <h1>入库配置</h1>
     <span class="spacer"></span>
-    <span class="msg">先提取校验，全部确认后在任务详情/校验台手动入库</span>
+    <span class="msg">左侧选数据源（一个数据源＝一个库），右侧配映射；先提取校验，全部确认后手动入库</span>
   </div>
   <div class="banner err" id="err" hidden></div>
   <div class="banner info" id="ok" hidden></div>
-  <div class="pagehead">
-    <h1>目的地</h1>
-    <span class="spacer"></span>
-    <div class="toolbar">
-      <button type="button" class="btn" id="newdest">新建目的地</button>
+  <div class="loadwrap">
+    <div class="panel dspanel">
+      <div class="dshead">
+        <b>数据源</b>
+        <span class="spacer"></span>
+        <button type="button" class="btn mini" id="newds">＋ 新建</button>
+      </div>
+      <div id="dslist"></div>
+      <div class="empty" id="dsempty" hidden>
+        <b>还没有数据源</b>
+        一个数据源＝一个库：主机 / 端口 / 账号 / 密码 / 库名。
+      </div>
     </div>
-  </div>
-  <div class="panel">
-    <table class="list">
-      <thead><tr>
-        <th>名称</th><th>类型</th><th>凭据引用</th><th>创建时间</th><th>操作</th>
-      </tr></thead>
-      <tbody id="destrows"></tbody>
-    </table>
-    <div class="empty" id="destempty" hidden>
-      <b>还没有入库目的地</b>
-      登记目标库的凭据引用名（env 或 data/secrets.json 的键，非密码）。
-    </div>
-  </div>
-  <div class="pagehead" style="margin-top:16px">
-    <h1>映射</h1>
-    <span class="spacer"></span>
-    <div class="toolbar">
-      <button type="button" class="btn" id="newmap">新建映射</button>
-    </div>
-  </div>
-  <div class="panel">
-    <table class="list">
-      <thead><tr>
-        <th>目的地</th><th>模板</th><th>目标表</th><th>写入模式</th>
-        <th>业务键</th><th>创建时间</th><th>操作</th>
-      </tr></thead>
-      <tbody id="maprows"></tbody>
-    </table>
-    <div class="empty" id="mapempty" hidden>
-      <b>还没有入库映射</b>
-      选目的地＋模板＋目标表，把模板字段逐一对到目标列（只写已有表，不自动建表）。
+    <div class="panel mapwrap">
+      <div class="dshead">
+        <b id="maptitle">入库映射</b>
+        <span class="spacer"></span>
+        <button type="button" class="btn mini" id="newmap" disabled>＋ 新建映射</button>
+      </div>
+      <table class="list" id="maptable" hidden>
+        <thead><tr>
+          <th>目标表</th><th>模板</th><th>写入模式</th>
+          <th>字段数</th><th>业务键</th><th>操作</th>
+        </tr></thead>
+        <tbody id="maprows"></tbody>
+      </table>
+      <div class="empty" id="mapempty" hidden>
+        <b>该数据源还没有映射</b>
+        选模板＋目标表，把模板字段逐一对到目标列（只写已有表，不自动建表）。
+      </div>
+      <div class="empty" id="mapnone">
+        <b>先在左侧选择一个数据源</b>
+        点击数据源查看它下面配置的映射表。
+      </div>
     </div>
   </div>
 </div>
-<div class="drawer" id="ddest" hidden>
+<div class="drawer" id="dds" hidden>
   <div class="dpanel">
     <div class="dhead">
-      <h2>新建目的地</h2>
+      <h2 id="dstitle">新建数据源</h2>
       <span class="spacer"></span>
-      <button type="button" class="dclose" id="ddclose">关闭 (Esc)</button>
+      <button type="button" class="dclose" id="dsclose">关闭 (Esc)</button>
     </div>
     <div class="dbody">
       <div class="fsec">
-        <label class="flab" for="ddname">名称</label>
-        <input type="text" class="tin" id="ddname" placeholder="如：审计业务库">
+        <label class="flab" for="dsname">名称</label>
+        <input type="text" class="tin" id="dsname" placeholder="如：审计业务库">
       </div>
       <div class="fsec">
-        <label class="flab" for="ddref">凭据引用名（conn_ref）</label>
-        <input type="text" class="tin" id="ddref" placeholder="如：C1_EXTRACT_DB">
-        <div class="hint">环境变量或 data/secrets.json 里的键名，不是密码；平台只存引用名。</div>
+        <label class="flab" for="dshost">主机</label>
+        <input type="text" class="tin" id="dshost" placeholder="如：10.0.6.161">
+      </div>
+      <div class="fsec">
+        <label class="flab" for="dsport">端口</label>
+        <input type="text" class="tin" id="dsport" value="3306">
+      </div>
+      <div class="fsec">
+        <label class="flab" for="dsuser">账号</label>
+        <input type="text" class="tin" id="dsuser">
+      </div>
+      <div class="fsec">
+        <label class="flab" for="dspass">密码</label>
+        <input type="text" class="tin" id="dspass">
+        <div class="hint">明文保存（当前裁决）；日志与测试连接回显永不打印密码。</div>
+      </div>
+      <div class="fsec">
+        <label class="flab" for="dsdb">库名</label>
+        <input type="text" class="tin" id="dsdb" placeholder="如：co_dev">
       </div>
       <div class="fsec">
         <label class="flab">类型</label>
         <input type="text" class="tin" value="mysql" disabled>
         <div class="hint">首个实现仅支持 MySQL。</div>
       </div>
+      <div class="hint" id="dslock" hidden>已被映射引用：主机 / 端口 / 库名锁定（改它们＝换目标库，历史回执追溯断裂）；账号密码可改。换目标请新建数据源。</div>
     </div>
     <div class="dfoot">
-      <span class="msg" id="ddmsg"></span>
+      <span class="msg" id="dsmsg"></span>
       <span class="spacer"></span>
-      <button type="button" class="btn" id="ddsave">保存</button>
+      <button type="button" class="btn" id="dssave">保存</button>
     </div>
   </div>
 </div>
 <div class="drawer wide" id="dmap" hidden>
   <div class="dpanel">
     <div class="dhead">
-      <h2>新建映射</h2>
+      <h2 id="mptitle">新建映射</h2>
       <span class="spacer"></span>
-      <button type="button" class="dclose" id="dmclose">关闭 (Esc)</button>
+      <button type="button" class="dclose" id="mpclose">关闭 (Esc)</button>
     </div>
     <div class="dbody">
       <div class="fsec">
-        <label class="flab" for="dmdest">目的地</label>
-        <select class="tin" id="dmdest"></select>
+        <label class="flab">数据源</label>
+        <input type="text" class="tin" id="mpds" disabled>
       </div>
       <div class="fsec">
-        <label class="flab" for="dmtpl">模板（须有固定目标字段，透传不可入库）</label>
-        <select class="tin" id="dmtpl"></select>
+        <label class="flab" for="mptpl">模板（须有固定目标字段，透传不可入库）</label>
+        <select class="tin" id="mptpl"></select>
       </div>
       <div class="fsec">
-        <label class="flab" for="dmtable">目标表（只写已有表）</label>
-        <select class="tin" id="dmtable" disabled><option value="">先选目的地</option></select>
-        <div class="hint" id="dmthint"></div>
+        <label class="flab" for="mptable">目标表（只写已有表）</label>
+        <select class="tin" id="mptable" disabled><option value="">加载中…</option></select>
+        <div class="hint" id="mpthint"></div>
       </div>
       <div class="fsec">
-        <label class="flab" for="dmmode">写入模式</label>
-        <select class="tin" id="dmmode">
+        <label class="flab" for="mpmode">写入模式</label>
+        <select class="tin" id="mpmode">
           <option value="upsert">upsert · 业务键存在则更新，否则插入</option>
           <option value="insert">insert · 直插（重跑靠回执跳过）</option>
           <option value="update">update · 只更新已有行，不存在则隔离</option>
@@ -129,14 +143,15 @@
       </div>
       <div class="fsec">
         <label class="flab">字段映射（模板字段 → 目标列）</label>
-        <div id="dmrows"></div>
+        <div id="mprows"></div>
         <div class="hint">勾选「业务键」的列作为 upsert/update 的去重依据（应用层判定，不要求唯一索引）。</div>
       </div>
+      <div class="hint" id="mplock" hidden>该映射已被任务引用，只读（入库回执语义）；如需调整请新建映射。</div>
     </div>
     <div class="dfoot">
-      <span class="msg" id="dmmsg"></span>
+      <span class="msg" id="mpmsg"></span>
       <span class="spacer"></span>
-      <button type="button" class="btn" id="dmsave">保存映射</button>
+      <button type="button" class="btn" id="mpsave">保存映射</button>
     </div>
   </div>
 </div>

@@ -78,6 +78,16 @@ def connect(ref=None, autocommit=False, migrate=True):
     return conn
 
 
+def connect_direct(p, autocommit=False):
+    """显式参数直连（P2b load 数据源行），不跑迁移——绝不把平台表建进目标库。
+    p={host,port,user,password,database}；连接参数与 connect() 一致。"""
+    import pymysql
+    return pymysql.connect(
+        host=p['host'], port=int(p['port'] or 3306), user=p['user'],
+        password=p['password'], database=p['database'],
+        charset='utf8mb4', autocommit=autocommit, connect_timeout=5)
+
+
 def _migrate(conn):
     """编号脚本 + schema_version 表；按序应用未跑过的迁移。"""
     with conn.cursor() as cur:

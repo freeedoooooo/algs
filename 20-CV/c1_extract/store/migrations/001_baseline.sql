@@ -1,5 +1,5 @@
--- 001_baseline.sql — 平台库最终态基线（design-task-schema.md，2026-11-21 批准）
--- 由 001–006 历史迁移压缩而成：任务化命名（task/task_file/file/load_dest）、
+-- 001_baseline.sql — 平台库最终态基线（design-task-schema.md ＋ design-p2b-datasource.md）
+-- 由历史迁移压缩而成：任务化命名（task/task_file/file/load_datasource）、
 -- 无外键约束（引用完整性与级联删除归应用层，见设计稿 §2）、表/列注释齐全。
 -- MySQL 8.x / InnoDB / utf8mb4，JSON 原生类型，时间 DATETIME（应用层 UTC）。
 -- 注意：执行器按半角分号朴素切分，注释与 COMMENT 字符串内不得出现半角分号。
@@ -38,33 +38,46 @@ CREATE TABLE IF NOT EXISTS extract_template_version (
   UNIQUE KEY uk_tpl_ver (template_id, version)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='模板版本：三段 JSON（字段定义/映射/转换）不可变快照';
 
-CREATE TABLE IF NOT EXISTS extract_load_dest (
-  id         BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '入库目的地 ID',
-  name       VARCHAR(128) NOT NULL COMMENT '目的地名称（唯一）',
-  db_type    VARCHAR(32)  NOT NULL COMMENT '目标库类型：mysql 等',
-  conn_ref   VARCHAR(128) NOT NULL COMMENT '凭据引用名（env 或 secrets.json，非密码）',
+CREATE TABLE IF NOT EXISTS extract_load_datasource (
+  id         BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '数据源 ID',
+  name       VARCHAR(100) NOT NULL COMMENT '显示名（唯一）',
+  db_type    VARCHAR(20)  NOT NULL DEFAULT 'mysql' COMMENT '目标库类型：首个实现仅 mysql',
+  host       VARCHAR(255) NOT NULL COMMENT '目标库主机',
+  port       INT          NOT NULL DEFAULT 3306 COMMENT '目标库端口',
+  user       VARCHAR(100) NOT NULL COMMENT '目标库账号',
+  password   VARCHAR(255) NOT NULL DEFAULT '' COMMENT '目标库密码（明文，2026-11-21 裁决，日志永不打印）',
+  db_name    VARCHAR(100) NOT NULL COMMENT '目标库名（一个数据源＝一个库）',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间（UTC）',
-  UNIQUE KEY uk_dest_name (name)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='入库目的地：目标库连接引用（凭据引用制，密码不入库）';
+  UNIQUE KEY uk_ds_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='入库数据源：一行＝一个库，连接参数页面明文配置（平台库自身凭据仍走 conn_ref）';
 
-CREATE TABLE IF NOT EXISTS extract_load_mapping (
-  id                BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '入库映射 ID',
-  load_dest_id      BIGINT NOT NULL COMMENT '目的地 ID（引用 extract_load_dest.id，应用层维护）',
-  template_id       BIGINT NOT NULL COMMENT '模板 ID（引用 extract_template.id，应用层维护）',
-  target_table      VARCHAR(128) NOT NULL COMMENT '目标业务表名',
-  column_map_json   JSON NOT NULL COMMENT '模板字段到目标列映射',
-  write_mode        VARCHAR(16) NOT NULL DEFAULT 'upsert' COMMENT '写入模式：upsert/insert/update',
-  business_key_json JSON COMMENT '业务键（upsert 去重依据）',
-  created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间（UTC）',
-  UNIQUE KEY uk_dest_tpl_table (load_dest_id, template_id, target_table)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='入库映射：模板字段到目标表列的映射与写入策略';
+CREATE TABLE IF NOT EXISTS extract_load_table (
+  id            BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '入库映射 ID',
+  datasource_id BIGINT       NOT NULL COMMENT '数据源 ID（引用 extract_load_datasource.id，应用层维护）',
+  template_id   BIGINT       NOT NULL COMMENT '模板 ID（引用 extract_template.id，应用层维护）',
+  target_table  VARCHAR(128) NOT NULL COMMENT '目标业务表名',
+  write_mode    VARCHAR(16)  NOT NULL DEFAULT 'upsert' COMMENT '写入模式：upsert/insert/update',
+  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间（UTC）',
+  UNIQUE KEY uk_ds_tpl_table (datasource_id, template_id, target_table)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='入库映射绑定：数据源×表×模板，同物理表可被不同模板各建一行';
+
+CREATE TABLE IF NOT EXISTS extract_load_table_field (
+  id              BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '字段映射 ID',
+  load_table_id   BIGINT       NOT NULL COMMENT '入库映射 ID（引用 extract_load_table.id，删除须应用层先清本表）',
+  template_field  VARCHAR(200) NOT NULL COMMENT '模板字段名（记录键）',
+  target_column   VARCHAR(128) NOT NULL COMMENT '目标列名',
+  is_business_key TINYINT      NOT NULL DEFAULT 0 COMMENT '是否业务键（upsert/update 去重依据）',
+  sort_order      INT          NOT NULL DEFAULT 0 COMMENT '展示序（schema 字段序）',
+  UNIQUE KEY uk_table_field (load_table_id, template_field),
+  UNIQUE KEY uk_table_column (load_table_id, target_column)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='入库字段映射行：模板字段→目标列＋业务键标记';
 
 CREATE TABLE IF NOT EXISTS extract_task (
   id                  BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '任务 ID',
   mode                VARCHAR(16) NOT NULL COMMENT '模式：preview 预览 / load 入库',
   template_version_id BIGINT NOT NULL COMMENT '使用的模板版本 ID（引用 extract_template_version.id）',
-  load_dest_id        BIGINT COMMENT '入库目的地 ID（preview 为空）',
-  load_mapping_id     BIGINT COMMENT '入库映射 ID（preview 为空）',
+  load_datasource_id  BIGINT COMMENT '入库数据源 ID（preview 为空）',
+  load_table_id       BIGINT COMMENT '入库映射 ID（preview 为空）',
   params_json         JSON COMMENT '生效提取参数快照',
   state               VARCHAR(24) NOT NULL DEFAULT 'pending' COMMENT '任务状态：pending/extracting/previewed/loaded/failed/partial',
   error               TEXT COMMENT '错误信息（失败时）',
@@ -102,12 +115,12 @@ CREATE TABLE IF NOT EXISTS extract_load_log (
   task_id        BIGINT NOT NULL COMMENT '所属任务 ID（引用 extract_task.id，应用层维护）',
   task_file_id   BIGINT NOT NULL COMMENT '所属任务文件 ID（引用 extract_task_file.id）',
   record_index   INT NOT NULL COMMENT '记录在文件内下标',
-  load_dest_id   BIGINT NOT NULL COMMENT '目的地 ID（引用 extract_load_dest.id）',
+  datasource_id  BIGINT NOT NULL COMMENT '数据源 ID（引用 extract_load_datasource.id，身份锁定保回执可追溯）',
   target_table   VARCHAR(128) NOT NULL COMMENT '目标业务表名',
   target_pk      VARCHAR(255) NOT NULL COMMENT '目标行主键值',
   action         VARCHAR(16) NOT NULL COMMENT '动作：insert/update/upsert/delete',
   loaded_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '入库时间（UTC）',
-  UNIQUE KEY uk_load_receipt (task_file_id, record_index, load_dest_id, target_table)
+  UNIQUE KEY uk_load_receipt (task_file_id, record_index, datasource_id, target_table)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='入库回执：每条记录写入目标库的幂等收据（唯一键防重）';
 
 CREATE TABLE IF NOT EXISTS extract_staging_record (

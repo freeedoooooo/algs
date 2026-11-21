@@ -100,9 +100,9 @@ c1_extract/
 ├── params.py                  调试参数 schema（顺序=优先级）+ 校验 + 快照
 ├── tasklog.py                 结构化运行日志（service.STATE + logs/task_<id>.log）
 ├── app.py                     FastAPI 路由 + 请求校验 + 包自举 + 异常处理器
-├── service.py                 运行引擎：STATE/LOCK + launch + task_batch（后台编排）
+├── service.py                 运行引擎：STATE/LOCK + launch + launch_load/run_load（入库）
 ├── __init__.py                支持 uvicorn c1_extract.app:app 包方式启动
-├── accept_records_db.py       records 入库六项验收（临时服务 8799/8797）
+├── accept_records_db.py       records 入库七项验收（临时服务 8799/8797，含 P2b 入库链路）
 ├── accept_artifacts_db.py     产物入库六项验收（两套脚本严禁并行）
 ├── export_artifacts.py        DB → 磁盘树按需导出（file:// 直开 / 审计 / 迁移）
 ├── store/                     存储层（DB 唯一事实源）
@@ -110,8 +110,11 @@ c1_extract/
 │   ├── errors.py              类型化业务异常（StoreError/BadRequest/NotFound/Conflict→HTTP 码）
 │   ├── migrations/            001_baseline.sql 单基线（schema_version 门禁，首连自动跑）
 │   ├── catalog.py             file(+content) / template / task / task_file / quarantine
+│   │                          / load_datasource / load_table(+field) / load_log
 │   ├── content.py             内容门面（extract 经 artifact，records 直委托 content_db）
 │   ├── content_db.py          staging 三表：get/save/patch/set_review/query_fields
+│   ├── loader.py              入库引擎接缝：数据源直连 / introspection / 字段契约
+│   │                          / transform（trim·number）/ write_record（应用层 upsert）
 │   ├── artifact.py            附件门面（kind/mime 推断）
 │   └── artifact_db.py         extract_artifact BLOB（键＝task_file_id，应用层级联删）
 ├── adapter/                   提取信封 → 模板记录的适配层（base.py hydrate 派生视图）
@@ -128,8 +131,8 @@ c1_extract/
 │   ├── cards.py               数据准备 + 选模板（坐标 rect / 行 / 文档块 / data URI）
 │   ├── builder.py             组装对照报告（内联 assets，每 task_file 一份）
 │   ├── templates/             Jinja2 HTML 模板（autoescape，结构与逻辑分离）
-│   └── assets/                前端资源（upload / sources / tasks / staging 四页
-│                              + shell 列表共用件 + stage 舞台共用件 report/staging 共享）
+│   └── assets/                前端资源（upload / sources / templates / staging / load / tasks
+│                              六页 + shell 列表共用件 + stage 舞台共用件 report/staging 共享）
 ├── data/                      secrets.json（git 排除）/ backup/（迁移前整库备份）
 ├── logs/                      任务日志（运行时生成，每任务一个 task_<id>.log）
 └── docs/                      设计稿与交接文档
@@ -154,6 +157,24 @@ c1_extract/
 - 重复上传同一文件不覆盖历史：新 task 新 task_file 新附件，旧 task 完整可回溯。
   批内重名文件加 `-2` 区分。task id 在上传响应与 `/api/status` 的 `task_id` 字段可见。
 - **无外键约束**：引用完整性归应用层（delete_file 引用守卫；重跑覆盖显式先删子表）。
+
+### 入库链路（P2b，design-p2b-datasource.md）
+
+- **数据源**（`extract_load_datasource`）：一个数据源＝一个 MySQL 库，
+  host/port/账号/密码/库名**明文存库、页面可见可编辑**（2026-11-21 裁决，暂不加密）；
+  首启幂等种「产品库」默认行（解析 `C1_EXTRACT_DB`）。日志与测试连接回显永不打印凭据
+  （仅 host:port/库名）。平台库自身凭据仍走 conn_ref。
+- **映射**（`extract_load_table` ＋ `extract_load_table_field`）：一行＝数据源×目标表×模板
+  ＋write_mode（upsert/insert/update），字段行＝模板字段→目标列＋业务键勾选。
+  只写已有表（不自动建表）；同物理表可被不同模板各建一行（UNIQUE 三元组）。
+- **审计守卫**：数据源被映射引用后 host/port/库名锁定（409，账号密码可改，换目标＝新建）；
+  映射被任务引用后只读（PATCH/DELETE 409，回执语义）。
+- **流程**：上传选 mode=load 预登记数据源＋映射 → 提取校验（门禁：全部 confirmed 才可入库，
+  否则 409 带计数）→ 任务详情/校验台手动「入库」→ 逐条回执（`extract_load_log`，
+  唯一键幂等，重跑跳过）＋数据级隔离（`extract_quarantine` stage=load，重试无回执记录）。
+  transform（trim/number）只在入库时消费，暂存原值永不改。loaded/partial 任务记录只读。
+- **/load 页**：左数据源列表（试连/编辑/删除）右映射列表（字段行抽屉编辑），
+  上传页 mode=load 联动选数据源＋映射。
 
 **按需导出**（file:// 直开 / 审计 / 迁移出口）：
 

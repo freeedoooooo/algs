@@ -65,6 +65,10 @@ async def lifespan(_app):
     部署时若想「启动即加载」，设 C1_EXTRACT_WARMUP=1，避免第一个请求等 20~40s；
     代价是启动变慢、内存常驻。两种启动方式（app.py / uvicorn app:app）都生效。
     """
+    try:
+        _load('store.catalog').ensure_default_datasource()
+    except Exception:
+        pass  # 尽力而为补种「产品库」默认行：断库启动不炸，页面可手建
     if config.WARMUP_ON_START:
         engines = _load('pipeline.engines')
         engines.ocr()
@@ -238,20 +242,20 @@ async def _json_body(request):
 
 
 def _load_preflight(body, tpl):
-    """mode=load 预登记校验（上传与 tasks_create 共用）：dest/mapping 归属＋
+    """mode=load 预登记校验（上传与 tasks_create 共用）：数据源/映射归属＋
     模板匹配＋目标库预检。失败抛 StoreError→400/404，不建 task（早失败）。"""
     catalog = _load('store.catalog')
     try:
-        dest_id = int(body.get('load_dest_id'))
-        mapping_id = int(body.get('load_mapping_id'))
+        ds_id = int(body.get('load_datasource_id'))
+        lt_id = int(body.get('load_table_id'))
     except (TypeError, ValueError):
-        raise store_errors.BadRequest('入库模式须选择目的地与映射')
-    mapping = catalog.get_mapping(mapping_id)
-    if mapping is None:
+        raise store_errors.BadRequest('入库模式须选择数据源与映射')
+    lt = catalog.get_load_table(lt_id)
+    if lt is None:
         raise store_errors.NotFound('映射不存在')
-    if mapping['load_dest_id'] != dest_id:
-        raise store_errors.BadRequest('映射不属于所选目的地')
-    if mapping['template_id'] != tpl['template_id']:
+    if lt['datasource_id'] != ds_id:
+        raise store_errors.BadRequest('映射不属于所选数据源')
+    if lt['template_id'] != tpl['template_id']:
         raise store_errors.BadRequest('映射与所选模板不匹配')
     sj = tpl.get('schema_json')
     fields = ([f.get('name') for f in sj.get('fields') or []]
@@ -259,11 +263,12 @@ def _load_preflight(body, tpl):
     fields = [f for f in fields if f]
     if not fields:
         raise store_errors.BadRequest('透传模板无固定目标字段，不可入库')
+    ds = catalog.get_datasource(ds_id)
+    if ds is None:
+        raise store_errors.NotFound('数据源不存在')
     _load('store.loader').preflight(
-        mapping['conn_ref'], mapping['target_table'],
-        mapping['column_map_json'], mapping['write_mode'],
-        mapping['business_key_json'], fields)
-    return {'dest_id': dest_id, 'mapping_id': mapping_id}
+        ds, lt['target_table'], lt['fields'], lt['write_mode'], fields)
+    return {'datasource_id': ds_id, 'load_table_id': lt_id}
 
 
 @app.post('/api/upload')
@@ -457,39 +462,60 @@ async def api_template_version_add(template_id: int, request: Request):
     return {'ok': True, 'version_id': vid}
 
 
-# ---- P2 入库：目的地 / 映射 / introspection（凭据只回 safe_detail 脱敏描述）----
+# ---- P2b 入库：数据源 / 映射绑定 / introspection ----
+# 数据源密码明文存库、API 明文返回（2026-11-21 裁决，页面可见可编辑）；
+# 但日志永不打印凭据，测试连接回显仅 host:port/库名。
 
-@app.get('/api/load/dests')
-def api_load_dests():
-    return {'items': _load('store.catalog').list_dests()}
+@app.get('/api/load/datasources')
+def api_load_datasources():
+    return {'items': _load('store.catalog').list_datasources()}
 
 
-@app.post('/api/load/dests')
-async def api_load_dest_add(request: Request):
+@app.post('/api/load/datasources')
+async def api_load_datasource_add(request: Request):
     body = await _json_body(request)
-    did = _load('store.catalog').create_dest(
-        body.get('name'), body.get('conn_ref'), body.get('db_type') or 'mysql')
+    did = _load('store.catalog').create_datasource(
+        body.get('name'), body.get('host'), body.get('port'),
+        body.get('user'), body.get('password'), body.get('db_name'),
+        body.get('db_type') or 'mysql')
     return {'ok': True, 'id': did}
 
 
-@app.delete('/api/load/dests/{dest_id}')
-def api_load_dest_del(dest_id: int):
-    _load('store.catalog').delete_dest(dest_id)
+@app.patch('/api/load/datasources/{ds_id}')
+async def api_load_datasource_patch(ds_id: int, request: Request):
+    body = await _json_body(request)
+    _load('store.catalog').update_datasource(
+        ds_id, name=body.get('name'), host=body.get('host'),
+        port=body.get('port'), user=body.get('user'),
+        password=body.get('password'), db_name=body.get('db_name'))
     return {'ok': True}
 
 
-def _dest_or_404(dest_id):
-    dest = _load('store.catalog').get_dest(dest_id)
-    if dest is None:
-        raise store_errors.NotFound('目的地不存在')
-    return dest
+@app.delete('/api/load/datasources/{ds_id}')
+def api_load_datasource_del(ds_id: int):
+    _load('store.catalog').delete_datasource(ds_id)
+    return {'ok': True}
 
 
-@app.post('/api/load/dests/{dest_id}/test')
-def api_load_dest_test(dest_id: int):
-    """测试连接：只回 host:port/库名（safe_detail），永不回显凭据。"""
-    dest = _dest_or_404(dest_id)
-    conn = _load('store.loader').connect_dest(dest['conn_ref'])
+def _ds_or_404(ds_id):
+    ds = _load('store.catalog').get_datasource(ds_id)
+    if ds is None:
+        raise store_errors.NotFound('数据源不存在')
+    return ds
+
+
+@app.post('/api/load/datasources/{ds_id}/test')
+def api_load_datasource_test(ds_id: int):
+    """测试连接：只回 host:port/库名，永不回显凭据。"""
+    ds = _ds_or_404(ds_id)
+    detail = '{}:{}/{}'.format(ds['host'], ds['port'], ds['db_name'])
+    try:
+        conn = _load('store.loader').connect_datasource(ds)
+    except Exception as e:
+        return JSONResponse(
+            {'ok': False,
+             'error': '目标库连接失败（{}）'.format(type(e).__name__)},
+            status_code=503)
     try:
         with conn.cursor() as cur:
             cur.execute('SELECT 1')
@@ -500,46 +526,61 @@ def api_load_dest_test(dest_id: int):
             status_code=503)
     finally:
         conn.close()
-    return {'ok': True,
-            'detail': _load('store.db').safe_detail(dest['conn_ref'])}
+    return {'ok': True, 'detail': detail}
 
 
-@app.get('/api/load/dests/{dest_id}/tables')
-def api_load_dest_tables(dest_id: int):
-    dest = _dest_or_404(dest_id)
-    return {'items': _load('store.loader').list_tables(dest['conn_ref'])}
+@app.get('/api/load/datasources/{ds_id}/tables')
+def api_load_datasource_tables(ds_id: int):
+    ds = _ds_or_404(ds_id)
+    return {'items': _load('store.loader').list_tables(ds)}
 
 
-@app.get('/api/load/dests/{dest_id}/columns')
-def api_load_dest_columns(dest_id: int, table: str = None):
-    dest = _dest_or_404(dest_id)
+@app.get('/api/load/datasources/{ds_id}/columns')
+def api_load_datasource_columns(ds_id: int, table: str = None):
+    ds = _ds_or_404(ds_id)
     if not table:
         raise store_errors.BadRequest('table 参数必填')
-    return {'items': _load('store.loader').list_columns(dest['conn_ref'], table)}
+    return {'items': _load('store.loader').list_columns(ds, table)}
 
 
-@app.get('/api/load/mappings')
-def api_load_mappings():
-    return {'items': _load('store.catalog').list_mappings()}
+@app.get('/api/load/tables')
+def api_load_tables(datasource_id: int = None):
+    return {'items': _load('store.catalog').list_load_tables(datasource_id)}
 
 
-@app.post('/api/load/mappings')
-async def api_load_mapping_add(request: Request):
+@app.post('/api/load/tables')
+async def api_load_table_add(request: Request):
     body = await _json_body(request)
     try:
-        dest_id = int(body.get('load_dest_id'))
+        ds_id = int(body.get('datasource_id'))
         tpl_id = int(body.get('template_id'))
     except (TypeError, ValueError):
-        raise store_errors.BadRequest('须选择目的地与模板')
-    mid = _load('store.catalog').create_mapping(
-        dest_id, tpl_id, body.get('target_table'), body.get('column_map'),
-        body.get('write_mode') or 'upsert', body.get('business_key'))
-    return {'ok': True, 'id': mid}
+        raise store_errors.BadRequest('须选择数据源与模板')
+    lt_id = _load('store.catalog').create_load_table(
+        ds_id, tpl_id, body.get('target_table'),
+        body.get('write_mode') or 'upsert', body.get('fields'))
+    return {'ok': True, 'id': lt_id}
 
 
-@app.delete('/api/load/mappings/{mapping_id}')
-def api_load_mapping_del(mapping_id: int):
-    _load('store.catalog').delete_mapping(mapping_id)
+@app.get('/api/load/tables/{lt_id}')
+def api_load_table_get(lt_id: int):
+    lt = _load('store.catalog').get_load_table(lt_id)
+    if lt is None:
+        raise store_errors.NotFound('映射不存在')
+    return lt
+
+
+@app.patch('/api/load/tables/{lt_id}')
+async def api_load_table_patch(lt_id: int, request: Request):
+    body = await _json_body(request)
+    _load('store.catalog').update_load_table(
+        lt_id, write_mode=body.get('write_mode'), fields=body.get('fields'))
+    return {'ok': True}
+
+
+@app.delete('/api/load/tables/{lt_id}')
+def api_load_table_del(lt_id: int):
+    _load('store.catalog').delete_load_table(lt_id)
     return {'ok': True}
 
 

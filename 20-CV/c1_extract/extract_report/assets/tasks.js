@@ -87,8 +87,9 @@ function renderDetail(j){
   }
   var isLoad=r.mode==='load'&&r.load;
   if(isLoad){
-    html+='<div class="msg" style="margin-top:10px">入库目的地 <b>'+
-      escHtml(r.load.dest_name||'—')+'</b> · 目标表 <code class="mono">'+
+    html+='<div class="msg" style="margin-top:10px">入库数据源 <b>'+
+      escHtml(r.load.datasource_name||'—')+'</b> · 库 '+escHtml(r.load.db_name||'—')+
+      ' · 目标表 <code class="mono">'+
       escHtml(r.load.target_table||'—')+'</code> · '+escHtml(r.load.write_mode||'')+
       '</div><div class="msg" id="gateinfo" style="margin-top:4px"></div>';
   }

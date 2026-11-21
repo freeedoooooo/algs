@@ -7,10 +7,11 @@ design-task-schema.md：DB 唯一事实源，task_id / task_file_id 粒度，无
 
 1 迁移门禁幂等+真实 task 投影往返一致 · 2 重跑级联替换（应用层）· 3 patch/set_review ·
 4 跨 task 查询 · 5 真链路（临时服务 8799，含 P1 校验路由冒烟）· 6 断库显式 503（临时服务 8797）·
-7 P2 入库（合成目标表 _accept_p2_load＋合成模板/映射：mode=load 预登记、门禁 409、
-全部确认→loaded、回执幂等、transform/数据级隔离→partial、重试、upsert update）。
+7 P2b 入库（合成目标表 _accept_p2_load＋合成模板/数据源/映射：mode=load 预登记、
+门禁 409、全部确认→loaded、回执幂等、transform/数据级隔离→partial、重试、upsert update、
+数据源目标锁定/映射只读审计）。
 上传字节取自 extract_file.content；断库用不可达 DSN 的临时服务模拟，
-全程不触碰真实库的可用性。破坏性操作只落合成 task/模板/目的地/目标表（验完按 id 清理＋DROP，
+全程不触碰真实库的可用性。破坏性操作只落合成 task/模板/数据源/目标表（验完按 id 清理＋DROP，
 无外键：field/lineage/artifact 等子表须显式先删）；真实 task / file / 模板只读。
 用户的 8765 全程不动。两套验收脚本严禁并行（共用 8799/8797 端口）。
 """
@@ -144,8 +145,9 @@ def baseline():
                         'SELECT id FROM extract_task ORDER BY id',
                         'SELECT COUNT(*) FROM extract_template',
                         'SELECT COUNT(*) FROM extract_template_version',
-                        'SELECT COUNT(*) FROM extract_load_dest',
-                        'SELECT COUNT(*) FROM extract_load_mapping',
+                        'SELECT COUNT(*) FROM extract_load_datasource',
+                        'SELECT COUNT(*) FROM extract_load_table',
+                        'SELECT COUNT(*) FROM extract_load_table_field',
                         'SELECT COUNT(*) FROM extract_load_log',
                         'SELECT COUNT(*) FROM extract_quarantine'):
                 cur.execute(sql)
@@ -157,17 +159,21 @@ def baseline():
 
 
 def p2_cleanup(p2):
-    """P2 合成对象清理（在 cleanup_tasks 之后跑，引用已空）：映射/目的地/模板＋DROP 表。"""
+    """P2b 合成对象清理（在 cleanup_tasks 之后跑，引用已空）：
+    字段行/映射/数据源/模板＋DROP 表。"""
     if not p2:
         return
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            for mid in p2.get('mids', []):
-                cur.execute('DELETE FROM extract_load_mapping WHERE id=%s',
-                            (mid,))
-            for did in p2.get('dests', []):
-                cur.execute('DELETE FROM extract_load_dest WHERE id=%s', (did,))
+            for lid in p2.get('lts', []):
+                cur.execute('DELETE FROM extract_load_table_field'
+                            ' WHERE load_table_id=%s', (lid,))
+                cur.execute('DELETE FROM extract_load_table WHERE id=%s',
+                            (lid,))
+            for did in p2.get('dss', []):
+                cur.execute('DELETE FROM extract_load_datasource'
+                            ' WHERE id=%s', (did,))
             for tid in p2.get('tpls', []):
                 cur.execute('DELETE FROM extract_template_version'
                             ' WHERE template_id=%s', (tid,))
@@ -339,7 +345,7 @@ def main():
     base0 = baseline()
     sweep_stale_scratch()
     syn_tasks, syn_fids, up = [], [], []
-    p2 = {'mids': [], 'dests': [], 'tpls': []}
+    p2 = {'lts': [], 'dss': [], 'tpls': []}
     try:
         rc = _main(syn_tasks, syn_fids, up, p2)
     finally:
@@ -554,7 +560,7 @@ def _main(syn_tasks, syn_fids, up, p2):
     finally:
         svc_down.kill()
 
-    print('[7/7] P2 入库（合成目标表＋模板/映射，真链路 mode=load）')
+    print('[7/7] P2b 入库（合成目标表＋模板/数据源/映射，真链路 mode=load）')
     conn = db.connect()
     try:
         with conn.cursor() as cur:
@@ -567,7 +573,12 @@ def _main(syn_tasks, syn_fids, up, p2):
         conn.close()
     p2['table'] = P2_TABLE
     fields3 = [{'name': '名称'}, {'name': '金额'}, {'name': '备注'}]
-    cmap = {'名称': 'c_name', '金额': 'c_amt', '备注': 'c_note'}
+    FROWS = [{'template_field': '名称', 'target_column': 'c_name',
+              'is_business_key': 1},
+             {'template_field': '金额', 'target_column': 'c_amt',
+              'is_business_key': 0},
+             {'template_field': '备注', 'target_column': 'c_note',
+              'is_business_key': 0}]
     vid1 = catalog.create_template(
         '_accept_p2_tpl', schema={'fields': fields3},
         mapping={'table': {'index': 0},
@@ -587,85 +598,114 @@ def _main(syn_tasks, syn_fids, up, p2):
 
     svc = start_service(8799)
     try:
-        st, j = http(8799, '/api/load/dests',
-                     {'name': '_accept_p2_dest',
-                      'conn_ref': config.PLATFORM_DB_REF})
-        dest_id = j.get('id')
-        p2['dests'].append(dest_id)
-        stt, jt = http(8799, '/api/load/dests/{}/test'.format(dest_id), {})
-        check('目的地 CRUD＋测试连接（仅 safe_detail）',
+        p = db._parts(db.resolve_conn(config.PLATFORM_DB_REF))
+        stds, jds = http(8799, '/api/load/datasources')
+        seed = [d for d in jds.get('items', []) if d['name'] == '产品库']
+        check('默认数据源「产品库」种子存在（明文落行）',
+              stds == 200 and len(seed) == 1
+              and seed[0]['host'] == p['host']
+              and seed[0]['db_name'] == p['database'],
+              db.safe_detail(config.PLATFORM_DB_REF))
+        st, j = http(8799, '/api/load/datasources',
+                     {'name': '_accept_p2_ds', 'host': p['host'],
+                      'port': p['port'], 'user': p['user'],
+                      'password': p['password'], 'db_name': p['database']})
+        ds_id = j.get('id')
+        p2['dss'].append(ds_id)
+        stt, jt = http(8799, '/api/load/datasources/{}/test'.format(ds_id), {})
+        check('数据源 CRUD＋测试连接（仅 host:port/库名）',
               st == 200 and stt == 200 and jt.get('ok')
               and jt.get('detail') == db.safe_detail(config.PLATFORM_DB_REF),
               str(jt.get('detail')))
-        stb, jb = http(8799, '/api/load/dests/{}/tables'.format(dest_id))
-        stc, jc = http(8799, '/api/load/dests/{}/columns?table={}'.format(
-            dest_id, P2_TABLE))
+        stb, jb = http(8799, '/api/load/datasources/{}/tables'.format(ds_id))
+        stc, jc = http(8799, '/api/load/datasources/{}/columns?table={}'.format(
+            ds_id, P2_TABLE))
         check('目标库 introspection（表/列）',
               stb == 200 and P2_TABLE in jb['items'] and stc == 200
               and {c['name'] for c in jc['items']}
               >= {'c_name', 'c_amt', 'c_note'})
-        st, j = http(8799, '/api/load/mappings',
-                     {'load_dest_id': dest_id,
+        st, j = http(8799, '/api/load/tables',
+                     {'datasource_id': ds_id,
                       'template_id': tpl1['template_id'],
-                      'target_table': P2_TABLE, 'column_map': cmap,
-                      'write_mode': 'upsert', 'business_key': ['c_name']})
-        mid1 = j.get('id')
-        p2['mids'].append(mid1)
-        st2, j2 = http(8799, '/api/load/mappings',
-                       {'load_dest_id': dest_id,
+                      'target_table': P2_TABLE, 'write_mode': 'upsert',
+                      'fields': FROWS})
+        lt1 = j.get('id')
+        p2['lts'].append(lt1)
+        st2, j2 = http(8799, '/api/load/tables',
+                       {'datasource_id': ds_id,
                         'template_id': tpl2['template_id'],
-                        'target_table': P2_TABLE, 'column_map': cmap,
-                        'write_mode': 'upsert', 'business_key': ['c_name']})
-        mid2 = j2.get('id')
-        p2['mids'].append(mid2)
-        check('POST 映射 ×2', st == 200 and st2 == 200,
-              '{} {}'.format(mid1, mid2))
-        stn, _ = http(8799, '/api/load/mappings',
-                      {'load_dest_id': dest_id,
+                        'target_table': P2_TABLE, 'write_mode': 'upsert',
+                        'fields': FROWS})
+        lt2 = j2.get('id')
+        p2['lts'].append(lt2)
+        check('POST 映射 ×2（同表不同模板）', st == 200 and st2 == 200,
+              '{} {}'.format(lt1, lt2))
+        stgd, jgd = http(8799, '/api/load/tables/{}'.format(lt1))
+        check('映射详情：字段行＋业务键',
+              stgd == 200 and len(jgd.get('fields', [])) == 3
+              and [f['target_column'] for f in jgd['fields']
+                   if f['is_business_key']] == ['c_name'])
+        stn, _ = http(8799, '/api/load/tables',
+                      {'datasource_id': ds_id,
                        'template_id': tpl1['template_id'],
-                       'target_table': P2_TABLE,
-                       'column_map': {'名称': 'c_name'},
-                       'write_mode': 'upsert', 'business_key': ['c_name']})
-        stn2, _ = http(8799, '/api/load/mappings',
-                       {'load_dest_id': dest_id,
+                       'target_table': P2_TABLE, 'write_mode': 'upsert',
+                       'fields': FROWS[:1]})
+        nobk = [dict(f, is_business_key=0) for f in FROWS]
+        stn2, _ = http(8799, '/api/load/tables',
+                       {'datasource_id': ds_id,
                         'template_id': tpl1['template_id'],
                         'target_table': '_accept_p2_other',
-                        'column_map': cmap, 'write_mode': 'upsert'})
+                        'write_mode': 'upsert', 'fields': nobk})
         check('映射契约 400（覆盖不全 / upsert 无业务键）',
               stn == 400 and stn2 == 400)
-        stb, jb = http(8799, '/api/load/mappings',
-                       {'load_dest_id': dest_id,
+        stdup, _ = http(8799, '/api/load/tables',
+                        {'datasource_id': ds_id,
+                         'template_id': tpl1['template_id'],
+                         'target_table': P2_TABLE, 'write_mode': 'upsert',
+                         'fields': FROWS})
+        check('同数据源＋模板＋表重复映射 409', stdup == 409)
+        stlk, _ = http(8799, '/api/load/datasources/{}'.format(ds_id),
+                       {'host': '127.0.0.1'}, method='PATCH')
+        stpw, _ = http(8799, '/api/load/datasources/{}'.format(ds_id),
+                       {'password': p['password']}, method='PATCH')
+        check('被引用数据源：目标锁定 409 · 密码可改 200',
+              stlk == 409 and stpw == 200)
+        stb, jb = http(8799, '/api/load/tables',
+                       {'datasource_id': ds_id,
                         'template_id': tpl1['template_id'],
                         'target_table': '_accept_p2_nosuch',
-                        'column_map': cmap, 'write_mode': 'upsert',
-                        'business_key': ['c_name']})
-        mid_bad = jb.get('id')
+                        'write_mode': 'upsert', 'fields': FROWS})
+        lt_bad = jb.get('id')
         small = base64.b64encode(b'%PDF-1.4 accept').decode()
 
         def up_load(**over):
             body = {'files': [{'name': 'p2.pdf', 'data': small}],
                     'mode': 'load', 'template_version_id': vid1,
-                    'load_dest_id': dest_id, 'load_mapping_id': mid1}
+                    'load_datasource_id': ds_id, 'load_table_id': lt1}
             body.update(over)
             return http(8799, '/api/upload', body, timeout=120)
 
-        stx, _ = up_load(load_dest_id=None, load_mapping_id=None)
+        stx, _ = up_load(load_datasource_id=None, load_table_id=None)
         sty, _ = up_load(template_version_id=tv['id'])
-        stz, _ = up_load(load_mapping_id=mid_bad)
-        check('上传预检 400（缺 dest/映射 · 模板不匹配 · 目标表不存在）',
+        stz, _ = up_load(load_table_id=lt_bad)
+        check('上传预检 400（缺数据源/映射 · 模板不匹配 · 目标表不存在）',
               stx == 400 and sty == 400 and stz == 400,
               '{} {} {}'.format(stx, sty, stz))
-        std, _ = http(8799, '/api/load/mappings/{}'.format(mid_bad),
+        std, _ = http(8799, '/api/load/tables/{}'.format(lt_bad),
                       method='DELETE')
         check('无引用映射可删', std == 200)
+        ste, _ = http(8799, '/api/load/tables/{}'.format(lt2),
+                      {'write_mode': 'upsert', 'fields': FROWS},
+                      method='PATCH')
+        check('无任务引用映射可编辑 200', ste == 200)
         stp, _ = http(8799, '/api/tasks/{}/load'.format(up[0]), {})
         check('preview 任务入库 400', stp == 400)
 
         # ---- Leg A：真链路 mode=load 上传 → 门禁 → 全确认 → loaded ----
         task_a, sta = upload(8799, src['data'], src['name'],
                              {'mode': 'load', 'template_version_id': vid1,
-                              'load_dest_id': dest_id,
-                              'load_mapping_id': mid1})
+                              'load_datasource_id': ds_id,
+                              'load_table_id': lt1})
         up.append(task_a)
         time.sleep(1)
         ra = catalog.get_task(task_a)
@@ -673,7 +713,7 @@ def _main(syn_tasks, syn_fids, up, p2):
         tfa = ra['files'][0]['task_file_id']
         check('mode=load 预登记＋previewed',
               sta.get('error') is None and ra['state'] == 'previewed'
-              and (ra.get('load') or {}).get('mapping_id') == mid1,
+              and (ra.get('load') or {}).get('load_table_id') == lt1,
               'state={} load={}'.format(ra['state'], ra.get('load')))
         stg, jg = http(8799, '/api/tasks/{}/staging'.format(task_a))
         names = [r['values'].get('名称', '')
@@ -714,15 +754,17 @@ def _main(syn_tasks, syn_fids, up, p2):
             task_a, tfa, 0), {'values': {'名称': 'x'}}, method='PATCH')
         check('loaded 重入库 409＋记录只读 409',
               strer == 409 and stpat == 409)
-        stdd, _ = http(8799, '/api/load/dests/{}'.format(dest_id),
+        stdd, _ = http(8799, '/api/load/datasources/{}'.format(ds_id),
                        method='DELETE')
-        stmd, _ = http(8799, '/api/load/mappings/{}'.format(mid1),
+        stmd, _ = http(8799, '/api/load/tables/{}'.format(lt1),
                        method='DELETE')
-        check('被任务引用的目的地/映射禁删 409',
-              stdd == 409 and stmd == 409)
+        stmp, _ = http(8799, '/api/load/tables/{}'.format(lt1),
+                       {'write_mode': 'insert'}, method='PATCH')
+        check('被任务引用的数据源/映射禁删禁改 409',
+              stdd == 409 and stmd == 409 and stmp == 409)
 
         # ---- Leg B：合成 task（number transform＋超长值）→ partial → 重试 ----
-        def syn_load_task(vid, mid, recs, tag):
+        def syn_load_task(vid, lt, recs, tag):
             tid = catalog.create_task('load', vid, {})
             syn_tasks.append(tid)
             fake = hashlib.sha256(
@@ -733,7 +775,7 @@ def _main(syn_tasks, syn_fids, up, p2):
             if not dup:
                 syn_fids.append(fid)
             tf = catalog.add_task_file(tid, fid)
-            catalog.set_task_load(tid, dest_id, mid)
+            catalog.set_task_load(tid, ds_id, lt)
             content_db.save_records(
                 {'schema': 'c1-extract-records/1', 'task_id': tid,
                  'template': {'name': '_accept_p2', 'version': 1},
@@ -748,7 +790,7 @@ def _main(syn_tasks, syn_fids, up, p2):
                     'lineage': {k: [] for k in vals},
                     'review': {'state': 'confirmed', 'at': None}}
 
-        tid_b, tfb = syn_load_task(vid2, mid2, [
+        tid_b, tfb = syn_load_task(vid2, lt2, [
             rec(0, {'名称': ' 合成甲 ', '金额': ' 1,234.5 ', '备注': 'n0'}),
             rec(1, {'名称': '合成乙', '金额': '88', '备注': 'x' * 300}),
             rec(2, {'名称': '合成丙', '金额': 'bad', '备注': 'n2'})], 'p2b')
@@ -801,7 +843,7 @@ def _main(syn_tasks, syn_fids, up, p2):
 
         # ---- Leg C：同映射跨 task upsert 命中已有行 → update ----
         name0 = str(names[0]).strip()
-        tid_c, _tfc = syn_load_task(vid1, mid1, [
+        tid_c, _tfc = syn_load_task(vid1, lt1, [
             rec(0, {'名称': name0, '金额': 'C1', '备注': 'UPDATED-C'})], 'p2c')
         http(8799, '/api/tasks/{}/load'.format(tid_c), {})
         rc = wait_load(8799, tid_c)
