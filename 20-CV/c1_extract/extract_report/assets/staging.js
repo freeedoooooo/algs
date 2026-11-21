@@ -326,7 +326,7 @@ function setCollapsed(on){
   var panel=document.getElementById('lineage');
   panel.classList.toggle('collapsed',on);
   var b=document.getElementById('ltoggle');
-  b.textContent=on?'展开 ▾':'收起 ▴';
+  b.textContent=on?'展开':'收起 ▴';
   b.setAttribute('aria-expanded',on?'false':'true');
   if(on){ clearSel(); closeLb(); }else alignPagers();
 }
@@ -459,9 +459,12 @@ document.getElementById('viewbar').addEventListener('click',function(e){
   var b=e.target.closest?e.target.closest('[data-view]'):null;
   if(b) setView(b.getAttribute('data-view'));
 });
-document.getElementById('ltoggle').onclick=function(){
-  setCollapsed(!document.getElementById('lineage').classList.contains('collapsed'));
-};
+/* 收起态整条竖栏可点展开；展开态只有「收起」钮触发折叠 */
+document.querySelector('#lineage .lhead').addEventListener('click',function(e){
+  var panel=document.getElementById('lineage');
+  if(panel.classList.contains('collapsed')){ setCollapsed(false); return; }
+  if(e.target.closest('#ltoggle')) setCollapsed(true);
+});
 
 /* ---- 窗口式翻页（公共件 pagerPages/renderPagerInto/alignPagerTo 在 stage.js） ---- */
 function renderPager(){
@@ -596,7 +599,7 @@ function loadStaging(){
     renderTable(); buildAnchors(); initViewer();
     var links=document.getElementById('filelinks');
     if(curFile){
-      links.innerHTML='<a class="btn mini reportbtn" target="_blank" href="'+
+      links.innerHTML='<a class="btn mini" target="_blank" href="'+
         fileUrl(curFile,'对照报告.html')+'">对照报告</a>';
     }else links.innerHTML='';
     var t=doc.template||{};
@@ -610,6 +613,8 @@ function loadStaging(){
 
 document.getElementById('tasktag').textContent=task?('任务 #'+task):'（未指定任务）';
 document.getElementById('tasklink').href=task?('/tasks?task='+encodeURIComponent(task)):'/tasks';
+/* 默认收起成细竖条：表格撑满全宽，点数据自动弹出（用户裁决） */
+setCollapsed(true);
 if(!task){
   /* 无任务参数：校验台独立入口，渲染任务级台账（/api/staging/ledger，新任务在前）。
      任务行汇总全部文件的校验进度，点任务行展开文件子行，点子行进校验台。 */

@@ -2,9 +2,6 @@
    + 源图回溯框双向血缘侧栏 + 筛选 chips / 任务级校验台账。
    舞台公共样式（框/视图切换/翻页胶囊/全屏浮层/光标提示）在 stage.css，先于本文件加载。 */
 .pagebody.wide{max-width:1500px}
-/* 页头「对照报告」：淡蓝底实心钮，比无边框文字链接明显 */
-.reportbtn{background:#e7f0ff;border-color:#bcd3f7;color:#1d4ed8}
-.reportbtn:hover{background:#d7e6ff;border-color:#9dc0f5;color:#1d4ed8}
 .filetabs{display:flex;align-items:center;gap:4px;margin-bottom:10px;
   overflow-x:auto;padding-bottom:2px}
 .filetabs[hidden]{display:none}
@@ -32,11 +29,18 @@
 .lhead b{font-weight:600}
 .lsub{flex:1;font-size:11px;color:#8a94a6;font-weight:400}
 .ltoggle{flex:none}
-/* 收起＝折叠成标题栏（展开入口常驻），不整块消失；点单元格/行会自动展开 */
-.lineage.collapsed{width:auto;max-width:none;max-height:none}
-.lineage.collapsed .lhead{border-bottom:0}
+/* 收起＝右侧细竖条（不占表格宽度）：点竖条或点数据自动展开 */
+.lineage.collapsed{width:34px;max-width:34px;max-height:none;align-self:stretch;
+  cursor:pointer}
+.lineage.collapsed:hover{border-color:#9dc0f5}
+.lineage.collapsed .lhead{flex:1 1 auto;flex-direction:column;align-items:center;
+  gap:12px;padding:12px 0;border-bottom:0}
 .lineage.collapsed .lsub,.lineage.collapsed .stage,
 .lineage.collapsed .lhint{display:none}
+.lineage.collapsed #ltitle{writing-mode:vertical-rl;font-size:12px;font-weight:500;
+  color:#5a6a85;letter-spacing:3px}
+.lineage.collapsed .ltoggle{writing-mode:vertical-rl;padding:8px 2px;
+  letter-spacing:2px}
 .lineage .stage{flex:1 1 auto;min-height:220px;overflow:visible;border-right:0}
 .lhint{padding:6px 12px;font-size:12px;color:#8a6d3b;background:#fcf8e3;
   border-top:1px solid #f0e6c8}
@@ -46,6 +50,10 @@
   .stgwrap{flex-direction:column}
   .lineage{width:100%;max-width:none;position:static;max-height:none}
   .lineage .stage{max-height:60vh}
+  .lineage.collapsed{width:100%;max-width:none;align-self:auto}
+  .lineage.collapsed .lhead{flex-direction:row;padding:9px 12px}
+  .lineage.collapsed #ltitle,.lineage.collapsed .ltoggle{
+    writing-mode:horizontal-tb;letter-spacing:normal}
 }
 /* 任务级校验台账（无 task 参数入口）：任务行汇总，展开文件子行 */
 .ledgerwrap{max-height:62vh;overflow:auto;border-top:1px solid #eef2f8}

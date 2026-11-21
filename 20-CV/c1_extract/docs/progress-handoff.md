@@ -157,27 +157,31 @@ P1b 模板消费＝选择器＋重命名（transform 留 P2）。
 
 ---
 
-## 〇.9、校验台两处打磨（2026-11-21，已完成；用户三条）
+## 〇.9、校验台按钮层级＋血缘细竖条（2026-11-21，已完成；用户三条×两轮迭代）
 
 1. **任务页「预览数据」→校验台是刻意设计**（P1a 裁决：暂存页原地升级成校验台，
    不另建预览页）。用户问是否刻意→答是；「文案暗示只读、实际可改值」的盲点已提出，
    用户裁决**先不动**（tasks.js 未改）。
-2. **页头「对照报告」加底色**：staging.js filelinks 改 `btn mini reportbtn`；
-   staging.css `.reportbtn` 淡蓝底 #e7f0ff／边 #bcd3f7／字 #1d4ed8，hover 加深。
-3. **血缘回溯收起 bug＋样式**：根因＝hideLineage 整块 `hidden=true`，只有
-   initViewer（换文件）复显，pinField/selectRecord 不展开→收起后永久打不开；
-   且 `.dclose` 是对话框关闭钮样式、整块消失不留入口。改＝**折叠成标题栏**
-   （`.lineage.collapsed` 隐藏 .stage/.lsub/.lhint、width:auto，保留 lhead＋展开钮）；
-   按钮改 `btn ghost mini ltoggle`（id ltoggle，收起 ▴／展开 ▾＋aria-expanded）；
-   pinField/selectRecord 调 showLineage() 自动展开；收起时 clearSel＋closeLb；
-   换文件保留折叠偏好。staging.css 局部 .dclose 覆盖已删（shell.css 共享 .dclose
-   仍供任务/上传页关闭钮使用，未动）。
-- **验证**：node --check；8799 只读浏览器：29 条／3 视图预渲染；收起→182×47 标题栏、
-  表格撑满全宽；点单元格／点行／按钮三路均展开；胶囊 18px/262px 与图高 714 各态
-  一致（零位移）；光箱开→收起即关；task42 换页签保留折叠、点格展开；控制台零消息。
+2. **页头按钮层级**：「对照报告」＝实心主色 `btn mini`（#2563eb 白字，最醒目）；
+   「返回任务」统一改名**「返回」**（全工程仅此一处返回钮），保持 ghost mini 白底退后。
+   第一版淡蓝底 .reportbtn 被用户否（不够显眼、反被返回压过）→ 改实心主色并删 .reportbtn。
+3. **血缘回溯收起 bug＋样式（两轮迭代到终态）**：根因＝hideLineage 整块 `hidden=true`，
+   只有 initViewer（换文件）复显，pinField/selectRecord 不展开→收起后永久打不开。
+   终态＝**默认收起成右侧 34px 细竖条**（用户裁决）：`.lineage.collapsed`
+   width/max-width:34px＋align-self:stretch（随表格等高）＋lhead 竖排
+   （#ltitle/.ltoggle writing-mode:vertical-rl，隐藏 .stage/.lsub/.lhint）；
+   整条竖栏可点展开（lhead 委托），展开态仅「收起 ▴」钮折叠；
+   **点单元格/行自动弹出**（pinField/selectRecord 调 showLineage()）；
+   收起时 clearSel＋closeLb；换文件保留折叠偏好；窄屏 media 回退横条。
+   按钮 `btn ghost mini ltoggle`（id ltoggle，收起 ▴／展开＋aria-expanded）。
+   staging.css 局部 .dclose 覆盖已删（shell.css 共享 .dclose 仍供任务/上传页使用，未动）。
+- **验证**：node --check；8799 只读浏览器：默认 34×943 竖条＋表格 1044 全宽、三页图
+  仍预加载（展开瞬时）；点格弹出 527px＋钉住框 1＋胶囊 18px/262px 图高 714 零位移；
+  竖条点击/按钮/点格三路展开全通；光箱开→收起即关；task42 换页签保留折叠；
+  返回 href=/tasks?task=21；控制台零消息；截图确认默认/展开两态。
   **本轮纯前端页面资产**（staging.html/css/js）：builder 只内联 stage/report 资产，
   报告 BLOB 与后端零改动→两套验收无回归面，未重跑（node＋浏览器金路径为准）。
-- **8765**：/static 即时生效，本轮两处改动无需重启即可见。
+- **8765**：/static 即时生效，本轮改动无需重启即可见。
 
 ---
 
