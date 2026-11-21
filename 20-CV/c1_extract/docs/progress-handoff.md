@@ -66,6 +66,34 @@ P1b 模板消费＝选择器＋重命名（transform 留 P2）。
 
 ---
 
+## 〇.6、小重构轮（2026-11-21，已完成；P1b 前置）
+
+用户裁决「小重构后再 P1b」。范围＝A 错误分类＋B 前端去重（C collect 单测骨架
+随 P1b 同轮）；路由拆分押后。两轮均已落地并验收。
+
+- **A 错误分类**：`store/errors.py` 类型化异常 StoreError(code,msg)/BadRequest(400)/
+  NotFound(404)/Conflict(409)；app 异常处理器 StoreError→对应码、
+  MySQLError/OSError/LookupError→503『平台库不可用』、其余→500；移除 22 处 catch-all；
+  upload/tasks_create 加 launched 标志＋finally `_rmtree_retry`（修 scratch 泄漏）。
+- **B 前端去重**：新建 `assets/stage.js`（cardOf/wantViewOf/toast/cursorHint/hitCell
+  含 polygon 射线法/pagerPages/renderPagerInto/alignPagerTo/bindStageLightbox 工厂）
+  ＋`assets/stage.css`（舞台/框族/pager/lightbox 共享规则）；report.js 821→~600 行、
+  staging.js 807→~640 行改钩子调用；report.css/staging.css 只留页面特有规则；
+  builder 内联 stage 件（hint→stage→report 顺序）保 file:// 自包含；staging.html
+  经 /static 外链 stage 件。shell.js 归一 escHtml/fmtSize/kindOf/thumbHtml/b64 等，
+  upload.js/sources.js 删本地副本。上传页自己的取坐标 lightbox 未动。
+- **验收**：A、B 两轮各两套脚本顺序跑 **6/6 PASS ×2**；B 轮浏览器金路径全过
+  （8799 临时服务＋合成 task 105＝CCB 3 页 29 记录）：报告页 3 页卡/pager 锚定/
+  hover-pin/Alt+click lightbox 钩子/boxes 克隆/点克隆框回跳 pin/翻页；校验台
+  29 行/共享 hitCell 点图定位/血缘 lightbox（153 框 syncBoxes）/双击改值→edited/
+  ✓确认→confirmed/翻页 page2；两页控制台零消息。合成 task 105 child-first 清净，
+  基线还原 records 135/field 1867/lineage 1867/artifact 98(14870953B)/file 5。
+- **当前库态**：tasks 21/30/41/42/51/52/53–56/80（51/52 failed）；files 3/19/26/33/56。
+- **8765 注意**：前端改动经 /static 即时生效，但 **A 轮 app.py/store 改动需用户
+  重启 8765 才载入**（当前进程仍是 P1a 代码）——方便时重启一次即可。
+
+---
+
 ## 一、C1 已完成（已验证）
 
 用户 5 项演进（2026-11-20 提出，全部批准落地）：
@@ -145,9 +173,10 @@ P1b 模板消费＝选择器＋重命名（transform 留 P2）。
 
 ## 四、下次上班入口
 
-1. C1 存储演进 + 任务化命名/去外键**均已完成**：代码＋迁移＋验收＋浏览器＋文档全部收尾。
-2. 建议事项：① 用户 8765 方便时再重启一次（载入 `_rmtree_retry` scratch 修复，
-   当前进程启动早于该修复落盘）；② 图片路线 paddlex[ocr] 依赖缺口（见 §〇）；
-   ③ git 历史凭据清理（见 §〇）。
-3. 新需求从 P1b 模板管理＋collect 消费起步（P1a 校验台已落地，见 §〇.5）。
+1. C1 存储演进＋任务化命名/去外键＋P1a 校验台＋**小重构轮（A 错误分类/B 前端去重）**
+   均已完成：代码＋验收＋浏览器＋文档全部收尾（见 §〇.6）。
+2. 建议事项：用户 8765 方便时重启一次——载入 A 轮 app.py/store 错误分类改动
+   （前端 /static 改动已即时生效，后端改动需重启；见 §〇.6）。
+3. 新需求从 **P1b** 起步（设计先行，用户确认后执行）：模板管理页 CRUD＋版本＋
+   collect 选择器/重命名消费＋选择器单测骨架（C 项）同轮；transform 留 P2。
 4. 其余沿用 §二挂起项。

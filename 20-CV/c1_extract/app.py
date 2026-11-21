@@ -79,6 +79,26 @@ async def lifespan(_app):
 
 app = FastAPI(title='结构化平台', version='0.1', lifespan=lifespan)
 
+# ---- 错误分类：业务错误类型化（StoreError.code→HTTP），DB 故障 503，
+# 编程错误 500（uvicorn 记 traceback）。不再把一切异常伪装成「平台库不可用」。----
+store_errors = _load('store.errors')
+
+
+@app.exception_handler(store_errors.StoreError)
+async def store_error_handler(_request, exc):
+    return JSONResponse({'ok': False, 'error': exc.msg}, status_code=exc.code)
+
+
+@app.exception_handler(Exception)
+async def fallback_error_handler(_request, exc):
+    import pymysql
+    if isinstance(exc, (pymysql.MySQLError, OSError, LookupError)):
+        print('>> 平台库不可用：{}: {}'.format(type(exc).__name__, exc))
+        return JSONResponse({'ok': False, 'error': '平台库不可用'},
+                            status_code=503)
+    return JSONResponse({'ok': False, 'error': '服务器内部错误'},
+                        status_code=500)
+
 # ---- 产物白名单：页面只见预生成的自有标准视图 ----
 # raw/（引擎原样）与旧 result.json 一律 403 —— 引擎结构不出适配层（防方案抄袭）。
 _TOP_FILES = {config.EXTRACT_JSON, config.BOXES_NAME,
@@ -123,10 +143,7 @@ def files_db(path: str, request: Request):
         msg = ('403 Forbidden（引擎原始层不对外）' if code == 403
                else '404 Not Found')
         return PlainTextResponse(msg, status_code=code)
-    try:
-        a = _load('store.artifact').get(int(parts[0]), rel)
-    except Exception as e:
-        return _db_unavailable(e)
+    a = _load('store.artifact').get(int(parts[0]), rel)
     if a is None:
         return PlainTextResponse('404 Not Found', status_code=404)
     return _blob_response(a['data'], a['mime'], a['sha'], request)
@@ -136,10 +153,7 @@ def files_db(path: str, request: Request):
 def srcfiles_db(file_id: int, request: Request):
     """/srcfiles/<file_id>：原件字节（extract_file.content）。
     用 id 不用名字——同名不同字节是两行，名字会撞。"""
-    try:
-        s = _load('store.catalog').get_file_content(file_id)
-    except Exception as e:
-        return _db_unavailable(e)
+    s = _load('store.catalog').get_file_content(file_id)
     if s is None:
         return PlainTextResponse('404 Not Found', status_code=404)
     mime = _load('store.artifact').mime_of(s['name'])
@@ -275,17 +289,20 @@ def _dedup_name(name, used):
     return '{}-{}{}'.format(stem, k, e)
 
 
+async def _json_body(request):
+    try:
+        return await request.json()
+    except Exception:
+        raise store_errors.BadRequest('请求体不是合法 JSON')
+
+
 @app.post('/api/upload')
 async def upload(request: Request):
     if STATE['running']:
         return JSONResponse(
             {'ok': False, 'error': '已有任务正在处理，请等它完成'},
             status_code=409)
-    try:
-        body = await request.json()
-    except Exception:
-        return JSONResponse({'ok': False, 'error': '请求体不是合法 JSON'},
-                            status_code=400)
+    body = await _json_body(request)
     files = body.get('files') or []
     if not files:
         return JSONResponse({'ok': False, 'error': '没有收到文件'},
@@ -295,60 +312,58 @@ async def upload(request: Request):
         return JSONResponse(
             {'ok': False, 'error': '入库模式在 P2 开放，当前请用预览模式'},
             status_code=400)
-    try:
-        tpl = _resolve_template(body.get('template_version_id'))
-    except Exception as e:
-        return _db_unavailable(e)
+    tpl = _resolve_template(body.get('template_version_id'))
     # 调试参数：校验一次，非法值回退默认并把警告带回页面（不让整批失败）
     params, warns = params_mod.normalize(body.get('params'))
 
-    # 输入副本只落 tmp/input scratch（字节事实源在 extract_file.content），跑完即清
+    # 输入副本只落 tmp/input scratch（字节事实源在 extract_file.content），跑完即清；
+    # 任何失败路径（校验 400 / DB 503）都由 finally 回收，不留孤儿
     in_dir = tempfile.mkdtemp(prefix='in_', dir=config.TMP_INPUT)
-    paths, used, ctx = [], set(), []
-    for item in files:
-        name = safe_name(item.get('name', ''))
-        ext = os.path.splitext(name)[1].lower()
-        if ext not in config.ALLOWED_EXTS:
-            return JSONResponse(
-                {'ok': False, 'error': '不支持的格式：{}'.format(ext)},
-                status_code=400)
-        name = _dedup_name(name, used)
-        used.add(name)
-        try:
-            data = base64.b64decode(str(item.get('data', '')).split(',')[-1])
-        except Exception:
-            return JSONResponse(
-                {'ok': False, 'error': '{} 的 base64 数据无效'.format(name)},
-                status_code=400)
-        if len(data) > config.MAX_FILE_MB * 1024 * 1024:
-            return JSONResponse(
-                {'ok': False,
-                 'error': '{} 超过 {}MB'.format(name, config.MAX_FILE_MB)},
-                status_code=400)
-        path = os.path.join(in_dir, name)
-        with open(path, 'wb') as f:
-            f.write(data)
-        paths.append(path)
-        try:
+    launched = False
+    try:
+        paths, used, ctx = [], set(), []
+        for item in files:
+            name = safe_name(item.get('name', ''))
+            ext = os.path.splitext(name)[1].lower()
+            if ext not in config.ALLOWED_EXTS:
+                return JSONResponse(
+                    {'ok': False, 'error': '不支持的格式：{}'.format(ext)},
+                    status_code=400)
+            name = _dedup_name(name, used)
+            used.add(name)
+            try:
+                data = base64.b64decode(str(item.get('data', '')).split(',')[-1])
+            except Exception:
+                return JSONResponse(
+                    {'ok': False, 'error': '{} 的 base64 数据无效'.format(name)},
+                    status_code=400)
+            if len(data) > config.MAX_FILE_MB * 1024 * 1024:
+                return JSONResponse(
+                    {'ok': False,
+                     'error': '{} 超过 {}MB'.format(name, config.MAX_FILE_MB)},
+                    status_code=400)
+            path = os.path.join(in_dir, name)
+            with open(path, 'wb') as f:
+                f.write(data)
+            paths.append(path)
             info = _register_file(name, data)
-        except Exception as e:
-            return _db_unavailable(e)
-        ctx.append(dict(info, name=name, path=path))
-
-    return _launch(paths, params, warns, ctx, mode, tpl)
+            ctx.append(dict(info, name=name, path=path))
+        result = _launch(paths, params, warns, ctx, mode, tpl)
+        launched = True
+        return result
+    finally:
+        if not launched:
+            _rmtree_retry(in_dir)
 
 
 def _launch(paths, params, warns, ctx, mode='preview', tpl=None):
-    """登记任务（DB 必选，失败整批 503）→ 建日志 → 重置 STATE → 起后台线程。"""
+    """登记任务（DB 必选，失败上抛 503）→ 建日志 → 重置 STATE → 起后台线程。"""
     tpl = tpl or _resolve_template()
     catalog = _load('store.catalog')
-    try:
-        task_id = catalog.create_task(mode, tpl['version_id'], params)
-        for f in ctx:
-            f['task_file_id'] = catalog.add_task_file(task_id, f['file_id'])
-            f['state'] = 'pending'
-    except Exception as e:
-        return _db_unavailable(e)
+    task_id = catalog.create_task(mode, tpl['version_id'], params)
+    for f in ctx:
+        f['task_file_id'] = catalog.add_task_file(task_id, f['file_id'])
+        f['state'] = 'pending'
     label = 'task_{}'.format(task_id)
     tasklog = _load('tasklog')
     log = tasklog.TaskLog(label, log_path=os.path.join(config.LOG_DIR,
@@ -402,11 +417,8 @@ def extract_report():
     报告内资源全是相对路径，必须落在该 task_file 的 URL 下才能解析；
     file:// 直开用 export_artifacts.py 按需导出。"""
     from urllib.parse import quote
-    try:
-        tf = _load('store.artifact_db').latest_task_file_with(
-            config.EXTRACT_REPORT_NAME)
-    except Exception as e:
-        return _db_unavailable(e)
+    tf = _load('store.artifact_db').latest_task_file_with(
+        config.EXTRACT_REPORT_NAME)
     if tf is not None:
         return RedirectResponse('/files/{}/{}'.format(
             tf, quote(config.EXTRACT_REPORT_NAME, safe='')))
@@ -579,30 +591,20 @@ def task_batch(paths, params=None, log=None, task_ctx=None):
 
 
 # ---- 数据链路 API（P0：资料库 / 模板 / 任务 / 预生成内容读取）----
-# 全部经 catalog / content / artifact repo 查 DB（DB 故障回 503）。
-# 任务以 task id 为键；文件以 task_file_id 为键；原件以 file_id 为键。
-
-def _db_unavailable(e):
-    return JSONResponse({'ok': False, 'error': '平台库不可用：{}'.format(e)},
-                        status_code=503)
+# 全部经 catalog / content / artifact repo 查 DB。错误分类归异常处理器：
+# StoreError→对应码，DB 故障→503，编程错误→500。任务以 task id 为键；
+# 文件以 task_file_id 为键；原件以 file_id 为键。
 
 
 @app.get('/api/sources')
 def api_sources(q: str = None, kind: str = None, tag: str = None, page: int = 1):
-    try:
-        return _load('store.catalog').list_files(q, kind, tag, page)
-    except Exception as e:
-        return _db_unavailable(e)
+    return _load('store.catalog').list_files(q, kind, tag, page)
 
 
 @app.post('/api/sources')
 async def api_sources_add(request: Request):
     """只登记不提取（资料页上传）。哈希命中回已有 id。"""
-    try:
-        body = await request.json()
-    except Exception:
-        return JSONResponse({'ok': False, 'error': '请求体不是合法 JSON'},
-                            status_code=400)
+    body = await _json_body(request)
     name = safe_name(body.get('name', ''))
     ext = os.path.splitext(name)[1].lower()
     if ext not in config.ALLOWED_EXTS:
@@ -617,47 +619,30 @@ async def api_sources_add(request: Request):
         return JSONResponse(
             {'ok': False, 'error': '{} 超过 {}MB'.format(name, config.MAX_FILE_MB)},
             status_code=400)
-    try:
-        info = _register_file(name, data)
-    except Exception as e:
-        return _db_unavailable(e)
+    info = _register_file(name, data)
     return {'ok': True, 'id': info['file_id'], 'dedup': info['dedup']}
 
 
 @app.delete('/api/sources/{file_id}')
 def api_sources_del(file_id: int):
-    try:
-        ok, reason = _load('store.catalog').delete_file(file_id)
-    except Exception as e:
-        return _db_unavailable(e)
-    if not ok:
-        return JSONResponse({'ok': False, 'reason': reason}, status_code=409)
-    return JSONResponse({'ok': True}, status_code=200)
+    _load('store.catalog').delete_file(file_id)
+    return {'ok': True}
 
 
 @app.get('/api/templates')
 def api_templates():
-    try:
-        return {'items': _load('store.catalog').list_templates()}
-    except Exception as e:
-        return _db_unavailable(e)
+    return {'items': _load('store.catalog').list_templates()}
 
 
 @app.get('/api/tasks')
 def api_tasks():
     """任务列表：task/task_file/file 表投影（无 run.json 附件）。"""
-    try:
-        return {'items': _load('store.catalog').list_tasks()}
-    except Exception as e:
-        return _db_unavailable(e)
+    return {'items': _load('store.catalog').list_tasks()}
 
 
 @app.get('/api/tasks/{task_id}')
 def api_task_detail(task_id: int):
-    try:
-        doc = _load('store.catalog').get_task(task_id)
-    except Exception as e:
-        return _db_unavailable(e)
+    doc = _load('store.catalog').get_task(task_id)
     if doc is None:
         return JSONResponse({'ok': False, 'error': '任务不存在'},
                             status_code=404)
@@ -675,17 +660,18 @@ def _tf_of(task_id, file):
     if not tfs:
         return None
     if file:
-        return int(file) if int(file) in tfs else None
+        try:
+            fid = int(file)
+        except ValueError:
+            raise store_errors.BadRequest('file 须为 task_file_id')
+        return fid if fid in tfs else None
     return tfs[0]
 
 
 @app.get('/api/tasks/{task_id}/extract')
 def api_task_extract(task_id: int, file: str = None):
-    try:
-        tf = _tf_of(task_id, file)
-        doc = _load('store.content').get_extract(tf) if tf else None
-    except Exception as e:
-        return _db_unavailable(e)
+    tf = _tf_of(task_id, file)
+    doc = _load('store.content').get_extract(tf) if tf else None
     if doc is None:
         return JSONResponse({'ok': False, 'error': 'extract.json 不存在'},
                             status_code=404)
@@ -694,15 +680,12 @@ def api_task_extract(task_id: int, file: str = None):
 
 @app.get('/api/tasks/{task_id}/staging')
 def api_task_staging(task_id: int, file: str = None):
-    try:
-        doc = _load('store.content').get_records(task_id)
-        if doc and file:
-            doc['files'] = [f for f in doc['files']
-                            if f['task_file_id'] == int(file)]
-            if not doc['files']:
-                doc = None
-    except Exception as e:
-        return _db_unavailable(e)
+    doc = _load('store.content').get_records(task_id)
+    if doc and file:
+        doc['files'] = [f for f in doc['files']
+                        if f['task_file_id'] == int(file)]
+        if not doc['files']:
+            doc = None
     if doc is None:
         return JSONResponse({'ok': False, 'error': '暂存记录不存在'},
                             status_code=404)
@@ -713,61 +696,39 @@ def api_task_staging(task_id: int, file: str = None):
 def api_staging_query(field: str = None, q: str = None,
                       task: str = None, state: str = None):
     """跨任务暂存查询：DB 直查 field 投影；DB down → 503。"""
-    try:
-        rows = _load('store.content_db').query_fields(field, q, task, state)
-    except Exception as e:
-        return _db_unavailable(e)
+    rows = _load('store.content_db').query_fields(field, q, task, state)
     return {'ok': True, 'items': rows}
 
 
 def _review_target(task_id, task_file_id):
-    """校验台写操作公共守卫：返回 (file_index, 错误响应)。
+    """校验台写操作公共守卫：返回 file_index。
 
-    task 不存在 / 文件不属于 task → 404；已入库 → 409（P2 前置守卫）。
+    task 不存在 / 文件不属于 task → NotFound；已入库 → Conflict（P2 前置守卫）。
     files 序与 content_db._task_files 的 ORDER BY tf.id 一致。
     """
-    try:
-        t = _load('store.catalog').get_task(task_id)
-    except Exception as e:
-        return None, _db_unavailable(e)
+    t = _load('store.catalog').get_task(task_id)
     if t is None:
-        return None, JSONResponse({'ok': False, 'error': '任务不存在'},
-                                  status_code=404)
+        raise store_errors.NotFound('任务不存在')
     if t['state'] == 'loaded':
-        return None, JSONResponse(
-            {'ok': False, 'error': '任务已入库，记录只读'}, status_code=409)
+        raise store_errors.Conflict('任务已入库，记录只读')
     fi = next((i for i, f in enumerate(t['files'])
                if f['task_file_id'] == task_file_id), None)
     if fi is None:
-        return None, JSONResponse(
-            {'ok': False, 'error': '文件不属于该任务'}, status_code=404)
-    return fi, None
+        raise store_errors.NotFound('文件不属于该任务')
+    return fi
 
 
 @app.patch('/api/tasks/{task_id}/staging/{task_file_id}/{index}')
 async def api_staging_patch(task_id: int, task_file_id: int, index: int,
                             request: Request):
     """校验改值：values 差量合并→edited，original 永不覆盖。"""
-    fi, err = _review_target(task_id, task_file_id)
-    if err:
-        return err
-    try:
-        body = await request.json()
-    except Exception:
-        return JSONResponse({'ok': False, 'error': '请求体不是合法 JSON'},
-                            status_code=400)
+    fi = _review_target(task_id, task_file_id)
+    body = await _json_body(request)
     values = body.get('values')
     if not isinstance(values, dict) or not values:
         return JSONResponse({'ok': False, 'error': 'values 须为非空对象'},
                             status_code=400)
-    try:
-        ok, rec = _load('store.content').patch_record(
-            task_id, fi, index, values)
-    except Exception as e:
-        return _db_unavailable(e)
-    if not ok:
-        code = 404 if '越界' in rec else 400
-        return JSONResponse({'ok': False, 'error': rec}, status_code=code)
+    rec = _load('store.content').patch_record(task_id, fi, index, values)
     return {'ok': True, 'record': rec}
 
 
@@ -775,14 +736,8 @@ async def api_staging_patch(task_id: int, task_file_id: int, index: int,
 async def api_staging_review(task_id: int, task_file_id: int,
                              request: Request):
     """批量确认/拒绝：indexes（记录内下标）＋ state。"""
-    fi, err = _review_target(task_id, task_file_id)
-    if err:
-        return err
-    try:
-        body = await request.json()
-    except Exception:
-        return JSONResponse({'ok': False, 'error': '请求体不是合法 JSON'},
-                            status_code=400)
+    fi = _review_target(task_id, task_file_id)
+    body = await _json_body(request)
     indexes = body.get('indexes')
     state = body.get('state')
     if not isinstance(indexes, list) or not indexes \
@@ -794,12 +749,7 @@ async def api_staging_review(task_id: int, task_file_id: int,
         return JSONResponse(
             {'ok': False, 'error': 'state 仅支持 confirmed/rejected'},
             status_code=400)
-    try:
-        ok, n = _load('store.content').set_review(task_id, fi, indexes, state)
-    except Exception as e:
-        return _db_unavailable(e)
-    if not ok:
-        return JSONResponse({'ok': False, 'error': n}, status_code=400)
+    n = _load('store.content').set_review(task_id, fi, indexes, state)
     return {'ok': True, 'updated': n}
 
 
@@ -809,50 +759,44 @@ async def api_tasks_create(request: Request):
     if STATE['running']:
         return JSONResponse({'ok': False, 'error': '已有任务正在处理'},
                             status_code=409)
-    try:
-        body = await request.json()
-    except Exception:
-        return JSONResponse({'ok': False, 'error': '请求体不是合法 JSON'},
-                            status_code=400)
+    body = await _json_body(request)
     ids = body.get('file_ids') or []
     if not ids:
         return JSONResponse({'ok': False, 'error': '未选择文件'},
                             status_code=400)
-    try:
-        catalog = _load('store.catalog')
-        rows = [catalog.get_file(int(i)) for i in ids]
-    except Exception as e:
-        return _db_unavailable(e)
+    catalog = _load('store.catalog')
+    rows = [catalog.get_file(int(i)) for i in ids]
     if any(r is None for r in rows):
         return JSONResponse({'ok': False, 'error': '存在未登记的文件 id'},
                             status_code=400)
     params, warns = params_mod.normalize(body.get('params'))
-    try:
-        tpl = _resolve_template(body.get('template_version_id'))
-    except Exception as e:
-        return _db_unavailable(e)
+    tpl = _resolve_template(body.get('template_version_id'))
     in_dir = tempfile.mkdtemp(prefix='in_', dir=config.TMP_INPUT)
-    paths, used, ctx = [], set(), []
-    for row in rows:
-        name = _dedup_name(row['name'], used)
-        used.add(name)
-        try:
+    launched = False
+    try:
+        paths, used, ctx = [], set(), []
+        for row in rows:
+            name = _dedup_name(row['name'], used)
+            used.add(name)
             s = catalog.get_file_content(row['id'])
-        except Exception as e:
-            return _db_unavailable(e)
-        if s is None:
-            return JSONResponse(
-                {'ok': False,
-                 'error': '原件字节缺失：file {}'.format(row['id'])},
-                status_code=409)
-        path = os.path.join(in_dir, name)
-        with open(path, 'wb') as fo:
-            fo.write(s['data'])
-        paths.append(path)
-        ctx.append({'name': name, 'path': path,
-                    'file_id': row['id'], 'sha256': row['sha256'],
-                    'dedup': True})
-    return _launch(paths, params, warns, ctx, 'preview', tpl)
+            if s is None:
+                return JSONResponse(
+                    {'ok': False,
+                     'error': '原件字节缺失：file {}'.format(row['id'])},
+                    status_code=409)
+            path = os.path.join(in_dir, name)
+            with open(path, 'wb') as fo:
+                fo.write(s['data'])
+            paths.append(path)
+            ctx.append({'name': name, 'path': path,
+                        'file_id': row['id'], 'sha256': row['sha256'],
+                        'dedup': True})
+        result = _launch(paths, params, warns, ctx, 'preview', tpl)
+        launched = True
+        return result
+    finally:
+        if not launched:
+            _rmtree_retry(in_dir)
 
 
 if __name__ == '__main__':

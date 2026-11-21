@@ -12,6 +12,7 @@ extract_file.content（原件 LONGBLOB）只在 get_file_content 里取，
 import json
 
 from . import db
+from .errors import Conflict
 
 _FILE_COLS = ('id, name, sha256, kind, size_bytes, tags, note, created_at')
 
@@ -106,17 +107,16 @@ def get_file_content(file_id):
 
 
 def delete_file(file_id):
-    """被任务引用禁删（血缘完整）；返回 (ok, reason)。字节随行删除。"""
+    """被任务引用禁删（血缘完整）抛 Conflict；字节随行删除。"""
     conn = db.connect()
     try:
         with conn.cursor() as cur:
             cur.execute('SELECT COUNT(*) FROM extract_task_file'
                         ' WHERE file_id=%s', (file_id,))
             if cur.fetchone()[0]:
-                return False, '该文件已被任务引用，禁止删除（血缘完整）'
+                raise Conflict('该文件已被任务引用，禁止删除（血缘完整）')
             cur.execute('DELETE FROM extract_file WHERE id=%s', (file_id,))
             conn.commit()
-            return True, None
     finally:
         conn.close()
 

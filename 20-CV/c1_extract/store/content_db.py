@@ -10,6 +10,7 @@ import time
 from datetime import datetime
 
 from . import db
+from .errors import BadRequest, NotFound
 from ..adapter.base import RECORDS_SCHEMA
 
 _TS = '%Y-%m-%dT%H:%M:%SZ'
@@ -173,26 +174,26 @@ def save_records(doc):
 
 
 def patch_record(task_id, file_index, index, values):
+    """校验改值：差量合并→edited，original 永不覆盖；返回更新后的记录。
+    越界抛 NotFound，未知键抛 BadRequest（事务回滚）。"""
     conn = db.connect()
     try:
         with conn.cursor() as cur:
             tfs = _task_files(cur, task_id)
             if file_index >= len(tfs):
-                return False, '文件下标越界'
+                raise NotFound('文件下标越界')
             cur.execute(
                 'SELECT id, values_json FROM extract_staging_record'
                 ' WHERE task_file_id=%s AND record_index=%s FOR UPDATE',
                 (tfs[file_index]['id'], index))
             row = cur.fetchone()
             if row is None:
-                conn.rollback()
-                return False, '记录下标越界'
+                raise NotFound('记录下标越界')
             rid, vj = row
             vals = json.loads(vj)
             unknown = set(values) - set(vals)
             if unknown:
-                conn.rollback()
-                return False, '未知字段：{}'.format('、'.join(sorted(unknown)))
+                raise BadRequest('未知字段：{}'.format('、'.join(sorted(unknown))))
             vals.update(values)
             cur.execute(
                 'UPDATE extract_staging_record SET values_json=%s,'
@@ -210,27 +211,24 @@ def patch_record(task_id, file_index, index, values):
     finally:
         conn.close()
     doc = get_records(task_id)
-    rec = next((r for r in doc['files'][file_index]['records']
-                if r['index'] == index), None)
-    return True, rec
+    return next((r for r in doc['files'][file_index]['records']
+                 if r['index'] == index), None)
 
 
 def set_review(task_id, file_index, indexes, state):
-    """批量确认/拒绝（P1 校验台）：单事务置 review_state/review_at。
-
-    state 仅 confirmed/rejected；original/lineage 不动。
-    返回 (ok, 更新条数或错误信息)。
-    """
+    """批量确认/拒绝（P1 校验台）：单事务置 review_state/review_at，
+    返回更新条数。state 仅 confirmed/rejected；original/lineage 不动。
+    非法入参抛 BadRequest，文件越界抛 NotFound。"""
     if state not in ('confirmed', 'rejected'):
-        return False, '非法校验状态：{}'.format(state)
+        raise BadRequest('非法校验状态：{}'.format(state))
     if not indexes:
-        return False, '未选择记录'
+        raise BadRequest('未选择记录')
     conn = db.connect()
     try:
         with conn.cursor() as cur:
             tfs = _task_files(cur, task_id)
             if file_index >= len(tfs):
-                return False, '文件下标越界'
+                raise NotFound('文件下标越界')
             ph = ','.join(['%s'] * len(indexes))
             cur.execute(
                 'UPDATE extract_staging_record SET review_state=%s,'
@@ -245,7 +243,7 @@ def set_review(task_id, file_index, indexes, state):
         raise
     finally:
         conn.close()
-    return True, n
+    return n
 
 
 def query_fields(field=None, q=None, task=None, state=None, limit=200):

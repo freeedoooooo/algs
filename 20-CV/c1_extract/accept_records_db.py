@@ -37,6 +37,7 @@ db = importlib.import_module(PKG + '.store.db')
 catalog = importlib.import_module(PKG + '.store.catalog')
 content = importlib.import_module(PKG + '.store.content')
 content_db = importlib.import_module(PKG + '.store.content_db')
+errors = importlib.import_module(PKG + '.store.errors')
 
 # 本地无人监听的端口：模拟库不可达，凭据为假值，永不落日志
 BAD_DSN = 'mysql://nobody:unused@127.0.0.1:3399/co_dev'
@@ -371,26 +372,37 @@ def _main(syn_tasks, syn_fids, up):
     check('无孤儿 field/lineage/record（反查=0）', orph == (0, 0, 0),
           'field/lineage/record 悬空={}'.format(orph))
 
-    print('[3/6] patch_record / set_review 语义')
-    ok, rec = content.patch_record(task2, 0, 0, {field: 'ACCEPT_EDIT'})
+    print('[3/6] patch_record / set_review 语义（类型化错误）')
+    rec = content.patch_record(task2, 0, 0, {field: 'ACCEPT_EDIT'})
     back = content_db.get_records(task2)['files'][0]['records'][0]
     check('edited+original 不变+DB 读回一致',
-          ok and rec['review']['state'] == 'edited'
+          rec['review']['state'] == 'edited'
           and rec['original'] == src_real[0]['original']
           and rec['values'][field] == 'ACCEPT_EDIT'
           and back['values'][field] == 'ACCEPT_EDIT'
           and back['review']['state'] == 'edited')
-    ok2, n2r = content.set_review(task2, 0, [0], 'confirmed')
+    n2r = content.set_review(task2, 0, [0], 'confirmed')
     back = content_db.get_records(task2)['files'][0]['records'][0]
-    check('set_review confirmed', ok2 and n2r == 1
+    check('set_review confirmed', n2r == 1
           and back['review']['state'] == 'confirmed')
-    ok3, n3r = content.set_review(task2, 0, [0], 'rejected')
+    n3r = content.set_review(task2, 0, [0], 'rejected')
     back = content_db.get_records(task2)['files'][0]['records'][0]
     hitr = content_db.query_fields(task=task2, state='rejected')
-    check('set_review rejected + 状态查询命中', ok3 and n3r == 1
+    check('set_review rejected + 状态查询命中', n3r == 1
           and back['review']['state'] == 'rejected' and len(hitr) > 0)
-    bad, err = content.patch_record(task2, 0, 0, {'不存在的字段': 'x'})
-    check('patch 未知键拒绝', not bad and '未知字段' in str(err), str(err))
+    try:
+        content.patch_record(task2, 0, 0, {'不存在的字段': 'x'})
+        raised = None
+    except errors.BadRequest as e:
+        raised = str(e)
+    check('patch 未知键抛 BadRequest', raised is not None
+          and '未知字段' in raised, str(raised))
+    try:
+        content.patch_record(task2, 0, 99999, {field: 'x'})
+        raised_nf = None
+    except errors.NotFound as e:
+        raised_nf = str(e)
+    check('patch 越界抛 NotFound', raised_nf is not None, str(raised_nf))
 
     print('[4/6] 跨 task 查询')
     hit = content_db.query_fields(field=field, q='ACCEPT_EDIT')
@@ -439,6 +451,10 @@ def _main(syn_tasks, syn_fids, up):
             task_id, tf_id, r0['index']),
             {'values': {'不存在的字段': 'x'}}, method='PATCH')
         check('PATCH 未知键 400', stb == 400)
+        stn, _jn = http(8799, '/api/tasks/{}/staging/{}/{}'.format(
+            task_id, tf_id, 99999),
+            {'values': {k0: 'x'}}, method='PATCH')
+        check('PATCH 越界 404（类型化错误）', stn == 404)
         stv, jv = http(8799, '/api/tasks/{}/staging/{}/review'.format(
             task_id, tf_id),
             {'indexes': [r0['index']], 'state': 'confirmed'})

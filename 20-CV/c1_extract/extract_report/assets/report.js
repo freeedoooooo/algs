@@ -1,5 +1,5 @@
-/* extract_report/assets/report.js — 对照报告交互（生成时内联进每份 对照报告.html） */
-function cardOf(el){ return el.closest('.card'); }
+/* extract_report/assets/report.js — 对照报告交互（生成时内联进每份 对照报告.html）。
+   舞台公共件（cardOf/toast/cursorHint/hitCell/pager/lightbox 工厂）在 stage.js，先于本文件内联。 */
 function activeSpace(card){
   var tp=card.querySelector('.tabpanel:not([hidden])');
   var t=tp?tp.getAttribute('data-tab'):'';
@@ -18,7 +18,6 @@ function elSpace(el){
   var host=el.closest('[data-space]');
   return host?host.getAttribute('data-space'):activeSpace(cardOf(el));
 }
-function wantViewOf(space){ return space==='rectified' ? 'rect' : 'orig'; }
 function ensureViewFor(card,space){
   var w=wantViewOf(space);
   if(currentView(card)===w) return;
@@ -38,19 +37,6 @@ function clearHover(card){
 }
 function clearPin(card){
   card.querySelectorAll('.pin').forEach(function(x){x.classList.remove('pin');});
-}
-/* 追溯不到时的轻提示：底部居中 toast，2.4s 自动消失 */
-var toastEl=null,toastTimer=null;
-function toast(msg){
-  if(!toastEl){
-    toastEl=document.createElement('div');
-    toastEl.id='trace-toast';
-    document.body.appendChild(toastEl);
-  }
-  toastEl.textContent=msg;
-  toastEl.classList.add('on');
-  clearTimeout(toastTimer);
-  toastTimer=setTimeout(function(){toastEl.classList.remove('on');},2400);
 }
 /* 反向定位公共件：图框 → 数据侧。先激活对应 tab/子页签（切换会清 pin，须先做），再滚动到位 */
 function matchingCells(card,el){
@@ -299,216 +285,22 @@ document.querySelectorAll('.copyjson').forEach(function(btn){
   });
 });
 
-/* 图片点击命中测试（定位模式）：按数据侧优先级取目标，与当前 tab 无关——
-   ① 跨页合并格框 stitchbox → 跨页合并 tab；② 单格框 cellbox → 表格 tab；
-   ③ 识别框 polygon（四边形射线法）→ 文本/文档 tab。同级重叠取面积最小者（最内层）。
-   合并表区域的格框与单格框几何重合，靠优先级保证先跳跨页合并。叠加框隐藏时也生效。
-   坐标按 viewBox 1:1 换算。命中返回图框元素（其 click 处理器负责切 tab/钉住），未命中 null。 */
-function hitCell(img,e){
-  var card=cardOf(img);
-  var view=img.closest('.view');
-  var svg=view&&view.querySelector('svg');
-  if(!svg||!svg.viewBox||!svg.viewBox.baseVal||!svg.viewBox.baseVal.width) return null;
-  var vb=svg.viewBox.baseVal,r=img.getBoundingClientRect();
-  if(!r.width||!r.height) return null;
-  var x=(e.clientX-r.left)/r.width*vb.width,y=(e.clientY-r.top)/r.height*vb.height;
-  function bestRect(list){
-    var best=null,bestA=Infinity;
-    Array.prototype.forEach.call(list,function(b){
-      var bx=+b.getAttribute('x'),by=+b.getAttribute('y'),
-          bw=+b.getAttribute('width'),bh=+b.getAttribute('height');
-      if(x>=bx&&x<=bx+bw&&y>=by&&y<=by+bh&&bw*bh<bestA){bestA=bw*bh;best=b;}
-    });
-    return best;
-  }
-  var cellSvg=view.querySelector('.cellsvg');
-  if(cellSvg){
-    var s=bestRect(cellSvg.querySelectorAll('.stitchbox'));
-    if(s) return s;
-    var c=bestRect(cellSvg.querySelectorAll('.cellbox'));
-    if(c) return c;
-  }
-  var best=null,bestA=Infinity;
-  view.querySelectorAll('polygon.box').forEach(function(p){
-    var pts=(p.getAttribute('points')||'').trim().split(/\s+/).map(function(s){
-      var xy=s.split(',');return [+xy[0],+xy[1]];
-    });
-    if(pts.length<3) return;
-    var inside=false,minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
-    for(var i=0,j=pts.length-1;i<pts.length;j=i++){
-      var xi=pts[i][0],yi=pts[i][1],xj=pts[j][0],yj=pts[j][1];
-      if(xi<minX)minX=xi;
-      if(xi>maxX)maxX=xi;
-      if(yi<minY)minY=yi;
-      if(yi>maxY)maxY=yi;
-      if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi) inside=!inside;
-    }
-    if(inside&&(maxX-minX)*(maxY-minY)<bestA){bestA=(maxX-minX)*(maxY-minY);best=p;}
-  });
-  if(best){
-    var tp=card.querySelector('.tabpanel:not([hidden])');
-    var tt=tp?tp.getAttribute('data-tab'):'';
-    /* 文档 tab 下表格 cell 的文字没有 md 行：不拽去文本 tab，给提示（格框通常已在②命中） */
-    if(tt==='md'&&!card.querySelector(
-      '.tabpanel[data-tab="md"] .mdline[data-idx="'+best.getAttribute('data-idx')+'"]')) return null;
-  }
-  return best;
-}
-
-/* 点图行为跟随光标（无持久开关）：悬停命中内容→十字光标，单击定位、Alt+单击放大；
-   悬停空白→放大光标，单击放大。光标旁小 pill 即时提示单击动作（无原生 title 延迟），
-   完整操作说明见面板标题「?」气泡。 */
-var hintEl=null;
-function cursorHint(){
-  if(!hintEl){
-    hintEl=document.createElement('div');
-    hintEl.id='cursor-hint';
-    document.body.appendChild(hintEl);
-  }
-  return hintEl;
-}
-function hideCursorHint(){ if(hintEl) hintEl.classList.remove('on'); }
-
-/* 点击图片全屏放大：克隆整个 .imgwrap，叠加框按同一 viewBox 1:1 跟随 */
-(function(){
-  var lb=document.getElementById('lightbox');
-  var stage=document.getElementById('lbStage');
-  var content=document.getElementById('lbContent');
-  var scaleEl=document.getElementById('lbScale');
-  var titleEl=document.getElementById('lbTitle');
-  var openBtn=document.getElementById('lbOpen');
-  var boxesBtn=document.getElementById('lbBoxes');
-  if(!lb||!stage||!content) return;
-  var scale=1,fit=1,tx=0,ty=0,imgW=0,imgH=0,drag=null,srcCard=null,moved=false;
-  function apply(){
-    content.style.transform='translate('+tx+'px,'+ty+'px) scale('+scale+')';
-    scaleEl.textContent=Math.round(scale*100)+'%';
-  }
-  function clamp(v){return Math.max(fit*0.3,Math.min(12,v));}
-  function setScale(v,mx,my){
-    var old=scale;scale=clamp(v);
-    if(mx!==undefined){
-      tx=mx-(mx-tx)*(scale/old);
-      ty=my-(my-ty)*(scale/old);
-    }
-    apply();
-  }
-  function fitWindow(){
-    var r=stage.getBoundingClientRect();
-    fit=Math.min(r.width/imgW,r.height/imgH)*0.94;
-    if(!isFinite(fit)||fit<=0) fit=1;
-    scale=fit;tx=0;ty=0;apply();
-  }
-  function open(img){
-    hideCursorHint();
-    var wrap=img.closest('.imgwrap');
-    if(!wrap) return;
-    var view=img.closest('.view');
-    var label=(view&&view.getAttribute('data-view')==='rect')?'矫正图':'原图';
+/* 点击图片全屏放大：共享 lightbox 工厂（stage.js），报告差异走钩子——
+   标题取卡片 h2 + 页码；叠加框初始跟随内联 stage；点框转发回源卡片当前可见视图的原框。 */
+var reportLb=bindStageLightbox({
+  title:function(img,label){
     var card=cardOf(img);
-    srcCard=card;
     var h2=card.querySelector('h2');
     if(!h2){var fc=fileCardOf(img);h2=fc&&fc.querySelector('h2');}
     var pg=card.getAttribute('data-page');
-    titleEl.textContent=(h2?h2.textContent:'图片')+(pg?' · 第 '+pg+' 页':'')+' · '+label;
-    openBtn.href=img.getAttribute('src');
-    var clone=wrap.cloneNode(true);
-    clone.className='lb-content';clone.id='lbContent';
-    content.parentNode.replaceChild(clone,content);
-    content=clone;
-    var ci=clone.querySelector('img');
-    ci.removeAttribute('width');ci.removeAttribute('height');
-    ci.style.width='';ci.style.height='';
-    imgW=img.naturalWidth||ci.naturalWidth||1000;
-    imgH=img.naturalHeight||ci.naturalHeight||700;
-    ci.style.width=imgW+'px';ci.style.height=imgH+'px';
-    lb.hidden=false;document.body.style.overflow='hidden';
-    /* 全屏叠加框默认跟随内联 stage 的状态（初始默认隐藏），可再单独切换 */
-    var srcStage=card.querySelector('.stage');
-    var nb=!!(srcStage&&srcStage.classList.contains('noboxes'));
-    lb.classList.toggle('lb-noboxes',nb);
-    boxesBtn.textContent=nb?'显示叠加框':'隐藏叠加框';
-    fitWindow();
-    if(!ci.complete){
-      ci.addEventListener('load',function(){
-        imgW=ci.naturalWidth;imgH=ci.naturalHeight;
-        ci.style.width=imgW+'px';ci.style.height=imgH+'px';fitWindow();
-      });
-    }
-  }
-  function close(){
-    lb.hidden=true;document.body.style.overflow='';drag=null;
-    stage.classList.remove('dragging');
-  }
-  document.querySelectorAll('.stage .imgwrap img').forEach(function(img){
-    img.addEventListener('mousemove',function(e){
-      var hit=hitCell(img,e);
-      var zoom=e.altKey||!hit;
-      img.style.cursor=zoom?'zoom-in':'crosshair';
-      var h=cursorHint();
-      h.textContent=e.altKey?'单击：放大（Alt）':(hit?'单击：定位\nAlt + 单击：放大':'单击：放大');
-      h.style.left=Math.min(e.clientX+14,window.innerWidth-h.offsetWidth-8)+'px';
-      h.style.top=Math.min(e.clientY+18,window.innerHeight-h.offsetHeight-8)+'px';
-      h.classList.add('on');
-    });
-    img.addEventListener('mouseleave',function(){
-      hideCursorHint();
-      img.style.cursor='';
-    });
-    img.addEventListener('click',function(e){
-      e.stopPropagation();
-      hideCursorHint();
-      if(e.altKey){open(img);return;}
-      var hit=hitCell(img,e);
-      if(hit){hit.dispatchEvent(new MouseEvent('click',{bubbles:true}));return;}
-      open(img);
-    });
-  });
-  document.querySelectorAll('[data-lb]').forEach(function(btn){
-    btn.addEventListener('click',function(e){
-      e.stopPropagation();
-      var a=btn.getAttribute('data-lb');
-      if(a==='close'){close();return;}
-      if(a==='fit'){fitWindow();return;}
-      if(a==='one'){scale=1;tx=0;ty=0;apply();return;}
-      if(a==='in'){setScale(scale*1.25);return;}
-      if(a==='out'){setScale(scale/1.25);return;}
-      if(a==='boxes'){
-        var h=!lb.classList.contains('lb-noboxes');
-        lb.classList.toggle('lb-noboxes',h);
-        boxesBtn.textContent=h?'显示叠加框':'隐藏叠加框';
-      }
-    });
-  });
-  stage.addEventListener('wheel',function(e){
-    e.preventDefault();
-    var r=stage.getBoundingClientRect();
-    setScale(scale*(e.deltaY<0?1.15:1/1.15),
-      e.clientX-r.left-r.width/2,e.clientY-r.top-r.height/2);
-  },{passive:false});
-  stage.addEventListener('mousedown',function(e){
-    if(e.button!==0) return;
-    drag={x:e.clientX,y:e.clientY,tx:tx,ty:ty};moved=false;
-    stage.classList.add('dragging');
-  });
-  window.addEventListener('mousemove',function(e){
-    if(!drag) return;
-    if(Math.abs(e.clientX-drag.x)+Math.abs(e.clientY-drag.y)>4) moved=true;
-    tx=drag.tx+(e.clientX-drag.x);ty=drag.ty+(e.clientY-drag.y);apply();
-  });
-  window.addEventListener('mouseup',function(){drag=null;stage.classList.remove('dragging');});
-  stage.addEventListener('dblclick',function(e){
-    e.preventDefault();
-    if(Math.abs(scale-1)<0.01) fitWindow();
-    else{scale=1;tx=0;ty=0;apply();}
-  });
-  /* 全屏里点叠加框反向定位：关闭全屏，回到报告钉住原格/行（拖动松手不算点击）。
-     克隆框不带处理器，按 data 属性找回源卡片里当前可见视图中的原框，转发点击。 */
-  stage.addEventListener('click',function(e){
-    if(moved||!srcCard) return;
-    var b=e.target.closest?e.target.closest('.cellbox,.stitchbox,.box'):null;
-    if(!b) return;
-    e.stopPropagation();
+    return (h2?h2.textContent:'图片')+(pg?' · 第 '+pg+' 页':'')+' · '+label;
+  },
+  boxesOnOpen:function(img){
+    var st=cardOf(img).querySelector('.stage');
+    return !(st&&st.classList.contains('noboxes'));
+  },
+  onBoxClick:function(b,srcImg){
+    var srcCard=cardOf(srcImg);
     var sel;
     if(b.classList.contains('cellbox'))
       sel='.cellbox[data-tbl="'+b.getAttribute('data-tbl')+'"][data-cell="'+b.getAttribute('data-cell')+'"]';
@@ -521,20 +313,36 @@ function hideCursorHint(){ if(hintEl) hintEl.classList.remove('on'); }
       var v=r.closest('.view');
       if(!orig&&v&&!v.hidden) orig=r;
     });
-    close();
     if(!orig) return;
     var fc=fileCardOf(srcCard),pg=srcCard.getAttribute('data-page');
     if(fc&&pg&&srcCard.hidden) activatePage(fc,pg);
     orig.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+  }
+});
+document.querySelectorAll('.stage .imgwrap img').forEach(function(img){
+  img.addEventListener('mousemove',function(e){
+    var hit=hitCell(img,e);
+    var zoom=e.altKey||!hit;
+    img.style.cursor=zoom?'zoom-in':'crosshair';
+    var h=cursorHint();
+    h.textContent=e.altKey?'单击：放大（Alt）':(hit?'单击：定位\nAlt + 单击：放大':'单击：放大');
+    h.style.left=Math.min(e.clientX+14,window.innerWidth-h.offsetWidth-8)+'px';
+    h.style.top=Math.min(e.clientY+18,window.innerHeight-h.offsetHeight-8)+'px';
+    h.classList.add('on');
   });
-  document.addEventListener('keydown',function(e){
-    if(lb.hidden) return;
-    if(e.key==='Escape') close();
-    else if(e.key==='+'||e.key==='=') setScale(scale*1.25);
-    else if(e.key==='-') setScale(scale/1.25);
-    else if(e.key==='0') fitWindow();
+  img.addEventListener('mouseleave',function(){
+    hideCursorHint();
+    img.style.cursor='';
   });
-})();
+  img.addEventListener('click',function(e){
+    e.stopPropagation();
+    hideCursorHint();
+    if(e.altKey){reportLb.open(img);return;}
+    var hit=hitCell(img,e);
+    if(hit){hit.dispatchEvent(new MouseEvent('click',{bubbles:true}));return;}
+    reportLb.open(img);
+  });
+});
 
 /* 多页文件：页签切换（只显示激活页卡片）；跨页合并表收进各页卡片 tab，完整 JSON 常驻下方 */
 function fileCardOf(el){ return el.closest('.filecard'); }
@@ -569,51 +377,21 @@ function updatePageHead(fc){
   var tpl=c&&c.querySelector('template.pagehead-tpl');
   if(slot&&tpl) slot.innerHTML=tpl.innerHTML;
 }
-/* 窗口式页码：首末页 + 当前页±1 常显，其余收进 …，页数再多也只占一小条。
-   页码列表取自 data-pages（指定页提取时页码可能不连续）。 */
-function pagerPages(pg){
-  return (pg.getAttribute('data-pages')||'').split(',').filter(Boolean).map(Number);
-}
+/* 窗口式页码（公共件 pagerPages/renderPagerInto/alignPagerTo 在 stage.js）：
+   每个页卡片各有一份 pager 副本（与页卡片同隐藏/显示），全部同步渲染。 */
 function renderPager(fc){
   var c=fc.querySelector('.card[data-page]:not([hidden])');
   var cur=Number(c&&c.getAttribute('data-page'));
-  /* 每个页卡片各有一份 pager 副本（与页卡片同隐藏/显示），全部同步渲染 */
   fc.querySelectorAll('.pager').forEach(function(pg){
-    var pages=pagerPages(pg);
-    var ci=pages.indexOf(cur);
-    if(ci<0) ci=0;
-    var html='',last=-1;
-    pages.forEach(function(p,i){
-      if(!(i===0||i===pages.length-1||Math.abs(i-ci)<=1)) return;
-      if(last>=0&&i-last>1) html+='<span class="pg-gap">…</span>';
-      html+='<button type="button" class="pg-num'+(i===ci?' on':'')+
-        '" data-page="'+p+'" title="第 '+p+' 页">'+p+'</button>';
-      last=i;
-    });
-    pg.querySelector('.pg-nums').innerHTML=html;
-    pg.querySelector('[data-pg="first"]').disabled=(ci===0);
-    pg.querySelector('[data-pg="prev"]').disabled=(ci===0);
-    pg.querySelector('[data-pg="next"]').disabled=(ci===pages.length-1);
-    pg.querySelector('[data-pg="last"]').disabled=(ci===pages.length-1);
-    var jump=pg.querySelector('.pg-jump');
-    if(document.activeElement!==jump) jump.value=pages[ci];
+    renderPagerInto(pg,pagerPages(pg),cur);
   });
 }
-/* 翻页组件贴靠源图：按当前激活 imgwrap 的实测底缘 / 水平中心锚定 pager，
-   窗口伸缩 / 切页 / 切视图 / 图片加载后始终悬浮在源图底部（不占布局、不压图宽）。
-   垂直方向只用 bottom 锚定：若设 top 而 CSS bottom 仍在，绝对定位元素会被
-   上下同时约束而拉伸，offsetHeight 读到拉伸高度 → 锚定计算自我污染。 */
 function alignPagers(){
   document.querySelectorAll('.stage .pager').forEach(function(pg){
     var stage=pg.closest('.stage');
     var card=stage.closest('.card');
     if(card&&card.hasAttribute('hidden')) return;
-    var iw=stage.querySelector('.view:not([hidden]) .imgwrap');
-    if(!iw) return;
-    var sr=stage.getBoundingClientRect(),ir=iw.getBoundingClientRect();
-    if(!ir.width) return;
-    pg.style.left=Math.round(ir.left-sr.left+ir.width/2)+'px';
-    pg.style.bottom=Math.max(6,Math.round(sr.bottom-ir.bottom+8))+'px';
+    alignPagerTo(pg,stage);
   });
 }
 function switchPage(fc,p){

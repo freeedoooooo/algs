@@ -99,21 +99,21 @@ c1_extract/
 ├── config.py                  唯一配置源：模型 / DPI / 阈值 / 路径 / 环境变量
 ├── params.py                  调试参数 schema（顺序=优先级）+ 校验 + 快照
 ├── runlog.py                  结构化运行日志（STATE + logs/run_<id>.log）
-├── viewmodel.py               官方 parsing → 报告视图的纯函数桥（hydrate 派生）
-├── app.py                     FastAPI 路由 + 后台任务编排 + 包自举
+├── app.py                     FastAPI 路由 + 后台任务编排 + 包自举 + 异常处理器
 ├── __init__.py                支持 uvicorn c1_extract.app:app 包方式启动
 ├── accept_records_db.py       records 入库六项验收（临时服务 8799/8797）
 ├── accept_artifacts_db.py     产物入库六项验收（两套脚本严禁并行）
 ├── export_artifacts.py        DB → 磁盘树按需导出（file:// 直开 / 审计 / 迁移）
 ├── store/                     存储层（DB 唯一事实源）
 │   ├── db.py                  驱动接缝 + conn_ref 解析 + 迁移执行器
+│   ├── errors.py              类型化业务异常（StoreError/BadRequest/NotFound/Conflict→HTTP 码）
 │   ├── migrations/            001_baseline.sql 单基线（schema_version 门禁，首连自动跑）
 │   ├── catalog.py             file(+content) / template / task / task_file / quarantine
 │   ├── content.py             内容门面（extract 经 artifact，records 直委托 content_db）
 │   ├── content_db.py          staging 三表：get/save/patch/set_review/query_fields
 │   ├── artifact.py            附件门面（kind/mime 推断）
 │   └── artifact_db.py         extract_artifact BLOB（键＝task_file_id，应用层级联删）
-├── adapter/                   提取信封 → 模板记录的适配层（原始透传等）
+├── adapter/                   提取信封 → 模板记录的适配层（base.py hydrate 派生视图）
 ├── pipeline/                  提取层
 │   ├── engines.py             模型单例（懒加载；表格模型按 doc_unwarp 分槽缓存）
 │   ├── ocr.py                 逐行文字 / 置信度 / 四点框 + 带框 PNG
@@ -127,7 +127,8 @@ c1_extract/
 │   ├── cards.py               数据准备 + 选模板（坐标 rect / 行 / 文档块 / data URI）
 │   ├── builder.py             组装对照报告（内联 assets，每 task_file 一份）
 │   ├── templates/             Jinja2 HTML 模板（autoescape，结构与逻辑分离）
-│   └── assets/                前端资源（upload / sources / tasks / staging 四页 + shell 共用件）
+│   └── assets/                前端资源（upload / sources / tasks / staging 四页
+│                              + shell 列表共用件 + stage 舞台共用件 report/staging 共享）
 ├── data/                      secrets.json（git 排除）/ backup/（迁移前整库备份）
 ├── logs/                      任务日志（运行时生成，每任务一个 task_<id>.log）
 └── docs/                      设计稿与交接文档
@@ -164,8 +165,9 @@ D:\miniforge3\envs\paddle\python.exe c1_extract/export_artifacts.py --out D:/tmp
 <out>/sources/<源文件名>              原件字节（重名加 _<id> 区分）
 ```
 
-**源码模块化，产物自包含**：`builder.py` 生成报告时会把 `report.css` / `report.js` / `lightbox.html`
-内联进 HTML，图片 / extract.json / CSV 链接一律**相对路径**，
+**源码模块化，产物自包含**：`builder.py` 生成报告时会把 `hint.css` / `stage.css` / `report.css` /
+`hint.js` / `stage.js` / `report.js` / `lightbox.html` 内联进 HTML（stage 件与校验台共享，先于页面件），
+图片 / extract.json / CSV 链接一律**相对路径**，
 所以报告经 `/files/<task_file_id>/` 访问时资源全部成立；导出后**双击用 `file://` 直接打开也能正常显示图片与全部交互**；
 整份信封 JSON 以紧凑 `<script type="application/json">` 嵌在报告里（全报告仅一份，首次打开 tab 才美化），
 不依赖在线 fetch。上传页是线上页面，走 `/static/` 外链资源。
@@ -189,7 +191,7 @@ IDE 高亮、改结构 / 样式不必碰 Python 逻辑。迁移经「重构前�
 每个 task_file 固定有一份 `extract.json` 附件（**紧凑 JSON**），统一为**文件信封**：
 `file/kind/encoding/params_snapshot/page_count` + `pages:[pageRec…]` + `stitched_tables`。
 单页文件也是 `pages:[1]`（无双形态、无兼容 shim）。每页 `pageRec` 只存三样：官方 `parsing`（裁掉代码不读的死字段）+ `structured_tables`（加工后的表 + 单元格坐标）+ 该页元信息/诊断。
-文字投影 `texts/scores/boxes`、版面 `layout`、行数/均值**不落盘**，由 `viewmodel.hydrate()` 在渲染期**逐页**从 `parsing` 现算（官方 JSON 为唯一事实源，派生视图不重复存储）；raw 表中间态已删。
+文字投影 `texts/scores/boxes`、版面 `layout`、行数/均值**不落盘**，由 `adapter.base.hydrate()` 在渲染期**逐页**从 `parsing` 现算（官方 JSON 为唯一事实源，派生视图不重复存储）；raw 表中间态已删。
 文本层 PDF / CSV 路线无 `parsing`，其 OCR 投影是唯一文字记录，直接存储。
 跨页续表合并进 `stitched_tables`（每格带 `page/space`，供报告页感知回溯）。详见 [docs/result-json-anatomy.md](./docs/result-json-anatomy.md)。
 `rectified.png` 只在真正抽到表的图片 / 扫描件里生成（多页为 `p{n}_rectified.png`）。

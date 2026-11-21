@@ -63,21 +63,13 @@ rows.addEventListener('click',function(e){
   if(!confirm('删除「'+name+'」的登记与原件字节？\n已产生的任务产物不受影响。')) return;
   fetch('/api/sources/'+id,{method:'DELETE'}).then(function(r){return r.json().then(function(j){return {s:r.status,j:j};});})
     .then(function(o){
-      if(o.s===409){ alert('不能删除：'+(o.j.reason||'已被任务引用')); return; }
+      if(o.s===409){ alert('不能删除：'+(o.j.error||'已被任务引用')); return; }
       if(!o.j.ok){ alert('删除失败：'+(o.j.error||o.s)); return; }
       load();
     }).catch(function(){ alert('删除失败：平台库不可用'); });
 });
 
-/* 上传 = 只登记不提取；逐个 POST，哈希命中提示复用 */
-function b64(file){
-  return new Promise(function(ok,no){
-    var r=new FileReader();
-    r.onload=function(){ok(r.result.split(',')[1]);};
-    r.onerror=no;
-    r.readAsDataURL(file);
-  });
-}
+/* 上传 = 只登记不提取；逐个 POST，哈希命中提示复用（b64 在 shell.js） */
 document.getElementById('upbtn').onclick=function(){
   document.getElementById('picker').click();
 };

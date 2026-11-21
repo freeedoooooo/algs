@@ -48,9 +48,11 @@ def build(records, out_path, params=None):
         total_lines=total_lines, total_tables=total_tables,
         total_stitch=total_stitch, paramsnap=Markup(_param_block(params)),
         hint_css=Markup(_asset('hint.css')),
+        stage_css=Markup(_asset('stage.css')),
         report_css=Markup(_asset('report.css')),
         lightbox=Markup(_asset('lightbox.html')),
         hint_js=Markup(_asset('hint.js')),
+        stage_js=Markup(_asset('stage.js')),
         report_js=Markup(_asset('report.js')),
         body=Markup('\n'.join(cards.card(r, i)
                               for i, r in enumerate(records))))

@@ -1,4 +1,5 @@
-/* extract_report/assets/report.css — 对照报告样式（生成时内联进每份 对照报告.html） */
+/* extract_report/assets/report.css — 对照报告页面特有样式（生成时内联，stage.css 在前）。
+   舞台公共规则（框/视图切换/翻页胶囊/全屏浮层/光标提示/单元格高亮）在 stage.css。 */
 :root{--line:#e2e7f0;--accent:#2563eb;--muted:#6b7688}
 *{box-sizing:border-box}
 body{margin:0;background:#f4f6fa;color:#1f2738;
@@ -30,54 +31,12 @@ header .sub{color:#6b7688;font-size:12px;display:flex;align-items:center;gap:6px
   padding:1px 8px;font-size:12px;margin-right:6px}
 .grid{display:grid;grid-template-columns:minmax(300px,44%) minmax(0,1fr);
   align-items:start}
-.stage{position:sticky;top:12px;background:#eceff3;padding:10px;
-  border-right:1px solid #e2e7f0}
-.imgwrap{position:relative;line-height:0;margin-inline:auto;
-  max-width:min(100%,calc((100vh - 180px) * var(--ar,1.5)))}
-.stage img{display:block;width:100%;height:auto;cursor:zoom-in}
-.stage svg{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
-.box{fill:rgba(37,99,235,.06);stroke:#2563eb;stroke-width:2;
-  vector-effect:non-scaling-stroke}
-.box.low{fill:rgba(222,92,40,.10);stroke:#de5c28}
-.box.hl{fill:rgba(37,99,235,.30);stroke-width:4}
-.box.pin{fill:rgba(216,97,10,.26);stroke:#d8610a;stroke-width:4}
-.viewbar{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin:0 0 10px}
-.viewbtn,.allcells,.boxtoggle{font:inherit;font-size:12px;cursor:pointer;
-  padding:4px 11px;border-radius:7px;border:1px solid #d8e0ed;
-  background:#fff;color:#1f2738}
-.viewbtn.on,.allcells.on,.boxtoggle.on{background:#2563eb;border-color:#2563eb;color:#fff}
-/* 只藏常显识别框；悬停文字行的回显高亮 .hl 仍要显示 */
-.stage.noboxes .box:not(.hl):not(.pin){display:none}
-/* 叠加框开关：半透明角标叠在原图右上角，不单独占行（imgwrap line-height:0 需复位） */
-.imgwrap .boxtoggle{position:absolute;top:6px;right:6px;z-index:3;
-  padding:3px 9px;font-size:11px;line-height:1.4;border-radius:6px;
-  background:rgba(15,23,38,.55);color:#fff;border:1px solid rgba(255,255,255,.35);
-  backdrop-filter:blur(2px)}
-.imgwrap .boxtoggle:hover{background:rgba(15,23,38,.78)}
-.imgwrap .boxtoggle.on{background:rgba(37,99,235,.8);border-color:rgba(255,255,255,.5)}
+/* 舞台基础规则在 stage.css；报告只覆盖定位（.grid 左栏吸顶） */
+.stage{position:sticky;top:12px}
 /* 整表网格开关与叠加框同款「有底色」胶囊，不再白底描边 */
 .allcells{background:rgba(15,23,38,.55);color:#fff;border-color:transparent}
 .allcells:hover{background:rgba(15,23,38,.78)}
 .allcells.on{background:#2563eb;border-color:#2563eb;color:#fff}
-/* 光标跟随提示：点图「定位/放大」选择在鼠标操作那一刻即时可见，不占版面 */
-#cursor-hint{position:fixed;z-index:70;pointer-events:none;white-space:pre-line;
-  background:rgba(15,23,38,.85);color:#fff;font-size:11px;padding:3px 8px;
-  border-radius:5px;opacity:0;transition:opacity .12s;line-height:1.6}
-#cursor-hint.on{opacity:1}
-/* 视图切换悬浮在图左上角（与右上「隐藏叠加框」对称），不占行、不把图往下压 */
-.stage .viewbar{position:absolute;top:16px;left:16px;z-index:4;gap:4px;margin:0}
-.stage .viewbar .viewbtn{padding:3px 9px;font-size:11px;line-height:1.4;border-radius:6px;
-  background:rgba(15,23,38,.55);color:#fff;border:1px solid rgba(255,255,255,.35);
-  backdrop-filter:blur(2px)}
-.stage .viewbar .viewbtn:hover{background:rgba(15,23,38,.78)}
-.stage .viewbar .viewbtn.on{background:rgba(37,99,235,.8);border-color:rgba(255,255,255,.5)}
-.lb-content .boxtoggle{display:none}
-/* 追溯失败提示：底部居中轻提示，不占版面、不挡操作 */
-#trace-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:80;
-  background:rgba(15,23,38,.92);color:#fff;font-size:13px;padding:8px 14px;
-  border-radius:6px;pointer-events:none;opacity:0;transition:opacity .18s;max-width:80vw}
-#trace-toast.on{opacity:1}
-.view[hidden]{display:none}
 /* 右栏：文字行 / 表格 / JSON 切 tab；图在左栏吸顶，切到表格悬停单元格即时可见高亮 */
 .contentcol{min-width:0;padding:10px 14px}
 .ctabs{display:flex;gap:6px;flex-wrap:wrap;position:sticky;top:0;z-index:3;
@@ -86,22 +45,7 @@ header .sub{color:#6b7688;font-size:12px;display:flex;align-items:center;gap:6px
   border:1px solid #d8e0ed;background:#fff;color:#1f2738}
 .ctab.on{background:#2563eb;border-color:#2563eb;color:#fff}
 .tabpanel[hidden]{display:none}
-.cellsvg{display:block}
-.cellbox{display:none;fill:rgba(15,157,110,.10);stroke:#0f9d6e;stroke-width:3;
-  vector-effect:non-scaling-stroke}
-.cellbox.off{display:none!important}
-.cellbox.hv{display:block;fill:rgba(15,157,110,.30);stroke-width:5}
-.cellbox.pin{display:block;fill:rgba(216,97,10,.26);stroke:#d8610a;stroke-width:5}
-.cellbox.all{display:block;opacity:.32}
-.cellbox.all.hv,.cellbox.all.pin{opacity:1}
-/* 反向定位：框可见态（悬停/钉住/整表网格）才可交互；SVG 整体仍忽略指针，不影响图片点击 */
-.cellbox.hv,.cellbox.pin,.cellbox.all,
-.stitchbox.hv,.stitchbox.pin{pointer-events:all;cursor:crosshair}
 .stage:not(.noboxes) .box{pointer-events:all;cursor:crosshair}
-td.cell,th.cell{cursor:crosshair}
-td.cell:hover,th.cell:hover,td.cell.hv,th.cell.hv{background:#e3f7ee!important}
-td.cell.pin,th.cell.pin{background:#fff0d9!important;
-  outline:2px solid #d8610a;outline-offset:-2px}
 /* 统一页签面板：可收起 details + 对齐标题栏 + 滚动盒；辅助内容走弹窗不占版面 */
 .tabpanel>.panel{margin:0}
 .panel{border:1px solid #e2e7f0;border-radius:8px;background:#fff}
@@ -186,27 +130,6 @@ pre{white-space:pre-wrap;word-break:break-all;font:12px/1.6 Consolas,Monaco,mono
   max-height:420px;overflow:auto}
 .empty{color:#8a94a6;padding:20px;font-size:13px}
 a{color:#2563eb}
-.lightbox{position:fixed;inset:0;z-index:9999;background:rgba(18,22,30,.95);
-  display:flex;flex-direction:column}
-.lightbox[hidden]{display:none}
-.lb-bar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;
-  padding:10px 14px;background:#1d2330;color:#e8ecf4;font-size:12px}
-.lb-bar button,.lb-bar a{font:inherit;font-size:12px;cursor:pointer;padding:5px 12px;
-  border-radius:7px;border:1px solid #46506a;background:#2a3245;color:#e8ecf4;
-  text-decoration:none}
-.lb-bar button:hover,.lb-bar a:hover{background:#3a4560}
-.lb-title{font-size:13px;font-weight:500;margin-right:6px;max-width:34vw;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.lb-scale{min-width:54px;text-align:center}
-.lb-stage{flex:1;min-height:0;overflow:hidden;position:relative;cursor:grab;
-  display:flex;align-items:center;justify-content:center}
-.lb-stage.dragging{cursor:grabbing}
-.lb-content{position:relative;line-height:0;flex:none;transform-origin:center center}
-.lb-content img{display:block;max-width:none;height:auto;user-select:none}
-.lb-content svg{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
-.lb-content .cellbox,.lb-content .stitchbox,.lb-content .box{pointer-events:all;cursor:crosshair}
-.lb-noboxes .lb-content svg{display:none!important}
-.lb-hint{padding:8px 14px;background:#1d2330;color:#9aa6bd;font-size:12px;text-align:center}
 @media(max-width:640px){.grid{grid-template-columns:1fr}
   .stage{position:static;border-right:0;border-bottom:1px solid #e2e7f0}
   .ctabs{position:static}
@@ -248,34 +171,8 @@ a{color:#2563eb}
 /* 多页页头右侧动态片段 = .fh-right.pagehead-slot：布局走 .fh-right（右对齐单行），
    切页时由 JS 注入当前页的 第N页 标签（路线/统计/链接已整合进右侧 tab）。空时隐藏。 */
 .pagehead-slot:empty{display:none}
-/* 翻页组件=窗口式页码胶囊，**悬浮叠在源图底缘之上**（绝对定位、不占布局、不压缩图宽）。
-   默认 left/bottom 给一个兜底位；report.js alignPagers 再按当前 imgwrap
-   实测底缘/水平中心精确锚定，窗口伸缩 / 切页 / 切视图后仍贴在源图上。 */
-.stage .pager{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);z-index:7;
-  display:flex;align-items:center;gap:2px;padding:3px 6px;border-radius:999px;
-  background:rgba(15,23,38,.62);border:1px solid rgba(255,255,255,.28);
-  backdrop-filter:blur(3px);box-shadow:0 2px 10px rgba(8,12,22,.35);
-  transition:left .15s ease,bottom .15s ease}
+/* 翻页胶囊公共规则在 stage.css；空舞台（无图）时 pager 落回布局流 */
 .stage.empty .pager{position:static;transform:none;margin:0 auto 8px}
-.pg-nums{display:flex;align-items:center;gap:2px}
-.pg-btn,.pg-num{font:inherit;font-size:11px;line-height:1;cursor:pointer;
-  width:20px;height:20px;min-width:0;padding:0;border-radius:50%;border:0;
-  display:flex;align-items:center;justify-content:center;
-  background:none;color:#e8ecf4;font-variant-numeric:tabular-nums;
-  transition:background .12s ease}
-.pg-btn{font-size:13px;color:#c6cede}
-.pg-btn:hover:not(:disabled),.pg-num:hover{background:rgba(255,255,255,.18)}
-.pg-btn:disabled{opacity:.35;cursor:default}
-.pg-num.on{background:rgba(37,99,235,.95);color:#fff;font-weight:600}
-.pg-gap{width:12px;text-align:center;color:#9aa4b8;font-size:10px;user-select:none}
-.pg-count{display:flex;align-items:center;gap:3px;margin-left:4px;
-  color:#c6cede;font-size:10px;font-variant-numeric:tabular-nums}
-.pg-count i{font-style:normal;opacity:.7}
-.pg-count b{font-weight:600;color:#e8ecf4}
-.pg-jump{width:30px;height:18px;padding:0 2px;border-radius:4px;text-align:center;
-  border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.12);
-  color:#fff;font-size:10px;font-family:inherit;outline:none}
-.pg-jump:focus{border-color:#7ea6f5;background:rgba(255,255,255,.22)}
 /* 跨页合并 tab 用琥珀色（与钉住/合并语义一致），区别于逐页蓝色 tab */
 .ctab.stitch{border-color:#e7c39a;color:#a85a12}
 .ctab.stitch.on{background:#d8610a;border-color:#d8610a;color:#fff}

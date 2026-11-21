@@ -33,10 +33,10 @@ def get_task(task_id):
 
 def patch_record(task_id, file_index, index, values):
     """校验改值（P1 校验台用）：values 差量合并，original 永不覆盖，
-    review.state=edited。返回 (ok, record_or_error)。"""
+    review.state=edited；返回更新后的记录。业务错误抛 StoreError。"""
     return content_db.patch_record(task_id, file_index, index, values)
 
 
 def set_review(task_id, file_index, indexes, state):
-    """批量确认/拒绝（P1 校验台用）：返回 (ok, 更新条数或错误信息)。"""
+    """批量确认/拒绝（P1 校验台用）：返回更新条数。业务错误抛 StoreError。"""
     return content_db.set_review(task_id, file_index, indexes, state)

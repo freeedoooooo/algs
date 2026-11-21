@@ -69,3 +69,12 @@ function fileUrl(rfId,rel){
 function shortName(name){
   return String(name||'');
 }
+/* File → base64（上传/登记共用） */
+function b64(file){
+  return new Promise(function(ok,no){
+    var r=new FileReader();
+    r.onload=function(){ok(r.result.split(',')[1]);};
+    r.onerror=no;
+    r.readAsDataURL(file);
+  });
+}

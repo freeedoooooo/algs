@@ -160,19 +160,6 @@ document.getElementById('clearfiles').onclick=function(){
   picked=[]; render();
   urls.forEach(function(u){ if(u) URL.revokeObjectURL(u); });
 };
-function kindOf(name){
-  var e=(name.split('.').pop()||'').toLowerCase();
-  if(['png','jpg','jpeg','bmp','webp','tif','tiff'].indexOf(e)>=0) return 'image';
-  if(e==='pdf') return 'pdf';
-  return 'text';
-}
-function thumbHtml(name,url){
-  var k=kindOf(name);
-  if(k==='image')
-    return '<img class="thumb" src="'+url+'" data-full="'+url+'" alt="'+escHtml(name)+'" title="'+escHtml(name)+'">';
-  var label=(k==='pdf'?'PDF':(name.split('.').pop()||'FILE').toUpperCase());
-  return '<a class="thumb file" href="'+url+'" target="_blank" title="'+escHtml(name)+'"><span>'+escHtml(label)+'</span></a>';
-}
 /* ---- 上传页取 x 坐标：提取前在原图预览上量列边界，直接填进 column_lines ----
    坐标=原图像素，与 doc_unwarp=off 的重切空间一致；on 的矫正图坐标需提取后在报告页取。 */
 var SVGNS='http://www.w3.org/2000/svg';
@@ -262,20 +249,7 @@ function bindThumbs(el){
   });
 }
 bindThumbs(list);
-function b64(file){
-  return new Promise(function(ok,no){
-    var r=new FileReader();
-    r.onload=function(){ok(r.result.split(',')[1]);};
-    r.onerror=no;
-    r.readAsDataURL(file);
-  });
-}
 var LV={info:'INFO',ok:' OK ',stage:'STEP',warn:'WARN',error:'ERR '};
-function escHtml(s){
-  return String(s==null?'':s).replace(/[&<>"]/g,function(c){
-    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
-  });
-}
 function say(rows,fallback){
   if(!rows||!rows.length){
     log.textContent=(fallback||[]).join('\n')||'等待日志…';
