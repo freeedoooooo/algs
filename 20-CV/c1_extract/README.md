@@ -98,8 +98,9 @@ c1_extract/
 ├── check_env.py               部署自检：缺包 / 目录 / 模型缓存 / 平台库
 ├── config.py                  唯一配置源：模型 / DPI / 阈值 / 路径 / 环境变量
 ├── params.py                  调试参数 schema（顺序=优先级）+ 校验 + 快照
-├── runlog.py                  结构化运行日志（STATE + logs/run_<id>.log）
-├── app.py                     FastAPI 路由 + 后台任务编排 + 包自举 + 异常处理器
+├── tasklog.py                 结构化运行日志（service.STATE + logs/task_<id>.log）
+├── app.py                     FastAPI 路由 + 请求校验 + 包自举 + 异常处理器
+├── service.py                 运行引擎：STATE/LOCK + launch + task_batch（后台编排）
 ├── __init__.py                支持 uvicorn c1_extract.app:app 包方式启动
 ├── accept_records_db.py       records 入库六项验收（临时服务 8799/8797）
 ├── accept_artifacts_db.py     产物入库六项验收（两套脚本严禁并行）
@@ -144,8 +145,9 @@ c1_extract/
 - 暂存记录进 staging 三表（record / field / lineage，field 是查询投影）。
 - **校验台**（`/staging`，P1a）：双击格改值→edited，✓ 确认 / ✗ 拒绝（review_state），
   状态筛选＋批量确认待审；改值格琥珀标记（title 显原值），original 永不覆盖；
-  loaded 任务只读（前端横幅＋后端 409）。无 task 参数时渲染**文件级校验台账**
-  （`/api/staging/ledger`：每文件记录数＋待校验/已修改/已确认/已拒绝计数，点行进入）。
+  loaded 任务只读（前端横幅＋后端 409）。无 task 参数时渲染**任务级校验台账**
+  （`/api/staging/ledger`：每任务汇总记录数＋待校验/已修改/已确认/已拒绝计数，
+  点任务行展开其文件子行，点文件行进入）。
 - 提取期间的工作目录与输入副本都是 tempfile scratch（`tmp/input/in_*` / `tmp/work/case_*`），跑完即清。
 - URL 全用 id：`/staging?task=<task_id>&file=<task_file_id>`、`/files/<task_file_id>/<产物>`、
   `/srcfiles/<file_id>`。`GET /extract-report` 重定向到最新 task_file 的报告真实地址。
@@ -260,12 +262,12 @@ IDE 高亮、改结构 / 样式不必碰 Python 逻辑。迁移经「重构前�
   （例：`+90640ms` 落在表格模型那条 = 首次加载十来个子模型）。
 - 记录了过去看不到的内部决策：载体判定、预筛横竖线数、模型加载开关、
   表格策略命中、坐标空间、OCR 行数/置信度、每张表行列数与填充率。
-- 日志同时落盘到 `logs/run_<id>.log`（每次运行各一份，历史可查），
-  页面「下载日志」或 `GET /api/logs` 可取当前运行纯文本。
+- 日志同时落盘到 `logs/task_<id>.log`（每任务各一份，历史可查），
+  页面「下载日志」或 `GET /api/logs` 可取当前任务纯文本。
 
-实现在 `runlog.py`：一个 `RunLog` 实例对应一次运行，同时写 `STATE['logs']`
-（页面轮询 `/api/status` 拿结构化数组）、`logs/run_<id>.log` 和控制台（同格式实时打印）。**pipeline 只认一个
-`emit(level, stage, msg)` 回调**，由 app 注入，提取层不 import Web 层，保持分层干净。
+实现在 `tasklog.py`：一个 `TaskLog` 实例对应一次任务，同时写 `service.STATE['logs']`
+（页面轮询 `/api/status` 拿结构化数组）、`logs/task_<id>.log` 和控制台（同格式实时打印）。**pipeline 只认一个
+`emit(level, stage, msg)` 回调**，由 service 注入，提取层不 import Web 层，保持分层干净。
 
 ## 调试参数面板（badcase 用，按优先级排）
 
@@ -284,8 +286,8 @@ IDE 高亮、改结构 / 样式不必碰 Python 逻辑。迁移经「重构前�
 | ⑥ 坐标回溯 | `doc_unwarp` | on | **电子版平整截图（如 108）设 off**：关闭方向分类 + UVDoc，单元格框直接叠原图、1:1 精确；旋转/弯曲扫描件保持 on（框叠矫正图）|
 
 **参数快照**：每次上传的生效参数写进 `extract.json` 文件信封的 `params_snapshot`，
-页码写进每页 `pageRec.page`；报告页头「本次参数快照」折叠区按优先级列出全部参数
-（`page=all` 显示「全部页」），运行状态 `/api/status` 也能看到。填错的参数会回退默认并在日志里给出警告，不会中断整批。
+页码写进每页 `pageRec.page`；报告页头统计行内的「参数快照 · N 项」小胶囊点开悬浮下拉，
+按优先级列出全部参数（不独立占行，点外部收起；`page=all` 显示「全部页」），运行状态 `/api/status` 也能看到。填错的参数会回退默认并在日志里给出警告，不会中断整批。
 
 技术分界：`det/box_thresh`、`page`、`table_strategy`、`column_lines`、`dpi`
 全是 predict 级 / 纯参数，**每批可不同、零额外开销**。

@@ -34,7 +34,7 @@
   <div class="panel" id="taskpick" hidden>
     <div class="pickbar">
       <b>校验台账</b>
-      <span class="hint">按文件列出暂存记录与校验进度 · 点行进入校验台 · 也可从「任务」页详情进入</span>
+      <span class="hint">按任务汇总校验进度 · 点任务行展开文件 · 点文件行进入校验台 · 也可从「任务」页详情进入</span>
     </div>
     <div class="listwrap ledgerwrap">
       <table class="list" id="ledger" hidden>
@@ -67,7 +67,8 @@
       <div class="lhead">
         <b id="ltitle">血缘回溯</b>
         <span class="lsub" id="lsub"></span>
-        <button type="button" class="dclose" id="lclose">收起</button>
+        <button type="button" class="btn ghost mini ltoggle" id="ltoggle"
+                aria-expanded="true" title="收起/展开血缘回溯侧栏">收起 ▴</button>
       </div>
       <div class="stage" id="lstage">
         <div class="pager" id="lpager" data-pages="" hidden>

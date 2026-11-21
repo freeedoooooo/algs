@@ -1,7 +1,10 @@
 /* extract_report/assets/staging.css — 校验台（P1）页面特有样式：记录表 + 编辑/确认/拒绝
-   + 源图回溯框双向血缘侧栏 + 筛选 chips / 文件级校验台账。
+   + 源图回溯框双向血缘侧栏 + 筛选 chips / 任务级校验台账。
    舞台公共样式（框/视图切换/翻页胶囊/全屏浮层/光标提示）在 stage.css，先于本文件加载。 */
 .pagebody.wide{max-width:1500px}
+/* 页头「对照报告」：淡蓝底实心钮，比无边框文字链接明显 */
+.reportbtn{background:#e7f0ff;border-color:#bcd3f7;color:#1d4ed8}
+.reportbtn:hover{background:#d7e6ff;border-color:#9dc0f5;color:#1d4ed8}
 .filetabs{display:flex;align-items:center;gap:4px;margin-bottom:10px;
   overflow-x:auto;padding-bottom:2px}
 .filetabs[hidden]{display:none}
@@ -28,9 +31,12 @@
   border-bottom:1px solid #e2e7f0;font-size:13px;color:#25324a}
 .lhead b{font-weight:600}
 .lsub{flex:1;font-size:11px;color:#8a94a6;font-weight:400}
-.dclose{font:inherit;font-size:12px;cursor:pointer;border:1px solid #d8e0ed;
-  background:#fff;color:#5a6a85;border-radius:6px;padding:2px 9px}
-.dclose:hover{border-color:#2563eb;color:#2563eb}
+.ltoggle{flex:none}
+/* 收起＝折叠成标题栏（展开入口常驻），不整块消失；点单元格/行会自动展开 */
+.lineage.collapsed{width:auto;max-width:none;max-height:none}
+.lineage.collapsed .lhead{border-bottom:0}
+.lineage.collapsed .lsub,.lineage.collapsed .stage,
+.lineage.collapsed .lhint{display:none}
 .lineage .stage{flex:1 1 auto;min-height:220px;overflow:visible;border-right:0}
 .lhint{padding:6px 12px;font-size:12px;color:#8a6d3b;background:#fcf8e3;
   border-top:1px solid #f0e6c8}
@@ -41,11 +47,17 @@
   .lineage{width:100%;max-width:none;position:static;max-height:none}
   .lineage .stage{max-height:60vh}
 }
-/* 文件级校验台账（无 task 参数入口） */
+/* 任务级校验台账（无 task 参数入口）：任务行汇总，展开文件子行 */
 .ledgerwrap{max-height:62vh;overflow:auto;border-top:1px solid #eef2f8}
 #ledgerrows tr{cursor:pointer}
 #ledgerrows tr:hover{background:#f3f7fd}
 #ledgerrows td.led-edited{color:#b45309;font-weight:600}
+.led-caret{display:inline-block;width:12px;color:#8a94a6;font-size:10px;
+  transition:transform .15s}
+tr.led-task.open .led-caret{transform:rotate(90deg)}
+#ledgerrows tr.led-file{background:#f7f9fd}
+#ledgerrows tr.led-file:hover{background:#eef4fc}
+.led-subname{padding-left:14px}
 
 /* P1 校验台：筛选 chips / 批量确认 / 双击改值 / 改值标记 / 行操作 / 台账入口 */
 .reviewbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px}

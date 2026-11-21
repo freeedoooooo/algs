@@ -1,7 +1,8 @@
 /* extract_report/assets/staging.js — 校验台（P1）：DB 暂存记录表 + 编辑/确认/拒绝
    + 源图血缘回溯。右侧舞台忠实复刻对照报告（report.js 舞台逻辑移植）：默认零框，
    悬停/点击揭示单格，点图走 hitCell 命中测试可定位任意记录行/格（不限选中行），
-   窗口式翻页、原图/矫正图切换、叠加框开关、光标跟随提示、全屏浮层。
+   窗口式翻页（全页预渲染、切页只切显隐，与报告同架构）、原图/矫正图切换、
+   叠加框开关、光标跟随提示、全屏浮层、左右方向键翻页。
    匹配键用 data-i（记录序）/data-key（字段）。单击=血缘钉住，双击=改值（P1）。
    数据经 /api/tasks/<id>/staging|extract 读 DB；图片经 /files/<task_file_id>/…。 */
 var task=new URLSearchParams(location.search).get('task')||'';
@@ -145,7 +146,7 @@ function cellFor(i,key){
 }
 function cssEsc(s){ return String(s).replace(/["\\]/g,'\\$&'); }
 
-function viewHtml(meta,view,space,here){
+function viewHtml(meta,view,space,here,page){
   var sz=viewSize(meta,view), w=sz[0]||0, h=sz[1]||0;
   var src=view==='rect'?meta.rectified_image:meta.image;
   var ar=(w&&h)?(w/h):1.5;
@@ -158,9 +159,10 @@ function viewHtml(meta,view,space,here){
       '" height="'+Math.max(0,b[3]-b[1])+'"><title>记录 #'+recordNo(x.i)+' · '+
       escHtml(x.key)+'&#10;'+escHtml(a.raw_text||'')+'</title></rect>';
   });
-  return '<div class="view" data-view="'+view+'" data-space="'+space+'">'+
+  return '<div class="view" data-page="'+page+'" data-view="'+view+'" data-space="'+space+'">'+
     '<div class="imgwrap" style="--ar:'+ar+'">'+
-    '<img src="'+imgUrl(src)+'" alt="'+(view==='rect'?'矫正图':'原图')+'">'+
+    '<img src="'+imgUrl(src)+'" width="'+w+'" height="'+h+
+    '" alt="'+(view==='rect'?'矫正图':'原图')+'">'+
     '<svg class="cellsvg" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none">'+rects+'</svg>'+
     '<button type="button" class="boxtoggle'+(allOn?' on':'')+'">'+
     (allOn?'隐藏叠加框':'显示叠加框')+'</button>'+
@@ -174,35 +176,44 @@ function initViewer(){
   if(!meta||!meta.size){ panel.hidden=true; return; }
   curPage=first; curView=null;
   panel.hidden=false;
-  renderViewer();
+  buildViews();
+  showPage(curPage);
 }
-function renderViewer(){
+/* 与报告同架构：所有页的视图一次性预渲染（图片只加载一次），
+   切页只切显隐——不再 innerHTML 重建，杜绝「新图未加载→高度塌缩→翻页胶囊上跳」。 */
+function buildViews(){
+  var views=document.getElementById('views'), html='';
+  pagesPresent.forEach(function(p){
+    var meta=metaOf(p);
+    if(!meta||!meta.size) return;
+    var here=allAnchors.filter(function(x){return x.a.page===p;});
+    html+=viewHtml(meta,'orig','source',here,p);
+    if(meta.rectified_image) html+=viewHtml(meta,'rect','rectified',here,p);
+  });
+  views.innerHTML=html;
+  views.querySelectorAll('img').forEach(function(im){
+    im.addEventListener('load',alignPagers);
+  });
+}
+function showPage(p){
+  curPage=p;
   var meta=metaOf(curPage);
+  var has=!!(meta&&meta.size);
   var views=document.getElementById('views');
   var vb=document.getElementById('viewbar');
   var hint=document.getElementById('lhint');
-  var here=allAnchors.filter(function(x){return x.a.page===curPage;});
-  if(!meta||!meta.size){
-    views.innerHTML=''; vb.innerHTML=''; vb.hidden=true;
-    document.getElementById('lpager').hidden=true;
-    hint.hidden=false; hint.textContent='该页无图像载体（纯文本输入），无法叠框回溯。';
-    document.getElementById('lsub').textContent='';
-    return;
-  }
-  if(!curView||(curView==='rect'&&!meta.rectified_image)) curView='orig';
-  var html=viewHtml(meta,'orig','source',here);
-  if(meta.rectified_image) html+=viewHtml(meta,'rect','rectified',here);
-  views.innerHTML=html;
-  if(meta.rectified_image){
+  if(!curView||(curView==='rect'&&!(has&&meta.rectified_image))) curView='orig';
+  views.querySelectorAll('.view').forEach(function(v){
+    v.hidden=!(has&&+v.getAttribute('data-page')===curPage&&
+      v.getAttribute('data-view')===curView);
+  });
+  if(has&&meta.rectified_image){
     vb.hidden=false;
     vb.innerHTML='<button type="button" class="viewbtn'+(curView==='orig'?' on':'')+
       '" data-view="orig" title="原始上传图">原图</button>'+
       '<button type="button" class="viewbtn'+(curView==='rect'?' on':'')+
       '" data-view="rect" title="单元格坐标基准图">矫正图</button>';
   }else{ vb.innerHTML=''; vb.hidden=true; }
-  views.querySelectorAll('.view').forEach(function(v){
-    v.hidden=(v.getAttribute('data-view')!==curView);
-  });
   var pg=document.getElementById('lpager');
   if(pagesPresent.length>1){
     pg.hidden=false;
@@ -210,18 +221,17 @@ function renderViewer(){
     document.getElementById('pgtotal').textContent=pagesPresent.length;
     renderPager();
   }else pg.hidden=true;
+  var here=allAnchors.filter(function(x){return x.a.page===curPage;});
   var drawn=here.filter(function(x){
     return x.a.cell_bbox&&x.a.space===(curView==='rect'?'rectified':'source');}).length;
-  if(!allAnchors.length){ hint.hidden=false; hint.textContent='无坐标血缘。'; }
+  if(!has){ hint.hidden=false;
+    hint.textContent='该页无图像载体（纯文本输入），无法叠框回溯。';
+    document.getElementById('lsub').textContent='';
+  }else if(!allAnchors.length){ hint.hidden=false; hint.textContent='无坐标血缘。'; }
   else if(!drawn){ hint.hidden=false;
     hint.textContent='当前视图无回溯框：坐标在'+(curView==='rect'?'原图':'矫正图')+'空间，切换视图查看。'; }
   else hint.hidden=true;
   applySelection();
-  /* 图片加载完成后才有真实高度：首次打开/切页时 img 尚未 load，imgwrap 高度≈0
-     会把翻页胶囊锚得偏上挡住文字。与报告一致绑 load→alignPagers，加载完再精确锚定。 */
-  views.querySelectorAll('img').forEach(function(im){
-    im.addEventListener('load',alignPagers);
-  });
   alignPagers();
   updateHead();
 }
@@ -272,7 +282,8 @@ function setView(v){
   document.querySelectorAll('#viewbar .viewbtn').forEach(function(b){
     b.classList.toggle('on',b.getAttribute('data-view')===v);});
   document.querySelectorAll('#views .view').forEach(function(p){
-    p.hidden=(p.getAttribute('data-view')!==v);});
+    p.hidden=!(+p.getAttribute('data-page')===curPage&&
+      p.getAttribute('data-view')===v);});
   clearHover(); applySelection(); alignPagers(); updateHead();
 }
 function ensureViewFor(space){
@@ -291,8 +302,9 @@ function pinField(key,i){
     return x.i===i&&x.key===key&&x.a.cell_bbox;})[0];
   if(!target){ toast('该单元格没有图像坐标，无法回溯到图'); return; }
   selIdx=i; selKey=key;
+  showLineage();
   if(target.a.page!==curPage){
-    curPage=target.a.page; curView=wantViewOf(target.a.space); renderViewer();
+    curView=wantViewOf(target.a.space); showPage(target.a.page);
   }else ensureViewFor(target.a.space);
   clearPin(); clearHover(); applySelection(); markLeft(); updateHead();
 }
@@ -301,14 +313,27 @@ function selectRecord(i){
   if(!records[i]) return;
   if(i===selIdx&&selKey==null){ clearSel(); updateHead(); return; }
   selIdx=i; selKey=null;
+  showLineage();
   var rp=rowPages(i);
-  if(rp.length&&rp.indexOf(curPage)<0){ curPage=rp[0]; curView=null; renderViewer(); }
+  if(rp.length&&rp.indexOf(curPage)<0){ showPage(rp[0]); }
+  var a0=allAnchors.filter(function(x){return x.i===i&&x.a.cell_bbox;})[0];
+  if(a0) ensureViewFor(a0.a.space);
   clearPin(); clearHover(); applySelection(); markLeft(); updateHead();
 }
-function hideLineage(){
-  clearSel();
-  document.getElementById('lineage').hidden=true;
-  closeLb();
+/* 收起＝折叠成标题栏（展开入口常驻），不是整块消失：
+   旧实现 hidden=true 后只有换文件才复显，点单元格再也打不开。 */
+function setCollapsed(on){
+  var panel=document.getElementById('lineage');
+  panel.classList.toggle('collapsed',on);
+  var b=document.getElementById('ltoggle');
+  b.textContent=on?'展开 ▾':'收起 ▴';
+  b.setAttribute('aria-expanded',on?'false':'true');
+  if(on){ clearSel(); closeLb(); }else alignPagers();
+}
+function showLineage(){
+  var panel=document.getElementById('lineage');
+  if(panel.hidden) return;
+  if(panel.classList.contains('collapsed')) setCollapsed(false);
 }
 
 /* ---- 事件委托（容器静态、内容动态重建，委托 survive rebuild） ---- */
@@ -434,7 +459,9 @@ document.getElementById('viewbar').addEventListener('click',function(e){
   var b=e.target.closest?e.target.closest('[data-view]'):null;
   if(b) setView(b.getAttribute('data-view'));
 });
-document.getElementById('lclose').onclick=hideLineage;
+document.getElementById('ltoggle').onclick=function(){
+  setCollapsed(!document.getElementById('lineage').classList.contains('collapsed'));
+};
 
 /* ---- 窗口式翻页（公共件 pagerPages/renderPagerInto/alignPagerTo 在 stage.js） ---- */
 function renderPager(){
@@ -448,7 +475,8 @@ function alignPagers(){
 }
 function goPage(p){
   if(pagesPresent.indexOf(p)<0) return;
-  curPage=p; curView=null; clearSel(); renderViewer();
+  /* 与报告一致：切页保留当前视图（原图/矫正图），只清钉住/悬停 */
+  clearSel(); showPage(p);
 }
 function curIndex(){
   var i=pagesPresent.indexOf(curPage); return i<0?0:i;
@@ -485,6 +513,18 @@ document.getElementById('lpager').addEventListener('click',function(e){
   jump.addEventListener('click',function(e){ e.stopPropagation(); });
 })();
 window.addEventListener('resize',alignPagers);
+/* 左右方向键翻页（与报告一致）：焦点在工作区（记录表/血缘侧栏）内且不在输入控件时生效 */
+document.addEventListener('keydown',function(e){
+  if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight') return;
+  var t=e.target;
+  if(t&&(/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)||t.isContentEditable)) return;
+  if(!(t&&t.closest&&t.closest('.stgwrap'))) return;
+  if(pagesPresent.length<2) return;
+  var i=curIndex(),ni=e.key==='ArrowLeft'?i-1:i+1;
+  if(ni<0||ni>=pagesPresent.length) return;
+  e.preventDefault();
+  goIndex(ni);
+});
 
 /* ---- 全屏浮层（共享 lightbox 工厂 stage.js）：克隆当前 imgwrap，滚轮缩放/拖拽/框可点。
    差异走钩子：标题带页码+血缘语义；叠加框初始跟随整表开关 allOn，切换时同步克隆框 .all；
@@ -556,7 +596,7 @@ function loadStaging(){
     renderTable(); buildAnchors(); initViewer();
     var links=document.getElementById('filelinks');
     if(curFile){
-      links.innerHTML='<a class="linkbtn" target="_blank" href="'+
+      links.innerHTML='<a class="btn mini reportbtn" target="_blank" href="'+
         fileUrl(curFile,'对照报告.html')+'">对照报告</a>';
     }else links.innerHTML='';
     var t=doc.template||{};
@@ -571,7 +611,8 @@ function loadStaging(){
 document.getElementById('tasktag').textContent=task?('任务 #'+task):'（未指定任务）';
 document.getElementById('tasklink').href=task?('/tasks?task='+encodeURIComponent(task)):'/tasks';
 if(!task){
-  /* 无任务参数：校验台独立入口，渲染文件级台账（/api/staging/ledger，新文件在前） */
+  /* 无任务参数：校验台独立入口，渲染任务级台账（/api/staging/ledger，新任务在前）。
+     任务行汇总全部文件的校验进度，点任务行展开文件子行，点子行进校验台。 */
   document.getElementById('modebanner').hidden=true;
   document.querySelector('.stgwrap').hidden=true;
   document.getElementById('summary').hidden=true;
@@ -583,19 +624,31 @@ if(!task){
     var items=j.items||[];
     document.getElementById('ledger').hidden=!items.length;
     document.getElementById('ledgerempty').hidden=items.length>0;
-    document.getElementById('ledgerrows').innerHTML=items.map(function(r){
-      var tpl=r.template||{};
-      return '<tr data-task="'+r.task_id+'" data-file="'+r.task_file_id+'">'+
-        '<td class="mono">#'+r.task_id+'</td>'+
-        '<td><span class="nm" title="'+escHtml(r.name)+'">'+escHtml(shortName(r.name))+'</span></td>'+
-        '<td>'+escHtml((tpl.name||'原始透传')+' v'+(tpl.version||1))+'</td>'+
-        '<td class="num">'+r.records_n+'</td>'+
+    function cntCells(r){
+      return '<td class="num">'+r.records_n+'</td>'+
         '<td class="num">'+r.pending_n+'</td>'+
         '<td class="num'+(r.edited_n?' led-edited':'')+'">'+r.edited_n+'</td>'+
         '<td class="num">'+r.confirmed_n+'</td>'+
-        '<td class="num">'+r.rejected_n+'</td>'+
+        '<td class="num">'+r.rejected_n+'</td>';
+    }
+    document.getElementById('ledgerrows').innerHTML=items.map(function(r){
+      var tpl=r.template||{};
+      var main='<tr class="led-task" data-task="'+r.task_id+'">'+
+        '<td class="mono"><span class="led-caret">▸</span>#'+r.task_id+'</td>'+
+        '<td>'+r.files.length+' 个文件</td>'+
+        '<td>'+escHtml((tpl.name||'原始透传')+' v'+(tpl.version||1))+'</td>'+
+        cntCells(r)+
         '<td>'+stateBadge(r.task_state)+'</td>'+
         '<td class="num">'+fmtTime(r.created_at)+'</td></tr>';
+      var subs=r.files.map(function(f){
+        return '<tr class="led-file" data-task="'+r.task_id+'" data-file="'+
+          f.task_file_id+'" hidden>'+
+          '<td></td>'+
+          '<td><span class="nm led-subname" title="'+escHtml(f.name)+'">'+
+          escHtml(shortName(f.name))+'</span></td>'+
+          '<td></td>'+cntCells(f)+'<td></td><td></td></tr>';
+      }).join('');
+      return main+subs;
     }).join('');
   }).catch(function(e){ showErr('读取校验台账失败：'+e.message); });
 }else{
@@ -612,9 +665,18 @@ if(!task){
   }).catch(function(e){ showErr(e.message); });
 }
 
-/* 台账行点击 → 进入该文件的校验台 */
+/* 台账：点任务行展开/收起其文件子行；点文件子行进入该文件的校验台 */
 document.getElementById('ledgerrows').addEventListener('click',function(e){
   var tr=e.target.closest?e.target.closest('tr[data-task]'):null;
-  if(tr) location.href='/staging?task='+tr.getAttribute('data-task')+
-    '&file='+tr.getAttribute('data-file');
+  if(!tr) return;
+  if(tr.classList.contains('led-file')){
+    location.href='/staging?task='+tr.getAttribute('data-task')+
+      '&file='+tr.getAttribute('data-file');
+    return;
+  }
+  var open=tr.classList.toggle('open');
+  var n=tr.nextElementSibling;
+  while(n&&n.classList.contains('led-file')){
+    n.hidden=!open; n=n.nextElementSibling;
+  }
 });

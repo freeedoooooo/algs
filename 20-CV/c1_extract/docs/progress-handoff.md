@@ -121,6 +121,66 @@ P1b 模板消费＝选择器＋重命名（transform 留 P2）。
 
 ---
 
+## 〇.8、任务级台账反转 + 报告/校验台打磨 + B 编排拆分（2026-11-21，已完成）
+
+用户四条需求。台账方向**反转**上轮裁决（文件级→任务级）；目录重构用户授权
+「最彻底是 B 就按 B，收益不大改 A」→ 执行 **B 核心（拆编排）**，**不挪验收/CLI
+脚本**：A 的脚本挪动会破坏脚本自举（ROOT/PKG）与套件硬编码路径＝改安全网换装饰。
+
+1. **任务级校验台账**：`content_db.ledger()` SQL 不变（per-task_file GROUP BY），
+   Python 聚合为 task 级 items（含 `files` 子列表，四态计数求和）。/staging 无 task
+   渲染任务行（▸ caret＋「N 个文件」），点任务行展开文件子行，点文件子行进入
+   `/staging?task=&file=`。API 形状变化对验收无影响（套件不引用 ledger）。
+2. **报告参数快照不独立占行**：paramsnap 移入页头 `.sub` 统计行内，改 `<details>`
+   小胶囊「参数快照 · N 项」，点开 absolute 悬浮下拉（440px/64vh/sticky 表头），
+   点外部收起（report.js）；页头高度零增长（82→82px）。
+3. **校验台分页与报告页对齐**：根因＝旧 renderViewer 每次切页 innerHTML 重建→
+   新 img 未 load→高度塌缩→alignPagerTo 锚高→load 后落回＝「上跳」。修复＝与
+   report 同架构**全页预渲染**（buildViews 一次 innerHTML，showPage 只切 hidden）
+   ＋img width/height 属性预留宽高比＋方向键（scoped `.stgwrap`，跳过输入控件）
+   ＋切页保留 curView；stage.js lightbox 克隆已 removeAttribute 宽高，兼容。
+4. **B 编排拆分**：新建 `service.py`（292 行）＝STATE/LOCK＋step/_on_log＋
+   safe_name/_now/_kind_of＋register_file/resolve_template＋launch＋
+   _STAGE_FRAC/_ingest_case/rmtree_retry/task_batch；`app.py` 813→543 行只剩
+   路由＋请求校验＋异常处理器＋_dedup_name/_json_body/asset。4 个函数去下划线
+   改公开名，其余**逐字迁移**（AST 逐块比对 HEAD 确认 14/14 一致）。所有入口
+   不变（python app.py / uvicorn c1_extract.app:app / 两套验收 / export）。
+- **验收**：两套顺序 **6/6 PASS ×2**（基线 135/1867/1867 · 98/14870953 · 5 不变）；
+  8799 只读浏览器（台账展开/导航、三页预渲染切页 pager 零位移、方向键、lightbox、
+  新报告胶囊）＋冒烟（healthz/status 形状/logs 404/task21 live=None/ledger 9 任务
+  task42=2 文件 47 条）；控制台零消息；scratch 无残留。
+- **存量报告 caveat**：报告是上传时生成的**静态 BLOB**（extract_artifact），
+  模板/CSS 改动只对新上传生效；存量 9 份报告仍是旧 paramsnap 独立行排版。
+  如需统一须一次性重建报告 BLOB＝修改真实数据，**先备份＋用户批准**再做（可选后续）。
+- **8765 注意**：本轮 ledger 任务级形状＋B 拆分＋A 轮错误分类都需**用户重启 8765**
+  才载入（前端 /static 即时生效）。
+
+---
+
+## 〇.9、校验台两处打磨（2026-11-21，已完成；用户三条）
+
+1. **任务页「预览数据」→校验台是刻意设计**（P1a 裁决：暂存页原地升级成校验台，
+   不另建预览页）。用户问是否刻意→答是；「文案暗示只读、实际可改值」的盲点已提出，
+   用户裁决**先不动**（tasks.js 未改）。
+2. **页头「对照报告」加底色**：staging.js filelinks 改 `btn mini reportbtn`；
+   staging.css `.reportbtn` 淡蓝底 #e7f0ff／边 #bcd3f7／字 #1d4ed8，hover 加深。
+3. **血缘回溯收起 bug＋样式**：根因＝hideLineage 整块 `hidden=true`，只有
+   initViewer（换文件）复显，pinField/selectRecord 不展开→收起后永久打不开；
+   且 `.dclose` 是对话框关闭钮样式、整块消失不留入口。改＝**折叠成标题栏**
+   （`.lineage.collapsed` 隐藏 .stage/.lsub/.lhint、width:auto，保留 lhead＋展开钮）；
+   按钮改 `btn ghost mini ltoggle`（id ltoggle，收起 ▴／展开 ▾＋aria-expanded）；
+   pinField/selectRecord 调 showLineage() 自动展开；收起时 clearSel＋closeLb；
+   换文件保留折叠偏好。staging.css 局部 .dclose 覆盖已删（shell.css 共享 .dclose
+   仍供任务/上传页关闭钮使用，未动）。
+- **验证**：node --check；8799 只读浏览器：29 条／3 视图预渲染；收起→182×47 标题栏、
+  表格撑满全宽；点单元格／点行／按钮三路均展开；胶囊 18px/262px 与图高 714 各态
+  一致（零位移）；光箱开→收起即关；task42 换页签保留折叠、点格展开；控制台零消息。
+  **本轮纯前端页面资产**（staging.html/css/js）：builder 只内联 stage/report 资产，
+  报告 BLOB 与后端零改动→两套验收无回归面，未重跑（node＋浏览器金路径为准）。
+- **8765**：/static 即时生效，本轮两处改动无需重启即可见。
+
+---
+
 ## 一、C1 已完成（已验证）
 
 用户 5 项演进（2026-11-20 提出，全部批准落地）：
@@ -200,10 +260,12 @@ P1b 模板消费＝选择器＋重命名（transform 留 P2）。
 
 ## 四、下次上班入口
 
-1. C1 存储演进＋任务化命名/去外键＋P1a 校验台＋小重构轮（A/B）＋**UI 打磨轮**
-   均已完成：代码＋验收＋浏览器＋文档全部收尾（见 §〇.6 / §〇.7）。
-2. 建议事项：**用户 8765 重启一次**——载入 A 轮错误分类＋台账新端点
-   /api/staging/ledger（重启前校验入口台账报读取失败；其余页面正常）。
+1. C1 存储演进＋任务化命名/去外键＋P1a 校验台＋小重构轮（A/B）＋UI 打磨轮
+   ＋任务级台账/报告打磨/B 编排拆分轮＋**校验台两处打磨轮**均已完成：代码＋验收＋
+   浏览器＋文档全部收尾（见 §〇.6 / §〇.7 / §〇.8 / §〇.9）。
+2. 建议事项：**用户 8765 重启一次**——载入 A 轮错误分类＋台账任务级形状
+   /api/staging/ledger＋B 拆分（app.py 路由 / service.py 引擎）。重启前校验入口
+   台账报读取失败；其余页面正常。
 3. 新需求从 **P1b** 起步（设计先行，用户确认后执行）：模板管理页 CRUD＋版本＋
    collect 选择器/重命名消费＋选择器单测骨架（C 项）同轮；transform 留 P2。
 4. 其余沿用 §二挂起项。

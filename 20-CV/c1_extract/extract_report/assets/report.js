@@ -492,6 +492,11 @@ window.addEventListener('resize',alignPagers);
 document.querySelectorAll('.stage img').forEach(function(im){
   im.addEventListener('load',alignPagers);
 });
+/* 参数快照悬浮面板：点外部收起，避免一直挂着挡内容 */
+document.addEventListener('click',function(e){
+  var ps=document.querySelector('.paramsnap[open]');
+  if(ps&&!ps.contains(e.target)) ps.removeAttribute('open');
+});
 
 /* 跨页合并表多表 tab */
 document.querySelectorAll('.stitchtab').forEach(function(btn){

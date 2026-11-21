@@ -148,14 +148,24 @@ a{color:#2563eb}
   .pg-count b{color:#25324a}
   .pg-jump{background:#fff;border-color:#d8e0ed;color:#25324a}
   .pg-jump:focus{border-color:#2563eb;background:#fff}}
-/* 参数快照：每个批次自解释「当时用了什么参数」，默认收起不占版面 */
-.paramsnap{margin-top:14px;border:1px solid var(--line);border-radius:8px;
-  background:#fff;padding:8px 12px;font-size:12px}
-.paramsnap summary{cursor:pointer;color:var(--accent);font-weight:500}
-.paramsnap table{border-collapse:collapse;width:100%;margin-top:10px}
+/* 参数快照：收进页头统计行内的小胶囊，不独立占行；
+   展开时表格悬浮下拉（absolute），不推挤下方内容，点外部收起（report.js） */
+.paramsnap{position:relative;font-size:12px}
+.paramsnap summary{cursor:pointer;list-style:none;user-select:none;
+  color:var(--accent);padding:1px 9px;border-radius:999px;
+  border:1px solid #d8e0ed;background:#f7f9fd;white-space:nowrap}
+.paramsnap summary::-webkit-details-marker{display:none}
+.paramsnap summary:hover{border-color:var(--accent);background:#eef4ff}
+.paramsnap[open] summary{background:#e7f0ff;border-color:var(--accent)}
+.psnap-pop{position:absolute;top:calc(100% + 6px);left:0;z-index:40;
+  width:440px;max-width:82vw;max-height:64vh;overflow:auto;
+  background:#fff;border:1px solid var(--line);border-radius:8px;
+  box-shadow:0 6px 24px rgba(20,30,60,.16);padding:4px 10px 8px}
+.paramsnap table{border-collapse:collapse;width:100%}
 .paramsnap th,.paramsnap td{border-bottom:1px solid var(--line);padding:5px 8px;
   text-align:left;vertical-align:top}
-.paramsnap th{color:var(--muted);font-weight:500;background:#f7f9fc}
+.paramsnap th{color:var(--muted);font-weight:500;background:#f7f9fc;
+  position:sticky;top:0}
 .paramsnap code{background:#eef4ff;color:var(--accent);padding:1px 6px;
   border-radius:4px;white-space:nowrap}
 .paramsnap .ph{color:var(--muted)}

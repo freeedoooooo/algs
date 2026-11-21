@@ -1,18 +1,20 @@
 <details class="paramsnap">
-    <summary>本次参数快照（{{ n }} 项，按优先级）</summary>
-    <table>
-        <thead>
-        <tr>
-            <th>参数</th>
-            <th>本次值</th>
-        </tr>
-        </thead>
-        <tbody>{% for r in rows %}
-        <tr>
-            <td>{{ r.label }} <span class="hint" tabindex="0" data-tip="{{ r.help }}">?</span></td>
-            <td><code>{{ r.value }}</code></td>
-        </tr>
-        {% endfor %}
-        </tbody>
-    </table>
+    <summary title="本次生效参数，按优先级">参数快照 · {{ n }} 项</summary>
+    <div class="psnap-pop">
+        <table>
+            <thead>
+            <tr>
+                <th>参数</th>
+                <th>本次值</th>
+            </tr>
+            </thead>
+            <tbody>{% for r in rows %}
+            <tr>
+                <td>{{ r.label }} <span class="hint" tabindex="0" data-tip="{{ r.help }}">?</span></td>
+                <td><code>{{ r.value }}</code></td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </details>

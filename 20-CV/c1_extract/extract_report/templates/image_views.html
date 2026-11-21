@@ -14,7 +14,7 @@
     {% endif %}
     <div class="views">
         <div class="view" data-card="{{ card }}" data-view="orig" data-space="source">
-            <div class="imgwrap" style="--ar:{{ ar|f4 }}"><img src="{{ src }}" alt="原图">
+            <div class="imgwrap" style="--ar:{{ ar|f4 }}"><img src="{{ src }}" width="{{ w }}" height="{{ h }}" alt="原图">
                 <svg viewBox="0 0 {{ w }} {{ h }}" preserveAspectRatio="none">{{ mc.polys(card, polys_src) }}</svg>
                 {% if cell_src or stitch_src %}
                 <svg class="cellsvg" viewBox="0 0 {{ w }} {{ h }}" preserveAspectRatio="none">{{ mc.cell_rects(card,
@@ -26,7 +26,7 @@
         </div>
         {% if rect %}
         <div class="view" data-card="{{ card }}" data-view="rect" data-space="rectified" hidden>
-            <div class="imgwrap" style="--ar:{{ rect.rar|f4 }}"><img src="{{ rect.src }}" alt="矫正图">
+            <div class="imgwrap" style="--ar:{{ rect.rar|f4 }}"><img src="{{ rect.src }}" width="{{ rect.rw }}" height="{{ rect.rh }}" alt="矫正图">
                 <svg class="cellsvg" viewBox="0 0 {{ rect.rw }} {{ rect.rh }}" preserveAspectRatio="none">{{
                     mc.cell_rects(card, rect.cells) }}{{ mc.polys(card, polys_rect) }}{{ mc.stitch_rects(card, page_no,
                     rect.stitch) }}

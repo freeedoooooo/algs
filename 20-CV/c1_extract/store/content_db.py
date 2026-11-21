@@ -282,9 +282,10 @@ def query_fields(field=None, q=None, task=None, state=None, limit=200):
 
 
 def ledger():
-    """校验台账（只读）：按 task_file 聚合记录数与四态校验进度，新文件在前。
+    """校验台账（只读）：按 task 聚合记录数与四态校验进度，新任务在前。
 
-    只列有暂存记录的文件（INNER JOIN record）；failed/无记录任务不出现。
+    每个任务带 files 子列表（task_file 粒度的同款计数），供前端展开选文件。
+    只列有暂存记录的任务（INNER JOIN record）；failed/无记录任务不出现。
     """
     conn = db.connect()
     try:
@@ -308,21 +309,33 @@ def ledger():
                 ' GROUP BY tf.id, tf.task_id, s.name, t.state, t.created_at,'
                 ' tpl.name, tv.version'
                 ' ORDER BY tf.id DESC')
-            out = []
+            tasks = {}
             for r in _rows(cur):
-                out.append({
-                    'task_id': r['task_id'],
+                f = {
                     'task_file_id': r['task_file_id'],
-                    'name': r['name'], 'task_state': r['task_state'],
-                    'template': {'name': r['tpl_name'],
-                                 'version': r['version']},
+                    'name': r['name'],
                     'records_n': int(r['records_n']),
                     'pending_n': int(r['pending_n'] or 0),
                     'edited_n': int(r['edited_n'] or 0),
                     'confirmed_n': int(r['confirmed_n'] or 0),
                     'rejected_n': int(r['rejected_n'] or 0),
-                    'created_at': str(r['created_at']),
-                })
-            return out
+                }
+                t = tasks.get(r['task_id'])
+                if t is None:
+                    t = tasks[r['task_id']] = {
+                        'task_id': r['task_id'],
+                        'task_state': r['task_state'],
+                        'template': {'name': r['tpl_name'],
+                                     'version': r['version']},
+                        'records_n': 0, 'pending_n': 0, 'edited_n': 0,
+                        'confirmed_n': 0, 'rejected_n': 0,
+                        'created_at': str(r['created_at']),
+                        'files': [],
+                    }
+                for k in ('records_n', 'pending_n', 'edited_n',
+                          'confirmed_n', 'rejected_n'):
+                    t[k] += f[k]
+                t['files'].append(f)
+            return list(tasks.values())
     finally:
         conn.close()
