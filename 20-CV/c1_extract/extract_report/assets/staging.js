@@ -612,50 +612,85 @@ function loadStaging(){
   });
 }
 
-document.getElementById('tasktag').textContent=task?('任务 #'+task):'（未指定任务）';
+/* ---- 任务级台账（无 task 入口）：客户端搜索/筛选，与资料/任务页工具栏同构 ---- */
+var ledgerItems=[], lq='', lprog='';
+function ledCnt(r){
+  return '<td class="num">'+r.records_n+'</td>'+
+    '<td class="num">'+r.pending_n+'</td>'+
+    '<td class="num'+(r.edited_n?' led-edited':'')+'">'+r.edited_n+'</td>'+
+    '<td class="num">'+r.confirmed_n+'</td>'+
+    '<td class="num">'+r.rejected_n+'</td>';
+}
+function ledMatch(r){
+  if(lprog==='todo'&&!(r.pending_n>0)) return false;
+  if(lprog==='edited'&&!(r.edited_n>0)) return false;
+  if(lprog==='done'&&r.pending_n>0) return false;
+  if(lq){
+    var tpl=r.template||{};
+    var hay=(r.task_id+' '+(tpl.name||'')+' '+
+      (r.files||[]).map(function(f){return f.name;}).join(' ')).toLowerCase();
+    if(hay.indexOf(lq)<0) return false;
+  }
+  return true;
+}
+function renderLedger(){
+  var list=ledgerItems.filter(ledMatch);
+  document.getElementById('ledger').hidden=!list.length;
+  var empty=document.getElementById('ledgerempty');
+  empty.hidden=list.length>0;
+  if(!list.length){
+    empty.innerHTML=ledgerItems.length?
+      '<b>没有匹配的任务</b>调整搜索或筛选条件。':
+      '<b>暂无可校验的记录</b>先到「提取」页上传文件。';
+  }
+  document.getElementById('ledgerrows').innerHTML=list.map(function(r){
+    var tpl=r.template||{};
+    var main='<tr class="led-task" data-task="'+r.task_id+'" title="点击展开/收起文件子行">'+
+      '<td class="mono"><span class="led-caret">▸</span>#'+r.task_id+'</td>'+
+      '<td>'+r.files.length+' 个文件</td>'+
+      '<td>'+escHtml((tpl.name||'原始透传')+' v'+(tpl.version||1))+'</td>'+
+      ledCnt(r)+
+      '<td>'+stateBadge(r.task_state)+'</td>'+
+      '<td class="num">'+fmtTime(r.created_at)+'</td></tr>';
+    var subs=r.files.map(function(f){
+      return '<tr class="led-file" data-task="'+r.task_id+'" data-file="'+
+        f.task_file_id+'" hidden>'+
+        '<td></td>'+
+        '<td><span class="nm led-subname" title="'+escHtml(f.name)+'">'+
+        escHtml(shortName(f.name))+'</span></td>'+
+        '<td></td>'+ledCnt(f)+'<td></td><td></td></tr>';
+    }).join('');
+    return main+subs;
+  }).join('');
+}
+
+var tasktag=document.getElementById('tasktag');
+tasktag.textContent=task?('任务 #'+task):'';
+tasktag.hidden=!task;
 document.getElementById('tasklink').href=task?('/tasks?task='+encodeURIComponent(task)):'/tasks';
 /* 默认收起成细竖条：表格撑满全宽，点数据自动弹出（用户裁决） */
 setCollapsed(true);
 if(!task){
-  /* 无任务参数：校验台独立入口，渲染任务级台账（/api/staging/ledger，新任务在前）。
-     任务行汇总全部文件的校验进度，点任务行展开文件子行，点子行进校验台。 */
+  /* 无任务参数＝台账入口：页头与资料/任务同构（标题＋右对齐工具栏，无返回），
+     面板内直接表格。任务行汇总校验进度，点任务行展开文件子行，点子行进校验台。 */
   document.getElementById('modebanner').hidden=true;
   document.querySelector('.stgwrap').hidden=true;
   document.getElementById('summary').hidden=true;
   document.getElementById('taskpick').hidden=false;
+  document.getElementById('tasklink').hidden=true;
+  document.getElementById('filelinks').hidden=true;
+  document.getElementById('tplbadge').hidden=true;
+  document.getElementById('ledgerbar').hidden=false;
+  document.querySelector('.pagehead h1').textContent='校验台账';
+  document.getElementById('lq').addEventListener('input',function(){
+    lq=this.value.trim().toLowerCase(); renderLedger();
+  });
+  document.getElementById('lprog').onchange=function(){ lprog=this.value; renderLedger(); };
   fetch('/api/staging/ledger').then(function(r){
     if(!r.ok) return r.json().then(function(j){throw new Error(j.error||('HTTP '+r.status));});
     return r.json();
   }).then(function(j){
-    var items=j.items||[];
-    document.getElementById('ledger').hidden=!items.length;
-    document.getElementById('ledgerempty').hidden=items.length>0;
-    function cntCells(r){
-      return '<td class="num">'+r.records_n+'</td>'+
-        '<td class="num">'+r.pending_n+'</td>'+
-        '<td class="num'+(r.edited_n?' led-edited':'')+'">'+r.edited_n+'</td>'+
-        '<td class="num">'+r.confirmed_n+'</td>'+
-        '<td class="num">'+r.rejected_n+'</td>';
-    }
-    document.getElementById('ledgerrows').innerHTML=items.map(function(r){
-      var tpl=r.template||{};
-      var main='<tr class="led-task" data-task="'+r.task_id+'">'+
-        '<td class="mono"><span class="led-caret">▸</span>#'+r.task_id+'</td>'+
-        '<td>'+r.files.length+' 个文件</td>'+
-        '<td>'+escHtml((tpl.name||'原始透传')+' v'+(tpl.version||1))+'</td>'+
-        cntCells(r)+
-        '<td>'+stateBadge(r.task_state)+'</td>'+
-        '<td class="num">'+fmtTime(r.created_at)+'</td></tr>';
-      var subs=r.files.map(function(f){
-        return '<tr class="led-file" data-task="'+r.task_id+'" data-file="'+
-          f.task_file_id+'" hidden>'+
-          '<td></td>'+
-          '<td><span class="nm led-subname" title="'+escHtml(f.name)+'">'+
-          escHtml(shortName(f.name))+'</span></td>'+
-          '<td></td>'+cntCells(f)+'<td></td><td></td></tr>';
-      }).join('');
-      return main+subs;
-    }).join('');
+    ledgerItems=j.items||[]; renderLedger();
   }).catch(function(e){ showErr('读取校验台账失败：'+e.message); });
 }else{
   fetch('/api/tasks/'+encodeURIComponent(task)).then(function(r){
