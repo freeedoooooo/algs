@@ -93,65 +93,8 @@ fetch('/api/templates').then(function(r){return r.json();}).then(function(j){
     return '<option value="'+(t.current_version_id||'')+'" data-tpl="'+t.id+'">'+
       escHtml((t.name||'原始透传')+' v'+(t.current_version||1))+'</option>';
   }).join('');
-  refreshMapSel();
 }).catch(tplFallback);
 function tplVersionId(){ return tplsel.value||null; }
-function currentTplId(){
-  var o=tplsel.options[tplsel.selectedIndex];
-  return o?(o.getAttribute('data-tpl')||''):'';
-}
-
-/* ---- P2b 入库模式：预登记数据源＋映射（按所选模板过滤）；
-   执行＝提取校验全部确认后，在任务详情/校验台手动点「入库」。 ---- */
-var dssel=document.getElementById('dssel'), mapsel=document.getElementById('mapsel');
-var loadMaps=[];
-function modeVal(){
-  var r=document.querySelector('input[name=mode]:checked');
-  return r?r.value:'preview';
-}
-function refreshMapSel(){
-  var tid=currentTplId(), did=dssel.value, keep=mapsel.value;
-  var list=loadMaps.filter(function(m){
-    return String(m.template_id)===String(tid)&&String(m.datasource_id)===String(did);
-  });
-  mapsel.innerHTML=list.length?list.map(function(m){
-    return '<option value="'+m.id+'">'+escHtml(m.target_table+' · '+m.write_mode)+'</option>';
-  }).join(''):'<option value="">无匹配映射（到入库页新建）</option>';
-  if(keep&&list.some(function(m){return String(m.id)===keep;})) mapsel.value=keep;
-}
-function syncMode(){
-  var load=modeVal()==='load';
-  document.getElementById('loadrow').hidden=!load;
-  Array.prototype.forEach.call(document.querySelectorAll('.mopt'),function(l){
-    l.classList.toggle('on',l.querySelector('input').checked);
-  });
-  if(load) refreshMapSel();
-}
-Array.prototype.forEach.call(document.querySelectorAll('input[name=mode]'),function(r){
-  r.addEventListener('change',syncMode);
-});
-tplsel.addEventListener('change',function(){ if(modeVal()==='load') refreshMapSel(); });
-dssel.addEventListener('change',refreshMapSel);
-Promise.all([
-  fetch('/api/load/datasources').then(function(r){return r.json();}),
-  fetch('/api/load/tables').then(function(r){return r.json();})
-]).then(function(res){
-  var ds=res[0].items||[]; loadMaps=res[1].items||[];
-  dssel.innerHTML=ds.length?ds.map(function(d){
-    return '<option value="'+d.id+'">'+escHtml(d.name+' · '+d.host+'/'+d.db_name)+'</option>';
-  }).join(''):'<option value="">暂无数据源（到入库页新建）</option>';
-  refreshMapSel();
-}).catch(function(){
-  dssel.innerHTML='<option value="">平台库未连接</option>';
-  mapsel.innerHTML='<option value="">平台库未连接</option>';
-});
-function loadFields(){
-  if(modeVal()!=='load') return {mode:'preview'};
-  if(!dssel.value||!mapsel.value)
-    throw new Error('入库模式须选择数据源与映射（到入库页配置）');
-  return {mode:'load',load_datasource_id:Number(dssel.value),
-          load_table_id:Number(mapsel.value)};
-}
 
 document.getElementById('resetparams').onclick=function(e){
   e.preventDefault();
@@ -464,7 +407,6 @@ go.onclick=async function(){
   document.getElementById('runpct').textContent='0%';
   document.getElementById('runstage').textContent='准备中…';
   try{
-    var lf=loadFields();
     var files=[];
     for(var i=0;i<picked.length;i++){
       var f=picked[i];
@@ -476,8 +418,8 @@ go.onclick=async function(){
     var res=await fetch('/api/upload',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(Object.assign({files:files,params:collectParams(),
-        template_version_id:tplVersionId()},lf))
+      body:JSON.stringify({files:files,params:collectParams(),
+        template_version_id:tplVersionId()})
     });
     var j=await res.json();
     if(!j.ok) throw new Error(j.error||'上传失败');
@@ -568,13 +510,12 @@ srcgo.onclick=async function(){
   if(!ids.length) return;
   srcgo.disabled=true;
   try{
-    var lf=loadFields();
     saveParams(collectParams());
     var res=await fetch('/api/tasks',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(Object.assign({file_ids:ids,params:collectParams(),
-        template_version_id:tplVersionId()},lf))
+      body:JSON.stringify({file_ids:ids,params:collectParams(),
+        template_version_id:tplVersionId()})
     });
     var j=await res.json();
     if(!j.ok) throw new Error(j.error||'发起失败');

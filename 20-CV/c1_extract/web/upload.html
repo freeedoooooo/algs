@@ -22,12 +22,6 @@
 </nav>
 <div class="app">
   <aside class="console">
-    <div class="moderow">
-      <span class="mlabel">模式</span>
-      <label class="mopt on"><input type="radio" name="mode" value="preview" checked>预览</label>
-      <label class="mopt"><input type="radio" name="mode" value="load">入库</label>
-      <span class="hint" tabindex="0" data-tip="预览=提取+暂存记录，只看不入库。&#10;入库=预登记目的地与映射，提取校验&#10;全部确认后在任务详情/校验台手动入库。">?</span>
-    </div>
     <div id="drop">
       <b>点击或拖拽文件到此处</b>
       pdf/csv/png/jpg/bmp/webp/txt/md，可多选，单个 ≤ 20MB
@@ -47,17 +41,6 @@
       <label for="tplsel">模板</label>
       <select id="tplsel"></select>
       <span class="hint" tabindex="0" data-tip="映射模板=固定目标字段（入库须用）。&#10;原始透传=每表每行一条，键=表头原文，&#10;只可预览，不可入库。">?</span>
-    </div>
-    <div class="loadrow" id="loadrow" hidden>
-      <div class="tplrow">
-        <label for="dssel">数据源</label>
-        <select id="dssel"></select>
-      </div>
-      <div class="tplrow">
-        <label for="mapsel">映射</label>
-        <select id="mapsel"></select>
-      </div>
-      <div class="loadhint">先提取校验，全部确认后手动入库。配置在 <a href="/load" target="_blank">入库页</a>。</div>
     </div>
     <div class="row">
       <button id="go" disabled>开始提取</button>

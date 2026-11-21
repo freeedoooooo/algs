@@ -241,34 +241,12 @@ async def _json_body(request):
         raise store_errors.BadRequest('请求体不是合法 JSON')
 
 
-def _load_preflight(body, tpl):
-    """mode=load 预登记校验（上传与 tasks_create 共用）：数据源/映射归属＋
-    模板匹配＋目标库预检。失败抛 StoreError→400/404，不建 task（早失败）。"""
-    catalog = _load('store.catalog')
-    try:
-        ds_id = int(body.get('load_datasource_id'))
-        lt_id = int(body.get('load_table_id'))
-    except (TypeError, ValueError):
-        raise store_errors.BadRequest('入库模式须选择数据源与映射')
-    lt = catalog.get_load_table(lt_id)
-    if lt is None:
-        raise store_errors.NotFound('映射不存在')
-    if lt['datasource_id'] != ds_id:
-        raise store_errors.BadRequest('映射不属于所选数据源')
-    if lt['template_id'] != tpl['template_id']:
-        raise store_errors.BadRequest('映射与所选模板不匹配')
-    sj = tpl.get('schema_json')
-    fields = ([f.get('name') for f in sj.get('fields') or []]
-              if isinstance(sj, dict) else [])
-    fields = [f for f in fields if f]
-    if not fields:
-        raise store_errors.BadRequest('透传模板无固定目标字段，不可入库')
-    ds = catalog.get_datasource(ds_id)
-    if ds is None:
-        raise store_errors.NotFound('数据源不存在')
-    _load('store.loader').preflight(
-        ds, lt['target_table'], lt['fields'], lt['write_mode'], fields)
-    return {'datasource_id': ds_id, 'load_table_id': lt_id}
+def _reject_retired_load_keys(body):
+    """P2c：上传不再携带入库目标。旧契约键显式 400（防旧浏览器缓存静默错行），
+    目标改在 POST /api/tasks/{id}/load 时选择。"""
+    if any(k in body for k in ('mode', 'load_datasource_id', 'load_table_id')):
+        raise store_errors.BadRequest(
+            '上传不再携带入库目标，请在任务入库时选择')
 
 
 @app.post('/api/upload')
@@ -278,17 +256,12 @@ async def upload(request: Request):
             {'ok': False, 'error': '已有任务正在处理，请等它完成'},
             status_code=409)
     body = await _json_body(request)
+    _reject_retired_load_keys(body)
     files = body.get('files') or []
     if not files:
         return JSONResponse({'ok': False, 'error': '没有收到文件'},
                             status_code=400)
-    mode = body.get('mode') or 'preview'
-    if mode not in ('preview', 'load'):
-        return JSONResponse(
-            {'ok': False, 'error': 'mode 仅支持 preview/load'},
-            status_code=400)
     tpl = service.resolve_template(body.get('template_version_id'))
-    load_ctx = _load_preflight(body, tpl) if mode == 'load' else None
     # 调试参数：校验一次，非法值回退默认并把警告带回页面（不让整批失败）
     params, warns = params_mod.normalize(body.get('params'))
 
@@ -324,8 +297,7 @@ async def upload(request: Request):
             paths.append(path)
             info = service.register_file(name, data)
             ctx.append(dict(info, name=name, path=path))
-        result = service.launch(paths, params, warns, ctx, mode, tpl,
-                                load=load_ctx)
+        result = service.launch(paths, params, warns, ctx, tpl)
         launched = True
         return result
     finally:
@@ -592,9 +564,19 @@ def api_task_load_log(task_id: int):
 
 
 @app.post('/api/tasks/{task_id}/load')
-def api_task_load(task_id: int):
-    """手动入库闸门：门禁/预检在 service.launch_load，失败类型化上抛。"""
-    return service.launch_load(task_id)
+async def api_task_load(task_id: int, request: Request):
+    """手动入库闸门（P2c）：未绑定任务带 {load_datasource_id, load_table_id}
+    入库时绑定；已绑定任务空体沿用原绑定。门禁/预检在 service.launch_load。"""
+    raw = await request.body()
+    body = await _json_body(request) if raw else {}
+    target = None
+    if 'load_datasource_id' in body or 'load_table_id' in body:
+        try:
+            target = {'datasource_id': int(body.get('load_datasource_id')),
+                      'load_table_id': int(body.get('load_table_id'))}
+        except (TypeError, ValueError):
+            raise store_errors.BadRequest('入库目标须为数据源/映射 id')
+    return service.launch_load(task_id, target)
 
 
 @app.get('/api/tasks/{task_id}/quarantine')
@@ -743,6 +725,7 @@ async def api_tasks_create(request: Request):
         return JSONResponse({'ok': False, 'error': '已有任务正在处理'},
                             status_code=409)
     body = await _json_body(request)
+    _reject_retired_load_keys(body)
     ids = body.get('file_ids') or []
     if not ids:
         return JSONResponse({'ok': False, 'error': '未选择文件'},
@@ -754,11 +737,6 @@ async def api_tasks_create(request: Request):
                             status_code=400)
     params, warns = params_mod.normalize(body.get('params'))
     tpl = service.resolve_template(body.get('template_version_id'))
-    mode = body.get('mode') or 'preview'
-    if mode not in ('preview', 'load'):
-        return JSONResponse({'ok': False, 'error': 'mode 仅支持 preview/load'},
-                            status_code=400)
-    load_ctx = _load_preflight(body, tpl) if mode == 'load' else None
     in_dir = tempfile.mkdtemp(prefix='in_', dir=config.TMP_INPUT)
     launched = False
     try:
@@ -779,8 +757,7 @@ async def api_tasks_create(request: Request):
             ctx.append({'name': name, 'path': path,
                         'file_id': row['id'], 'sha256': row['sha256'],
                         'dedup': True})
-        result = service.launch(paths, params, warns, ctx, mode, tpl,
-                                load=load_ctx)
+        result = service.launch(paths, params, warns, ctx, tpl)
         launched = True
         return result
     finally:

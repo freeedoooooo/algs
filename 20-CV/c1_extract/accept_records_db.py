@@ -7,7 +7,8 @@ design-task-schema.md：DB 唯一事实源，task_id / task_file_id 粒度，无
 
 1 迁移门禁幂等+真实 task 投影往返一致 · 2 重跑级联替换（应用层）· 3 patch/set_review ·
 4 跨 task 查询 · 5 真链路（临时服务 8799，含 P1 校验路由冒烟）· 6 断库显式 503（临时服务 8797）·
-7 P2b 入库（合成目标表 _accept_p2_load＋合成模板/数据源/映射：mode=load 预登记、
+7 P2c 入库（合成目标表 _accept_p2_load＋合成模板/数据源/映射：上传不带模式、
+入库时绑定目标（预检/门禁失败不留绑定可换目标）、已绑定锁死 409、
 门禁 409、全部确认→loaded、回执幂等、transform/数据级隔离→partial、重试、upsert update、
 数据源目标锁定/映射只读审计）。
 上传字节取自 extract_file.content；断库用不可达 DSN 的临时服务模拟，
@@ -159,7 +160,7 @@ def baseline():
 
 
 def p2_cleanup(p2):
-    """P2b 合成对象清理（在 cleanup_tasks 之后跑，引用已空）：
+    """P2c 合成对象清理（在 cleanup_tasks 之后跑，引用已空）：
     字段行/映射/数据源/模板＋DROP 表。"""
     if not p2:
         return
@@ -178,8 +179,8 @@ def p2_cleanup(p2):
                 cur.execute('DELETE FROM extract_template_version'
                             ' WHERE template_id=%s', (tid,))
                 cur.execute('DELETE FROM extract_template WHERE id=%s', (tid,))
-            if p2.get('table'):
-                cur.execute('DROP TABLE IF EXISTS ' + P2_TABLE)
+            for tname in p2.get('tables', []):
+                cur.execute('DROP TABLE IF EXISTS ' + tname)
         conn.commit()
     finally:
         conn.close()
@@ -223,8 +224,7 @@ def upload(port, src_bytes, name, extra=None):
     # WARMUP=0 时后台线程即刻建 paddle 模型（oneDNN 初始化持 GIL），
     # 事件循环回包被饿死，首个 POST 可能数十秒——放宽到 120s
     body = {'files': [{'name': name,
-                       'data': base64.b64encode(src_bytes).decode()}],
-            'mode': 'preview'}
+                       'data': base64.b64encode(src_bytes).decode()}]}
     if extra:
         body.update(extra)
     st, j = http(port, '/api/upload', body, timeout=120)
@@ -345,7 +345,7 @@ def main():
     base0 = baseline()
     sweep_stale_scratch()
     syn_tasks, syn_fids, up = [], [], []
-    p2 = {'lts': [], 'dss': [], 'tpls': []}
+    p2 = {'lts': [], 'dss': [], 'tpls': [], 'tables': []}
     try:
         rc = _main(syn_tasks, syn_fids, up, p2)
     finally:
@@ -385,7 +385,7 @@ def _main(syn_tasks, syn_fids, up, p2):
         return 1
     src_real, field, real_kw = None, None, None
     for doc in real:
-        task_id = catalog.create_task('preview', tv['id'], {})
+        task_id = catalog.create_task(tv['id'], {})
         syn_tasks.append(task_id)
         remap = json.loads(json.dumps(doc))
         remap['task_id'] = task_id
@@ -420,7 +420,7 @@ def _main(syn_tasks, syn_fids, up, p2):
                     break
 
     print('[2/7] 重跑级联替换（合成 task，应用层先删子表）')
-    task2 = catalog.create_task('preview', tv['id'], {})
+    task2 = catalog.create_task(tv['id'], {})
     syn_tasks.append(task2)
     fid, dup = catalog.register_file('accept.pdf', 'pdf', 22, '0' * 64,
                                      b'%PDF-1.4 accept-two')
@@ -548,8 +548,7 @@ def _main(syn_tasks, syn_fids, up, p2):
         st, j = http(8797, '/api/upload',
                      {'files': [{'name': src['name'],
                                  'data': base64.b64encode(
-                                     src['data']).decode()}],
-                      'mode': 'preview'})
+                                     src['data']).decode()}]})
         check('断库上传 503（不建 task）', st == 503, 'st={}'.format(st))
         st, _j = http(8797, '/api/tasks')
         check('断库 tasks 503', st == 503)
@@ -560,7 +559,7 @@ def _main(syn_tasks, syn_fids, up, p2):
     finally:
         svc_down.kill()
 
-    print('[7/7] P2b 入库（合成目标表＋模板/数据源/映射，真链路 mode=load）')
+    print('[7/7] P2c 入库（合成目标表＋模板/数据源/映射，入库时绑定目标）')
     conn = db.connect()
     try:
         with conn.cursor() as cur:
@@ -571,7 +570,7 @@ def _main(syn_tasks, syn_fids, up, p2):
         conn.commit()
     finally:
         conn.close()
-    p2['table'] = P2_TABLE
+    p2['tables'].append(P2_TABLE)
     fields3 = [{'name': '名称'}, {'name': '金额'}, {'name': '备注'}]
     FROWS = [{'template_field': '名称', 'target_column': 'c_name',
               'is_business_key': 1},
@@ -677,19 +676,32 @@ def _main(syn_tasks, syn_fids, up, p2):
                         'write_mode': 'upsert', 'fields': FROWS})
         lt_bad = jb.get('id')
         small = base64.b64encode(b'%PDF-1.4 accept').decode()
+        strk, _ = http(8799, '/api/upload',
+                       {'files': [{'name': 'p2.pdf', 'data': small}],
+                        'mode': 'load'})
+        check('退役契约键上传 400（不再收 mode/入库目标）', strk == 400)
 
-        def up_load(**over):
-            body = {'files': [{'name': 'p2.pdf', 'data': small}],
-                    'mode': 'load', 'template_version_id': vid1,
-                    'load_datasource_id': ds_id, 'load_table_id': lt1}
-            body.update(over)
-            return http(8799, '/api/upload', body, timeout=120)
-
-        stx, _ = up_load(load_datasource_id=None, load_table_id=None)
-        sty, _ = up_load(template_version_id=tv['id'])
-        stz, _ = up_load(load_table_id=lt_bad)
-        check('上传预检 400（缺数据源/映射 · 模板不匹配 · 目标表不存在）',
-              stx == 400 and sty == 400 and stz == 400,
+        # ---- Leg A：普通上传 → 入库时绑定（失败不留痕）→ 门禁 → 全确认 → loaded ----
+        task_a, sta = upload(8799, src['data'], src['name'],
+                             {'template_version_id': vid1})
+        up.append(task_a)
+        time.sleep(1)
+        ra = catalog.get_task(task_a)
+        n_rec = ra['files'][0]['records_n']
+        tfa = ra['files'][0]['task_file_id']
+        check('普通上传 previewed · 无入库目标',
+              sta.get('error') is None and ra['state'] == 'previewed'
+              and ra.get('load') is None,
+              'state={} load={}'.format(ra['state'], ra.get('load')))
+        stx, _ = http(8799, '/api/tasks/{}/load'.format(task_a), {})
+        sty, _ = http(8799, '/api/tasks/{}/load'.format(task_a),
+                      {'load_datasource_id': ds_id, 'load_table_id': lt2})
+        stz, _ = http(8799, '/api/tasks/{}/load'.format(task_a),
+                      {'load_datasource_id': ds_id, 'load_table_id': lt_bad})
+        ra = catalog.get_task(task_a)
+        check('入库时校验 400（缺目标 · 模板不匹配 · 目标表不存在）不留绑定',
+              stx == 400 and sty == 400 and stz == 400
+              and ra.get('load') is None,
               '{} {} {}'.format(stx, sty, stz))
         std, _ = http(8799, '/api/load/tables/{}'.format(lt_bad),
                       method='DELETE')
@@ -699,42 +711,32 @@ def _main(syn_tasks, syn_fids, up, p2):
                       method='PATCH')
         check('无任务引用映射可编辑 200', ste == 200)
         stp, _ = http(8799, '/api/tasks/{}/load'.format(up[0]), {})
-        check('preview 任务入库 400', stp == 400)
-
-        # ---- Leg A：真链路 mode=load 上传 → 门禁 → 全确认 → loaded ----
-        task_a, sta = upload(8799, src['data'], src['name'],
-                             {'mode': 'load', 'template_version_id': vid1,
-                              'load_datasource_id': ds_id,
-                              'load_table_id': lt1})
-        up.append(task_a)
-        time.sleep(1)
-        ra = catalog.get_task(task_a)
-        n_rec = ra['files'][0]['records_n']
-        tfa = ra['files'][0]['task_file_id']
-        check('mode=load 预登记＋previewed',
-              sta.get('error') is None and ra['state'] == 'previewed'
-              and (ra.get('load') or {}).get('load_table_id') == lt1,
-              'state={} load={}'.format(ra['state'], ra.get('load')))
+        check('未绑定任务未选目标入库 400', stp == 400)
         stg, jg = http(8799, '/api/tasks/{}/staging'.format(task_a))
         names = [r['values'].get('名称', '')
                  for r in jg['files'][0]['records']]
-        stg1, jg1 = http(8799, '/api/tasks/{}/load'.format(task_a), {})
-        check('门禁：全待校验 409', stg1 == 409
-              and '待校验' in jg1.get('error', ''), str(jg1.get('error')))
+        tgt = {'load_datasource_id': ds_id, 'load_table_id': lt1}
+        stg1, jg1 = http(8799, '/api/tasks/{}/load'.format(task_a), tgt)
+        ra = catalog.get_task(task_a)
+        check('门禁：全待校验 409 不留绑定', stg1 == 409
+              and '待校验' in jg1.get('error', '') and ra.get('load') is None,
+              str(jg1.get('error')))
         http(8799, '/api/tasks/{}/staging/{}/review'.format(task_a, tfa),
              {'indexes': list(range(n_rec)), 'state': 'confirmed'})
         http(8799, '/api/tasks/{}/staging/{}/review'.format(task_a, tfa),
              {'indexes': [0], 'state': 'rejected'})
-        stg2, jg2 = http(8799, '/api/tasks/{}/load'.format(task_a), {})
+        stg2, jg2 = http(8799, '/api/tasks/{}/load'.format(task_a), tgt)
         check('门禁：rejected 也阻止 409', stg2 == 409
               and '已拒绝' in jg2.get('error', ''), str(jg2.get('error')))
         http(8799, '/api/tasks/{}/staging/{}/review'.format(task_a, tfa),
              {'indexes': [0], 'state': 'confirmed'})
-        stl, jl = http(8799, '/api/tasks/{}/load'.format(task_a), {})
+        stl, jl = http(8799, '/api/tasks/{}/load'.format(task_a), tgt)
         ra = wait_load(8799, task_a)
-        check('全确认→loaded', stl == 200 and jl.get('ok')
-              and ra['state'] == 'loaded',
-              'state={} err={}'.format(ra['state'], ra.get('error')))
+        check('全确认→loaded · 启动成功才绑定目标', stl == 200 and jl.get('ok')
+              and ra['state'] == 'loaded'
+              and (ra.get('load') or {}).get('load_table_id') == lt1,
+              'state={} err={} load={}'.format(
+                  ra['state'], ra.get('error'), ra.get('load')))
         want = len({str(v).strip() for v in names})
         conn = db.connect()
         try:
@@ -764,8 +766,8 @@ def _main(syn_tasks, syn_fids, up, p2):
               stdd == 409 and stmd == 409 and stmp == 409)
 
         # ---- Leg B：合成 task（number transform＋超长值）→ partial → 重试 ----
-        def syn_load_task(vid, lt, recs, tag):
-            tid = catalog.create_task('load', vid, {})
+        def syn_load_task(vid, lt, recs, tag, bind=True):
+            tid = catalog.create_task(vid, {})
             syn_tasks.append(tid)
             fake = hashlib.sha256(
                 'accept-{}-{}'.format(tag, tid).encode()).hexdigest()
@@ -775,7 +777,8 @@ def _main(syn_tasks, syn_fids, up, p2):
             if not dup:
                 syn_fids.append(fid)
             tf = catalog.add_task_file(tid, fid)
-            catalog.set_task_load(tid, ds_id, lt)
+            if bind:
+                catalog.set_task_load(tid, ds_id, lt)
             content_db.save_records(
                 {'schema': 'c1-extract-records/1', 'task_id': tid,
                  'template': {'name': '_accept_p2', 'version': 1},
@@ -840,6 +843,11 @@ def _main(syn_tasks, syn_fids, up, p2):
         stpb, _ = http(8799, '/api/tasks/{}/staging/{}/{}'.format(
             tid_b, tfb, 2), {'values': {'金额': '9'}}, method='PATCH')
         check('partial 记录只读 409', stpb == 409)
+        stbt, jbt = http(8799, '/api/tasks/{}/load'.format(tid_b),
+                         {'load_datasource_id': ds_id, 'load_table_id': lt1})
+        check('已绑定任务带新目标 409（重试沿用原目标）',
+              stbt == 409 and '已绑定' in jbt.get('error', ''),
+              str(jbt.get('error')))
 
         # ---- Leg C：同映射跨 task upsert 命中已有行 → update ----
         name0 = str(names[0]).strip()
@@ -867,6 +875,44 @@ def _main(syn_tasks, syn_fids, up, p2):
               and total_c == want + 2,  # Leg B 已写入合成甲/乙两行
               'action={} rows={} total={}'.format(
                   it.get('action'), rows_c, total_c))
+
+        # ---- Leg D：门禁失败不留绑定 → 确认后换另一映射入库成功（P2c 自由度）----
+        ALT_TABLE = '_accept_p2_alt'
+        conn = db.connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute('DROP TABLE IF EXISTS ' + ALT_TABLE)
+                cur.execute('CREATE TABLE {} (id INT AUTO_INCREMENT PRIMARY KEY,'
+                            ' c_name VARCHAR(255), c_amt VARCHAR(255),'
+                            ' c_note VARCHAR(255))'.format(ALT_TABLE))
+            conn.commit()
+        finally:
+            conn.close()
+        p2['tables'].append(ALT_TABLE)
+        st3, j3 = http(8799, '/api/load/tables',
+                       {'datasource_id': ds_id,
+                        'template_id': tpl1['template_id'],
+                        'target_table': ALT_TABLE, 'write_mode': 'upsert',
+                        'fields': FROWS})
+        lt3 = j3.get('id')
+        p2['lts'].append(lt3)
+        recd = rec(0, {'名称': '换目标丁', '金额': '7', '备注': 'd0'})
+        recd['review'] = {'state': 'pending', 'at': None}
+        tid_d, tfd = syn_load_task(vid1, lt1, [recd], 'p2d', bind=False)
+        stdg, _ = http(8799, '/api/tasks/{}/load'.format(tid_d),
+                       {'load_datasource_id': ds_id, 'load_table_id': lt1})
+        rd = catalog.get_task(tid_d)
+        check('合成任务门禁 409 不留绑定',
+              stdg == 409 and rd.get('load') is None)
+        http(8799, '/api/tasks/{}/staging/{}/review'.format(tid_d, tfd),
+             {'indexes': [0], 'state': 'confirmed'})
+        stdl, _ = http(8799, '/api/tasks/{}/load'.format(tid_d),
+                       {'load_datasource_id': ds_id, 'load_table_id': lt3})
+        rd = wait_load(8799, tid_d)
+        check('门禁失败后换另一映射入库成功（绑定落在 lt3）',
+              st3 == 200 and stdl == 200 and rd['state'] == 'loaded'
+              and (rd.get('load') or {}).get('load_table_id') == lt3,
+              'state={} load={}'.format(rd['state'], rd.get('load')))
     finally:
         svc.kill()
     return 1 if FAILS else 0

@@ -138,3 +138,126 @@ function openReceiptDrawer(taskId){
     if(e.key==='Escape') closeReceiptDrawer();
   });
 })();
+/* P2c 入库目标抽屉（tasks/staging 共用）：未绑定任务入库时选数据源＋映射。
+    markup 动态注入；映射按 数据源×任务模板 双过滤；门禁计数可见预期；
+   服务端校验/门禁/预检全过才登记目标并写入，失败内联显示且不登记（可另选）。
+   选择内存保留：门禁失败修完校验重开不必重选。 */
+var ltCtx=null, ltAll={ds:[],maps:[]}, ltKeep={ds:'',lt:''};
+function closeLoadTargetDrawer(){
+  var d=document.getElementById('ltdrawer');
+  if(d) d.hidden=true;
+}
+function ltGateText(doc){
+  var c={pending:0,edited:0,confirmed:0,rejected:0};
+  ((doc||{}).files||[]).forEach(function(f){
+    (f.records||[]).forEach(function(rec){
+      var s=(rec.review||{}).state||'pending';
+      if(c[s]!=null) c[s]++;
+    });
+  });
+  var blocked=c.pending+c.edited+c.rejected;
+  return blocked?
+    ('门禁：待校验 '+c.pending+' · 已修改未确认 '+c.edited+' · 已拒绝 '+c.rejected+
+     ' · 已确认 '+c.confirmed+'（须全部确认）'):
+    ('门禁通过：全部 '+c.confirmed+' 条已确认，可入库');
+}
+function ltRefreshMaps(){
+  var dsSel=document.getElementById('ltds'), mapSel=document.getElementById('ltmap');
+  var go=document.getElementById('ltgo');
+  var list=ltAll.maps.filter(function(m){
+    return String(m.template_id)===String(ltCtx.templateId)&&
+           String(m.datasource_id)===String(dsSel.value);
+  });
+  mapSel.innerHTML=list.length?list.map(function(m){
+    return '<option value="'+m.id+'">'+escHtml(m.target_table+' · '+m.write_mode)+'</option>';
+  }).join(''):'<option value="">无匹配映射（到入库页新建）</option>';
+  if(ltKeep.lt&&list.some(function(m){return String(m.id)===ltKeep.lt;}))
+    mapSel.value=ltKeep.lt;
+  ltKeep.lt=mapSel.value;
+  go.disabled=!mapSel.value;
+}
+function openLoadTargetDrawer(taskId,templateId,onDone){
+  ltCtx={taskId:taskId,templateId:templateId,onDone:onDone};
+  var d=document.getElementById('ltdrawer');
+  if(!d){
+    d=document.createElement('div');
+    d.className='drawer'; d.id='ltdrawer';
+    d.innerHTML='<div class="dpanel">'+
+      '<div class="dhead"><h2 id="lttitle">选择入库目标</h2><span class="spacer"></span>'+
+      '<button type="button" class="dclose" id="ltclose">关闭 (Esc)</button></div>'+
+      '<div class="dbody">'+
+      '<div class="banner err" id="lterr" hidden></div>'+
+      '<div class="ltrow"><label for="ltds">数据源</label><select id="ltds"></select></div>'+
+      '<div class="ltrow"><label for="ltmap">映射</label><select id="ltmap"></select></div>'+
+      '<div class="msg" id="ltgate" style="margin-top:8px"></div>'+
+      '<div class="msg" style="margin-top:6px">映射＝数据源×表×模板的绑定，在 '+
+      '<a href="/load" target="_blank">入库页</a> 管理。校验/门禁/预检全过才登记目标并写入；'+
+      '未通过不登记，下次可另选。</div>'+
+      '</div>'+
+      '<div class="dfoot"><span class="spacer" style="flex:1"></span>'+
+      '<button type="button" class="btn" id="ltgo">入库</button></div>'+
+      '</div>';
+    document.body.appendChild(d);
+    document.getElementById('ltclose').onclick=closeLoadTargetDrawer;
+    d.addEventListener('click',function(e){ if(e.target===d) closeLoadTargetDrawer(); });
+    document.addEventListener('keydown',function(e){
+      if(e.key==='Escape') closeLoadTargetDrawer();
+    });
+    document.getElementById('ltds').onchange=function(){
+      ltKeep.ds=this.value; ltRefreshMaps();
+    };
+    document.getElementById('ltmap').onchange=function(){ ltKeep.lt=this.value; };
+    document.getElementById('ltgo').onclick=function(){
+      var btn=this, err=document.getElementById('lterr');
+      var dsSel=document.getElementById('ltds'), mapSel=document.getElementById('ltmap');
+      if(!dsSel.value||!mapSel.value) return;
+      btn.disabled=true; err.hidden=true;
+      fetch('/api/tasks/'+ltCtx.taskId+'/load',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({load_datasource_id:Number(dsSel.value),
+                             load_table_id:Number(mapSel.value)})
+      }).then(function(r){
+        return r.json().catch(function(){return {};}).then(function(j){
+          return {s:r.status,j:j};
+        });
+      }).then(function(o){
+        btn.disabled=false;
+        if(!o.j.ok){
+          err.textContent='不能入库：'+(o.j.error||('HTTP '+o.s));
+          err.hidden=false; return;
+        }
+        closeLoadTargetDrawer();
+        if(ltCtx.onDone) ltCtx.onDone();
+      }).catch(function(){
+        btn.disabled=false;
+        err.textContent='入库请求失败：平台库不可用'; err.hidden=false;
+      });
+    };
+  }
+  document.getElementById('lttitle').textContent='任务 #'+taskId+' · 选择入库目标';
+  document.getElementById('lterr').hidden=true;
+  document.getElementById('ltgate').textContent='加载数据源与门禁计数…';
+  document.getElementById('ltgo').disabled=true;
+  d.hidden=false;
+  Promise.all([
+    fetch('/api/load/datasources').then(function(r){return r.json();}),
+    fetch('/api/load/tables').then(function(r){return r.json();}),
+    fetch('/api/tasks/'+taskId+'/staging').then(function(r){return r.json();})
+  ]).then(function(res){
+    if(!ltCtx||ltCtx.taskId!==taskId) return;
+    ltAll.ds=res[0].items||[]; ltAll.maps=res[1].items||[];
+    var dsSel=document.getElementById('ltds');
+    dsSel.innerHTML=ltAll.ds.length?ltAll.ds.map(function(x){
+      return '<option value="'+x.id+'">'+escHtml(x.name+' · '+x.host+'/'+x.db_name)+'</option>';
+    }).join(''):'<option value="">暂无数据源（到入库页新建）</option>';
+    if(ltKeep.ds&&ltAll.ds.some(function(x){return String(x.id)===ltKeep.ds;}))
+      dsSel.value=ltKeep.ds;
+    ltKeep.ds=dsSel.value;
+    document.getElementById('ltgate').textContent=ltGateText(res[2]);
+    ltRefreshMaps();
+  }).catch(function(){
+    document.getElementById('ltgate').textContent='';
+    var err=document.getElementById('lterr');
+    err.textContent='读取失败：平台库不可用'; err.hidden=false;
+  });
+}

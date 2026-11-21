@@ -622,17 +622,24 @@ function loadStaging(){
   });
 }
 
-/* ---- P2 手动入库闸门：仅 mode=load 且 previewed/partial 显示；
-   门禁计数由后端 409 兜底，点击后轮询任务态直至入库完成自动刷新。 ---- */
+/* ---- P2c 手动入库闸门：previewed/partial 可见；未绑定开目标抽屉（入库时
+   选数据源＋映射），已绑定直接提交。门禁计数由后端 409 兜底，点击后轮询
+   任务态直至入库完成自动刷新。 ---- */
 var loadPoll=null;
 function updateLoadButtons(){
   var lb=document.getElementById('loadbtn'), rb=document.getElementById('rcbtn');
-  var t=taskDoc||{}, isLoad=t.mode==='load'&&t.load;
-  lb.hidden=!(isLoad&&(t.state==='previewed'||t.state==='partial'));
-  lb.textContent=t.state==='partial'?'重新入库':'入库';
-  rb.hidden=!(isLoad&&(t.state==='loaded'||t.state==='partial'));
+  var t=taskDoc||{}, hasLoad=!!t.load;
+  lb.hidden=!(t.state==='previewed'||t.state==='partial');
+  lb.textContent=t.state==='partial'?'重新入库':(hasLoad?'入库':'入库…');
+  rb.hidden=!(hasLoad&&(t.state==='loaded'||t.state==='partial'));
 }
 document.getElementById('loadbtn').onclick=function(){
+  var t=taskDoc||{};
+  if(!t.load&&t.state==='previewed'){
+    openLoadTargetDrawer(task,(t.template||{}).template_id,
+      function(){ loadStaging(); });
+    return;
+  }
   var lb=this; lb.disabled=true;
   fetch('/api/tasks/'+encodeURIComponent(task)+'/load',{method:'POST'})
     .then(function(r){

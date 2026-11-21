@@ -74,10 +74,9 @@ CREATE TABLE IF NOT EXISTS extract_load_table_field (
 
 CREATE TABLE IF NOT EXISTS extract_task (
   id                  BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '任务 ID',
-  mode                VARCHAR(16) NOT NULL COMMENT '模式：preview 预览 / load 入库',
   template_version_id BIGINT NOT NULL COMMENT '使用的模板版本 ID（引用 extract_template_version.id）',
-  load_datasource_id  BIGINT COMMENT '入库数据源 ID（preview 为空）',
-  load_table_id       BIGINT COMMENT '入库映射 ID（preview 为空）',
+  load_datasource_id  BIGINT COMMENT '入库数据源 ID（入库启动时绑定，未绑定为空）',
+  load_table_id       BIGINT COMMENT '入库映射 ID（入库启动时绑定，未绑定为空）',
   params_json         JSON COMMENT '生效提取参数快照',
   state               VARCHAR(24) NOT NULL DEFAULT 'pending' COMMENT '任务状态：pending/extracting/previewed/loaded/failed/partial',
   error               TEXT COMMENT '错误信息（失败时）',

@@ -31,7 +31,7 @@ STATE = {
     'params': {}, 'warnings': [],
     'logs': [], 'progress': 0, 'stage': '',
     'log_file': None,
-    'mode': 'preview', 'template': None, 'task_id': None,
+    'template': None, 'task_id': None,
 }
 LOCK = threading.Lock()
 
@@ -94,16 +94,12 @@ def resolve_template(version_id=None):
             'transform_json': tv['transform_json']}
 
 
-def launch(paths, params, warns, ctx, mode='preview', tpl=None, load=None):
+def launch(paths, params, warns, ctx, tpl=None):
     """登记任务（DB 必选，失败上抛 503）→ 建日志 → 重置 STATE → 起后台线程。
-    load={'datasource_id','load_table_id'}：mode=load 的预登记入库意图
-    （执行须手动点入库）。"""
+    单一提取入口（P2c）：入库目标在入库启动时绑定，上传不携带。"""
     tpl = tpl or resolve_template()
     catalog = _load('store.catalog')
-    task_id = catalog.create_task(mode, tpl['version_id'], params)
-    if load:
-        catalog.set_task_load(task_id, load['datasource_id'],
-                              load['load_table_id'])
+    task_id = catalog.create_task(tpl['version_id'], params)
     for f in ctx:
         f['task_file_id'] = catalog.add_task_file(task_id, f['file_id'])
         f['state'] = 'pending'
@@ -112,7 +108,7 @@ def launch(paths, params, warns, ctx, mode='preview', tpl=None, load=None):
     log = tasklog.TaskLog(label, log_path=os.path.join(config.LOG_DIR,
                                                        label + '.log'),
                           on_emit=_on_log)
-    task_ctx = {'task_id': task_id, 'mode': mode, 'template': tpl,
+    task_ctx = {'task_id': task_id, 'template': tpl,
                 'files': ctx, 'created_at': _now()}
     if paths:
         task_ctx['in_scratch'] = os.path.dirname(paths[0])
@@ -123,17 +119,14 @@ def launch(paths, params, warns, ctx, mode='preview', tpl=None, load=None):
                              if not k.startswith('_')}, warnings=warns,
                      logs=[], progress=0, stage='batch',
                      log_file=label + '.log',
-                     mode=mode, template=tpl, task_id=task_id)
-    log.stage('batch', '任务 {} · 收到 {} 个文件 · 模式 {} · 模板 {} v{}'.format(
-        task_id, len(paths), mode, tpl['name'], tpl['version']))
+                     template=tpl, task_id=task_id)
+    log.stage('batch', '任务 {} · 收到 {} 个文件 · 模板 {} v{}'.format(
+        task_id, len(paths), tpl['name'], tpl['version']))
     log.info('params', '生效参数：{}'.format(
         ', '.join('{}={}'.format(k, v) for k, v in params.items()
                   if not k.startswith('_'))))
     for w in warns:
         log.warn('params', w)
-    if load:
-        log.info('load', '入库预登记：数据源 {} · 映射 {}（全部确认后手动入库）'
-                 .format(load['datasource_id'], load['load_table_id']))
     threading.Thread(target=task_batch, args=(paths, params, log, task_ctx),
                      daemon=True).start()
     return {'ok': True, 'count': len(paths), 'task_id': task_id,
@@ -187,7 +180,7 @@ def rmtree_retry(path, tries=6, delay=0.3):
 def task_batch(paths, params=None, log=None, task_ctx=None):
     """后台线程：逐个提取 → raw/ + extract.json → 对照报告 → collect 记录入库
     → 产物 ingest 入 BLOB。DB 必选：写失败整任务 failed；scratch 跑完清尽。"""
-    task_ctx = task_ctx or {'task_id': None, 'mode': 'preview',
+    task_ctx = task_ctx or {'task_id': None,
                             'template': resolve_template(),
                             'files': [{'name': os.path.basename(p), 'path': p}
                                       for p in paths],
@@ -308,8 +301,11 @@ def task_batch(paths, params=None, log=None, task_ctx=None):
 
 # ---- P2 入库引擎（design-p2-load.md）：手动闸门 → 后台逐条写入＋幂等回执 ----
 
-def launch_load(task_id):
-    """POST /api/tasks/{id}/load 的编排：状态/门禁/预检全过才起线程。
+def launch_load(task_id, target=None):
+    """POST /api/tasks/{id}/load 的编排（P2c：入库时绑定目标）。
+    未绑定任务须带 target={'datasource_id','load_table_id'}：归属/模板/
+    预检/门禁全过才登记绑定＋起线程，任何一步失败都不落绑定（下次可另选）。
+    已绑定任务沿用原绑定（带 target→409，回执语义）。
     校验失败抛 StoreError（app 处理器映射 HTTP）；目标库连不上→503。"""
     catalog = _load('store.catalog')
     errors = _load('store.errors')
@@ -318,8 +314,6 @@ def launch_load(task_id):
     task = catalog.get_task(task_id)
     if task is None:
         raise errors.NotFound('任务不存在')
-    if task['mode'] != 'load' or not task.get('load'):
-        raise errors.BadRequest('任务非入库模式（上传时须选 mode=load）')
     state = task['state']
     if state == 'loaded':
         raise errors.Conflict('任务已入库')
@@ -327,12 +321,25 @@ def launch_load(task_id):
         raise errors.Conflict('入库进行中')
     if state not in ('previewed', 'partial'):
         raise errors.Conflict('任务状态 {} 不可入库（须先提取完成）'.format(state))
-    lt = catalog.get_load_table(task['load']['load_table_id'])
+    bound = task.get('load')
+    if bound:
+        if target:
+            raise errors.Conflict('已绑定入库目标，不可改（重试沿用原目标）')
+        ds_id, lt_id = bound['datasource_id'], bound['load_table_id']
+    else:
+        if not target:
+            raise errors.BadRequest('请选择入库数据源与映射')
+        ds_id, lt_id = target['datasource_id'], target['load_table_id']
+    lt = catalog.get_load_table(lt_id)
     if lt is None:
         raise errors.NotFound('入库映射不存在')
-    ds = catalog.get_datasource(task['load']['datasource_id'])
+    ds = catalog.get_datasource(ds_id)
     if ds is None:
         raise errors.NotFound('数据源不存在')
+    if lt['datasource_id'] != ds_id:
+        raise errors.BadRequest('映射不属于所选数据源')
+    if lt['template_id'] != task['template']['template_id']:
+        raise errors.BadRequest('映射与任务模板不匹配')
     tpl = resolve_template(task['template']['version_id'])
     sj = tpl.get('schema_json')
     fields = ([f.get('name') for f in sj.get('fields') or []]
@@ -354,6 +361,8 @@ def launch_load(task_id):
             '{} 条待校验 / {} 条已修改未确认 / {} 条已拒绝，'
             '请先处理完（仅全部 confirmed 可入库）'.format(
                 c['pending'], c['edited'], c['rejected']))
+    if not bound:
+        catalog.set_task_load(task_id, ds_id, lt_id)
     label = 'task_{}_load'.format(task_id)
     tasklog = _load('tasklog')
     log = tasklog.TaskLog(label, log_path=os.path.join(config.LOG_DIR,
@@ -364,7 +373,7 @@ def launch_load(task_id):
                      cases=[], started=time.time(), elapsed=0,
                      params={}, warnings=[], logs=[], progress=0,
                      stage='load', log_file=label + '.log',
-                     mode='load', template=tpl, task_id=task_id)
+                     template=tpl, task_id=task_id)
     log.stage('load', '任务 {} 入库 → {}.{}（{} · 共 {} 条）'.format(
         task_id, ds['db_name'], lt['target_table'], lt['write_mode'],
         len(recs)))

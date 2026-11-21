@@ -11,14 +11,14 @@ from ._common import _j, _rows
 # ---- extract_task / extract_task_file ----
 
 
-def create_task(mode, template_version_id, params):
+def create_task(template_version_id, params):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
             cur.execute(
-                'INSERT INTO extract_task (mode, template_version_id,'
-                ' params_json, state) VALUES (%s,%s,%s,%s)',
-                (mode, template_version_id,
+                'INSERT INTO extract_task (template_version_id,'
+                ' params_json, state) VALUES (%s,%s,%s)',
+                (template_version_id,
                  json.dumps(params or {}, ensure_ascii=False), 'pending'))
             conn.commit()
             return cur.lastrowid
@@ -64,7 +64,7 @@ def set_task_file_state(task_file_id, state):
 def _task_doc(cur, task_id):
     """task 表投影（tasks API 的唯一数据源，无 task.json 附件）。"""
     cur.execute(
-        'SELECT r.id, r.mode, r.state, r.error, r.params_json,'
+        'SELECT r.id, r.state, r.error, r.params_json,'
         ' r.created_at, r.updated_at, t.name AS tpl_name, tv.version,'
         ' tv.id AS version_id, tv.template_id,'
         ' r.load_datasource_id, r.load_table_id,'
@@ -92,7 +92,7 @@ def _task_doc(cur, task_id):
               'task_file_id': f['id'], 'records_n': f['records_n']}
              for f in _rows(cur)]
     return {
-        'task_id': r['id'], 'mode': r['mode'],
+        'task_id': r['id'],
         'template': {'name': r['tpl_name'], 'version': r['version'],
                      'version_id': r['version_id'],
                      'template_id': r['template_id']},

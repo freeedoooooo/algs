@@ -111,6 +111,11 @@ table.list .namecell .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowr
 .dclose{font-size:12px;padding:4px 12px;border-radius:6px;border:1px solid #cbd5e1;
   background:#fff;color:#5a6a85}
 .dclose:hover{border-color:#2563eb;color:#2563eb}
+/* P2c 入库目标抽屉表单行（tasks/staging 共用，shell.js 动态注入） */
+.ltrow{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px}
+.ltrow label{color:#25324a;flex:none}
+.ltrow select{font:inherit;font-size:12px;padding:4px 8px;border:1px solid #cbd5e1;
+  border-radius:6px;background:#fff;color:#1f2738;flex:1;min-width:0}
 
 /* ---- 全屏图片预览（列表页共用，无取数功能） ---- */
 .lightbox{position:fixed;inset:0;background:rgba(10,15,30,.9);z-index:99;

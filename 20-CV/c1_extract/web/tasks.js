@@ -10,10 +10,8 @@ function tplLabel(t){
 function filtered(){
   var q=document.getElementById('q').value.trim().toLowerCase();
   var st=document.getElementById('fstate').value;
-  var md=document.getElementById('fmode').value;
   return items.filter(function(r){
     if(st&&r.state!==st) return false;
-    if(md&&r.mode!==md) return false;
     if(q){
       var hay=(r.task_id+' '+(r.files||[]).map(function(f){return f.name;}).join(' ')).toLowerCase();
       if(hay.indexOf(q)<0) return false;
@@ -28,7 +26,7 @@ function render(){
       '<td class="mono">#'+r.task_id+'</td>'+
       '<td class="num">'+(r.files||[]).length+'</td>'+
       '<td>'+tplLabel(r.template)+'</td>'+
-      '<td>'+(r.mode==='load'?'入库':'预览')+'</td>'+
+      '<td>'+(r.load?escHtml(r.load.target_table+' · '+r.load.write_mode):'—')+'</td>'+
       '<td>'+stateBadge(r.state)+'</td>'+
       '<td class="num">'+fmtTime(r.created_at)+'</td>'+
       '<td><button type="button" class="linkbtn" data-task="'+r.task_id+'">详情</button></td>'+
@@ -43,7 +41,6 @@ function load(){
 }
 document.getElementById('q').addEventListener('input',render);
 document.getElementById('fstate').onchange=render;
-document.getElementById('fmode').onchange=render;
 rows.addEventListener('click',function(e){
   var b=e.target.closest?e.target.closest('[data-task]'):null;
   if(b) openDetail(Number(b.getAttribute('data-task')));
@@ -74,7 +71,6 @@ function renderDetail(j){
   }
   if(r.error) html+='<div class="banner err">出错：'+escHtml(r.error)+'</div>';
   html+='<div class="msg" style="margin-bottom:10px">模板 '+tplLabel(r.template)+
-    ' · 模式 '+(r.mode==='load'?'入库':'预览')+
     ' · 发起 '+fmtTime(r.created_at)+'</div>';
   html+='<table class="list"><thead><tr><th>文件</th><th>状态</th><th>暂存记录</th><th>产物</th></tr></thead><tbody>'+
     (r.files||[]).map(function(f){return fileRow(f,r.task_id);}).join('')+'</tbody></table>';
@@ -85,31 +81,38 @@ function renderDetail(j){
       ps.map(function(k){return escHtml(k)+'='+escHtml(r.params[k]);}).join('<br>')+
       '</div></details>';
   }
-  var isLoad=r.mode==='load'&&r.load;
-  if(isLoad){
+  var hasLoad=!!r.load;
+  if(hasLoad){
     html+='<div class="msg" style="margin-top:10px">入库数据源 <b>'+
       escHtml(r.load.datasource_name||'—')+'</b> · 库 '+escHtml(r.load.db_name||'—')+
       ' · 目标表 <code class="mono">'+
       escHtml(r.load.target_table||'—')+'</code> · '+escHtml(r.load.write_mode||'')+
-      '</div><div class="msg" id="gateinfo" style="margin-top:4px"></div>';
+      '</div>';
   }
+  if(r.state==='previewed'||r.state==='partial')
+    html+='<div class="msg" id="gateinfo" style="margin-top:4px"></div>';
   document.getElementById('dbody').innerHTML=html;
   var n=(r.files||[]).reduce(function(s,f){return s+(f.records_n||0);},0);
   var foot='<span>共 '+(r.files||[]).length+' 个文件 · 暂存记录 '+n+' 条</span>'+
     '<span class="spacer" style="flex:1"></span>';
-  if(isLoad){
-    if(r.state==='previewed'||r.state==='partial')
-      foot+='<button type="button" class="btn mini" id="loadbtn">'+
-        (r.state==='partial'?'重新入库':'入库')+'</button>';
-    if(r.state==='loaded'||r.state==='partial')
-      foot+='<button type="button" class="btn mini ghost" id="rcbtn">回执 / 隔离</button>';
-  }
+  if(r.state==='previewed'||r.state==='partial')
+    foot+='<button type="button" class="btn mini" id="loadbtn">'+
+      (r.state==='partial'?'重新入库':(hasLoad?'入库':'入库…'))+'</button>';
+  if(hasLoad&&(r.state==='loaded'||r.state==='partial'))
+    foot+='<button type="button" class="btn mini ghost" id="rcbtn">回执 / 隔离</button>';
   document.getElementById('dfoot').innerHTML=foot;
   var lb=document.getElementById('loadbtn');
-  if(lb) lb.onclick=function(){ doLoad(r.task_id,lb); };
+  if(lb) lb.onclick=function(){
+    if(!hasLoad&&r.state==='previewed'){
+      openLoadTargetDrawer(r.task_id,(r.template||{}).template_id,
+        function(){ refreshDetail(r.task_id); });
+      return;
+    }
+    doLoad(r.task_id,lb);
+  };
   var rb=document.getElementById('rcbtn');
   if(rb) rb.onclick=function(){ openReceiptDrawer(r.task_id); };
-  if(isLoad&&(r.state==='previewed'||r.state==='partial')) loadGateInfo(r.task_id);
+  if(r.state==='previewed'||r.state==='partial') loadGateInfo(r.task_id);
   clearTimeout(pollTimer);
   if(live&&live.running) pollTimer=setTimeout(function(){refreshDetail(r.task_id);},1500);
 }
@@ -157,7 +160,8 @@ function refreshDetail(taskId){
     if(curTask!==taskId) return;
     renderDetail(j);
     var it=items.find(function(x){return x.task_id===taskId;});
-    if(it&&j.task){ it.state=j.task.state; it.files=j.task.files; render(); }
+    if(it&&j.task){ it.state=j.task.state; it.files=j.task.files;
+      it.load=j.task.load; render(); }
   }).catch(function(){});
 }
 function openDetail(taskId){

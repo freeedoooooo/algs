@@ -137,8 +137,8 @@ def upload(port, src_bytes, name):
     # 事件循环回包被饿死，首个 POST 可能数十秒——放宽到 120s
     st, j = http_json(port, '/api/upload',
                       {'files': [{'name': name,
-                                  'data': base64.b64encode(src_bytes).decode()}],
-                       'mode': 'preview'}, timeout=120)
+                                  'data': base64.b64encode(src_bytes).decode()}]},
+                      timeout=120)
     if st != 200 or not j.get('ok'):
         raise RuntimeError('upload 失败：{} {}'.format(st, j))
     task_id = j['task_id']
@@ -440,8 +440,7 @@ def _main(up):
         st, j = http_json(8797, '/api/upload',
                           {'files': [{'name': src['name'],
                                       'data': base64.b64encode(
-                                          src['data']).decode()}],
-                           'mode': 'preview'})
+                                          src['data']).decode()}]})
         check('断库上传 503', st == 503, 'st={} err={}'.format(
             st, j.get('error')))
         st, _j = http_json(8797, '/api/tasks')
