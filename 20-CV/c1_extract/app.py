@@ -22,14 +22,14 @@ c1_extract/app.py — Web 工具入口（FastAPI + uvicorn）。只负责 HTTP �
 磁盘仅 tmp/ 运行期 scratch。DB 不可用显式 503/failed，不降级。
 审计/file:// 用 export_artifacts.py。提取逻辑在 pipeline/，报告在 extract_report/。
 """
+import base64
+import importlib
 import os
 import sys
-import base64
 import tempfile
-import importlib
+from contextlib import asynccontextmanager
 from fnmatch import fnmatch
 from urllib.parse import unquote
-from contextlib import asynccontextmanager
 
 # ★ 零 IDE 配置的关键：内部模块一律以「包」方式加载。
 # 静态分析器能直接解析包内相对导入（from .. import config），不需要标记
@@ -49,9 +49,9 @@ def _load(name):
     return importlib.import_module(PKG + '.' + name)
 
 
-config = _load('config')           # 必须在 paddle 相关导入之前：设置模型源环境变量
-params_mod = _load('params')       # 调试参数 schema / 校验（纯 Python，不碰模型）
-service = _load('service')         # 运行引擎：STATE/LOCK、launch、task_batch
+config = _load('config')  # 必须在 paddle 相关导入之前：设置模型源环境变量
+params_mod = _load('params')  # 调试参数 schema / 校验（纯 Python，不碰模型）
+service = _load('service')  # 运行引擎：STATE/LOCK、launch、task_batch
 from fastapi import FastAPI, Request
 from fastapi.responses import (HTMLResponse, JSONResponse, FileResponse,
                                RedirectResponse, PlainTextResponse, Response)
@@ -94,6 +94,7 @@ async def fallback_error_handler(_request, exc):
                             status_code=503)
     return JSONResponse({'ok': False, 'error': '服务器内部错误'},
                         status_code=500)
+
 
 # ---- 产物白名单：页面只见预生成的自有标准视图 ----
 # raw/（引擎原样）与旧 result.json 一律 403 —— 引擎结构不出适配层（防方案抄袭）。
@@ -167,6 +168,7 @@ async def no_cache(request, call_next):
     resp = await call_next(request)
     resp.headers['Cache-Control'] = 'no-cache'
     return resp
+
 
 def asset(name):
     with open(os.path.join(config.ASSETS_DIR, name), 'r',
@@ -537,8 +539,8 @@ async def api_tasks_create(request: Request):
 
 if __name__ == '__main__':
     import uvicorn
-    print('>> 结构化平台 启动： http://{}:{}'.format(config.HOST, config.PORT))
-    print('>> 存储：DB 唯一事实源 · {}'.format(
+
+    print('>> 结构化平台 地址： http://{}:{}'.format(config.HOST, config.PORT))
+    print('>> 结构化平台 存储： {}'.format(
         _load('store.db').safe_detail(config.PLATFORM_DB_REF)))
-    uvicorn.run(app, host=config.HOST, port=config.PORT,
-                log_level='warning')
+    uvicorn.run(app, host=config.HOST, port=config.PORT, log_level='warning')
