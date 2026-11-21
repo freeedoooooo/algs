@@ -1,6 +1,6 @@
 # 功能映射表（页面 ↔ 代码 ↔ 表）
 
-日期：2026-11-21 ｜ 配套：结构 B 轮（catalog 按域拆分＋前端资产迁 web/）。
+日期：2026-11-21 ｜ 配套：结构 B 轮（catalog 按域拆分＋前端资产迁 web/）＋P2c（单一提取入口，入库时绑定目标）。
 用途：从产品功能/页面/表名任一入口，一跳定位到代码。目录分层不变
 （路由 app.py · 引擎 service.py · 存储 store/ · 提取 pipeline/），
 本表补上「层 ↔ 功能」的横向对照。
@@ -44,18 +44,18 @@ c1_extract/
 
 | 页面 | 路由（app.py） | 引擎/逻辑 | 存储模块 | 表 | 前端（web/） |
 |---|---|---|---|---|---|
-| 提取 `/` | `GET /` · `POST /api/upload` · `GET /api/status` · `/api/logs` · `/api/params` | service.launch/run（task_batch）· register_file · resolve_template；pipeline 提取；adapter 投影；collect 收集 | catalog.files/tasks/templates · content_db · artifact_db · loader.preflight（mode=load 预检） | extract_file · task · task_file · template(_version) · staging 三表 · artifact | upload.html/js/css ＋ shell ＋ hint |
+| 提取 `/` | `GET /` · `POST /api/upload` · `GET /api/status` · `/api/logs` · `/api/params` | service.launch/run（task_batch）· register_file · resolve_template；pipeline 提取；adapter 投影；collect 收集 | catalog.files/tasks/templates · content_db · artifact_db | extract_file · task · task_file · template(_version) · staging 三表 · artifact | upload.html/js/css ＋ shell ＋ hint |
 | 资料 `/sources` | `GET/POST /api/sources` · `DELETE /api/sources/{id}` · `GET /srcfiles/{id}` | service.register_file（sha 去重） | catalog.files | extract_file(+content) | sources.html/js ＋ shell |
 | 模板 `/templates` | `/api/templates` CRUD · `…/versions` CRUD | —（纯目录 CRUD） | catalog.templates | extract_template · extract_template_version | templates.html/js/css ＋ shell |
 | 校验 `/staging` | `GET /api/tasks/{id}/staging` · `PATCH …/staging/{tf}/{idx}` · `POST …/review` · `GET /api/staging/query` · `/api/staging/ledger` | app._review_target（只读守卫） | content.patch_record/set_review/get_records · content_db.query_fields/ledger | extract_staging_record/field/lineage | staging.html/js/css ＋ stage ＋ shell |
 | 入库 `/load` | `/api/load/datasources` CRUD/test/tables/columns · `/api/load/tables` CRUD | loader.connect_datasource/list_tables/list_columns/validate_fields | catalog.load | extract_load_datasource · load_table · load_table_field | load.html/js/css ＋ templates.css（表单 token）＋ shell |
-| 任务 `/tasks` | `GET /api/tasks(+/{id})` · `POST /api/tasks`（资料库发起）· `POST /api/tasks/{id}/load` · `GET …/load-log` · `…/quarantine` · `…/extract` | service.launch_load/run_load（门禁→写入→回执→隔离→重试）· loader.write_record/apply_transform/review_gate | catalog.tasks/load · content · artifact | extract_task/task_file · load_log · quarantine · staging 三表 · 目标业务表 | tasks.html/js ＋ shell（回执抽屉） |
+| 任务 `/tasks` | `GET /api/tasks(+/{id})` · `POST /api/tasks`（资料库发起）· `POST /api/tasks/{id}/load`（可带目标）· `GET …/load-log` · `…/quarantine` · `…/extract` | service.launch_load（目标解析→预检→门禁→**全过才绑定**→写入）/run_load（回执→隔离→重试）· loader.preflight/write_record/apply_transform/review_gate | catalog.tasks/load · content · artifact | extract_task/task_file · load_log · quarantine · staging 三表 · 目标业务表 | tasks.html/js ＋ shell（回执抽屉＋入库目标抽屉） |
 | 对照报告 | `GET /extract-report`（重定向）· `GET /files/{tf}/{path}`（白名单，raw 403） | extract_report.builder.build（生成期内联资产）· artifact_db 读 | artifact_db | extract_artifact | 报告 BLOB 自包含（内联 report/stage/hint/lightbox，不走 /static） |
 
 ## 二、web/ 资产归属
 
 - **六页私有**：upload.* · sources.*（无 css，用 shell）· templates.* · staging.* · load.* · tasks.*（无 css，用 shell）
-- **页面共享**：shell.css/js（全局壳＋列表小件＋回执抽屉）· hint.css/js（「?」悬浮说明：上传页＋报告）· stage.css/js（舞台：校验台＋报告）
+- **页面共享**：shell.css/js（全局壳＋列表小件＋回执抽屉＋入库目标抽屉 openLoadTargetDrawer，tasks/staging 共用）· hint.css/js（「?」悬浮说明：上传页＋报告）· stage.css/js（舞台：校验台＋报告）
 - **报告专用（生成时内联进 BLOB）**：report.css/js · lightbox.html
 - 页面引用一律绝对路径 `/static/<file>`（app.py 挂载 web/）；改文件名须同步 HTML 引用。
 - 已入库的 9 份报告是静态 BLOB，资产搬迁不影响它们；新报告由 builder 从 web/ 内联。

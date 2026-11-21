@@ -167,7 +167,7 @@ c1_extract/
   批内重名文件加 `-2` 区分。task id 在上传响应与 `/api/status` 的 `task_id` 字段可见。
 - **无外键约束**：引用完整性归应用层（delete_file 引用守卫；重跑覆盖显式先删子表）。
 
-### 入库链路（P2b，design-p2b-datasource.md）
+### 入库链路（P2b/P2c，design-p2b-datasource.md＋design-p2c-load-entry.md）
 
 - **数据源**（`extract_load_datasource`）：一个数据源＝一个 MySQL 库，
   host/port/账号/密码/库名**明文存库、页面可见可编辑**（2026-11-21 裁决，暂不加密）；
@@ -178,12 +178,15 @@ c1_extract/
   只写已有表（不自动建表）；同物理表可被不同模板各建一行（UNIQUE 三元组）。
 - **审计守卫**：数据源被映射引用后 host/port/库名锁定（409，账号密码可改，换目标＝新建）；
   映射被任务引用后只读（PATCH/DELETE 409，回执语义）。
-- **流程**：上传选 mode=load 预登记数据源＋映射 → 提取校验（门禁：全部 confirmed 才可入库，
-  否则 409 带计数）→ 任务详情/校验台手动「入库」→ 逐条回执（`extract_load_log`，
-  唯一键幂等，重跑跳过）＋数据级隔离（`extract_quarantine` stage=load，重试无回执记录）。
-  transform（trim/number）只在入库时消费，暂存原值永不改。loaded/partial 任务记录只读。
-- **/load 页**：左数据源列表（试连/编辑/删除）右映射列表（字段行抽屉编辑），
-  上传页 mode=load 联动选数据源＋映射。
+- **流程（P2c 单一提取入口）**：上传只选文件＋模板（不再携带 mode/入库目标，旧契约键 400）
+  → 提取校验（门禁：全部 confirmed 才可入库，否则 409 带计数）→ 任务详情/校验台「入库…」
+  抽屉选数据源＋映射（按 数据源×任务模板 双过滤）→ **校验/门禁/预检全过才绑定目标并写入**
+  （失败不留绑定，可另选；已绑定任务重试沿用原目标，带新目标 409）→ 逐条回执
+  （`extract_load_log`，唯一键幂等，重跑跳过）＋数据级隔离（`extract_quarantine` stage=load，
+  重试无回执记录）。transform（trim/number）只在入库时消费，暂存原值永不改。
+  loaded/partial 任务记录只读。
+- **/load 页**：左数据源列表（试连/编辑/删除）右映射列表（字段行抽屉编辑）；
+  入库目标在任务入库时选择（tasks/staging 共用抽屉，shell.js）。
 
 **按需导出**（file:// 直开 / 审计 / 迁移出口）：
 
