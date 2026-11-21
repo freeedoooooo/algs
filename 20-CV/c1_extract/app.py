@@ -7,7 +7,7 @@ c1_extract/app.py — Web 工具入口（FastAPI + uvicorn）。只负责 HTTP �
     浏览器打开 http://127.0.0.1:8765
 
 路由：
-    GET  /              提取页（assets/upload.html + /static 资源）
+    GET  /              提取页（web/upload.html + /static 资源）
     GET  /sources       资料库页 · GET /tasks 任务页 · GET /staging 暂存只读视图
     GET  /healthz       健康检查
     POST /api/upload    上传（base64 JSON，不依赖 python-multipart）
@@ -161,7 +161,7 @@ def srcfiles_db(file_id: int, request: Request):
     return _blob_response(s['data'], mime, s['sha'], request)
 
 
-app.mount('/static', StaticFiles(directory=config.ASSETS_DIR), name='static')
+app.mount('/static', StaticFiles(directory=config.WEB_DIR), name='static')
 
 
 @app.middleware('http')
@@ -175,7 +175,7 @@ async def no_cache(request, call_next):
 
 
 def asset(name):
-    with open(os.path.join(config.ASSETS_DIR, name), 'r',
+    with open(os.path.join(config.WEB_DIR, name), 'r',
               encoding='utf-8') as f:
         return f.read()
 

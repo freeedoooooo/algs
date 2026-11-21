@@ -1,4 +1,4 @@
-/* extract_report/assets/report.js — 对照报告交互（生成时内联进每份 对照报告.html）。
+/* web/report.js — 对照报告交互（生成时内联进每份 对照报告.html）。
    舞台公共件（cardOf/toast/cursorHint/hitCell/pager/lightbox 工厂）在 stage.js，先于本文件内联。 */
 function activeSpace(card){
   var tp=card.querySelector('.tabpanel:not([hidden])');

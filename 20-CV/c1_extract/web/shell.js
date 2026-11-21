@@ -1,4 +1,4 @@
-/* extract_report/assets/shell.js — 列表页共用小件：转义 / 格式化 / 缩略图 /
+/* web/shell.js — 列表页共用小件：转义 / 格式化 / 缩略图 /
    状态徽标 / 全屏预览。各页面自己的交互仍在各自 js 里。 */
 function escHtml(s){
   return String(s==null?'':s).replace(/[&<>"]/g,function(c){

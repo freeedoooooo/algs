@@ -2,7 +2,7 @@
 extract_report/cards.py — 卡片渲染的薄层：准备数据 + 选模板。
 
 HTML 结构全部在 templates/*.html（Jinja2，autoescape 默认开启），
-样式在 assets/report.css，交互在 assets/report.js。本文件只做：
+样式在 web/report.css，交互在 web/report.js。本文件只做：
   · 从 c1-extract 页 / 信封里挑出渲染所需的数据（坐标 rect、行、表格、文档块）
   · 生成自包含 data URI（CSV / Markdown 下载）
   · 调 render() 产出 HTML 片段（Markup，供上层模板安全内嵌）

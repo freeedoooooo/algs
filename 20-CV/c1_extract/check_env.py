@@ -69,9 +69,9 @@ def check_dirs():
                         ('data', config.DATA_DIR),
                         ('tmp/input', config.TMP_INPUT),
                         ('tmp/work', config.TMP_WORK),
-                        ('assets', config.ASSETS_DIR),
+                        ('web', config.WEB_DIR),
                         ('templates', config.TEMPLATES_DIR)):
-        ok = os.path.isdir(path) and (label in ('assets', 'templates')
+        ok = os.path.isdir(path) and (label in ('web', 'templates')
                                       or os.access(path, os.W_OK))
         print('  {:<7} {:<8} {}'.format('OK' if ok else 'FAIL',
                                         label, path))

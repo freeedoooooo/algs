@@ -1,4 +1,4 @@
-/* extract_report/assets/sources.js — 资料库：列表/搜索/过滤/分页 + 上传登记 + 删除保护 */
+/* web/sources.js — 资料库：列表/搜索/过滤/分页 + 上传登记 + 删除保护 */
 var page=1, PER=20, total=0, q='', kind='', qTimer=null;
 var rows=document.getElementById('rows'),empty=document.getElementById('empty');
 

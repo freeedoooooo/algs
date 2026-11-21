@@ -1,4 +1,4 @@
-/* extract_report/assets/shell.css — 全局壳：单行色带页头 + 顶部同级短名 tab，
+/* web/shell.css — 全局壳：单行色带页头 + 顶部同级短名 tab，
    以及资料/任务/暂存三个列表页共用的基础件（表格/徽标/按钮/抽屉/横幅）。
    调色板与 upload.css 一致：#2563eb 主色 / #f4f6fa 底 / #e2e7f0 边框。 */
 *{box-sizing:border-box}

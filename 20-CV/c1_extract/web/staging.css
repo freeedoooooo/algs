@@ -1,4 +1,4 @@
-/* extract_report/assets/staging.css — 校验台（P1）页面特有样式：记录表 + 编辑/确认/拒绝
+/* web/staging.css — 校验台（P1）页面特有样式：记录表 + 编辑/确认/拒绝
    + 源图回溯框双向血缘侧栏 + 筛选 chips / 任务级校验台账。
    舞台公共样式（框/视图切换/翻页胶囊/全屏浮层/光标提示）在 stage.css，先于本文件加载。 */
 .pagebody.wide{max-width:1500px}

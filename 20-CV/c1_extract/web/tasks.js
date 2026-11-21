@@ -1,4 +1,4 @@
-/* extract_report/assets/tasks.js — 任务列表（task 表投影）+ 详情抽屉 + 处理中轮询 */
+/* web/tasks.js — 任务列表（task 表投影）+ 详情抽屉 + 处理中轮询 */
 var items=[], curTask=null, pollTimer=null;
 var rows=document.getElementById('rows'),empty=document.getElementById('empty');
 var detail=document.getElementById('detail');

@@ -1,4 +1,4 @@
-/* extract_report/assets/load.css — 入库配置页私有样式（左数据源右映射；表单 token 复用 templates.css） */
+/* web/load.css — 入库配置页私有样式（左数据源右映射；表单 token 复用 templates.css） */
 .loadwrap{display:flex;gap:12px;align-items:flex-start}
 .dspanel{width:300px;flex:none}
 .mapwrap{flex:1;min-width:0}

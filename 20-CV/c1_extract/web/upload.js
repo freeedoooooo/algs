@@ -1,4 +1,4 @@
-/* extract_report/assets/upload.js — 上传页交互：参数面板 + base64 上传 + 进度轮询 */
+/* web/upload.js — 上传页交互：参数面板 + base64 上传 + 进度轮询 */
 var picked=[],timer=null,paramSchema=[];
 var drop=document.getElementById('drop'),picker=document.getElementById('picker');
 var list=document.getElementById('filelist'),go=document.getElementById('go');

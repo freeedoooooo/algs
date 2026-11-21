@@ -22,7 +22,7 @@ DATA_DIR = os.path.join(DATA_ROOT, 'data')
 TMP_DIR = os.path.join(DATA_ROOT, 'tmp')
 TMP_INPUT = os.path.join(TMP_DIR, 'input')
 TMP_WORK = os.path.join(TMP_DIR, 'work')
-ASSETS_DIR = os.path.join(ROOT, 'extract_report', 'assets')
+WEB_DIR = os.path.join(ROOT, 'web')
 TEMPLATES_DIR = os.path.join(ROOT, 'extract_report', 'templates')
 
 # 官方模型首次推理时下载到 ${PADDLE_PDX_CACHE_HOME:-~/.paddlex}/official_models。
@@ -62,7 +62,7 @@ RAW_DIR = 'raw'
 EXTRACT_JSON = 'extract.json'
 RECORDS_JSON = 'records.json'
 # 对照报告：每 task_file 一份独立自包含 HTML，与 extract.json / 图片 / CSV 同入
-# extract_artifact BLOB；模板（assets）只有一份，生成时内联。
+# extract_artifact BLOB；页面与报告共用资产在 web/，生成时内联。
 EXTRACT_REPORT_NAME = '对照报告.html'
 
 # ---- 平台目录库凭据引用名（解析顺序 env → data/secrets.json，见 store/db.py）----

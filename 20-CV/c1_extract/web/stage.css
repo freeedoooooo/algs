@@ -1,4 +1,4 @@
-/* extract_report/assets/stage.css — 报告/校验台共享舞台样式。
+/* web/stage.css — 报告/校验台共享舞台样式。
    生成报告时内联在 report.css 之前（builder.py）；校验台经 /static 引用。
    页面特有规则（.stage 定位、布局、媒体回退）留各自页面 CSS，加载在后覆盖。 */
 .stage{position:relative;background:#eceff3;padding:10px;

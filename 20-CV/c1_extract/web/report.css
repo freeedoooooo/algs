@@ -1,4 +1,4 @@
-/* extract_report/assets/report.css — 对照报告页面特有样式（生成时内联，stage.css 在前）。
+/* web/report.css — 对照报告页面特有样式（生成时内联，stage.css 在前）。
    舞台公共规则（框/视图切换/翻页胶囊/全屏浮层/光标提示/单元格高亮）在 stage.css。 */
 :root{--line:#e2e7f0;--accent:#2563eb;--muted:#6b7688}
 *{box-sizing:border-box}

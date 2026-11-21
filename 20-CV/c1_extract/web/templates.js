@@ -1,4 +1,4 @@
-/* extract_report/assets/templates.js — 模板管理：列表＋编辑抽屉（结构化字段行
+/* web/templates.js — 模板管理：列表＋编辑抽屉（结构化字段行
    表单＋参考文件预览辅助选表选列）＋版本历史。契约见 design-p1b-templates.md §二。 */
 var items=[], cur=null, origName='', origDesc='', cands=null, pendingTable=null;
 var rows=document.getElementById('rows'), empty=document.getElementById('empty');

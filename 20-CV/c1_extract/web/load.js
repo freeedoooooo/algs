@@ -1,4 +1,4 @@
-/* extract_report/assets/load.js — 入库配置（P2b）：左数据源列表 · 右映射列表。
+/* web/load.js — 入库配置（P2b）：左数据源列表 · 右映射列表。
    一个数据源＝一个库（明文配置）；映射＝数据源×表×模板绑定，字段行编辑。
    契约见 design-p2b-datasource.md。 */
 var dss=[], maps=[], tpls=[], cols=[];

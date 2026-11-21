@@ -3,11 +3,12 @@
 把 week-02 验证过的提取能力封装成一个**本地 Web 工具**：浏览器上传文件 → 后端提取 → 生成对照报告。
 **DB 是唯一事实源**（MySQL）：原件字节、产物附件、暂存记录全部入库，磁盘只有跑完即清的
 临时 scratch。每个 task_file 一份独立自包含的 `对照报告.html`（BLOB，经 `/files/<task_file_id>/`
-白名单路由访问），每次上传各自独立、互不覆盖；模板（assets）只有一份。
+白名单路由访问），每次上传各自独立、互不覆盖；页面与报告资产（`web/`）只有一份。
 支持**多页 PDF 逐页提取 + 报告翻页切换 + 跨页表格拼接**（页码留空 = 全部页）。
 `weekly/week-02/` 的代码与产物**完全不改动**，本目录自包含。
 存储设计见 [docs/design-task-schema.md](./docs/design-task-schema.md)（任务化命名 + 去外键，
 取代 [design-c1-storage.md](./docs/design-c1-storage.md) 的表名/列名表述）。
+**找代码**：[docs/feature-map.md](./docs/feature-map.md)——页面↔路由↔引擎↔存储↔表↔前端文件对照。
 
 ## 启动
 
@@ -109,8 +110,12 @@ c1_extract/
 │   ├── db.py                  驱动接缝 + conn_ref 解析 + 迁移执行器
 │   ├── errors.py              类型化业务异常（StoreError/BadRequest/NotFound/Conflict→HTTP 码）
 │   ├── migrations/            001_baseline.sql 单基线（schema_version 门禁，首连自动跑）
-│   ├── catalog.py             file(+content) / template / task / task_file / quarantine
-│   │                          / load_datasource / load_table(+field) / load_log
+│   ├── catalog/               目录元数据 repo，按业务域拆分（__init__ 全量重导出，
+│   │   │                      调用方 catalog.xxx() 不感知边界）
+│   │   ├── files.py           源文件域（extract_file ＋ content 原件字节）
+│   │   ├── templates.py       模板域（template / template_version）
+│   │   ├── tasks.py           任务域（task / task_file / quarantine）
+│   │   └── load.py            入库域（load_datasource / load_table(+field) / load_log）
 │   ├── content.py             内容门面（extract 经 artifact，records 直委托 content_db）
 │   ├── content_db.py          staging 三表：get/save/patch/set_review/query_fields
 │   ├── loader.py              入库引擎接缝：数据源直连 / introspection / 字段契约
@@ -127,12 +132,16 @@ c1_extract/
 │   ├── resplit.py             图片人工列边界：切黏连格 + 子格重 OCR 归位
 │   ├── structure.py           表头分离 / cells 网格 / CSV 导出 / 跨页续表拼接
 │   └── runner.py              extract_one() 统一入口：逐页提取 + pages 信封编排
-├── extract_report/            对照报告层
+├── extract_report/            对照报告生成器（纯 Python＋Jinja2，不含页面资产）
 │   ├── cards.py               数据准备 + 选模板（坐标 rect / 行 / 文档块 / data URI）
-│   ├── builder.py             组装对照报告（内联 assets，每 task_file 一份）
-│   ├── templates/             Jinja2 HTML 模板（autoescape，结构与逻辑分离）
-│   └── assets/                前端资源（upload / sources / templates / staging / load / tasks
-│                              六页 + shell 列表共用件 + stage 舞台共用件 report/staging 共享）
+│   ├── builder.py             组装对照报告（内联 web/ 资产，每 task_file 一份）
+│   └── templates/             Jinja2 HTML 模板（autoescape，结构与逻辑分离）
+├── web/                       全部前端资产（/static 挂载于此）
+│   ├── <page>.html/js/css     六页：upload / sources / templates / staging / load / tasks
+│   ├── shell.css/js           全局壳＋列表页共用小件＋回执抽屉
+│   ├── stage.css/js           舞台共用件（校验台＋报告）
+│   ├── hint.css/js            「?」悬浮说明（上传页＋报告）
+│   └── report.css/js · lightbox.html   报告专用（生成时内联进 BLOB）
 ├── data/                      secrets.json（git 排除）/ backup/（迁移前整库备份）
 ├── logs/                      任务日志（运行时生成，每任务一个 task_<id>.log）
 └── docs/                      设计稿与交接文档
@@ -199,7 +208,7 @@ D:\miniforge3\envs\paddle\python.exe c1_extract/export_artifacts.py --out D:/tmp
 `GET /extract-report` 重定向到最新 task_file 报告的 `/files/` 真实地址（相对路径资源需在该 task_file URL 下解析）。
 
 HTML 结构全部在 `extract_report/templates/*.html`（Jinja2，**autoescape 默认开启**，
-不再手写转义），CSS / JS 在 assets/ 独立文件，Python 只做数据准备与模板选择——
+不再手写转义），CSS / JS 在 web/ 独立文件，Python 只做数据准备与模板选择——
 IDE 高亮、改结构 / 样式不必碰 Python 逻辑。迁移经「重构前后 DOM 逐节点对比」
 验证（15 个真实 case + 3 个合成边界 case 全部等价），交互零回归。
 

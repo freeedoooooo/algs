@@ -1,4 +1,4 @@
-/* extract_report/assets/stage.js — 报告/校验台共享舞台交互。
+/* web/stage.js — 报告/校验台共享舞台交互。
    生成报告时内联在 report.js 之前（builder.py）；校验台经 /static 引用。
    页面各自的 wiring（逐卡绑定 / 动态渲染 / 钉住转发）留 report.js / staging.js。 */
 function cardOf(el){ return el.closest('.card'); }
