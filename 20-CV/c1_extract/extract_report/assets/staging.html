@@ -15,7 +15,7 @@
   <a href="/sources">资料</a>
   <a href="/templates">模板</a>
   <a href="/staging" class="on">校验</a>
-  <a class="off" title="P2 开放">入库</a>
+  <a href="/load">入库</a>
   <a href="/tasks">任务</a>
   <span class="spacer"></span>
   <span class="navnote">P1 · 校验台</span>
@@ -36,6 +36,8 @@
       </select>
     </div>
     <span id="filelinks"></span>
+    <button type="button" class="btn mini" id="loadbtn" hidden>入库</button>
+    <button type="button" class="btn ghost mini" id="rcbtn" hidden>回执 / 隔离</button>
     <a class="btn ghost mini" id="tasklink" href="/tasks">返回</a>
   </div>
   <div class="banner info" id="modebanner">双击单元格改值（自动转已修改）· ✓ 确认 · ✗ 拒绝 · 单击/悬停血缘回溯不变</div>
@@ -107,6 +109,16 @@
   </div>
   <div class="lb-stage" id="lbStage"><div class="lb-content" id="lbContent"></div></div>
   <div class="lb-hint">滚轮缩放 · 按住拖拽平移 · 双击切换 1:1 / 适应窗口 · 单击回溯框定位记录 · Esc 关闭</div>
+</div>
+<div class="drawer" id="receipt" hidden>
+  <div class="dpanel">
+    <div class="dhead">
+      <h2 id="rctitle">入库回执</h2>
+      <span class="spacer"></span>
+      <button type="button" class="dclose" id="rcclose">关闭 (Esc)</button>
+    </div>
+    <div class="dbody" id="rcbody"></div>
+  </div>
 </div>
 <script src="/static/shell.js"></script>
 <script src="/static/stage.js"></script>

@@ -90,11 +90,68 @@ fetch('/api/templates').then(function(r){return r.json();}).then(function(j){
   var items=j.items||[];
   if(!items.length){ tplFallback(); return; }
   tplsel.innerHTML=items.map(function(t){
-    return '<option value="'+(t.current_version_id||'')+'">'+
+    return '<option value="'+(t.current_version_id||'')+'" data-tpl="'+t.id+'">'+
       escHtml((t.name||'原始透传')+' v'+(t.current_version||1))+'</option>';
   }).join('');
+  refreshMapSel();
 }).catch(tplFallback);
 function tplVersionId(){ return tplsel.value||null; }
+function currentTplId(){
+  var o=tplsel.options[tplsel.selectedIndex];
+  return o?(o.getAttribute('data-tpl')||''):'';
+}
+
+/* ---- P2 入库模式：预登记目的地＋映射（按所选模板过滤）；
+   执行＝提取校验全部确认后，在任务详情/校验台手动点「入库」。 ---- */
+var destsel=document.getElementById('destsel'), mapsel=document.getElementById('mapsel');
+var loadMaps=[];
+function modeVal(){
+  var r=document.querySelector('input[name=mode]:checked');
+  return r?r.value:'preview';
+}
+function refreshMapSel(){
+  var tid=currentTplId(), did=destsel.value, keep=mapsel.value;
+  var list=loadMaps.filter(function(m){
+    return String(m.template_id)===String(tid)&&String(m.load_dest_id)===String(did);
+  });
+  mapsel.innerHTML=list.length?list.map(function(m){
+    return '<option value="'+m.id+'">'+escHtml(m.target_table+' · '+m.write_mode)+'</option>';
+  }).join(''):'<option value="">无匹配映射（到入库页新建）</option>';
+  if(keep&&list.some(function(m){return String(m.id)===keep;})) mapsel.value=keep;
+}
+function syncMode(){
+  var load=modeVal()==='load';
+  document.getElementById('loadrow').hidden=!load;
+  Array.prototype.forEach.call(document.querySelectorAll('.mopt'),function(l){
+    l.classList.toggle('on',l.querySelector('input').checked);
+  });
+  if(load) refreshMapSel();
+}
+Array.prototype.forEach.call(document.querySelectorAll('input[name=mode]'),function(r){
+  r.addEventListener('change',syncMode);
+});
+tplsel.addEventListener('change',function(){ if(modeVal()==='load') refreshMapSel(); });
+destsel.addEventListener('change',refreshMapSel);
+Promise.all([
+  fetch('/api/load/dests').then(function(r){return r.json();}),
+  fetch('/api/load/mappings').then(function(r){return r.json();})
+]).then(function(res){
+  var dests=res[0].items||[]; loadMaps=res[1].items||[];
+  destsel.innerHTML=dests.length?dests.map(function(d){
+    return '<option value="'+d.id+'">'+escHtml(d.name)+'</option>';
+  }).join(''):'<option value="">暂无目的地（到入库页新建）</option>';
+  refreshMapSel();
+}).catch(function(){
+  destsel.innerHTML='<option value="">平台库未连接</option>';
+  mapsel.innerHTML='<option value="">平台库未连接</option>';
+});
+function loadFields(){
+  if(modeVal()!=='load') return {mode:'preview'};
+  if(!destsel.value||!mapsel.value)
+    throw new Error('入库模式须选择目的地与映射（到入库页配置）');
+  return {mode:'load',load_dest_id:Number(destsel.value),
+          load_mapping_id:Number(mapsel.value)};
+}
 
 document.getElementById('resetparams').onclick=function(e){
   e.preventDefault();
@@ -407,6 +464,7 @@ go.onclick=async function(){
   document.getElementById('runpct').textContent='0%';
   document.getElementById('runstage').textContent='准备中…';
   try{
+    var lf=loadFields();
     var files=[];
     for(var i=0;i<picked.length;i++){
       var f=picked[i];
@@ -418,8 +476,8 @@ go.onclick=async function(){
     var res=await fetch('/api/upload',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({files:files,params:collectParams(),
-        mode:'preview',template_version_id:tplVersionId()})
+      body:JSON.stringify(Object.assign({files:files,params:collectParams(),
+        template_version_id:tplVersionId()},lf))
     });
     var j=await res.json();
     if(!j.ok) throw new Error(j.error||'上传失败');
@@ -510,12 +568,13 @@ srcgo.onclick=async function(){
   if(!ids.length) return;
   srcgo.disabled=true;
   try{
+    var lf=loadFields();
     saveParams(collectParams());
     var res=await fetch('/api/tasks',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({file_ids:ids,params:collectParams(),
-        template_version_id:tplVersionId()})
+      body:JSON.stringify(Object.assign({file_ids:ids,params:collectParams(),
+        template_version_id:tplVersionId()},lf))
     });
     var j=await res.json();
     if(!j.ok) throw new Error(j.error||'发起失败');

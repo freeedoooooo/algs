@@ -1,15 +1,17 @@
 """
-c1_extract/accept_records_db.py — records 入库六项验收（任务化契约，
+c1_extract/accept_records_db.py — records 入库七项验收（任务化契约，
 design-task-schema.md：DB 唯一事实源，task_id / task_file_id 粒度，无外键）。
 
 前置：C1_EXTRACT_DB 已配置（env 或 data/secrets.json，用户配置的库）。
 用法（从 20-CV）：D:/miniforge3/envs/paddle/python.exe -u c1_extract/accept_records_db.py
 
 1 迁移门禁幂等+真实 task 投影往返一致 · 2 重跑级联替换（应用层）· 3 patch/set_review ·
-4 跨 task 查询 · 5 真链路（临时服务 8799，含 P1 校验路由冒烟）· 6 断库显式 503（临时服务 8797）。
+4 跨 task 查询 · 5 真链路（临时服务 8799，含 P1 校验路由冒烟）· 6 断库显式 503（临时服务 8797）·
+7 P2 入库（合成目标表 _accept_p2_load＋合成模板/映射：mode=load 预登记、门禁 409、
+全部确认→loaded、回执幂等、transform/数据级隔离→partial、重试、upsert update）。
 上传字节取自 extract_file.content；断库用不可达 DSN 的临时服务模拟，
-全程不触碰真实库的可用性。破坏性操作只落合成 task（验完按 id 清理，
-无外键：field/lineage/artifact 等子表须显式先删）；真实 task / file 只读。
+全程不触碰真实库的可用性。破坏性操作只落合成 task/模板/目的地/目标表（验完按 id 清理＋DROP，
+无外键：field/lineage/artifact 等子表须显式先删）；真实 task / file / 模板只读。
 用户的 8765 全程不动。两套验收脚本严禁并行（共用 8799/8797 端口）。
 """
 import os
@@ -41,6 +43,7 @@ errors = importlib.import_module(PKG + '.store.errors')
 
 # 本地无人监听的端口：模拟库不可达，凭据为假值，永不落日志
 BAD_DSN = 'mysql://nobody:unused@127.0.0.1:3399/co_dev'
+P2_TABLE = '_accept_p2_load'
 FAILS = []
 
 
@@ -128,6 +131,63 @@ def orphan_counts():
         conn.close()
 
 
+def baseline():
+    """全量基线快照：验收清理后必须逐项守恒（真实数据不可动的量化守卫）。"""
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('SELECT COUNT(*), COALESCE(SUM(size_bytes),0)'
+                        ' FROM extract_artifact')
+            art = tuple(cur.fetchone())
+            out = [counts(), art]
+            for sql in ('SELECT COUNT(*) FROM extract_file',
+                        'SELECT id FROM extract_task ORDER BY id',
+                        'SELECT COUNT(*) FROM extract_template',
+                        'SELECT COUNT(*) FROM extract_template_version',
+                        'SELECT COUNT(*) FROM extract_load_dest',
+                        'SELECT COUNT(*) FROM extract_load_mapping',
+                        'SELECT COUNT(*) FROM extract_load_log',
+                        'SELECT COUNT(*) FROM extract_quarantine'):
+                cur.execute(sql)
+                rows = cur.fetchall()
+                out.append(tuple(r[0] for r in rows))
+            return tuple(out)
+    finally:
+        conn.close()
+
+
+def p2_cleanup(p2):
+    """P2 合成对象清理（在 cleanup_tasks 之后跑，引用已空）：映射/目的地/模板＋DROP 表。"""
+    if not p2:
+        return
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            for mid in p2.get('mids', []):
+                cur.execute('DELETE FROM extract_load_mapping WHERE id=%s',
+                            (mid,))
+            for did in p2.get('dests', []):
+                cur.execute('DELETE FROM extract_load_dest WHERE id=%s', (did,))
+            for tid in p2.get('tpls', []):
+                cur.execute('DELETE FROM extract_template_version'
+                            ' WHERE template_id=%s', (tid,))
+                cur.execute('DELETE FROM extract_template WHERE id=%s', (tid,))
+            if p2.get('table'):
+                cur.execute('DROP TABLE IF EXISTS ' + P2_TABLE)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def wait_load(port, task_id, secs=120):
+    for _ in range(secs * 2):
+        _, s = http(port, '/api/status')
+        if not s.get('running'):
+            return catalog.get_task(task_id)
+        time.sleep(0.5)
+    raise RuntimeError('load 超时 task {}'.format(task_id))
+
+
 def start_service(port, dsn=None):
     # 端口必须空闲：否则 wait_http 会误连到别的服务（两套脚本严禁并行跑）
     s = socket.socket()
@@ -153,13 +213,15 @@ def start_service(port, dsn=None):
     return p
 
 
-def upload(port, src_bytes, name):
+def upload(port, src_bytes, name, extra=None):
     # WARMUP=0 时后台线程即刻建 paddle 模型（oneDNN 初始化持 GIL），
     # 事件循环回包被饿死，首个 POST 可能数十秒——放宽到 120s
-    st, j = http(port, '/api/upload',
-                 {'files': [{'name': name,
-                             'data': base64.b64encode(src_bytes).decode()}],
-                  'mode': 'preview'}, timeout=120)
+    body = {'files': [{'name': name,
+                       'data': base64.b64encode(src_bytes).decode()}],
+            'mode': 'preview'}
+    if extra:
+        body.update(extra)
+    st, j = http(port, '/api/upload', body, timeout=120)
     if st != 200 or not j.get('ok'):
         raise RuntimeError('upload 失败：{} {}'.format(st, j))
     task_id = j['task_id']
@@ -274,20 +336,26 @@ def main():
         print(str(e))
         return 1
     db.connect().close()  # 触发 001 baseline 迁移门禁
+    base0 = baseline()
     sweep_stale_scratch()
     syn_tasks, syn_fids, up = [], [], []
+    p2 = {'mids': [], 'dests': [], 'tpls': []}
     try:
-        rc = _main(syn_tasks, syn_fids, up)
+        rc = _main(syn_tasks, syn_fids, up, p2)
     finally:
         print('清理临时产物')
         cleanup_tasks(syn_tasks + up, syn_fids)
-    print('\n结论：{}'.format('六项全部 PASS' if not FAILS
+        p2_cleanup(p2)
+        base1 = baseline()
+        check('清理后全量基线守恒（真实数据不动）', base1 == base0,
+              '' if base1 == base0 else '{} vs {}'.format(base0, base1))
+    print('\n结论：{}'.format('七项全部 PASS' if not FAILS
                             else 'FAIL {} 项：{}'.format(len(FAILS), FAILS)))
     return rc
 
 
-def _main(syn_tasks, syn_fids, up):
-    print('[1/6] 迁移门禁幂等 + 真实 task 投影往返一致')
+def _main(syn_tasks, syn_fids, up, p2):
+    print('[1/7] 迁移门禁幂等 + 真实 task 投影往返一致')
     c0 = counts()
     db._READY.clear()       # 强制重跑门禁：baseline 已应用，应零变更
     conn = db.connect()
@@ -345,7 +413,7 @@ def _main(syn_tasks, syn_fids, up):
                                     if v not in (None, '')), '流水')
                     break
 
-    print('[2/6] 重跑级联替换（合成 task，应用层先删子表）')
+    print('[2/7] 重跑级联替换（合成 task，应用层先删子表）')
     task2 = catalog.create_task('preview', tv['id'], {})
     syn_tasks.append(task2)
     fid, dup = catalog.register_file('accept.pdf', 'pdf', 22, '0' * 64,
@@ -372,7 +440,7 @@ def _main(syn_tasks, syn_fids, up):
     check('无孤儿 field/lineage/record（反查=0）', orph == (0, 0, 0),
           'field/lineage/record 悬空={}'.format(orph))
 
-    print('[3/6] patch_record / set_review 语义（类型化错误）')
+    print('[3/7] patch_record / set_review 语义（类型化错误）')
     rec = content.patch_record(task2, 0, 0, {field: 'ACCEPT_EDIT'})
     back = content_db.get_records(task2)['files'][0]['records'][0]
     check('edited+original 不变+DB 读回一致',
@@ -404,13 +472,13 @@ def _main(syn_tasks, syn_fids, up):
         raised_nf = str(e)
     check('patch 越界抛 NotFound', raised_nf is not None, str(raised_nf))
 
-    print('[4/6] 跨 task 查询')
+    print('[4/7] 跨 task 查询')
     hit = content_db.query_fields(field=field, q='ACCEPT_EDIT')
     hit2 = content_db.query_fields(q=real_kw)
     check('field 投影命中', any(h['task_id'] == task2 for h in hit)
           and len(hit2) > 0, 'syn={} real={}'.format(len(hit), len(hit2)))
 
-    print('[5/6] 真链路（临时服务 8799，上传字节取自 extract_file.content）')
+    print('[5/7] 真链路（临时服务 8799，上传字节取自 extract_file.content）')
     src = find_pdf_file()
     if src is None:
         print('  FAIL  extract_file 无 PDF 原件，无法真链路验收')
@@ -468,7 +536,7 @@ def _main(syn_tasks, syn_fids, up):
     finally:
         svc.kill()
 
-    print('[6/6] 断库显式 503（临时服务 8797，不可达 DSN）')
+    print('[6/7] 断库显式 503（临时服务 8797，不可达 DSN）')
     svc_down = start_service(8797, BAD_DSN)
     try:
         st, j = http(8797, '/api/upload',
@@ -485,6 +553,280 @@ def _main(syn_tasks, syn_fids, up):
         check('断库模板 503（不降级）', st == 503)
     finally:
         svc_down.kill()
+
+    print('[7/7] P2 入库（合成目标表＋模板/映射，真链路 mode=load）')
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('DROP TABLE IF EXISTS ' + P2_TABLE)
+            cur.execute('CREATE TABLE {} (id INT AUTO_INCREMENT PRIMARY KEY,'
+                        ' c_name VARCHAR(255), c_amt VARCHAR(255),'
+                        ' c_note VARCHAR(255))'.format(P2_TABLE))
+        conn.commit()
+    finally:
+        conn.close()
+    p2['table'] = P2_TABLE
+    fields3 = [{'name': '名称'}, {'name': '金额'}, {'name': '备注'}]
+    cmap = {'名称': 'c_name', '金额': 'c_amt', '备注': 'c_note'}
+    vid1 = catalog.create_template(
+        '_accept_p2_tpl', schema={'fields': fields3},
+        mapping={'table': {'index': 0},
+                 'fields': [{'target': '名称', 'column': {'index': 0}},
+                            {'target': '金额', 'column': {'index': 1}},
+                            {'target': '备注', 'column': {'index': 2}}]},
+        transform={'fields': [{'target': '名称', 'apply': ['trim']}]})
+    tpl1 = catalog.get_template_version(vid1)
+    p2['tpls'].append(tpl1['template_id'])
+    vid2 = catalog.create_template(
+        '_accept_p2_num', schema={'fields': fields3},
+        transform={'fields': [{'target': '名称', 'apply': ['trim']},
+                              {'target': '金额',
+                               'apply': ['trim', 'number']}]})
+    tpl2 = catalog.get_template_version(vid2)
+    p2['tpls'].append(tpl2['template_id'])
+
+    svc = start_service(8799)
+    try:
+        st, j = http(8799, '/api/load/dests',
+                     {'name': '_accept_p2_dest',
+                      'conn_ref': config.PLATFORM_DB_REF})
+        dest_id = j.get('id')
+        p2['dests'].append(dest_id)
+        stt, jt = http(8799, '/api/load/dests/{}/test'.format(dest_id), {})
+        check('目的地 CRUD＋测试连接（仅 safe_detail）',
+              st == 200 and stt == 200 and jt.get('ok')
+              and jt.get('detail') == db.safe_detail(config.PLATFORM_DB_REF),
+              str(jt.get('detail')))
+        stb, jb = http(8799, '/api/load/dests/{}/tables'.format(dest_id))
+        stc, jc = http(8799, '/api/load/dests/{}/columns?table={}'.format(
+            dest_id, P2_TABLE))
+        check('目标库 introspection（表/列）',
+              stb == 200 and P2_TABLE in jb['items'] and stc == 200
+              and {c['name'] for c in jc['items']}
+              >= {'c_name', 'c_amt', 'c_note'})
+        st, j = http(8799, '/api/load/mappings',
+                     {'load_dest_id': dest_id,
+                      'template_id': tpl1['template_id'],
+                      'target_table': P2_TABLE, 'column_map': cmap,
+                      'write_mode': 'upsert', 'business_key': ['c_name']})
+        mid1 = j.get('id')
+        p2['mids'].append(mid1)
+        st2, j2 = http(8799, '/api/load/mappings',
+                       {'load_dest_id': dest_id,
+                        'template_id': tpl2['template_id'],
+                        'target_table': P2_TABLE, 'column_map': cmap,
+                        'write_mode': 'upsert', 'business_key': ['c_name']})
+        mid2 = j2.get('id')
+        p2['mids'].append(mid2)
+        check('POST 映射 ×2', st == 200 and st2 == 200,
+              '{} {}'.format(mid1, mid2))
+        stn, _ = http(8799, '/api/load/mappings',
+                      {'load_dest_id': dest_id,
+                       'template_id': tpl1['template_id'],
+                       'target_table': P2_TABLE,
+                       'column_map': {'名称': 'c_name'},
+                       'write_mode': 'upsert', 'business_key': ['c_name']})
+        stn2, _ = http(8799, '/api/load/mappings',
+                       {'load_dest_id': dest_id,
+                        'template_id': tpl1['template_id'],
+                        'target_table': '_accept_p2_other',
+                        'column_map': cmap, 'write_mode': 'upsert'})
+        check('映射契约 400（覆盖不全 / upsert 无业务键）',
+              stn == 400 and stn2 == 400)
+        stb, jb = http(8799, '/api/load/mappings',
+                       {'load_dest_id': dest_id,
+                        'template_id': tpl1['template_id'],
+                        'target_table': '_accept_p2_nosuch',
+                        'column_map': cmap, 'write_mode': 'upsert',
+                        'business_key': ['c_name']})
+        mid_bad = jb.get('id')
+        small = base64.b64encode(b'%PDF-1.4 accept').decode()
+
+        def up_load(**over):
+            body = {'files': [{'name': 'p2.pdf', 'data': small}],
+                    'mode': 'load', 'template_version_id': vid1,
+                    'load_dest_id': dest_id, 'load_mapping_id': mid1}
+            body.update(over)
+            return http(8799, '/api/upload', body, timeout=120)
+
+        stx, _ = up_load(load_dest_id=None, load_mapping_id=None)
+        sty, _ = up_load(template_version_id=tv['id'])
+        stz, _ = up_load(load_mapping_id=mid_bad)
+        check('上传预检 400（缺 dest/映射 · 模板不匹配 · 目标表不存在）',
+              stx == 400 and sty == 400 and stz == 400,
+              '{} {} {}'.format(stx, sty, stz))
+        std, _ = http(8799, '/api/load/mappings/{}'.format(mid_bad),
+                      method='DELETE')
+        check('无引用映射可删', std == 200)
+        stp, _ = http(8799, '/api/tasks/{}/load'.format(up[0]), {})
+        check('preview 任务入库 400', stp == 400)
+
+        # ---- Leg A：真链路 mode=load 上传 → 门禁 → 全确认 → loaded ----
+        task_a, sta = upload(8799, src['data'], src['name'],
+                             {'mode': 'load', 'template_version_id': vid1,
+                              'load_dest_id': dest_id,
+                              'load_mapping_id': mid1})
+        up.append(task_a)
+        time.sleep(1)
+        ra = catalog.get_task(task_a)
+        n_rec = ra['files'][0]['records_n']
+        tfa = ra['files'][0]['task_file_id']
+        check('mode=load 预登记＋previewed',
+              sta.get('error') is None and ra['state'] == 'previewed'
+              and (ra.get('load') or {}).get('mapping_id') == mid1,
+              'state={} load={}'.format(ra['state'], ra.get('load')))
+        stg, jg = http(8799, '/api/tasks/{}/staging'.format(task_a))
+        names = [r['values'].get('名称', '')
+                 for r in jg['files'][0]['records']]
+        stg1, jg1 = http(8799, '/api/tasks/{}/load'.format(task_a), {})
+        check('门禁：全待校验 409', stg1 == 409
+              and '待校验' in jg1.get('error', ''), str(jg1.get('error')))
+        http(8799, '/api/tasks/{}/staging/{}/review'.format(task_a, tfa),
+             {'indexes': list(range(n_rec)), 'state': 'confirmed'})
+        http(8799, '/api/tasks/{}/staging/{}/review'.format(task_a, tfa),
+             {'indexes': [0], 'state': 'rejected'})
+        stg2, jg2 = http(8799, '/api/tasks/{}/load'.format(task_a), {})
+        check('门禁：rejected 也阻止 409', stg2 == 409
+              and '已拒绝' in jg2.get('error', ''), str(jg2.get('error')))
+        http(8799, '/api/tasks/{}/staging/{}/review'.format(task_a, tfa),
+             {'indexes': [0], 'state': 'confirmed'})
+        stl, jl = http(8799, '/api/tasks/{}/load'.format(task_a), {})
+        ra = wait_load(8799, task_a)
+        check('全确认→loaded', stl == 200 and jl.get('ok')
+              and ra['state'] == 'loaded',
+              'state={} err={}'.format(ra['state'], ra.get('error')))
+        want = len({str(v).strip() for v in names})
+        conn = db.connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute('SELECT COUNT(*) FROM ' + P2_TABLE)
+                n_rows = cur.fetchone()[0]
+        finally:
+            conn.close()
+        stlog, jlog = http(8799, '/api/tasks/{}/load-log'.format(task_a))
+        check('目标行数＝业务键去重＋回执逐条',
+              n_rows == want and stlog == 200
+              and len(jlog['items']) == n_rec,
+              'rows={} want={} receipts={}'.format(
+                  n_rows, want, len(jlog['items'])))
+        strer, _ = http(8799, '/api/tasks/{}/load'.format(task_a), {})
+        stpat, _ = http(8799, '/api/tasks/{}/staging/{}/{}'.format(
+            task_a, tfa, 0), {'values': {'名称': 'x'}}, method='PATCH')
+        check('loaded 重入库 409＋记录只读 409',
+              strer == 409 and stpat == 409)
+        stdd, _ = http(8799, '/api/load/dests/{}'.format(dest_id),
+                       method='DELETE')
+        stmd, _ = http(8799, '/api/load/mappings/{}'.format(mid1),
+                       method='DELETE')
+        check('被任务引用的目的地/映射禁删 409',
+              stdd == 409 and stmd == 409)
+
+        # ---- Leg B：合成 task（number transform＋超长值）→ partial → 重试 ----
+        def syn_load_task(vid, mid, recs, tag):
+            tid = catalog.create_task('load', vid, {})
+            syn_tasks.append(tid)
+            fake = hashlib.sha256(
+                'accept-{}-{}'.format(tag, tid).encode()).hexdigest()
+            fid, dup = catalog.register_file(
+                'accept-{}.pdf'.format(tag), 'pdf', 11, fake,
+                b'%PDF-1.4 accept')
+            if not dup:
+                syn_fids.append(fid)
+            tf = catalog.add_task_file(tid, fid)
+            catalog.set_task_load(tid, dest_id, mid)
+            content_db.save_records(
+                {'schema': 'c1-extract-records/1', 'task_id': tid,
+                 'template': {'name': '_accept_p2', 'version': 1},
+                 'files': [{'task_file_id': tf, 'file_id': fid,
+                            'name': 'accept-{}.pdf'.format(tag),
+                            'records': recs}]})
+            catalog.set_task_state(tid, 'previewed')
+            return tid, tf
+
+        def rec(i, vals):
+            return {'index': i, 'values': vals, 'original': dict(vals),
+                    'lineage': {k: [] for k in vals},
+                    'review': {'state': 'confirmed', 'at': None}}
+
+        tid_b, tfb = syn_load_task(vid2, mid2, [
+            rec(0, {'名称': ' 合成甲 ', '金额': ' 1,234.5 ', '备注': 'n0'}),
+            rec(1, {'名称': '合成乙', '金额': '88', '备注': 'x' * 300}),
+            rec(2, {'名称': '合成丙', '金额': 'bad', '备注': 'n2'})], 'p2b')
+        http(8799, '/api/tasks/{}/load'.format(tid_b), {})
+        rb = wait_load(8799, tid_b)
+        stq, jq = http(8799, '/api/tasks/{}/quarantine'.format(tid_b))
+        stlog, jlog = http(8799, '/api/tasks/{}/load-log'.format(tid_b))
+        qidx = {r['record_index'] for r in jq['items']
+                if r['stage'] == 'load'}
+        conn = db.connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute('SELECT c_name, c_amt FROM {}'
+                            ' WHERE c_name=%s'.format(P2_TABLE), ('合成甲',))
+                row_a = cur.fetchone()
+        finally:
+            conn.close()
+        check('transform 消费＋数据级隔离→partial',
+              rb['state'] == 'partial' and len(jlog['items']) == 1
+              and qidx == {1, 2} and row_a == ('合成甲', '1234.5'),
+              'state={} receipts={} q={} row={}'.format(
+                  rb['state'], len(jlog['items']), sorted(qidx), row_a))
+        conn = db.connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute('ALTER TABLE {} MODIFY c_note VARCHAR(512)'
+                            .format(P2_TABLE))
+            conn.commit()
+        finally:
+            conn.close()
+        http(8799, '/api/tasks/{}/load'.format(tid_b), {})
+        rb = wait_load(8799, tid_b)
+        stlog, jlog = http(8799, '/api/tasks/{}/load-log'.format(tid_b))
+        conn = db.connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute('SELECT c_name FROM {} ORDER BY c_name'
+                            .format(P2_TABLE))
+                got_names = [r[0] for r in cur.fetchall()]
+        finally:
+            conn.close()
+        check('partial 重试：回执跳过＋隔离重试（幂等不重写）',
+              rb['state'] == 'partial' and len(jlog['items']) == 2
+              and got_names.count('合成甲') == 1
+              and '合成乙' in got_names and '合成丙' not in got_names,
+              'receipts={} names={}'.format(len(jlog['items']), got_names))
+        stpb, _ = http(8799, '/api/tasks/{}/staging/{}/{}'.format(
+            tid_b, tfb, 2), {'values': {'金额': '9'}}, method='PATCH')
+        check('partial 记录只读 409', stpb == 409)
+
+        # ---- Leg C：同映射跨 task upsert 命中已有行 → update ----
+        name0 = str(names[0]).strip()
+        tid_c, _tfc = syn_load_task(vid1, mid1, [
+            rec(0, {'名称': name0, '金额': 'C1', '备注': 'UPDATED-C'})], 'p2c')
+        http(8799, '/api/tasks/{}/load'.format(tid_c), {})
+        rc = wait_load(8799, tid_c)
+        stlog, jlog = http(8799, '/api/tasks/{}/load-log'.format(tid_c))
+        it = jlog['items'][0] if jlog['items'] else {}
+        conn = db.connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute('SELECT c_note FROM {} WHERE c_name=%s'
+                            .format(P2_TABLE), (name0,))
+                rows_c = cur.fetchall()
+                cur.execute('SELECT COUNT(*) FROM ' + P2_TABLE)
+                total_c = cur.fetchone()[0]
+        finally:
+            conn.close()
+        check('upsert 命中→update＋行数不增',
+              rc['state'] == 'loaded' and it.get('action') == 'update'
+              and it.get('target_pk') == json.dumps([name0],
+                                                    ensure_ascii=False)
+              and len(rows_c) == 1 and rows_c[0][0] == 'UPDATED-C'
+              and total_c == want + 2,  # Leg B 已写入合成甲/乙两行
+              'action={} rows={} total={}'.format(
+                  it.get('action'), rows_c, total_c))
+    finally:
+        svc.kill()
     return 1 if FAILS else 0
 
 

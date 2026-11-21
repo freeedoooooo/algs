@@ -141,16 +141,22 @@ function fillCol(div,col){
     sel.value=keys.length?keys[0]:''; idx.hidden=true;
   }
 }
-function addRow(target,col){
+function addRow(target,col,fx){
   var div=document.createElement('div');
   div.className='frow';
   div.innerHTML='<input type="text" class="tin fname" placeholder="目标字段名" value="'+
     escHtml(target||'')+'">'+
     '<select class="tin fcol"></select>'+
     '<input type="number" class="tin fidx" min="0" placeholder="列序号" hidden>'+
+    '<select class="tin fxform" title="入库时转换（暂存值保真不动）">'+
+      '<option value="">无转换</option>'+
+      '<option value="trim">trim</option>'+
+      '<option value="trim,number">trim+number</option>'+
+    '</select>'+
     '<button type="button" class="btn mini danger fdel">删</button>';
   frows.appendChild(div);
   fillCol(div,col);
+  div.querySelector('.fxform').value=fx||'';
   div.querySelector('.fcol').onchange=function(){syncIdx(div);};
   div.querySelector('.fdel').onclick=function(){div.remove();};
 }
@@ -277,7 +283,11 @@ function openEditor(id,focusVer){
       if(pendingTable.header_contains) tkw.value=pendingTable.header_contains;
     }
     var fs=mp.fields||[];
-    if(fs.length) fs.forEach(function(f){addRow(f.target,f.column);});
+    var fxMap={};
+    ((j.transform_json||{}).fields||[]).forEach(function(f){
+      fxMap[f.target]=(f.apply||[]).join(',');
+    });
+    if(fs.length) fs.forEach(function(f){addRow(f.target,f.column,fxMap[f.target]);});
     else addRow('',null);
     delbtn.hidden=false;
     document.getElementById('versec').hidden=false;
@@ -293,7 +303,7 @@ savebtn.onclick=function(){
   emsg.textContent='';
   var name=ename.value.trim();
   if(!name){emsg.textContent='模板名不能为空';return;}
-  var fields=[], seen={}, err=null;
+  var fields=[], seen={}, err=null, xf=[];
   Array.prototype.forEach.call(frows.children,function(div){
     if(err) return;
     var t=div.querySelector('.fname').value.trim();
@@ -303,6 +313,8 @@ savebtn.onclick=function(){
     var col=readCol(div);
     if(!col){err='字段「'+t+'」未选源列';return;}
     fields.push({target:t,column:col});
+    var fx=div.querySelector('.fxform').value;
+    if(fx) xf.push({target:t,apply:fx.split(',')});
   });
   if(err){emsg.textContent=err;return;}
   if(!fields.length){
@@ -315,12 +327,14 @@ savebtn.onclick=function(){
   else{emsg.textContent='请选源表（参考文件，或手填序号 / 表头关键词）';return;}
   var schema={fields:fields.map(function(f){return {name:f.target,type:'text'};})};
   var mapping={table:table,fields:fields};
+  var transform=xf.length?{fields:xf}:null;
   var desc=edesc.value.trim();
   savebtn.disabled=true;
   var p;
   if(cur==null){
     p=api('POST','/api/templates',
-          {name:name,description:desc||null,schema:schema,mapping:mapping});
+          {name:name,description:desc||null,schema:schema,mapping:mapping,
+           transform:transform});
   }else{
     var patch={};
     if(name!==origName) patch.name=name;
@@ -328,7 +342,7 @@ savebtn.onclick=function(){
     p=(Object.keys(patch).length?api('PATCH','/api/templates/'+cur,patch):
         Promise.resolve()).then(function(){
       return api('POST','/api/templates/'+cur+'/versions',
-                 {schema:schema,mapping:mapping});
+                 {schema:schema,mapping:mapping,transform:transform});
     });
   }
   p.then(function(){

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>入库 · 结构化平台</title>
+<link rel="stylesheet" href="/static/shell.css">
+<link rel="stylesheet" href="/static/templates.css">
+<link rel="stylesheet" href="/static/load.css">
+</head>
+<body>
+<nav class="topnav">
+  <span class="brand">结构化平台</span>
+  <a href="/">提取</a>
+  <a href="/sources">资料</a>
+  <a href="/templates">模板</a>
+  <a href="/staging">校验</a>
+  <a href="/load" class="on">入库</a>
+  <a href="/tasks">任务</a>
+  <span class="spacer"></span>
+  <span class="navnote">P2 · 入库配置</span>
+</nav>
+<div class="pagebody">
+  <div class="pagehead">
+    <h1>入库配置</h1>
+    <span class="spacer"></span>
+    <span class="msg">先提取校验，全部确认后在任务详情/校验台手动入库</span>
+  </div>
+  <div class="banner err" id="err" hidden></div>
+  <div class="banner info" id="ok" hidden></div>
+  <div class="pagehead">
+    <h1>目的地</h1>
+    <span class="spacer"></span>
+    <div class="toolbar">
+      <button type="button" class="btn" id="newdest">新建目的地</button>
+    </div>
+  </div>
+  <div class="panel">
+    <table class="list">
+      <thead><tr>
+        <th>名称</th><th>类型</th><th>凭据引用</th><th>创建时间</th><th>操作</th>
+      </tr></thead>
+      <tbody id="destrows"></tbody>
+    </table>
+    <div class="empty" id="destempty" hidden>
+      <b>还没有入库目的地</b>
+      登记目标库的凭据引用名（env 或 data/secrets.json 的键，非密码）。
+    </div>
+  </div>
+  <div class="pagehead" style="margin-top:16px">
+    <h1>映射</h1>
+    <span class="spacer"></span>
+    <div class="toolbar">
+      <button type="button" class="btn" id="newmap">新建映射</button>
+    </div>
+  </div>
+  <div class="panel">
+    <table class="list">
+      <thead><tr>
+        <th>目的地</th><th>模板</th><th>目标表</th><th>写入模式</th>
+        <th>业务键</th><th>创建时间</th><th>操作</th>
+      </tr></thead>
+      <tbody id="maprows"></tbody>
+    </table>
+    <div class="empty" id="mapempty" hidden>
+      <b>还没有入库映射</b>
+      选目的地＋模板＋目标表，把模板字段逐一对到目标列（只写已有表，不自动建表）。
+    </div>
+  </div>
+</div>
+<div class="drawer" id="ddest" hidden>
+  <div class="dpanel">
+    <div class="dhead">
+      <h2>新建目的地</h2>
+      <span class="spacer"></span>
+      <button type="button" class="dclose" id="ddclose">关闭 (Esc)</button>
+    </div>
+    <div class="dbody">
+      <div class="fsec">
+        <label class="flab" for="ddname">名称</label>
+        <input type="text" class="tin" id="ddname" placeholder="如：审计业务库">
+      </div>
+      <div class="fsec">
+        <label class="flab" for="ddref">凭据引用名（conn_ref）</label>
+        <input type="text" class="tin" id="ddref" placeholder="如：C1_EXTRACT_DB">
+        <div class="hint">环境变量或 data/secrets.json 里的键名，不是密码；平台只存引用名。</div>
+      </div>
+      <div class="fsec">
+        <label class="flab">类型</label>
+        <input type="text" class="tin" value="mysql" disabled>
+        <div class="hint">首个实现仅支持 MySQL。</div>
+      </div>
+    </div>
+    <div class="dfoot">
+      <span class="msg" id="ddmsg"></span>
+      <span class="spacer"></span>
+      <button type="button" class="btn" id="ddsave">保存</button>
+    </div>
+  </div>
+</div>
+<div class="drawer wide" id="dmap" hidden>
+  <div class="dpanel">
+    <div class="dhead">
+      <h2>新建映射</h2>
+      <span class="spacer"></span>
+      <button type="button" class="dclose" id="dmclose">关闭 (Esc)</button>
+    </div>
+    <div class="dbody">
+      <div class="fsec">
+        <label class="flab" for="dmdest">目的地</label>
+        <select class="tin" id="dmdest"></select>
+      </div>
+      <div class="fsec">
+        <label class="flab" for="dmtpl">模板（须有固定目标字段，透传不可入库）</label>
+        <select class="tin" id="dmtpl"></select>
+      </div>
+      <div class="fsec">
+        <label class="flab" for="dmtable">目标表（只写已有表）</label>
+        <select class="tin" id="dmtable" disabled><option value="">先选目的地</option></select>
+        <div class="hint" id="dmthint"></div>
+      </div>
+      <div class="fsec">
+        <label class="flab" for="dmmode">写入模式</label>
+        <select class="tin" id="dmmode">
+          <option value="upsert">upsert · 业务键存在则更新，否则插入</option>
+          <option value="insert">insert · 直插（重跑靠回执跳过）</option>
+          <option value="update">update · 只更新已有行，不存在则隔离</option>
+        </select>
+      </div>
+      <div class="fsec">
+        <label class="flab">字段映射（模板字段 → 目标列）</label>
+        <div id="dmrows"></div>
+        <div class="hint">勾选「业务键」的列作为 upsert/update 的去重依据（应用层判定，不要求唯一索引）。</div>
+      </div>
+    </div>
+    <div class="dfoot">
+      <span class="msg" id="dmmsg"></span>
+      <span class="spacer"></span>
+      <button type="button" class="btn" id="dmsave">保存映射</button>
+    </div>
+  </div>
+</div>
+<script src="/static/shell.js"></script>
+<script src="/static/load.js"></script>
+</body>
+</html>

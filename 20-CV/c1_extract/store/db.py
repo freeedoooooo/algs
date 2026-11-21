@@ -57,8 +57,9 @@ def safe_detail(ref):
         return str(e)
 
 
-def connect(ref=None, autocommit=False):
-    """DB-API 连接。首次调用自动跑迁移（幂等）；pymysql 懒导入。"""
+def connect(ref=None, autocommit=False, migrate=True):
+    """DB-API 连接。平台库首次调用自动跑迁移（幂等）；pymysql 懒导入。
+    migrate=False 用于目标业务库（P2 入库）——绝不把平台表建进人家库。"""
     import pymysql
     ref = ref or config.PLATFORM_DB_REF
     p = _parts(resolve_conn(ref))
@@ -66,6 +67,8 @@ def connect(ref=None, autocommit=False):
         host=p['host'], port=p['port'], user=p['user'],
         password=p['password'], database=p['database'],
         charset='utf8mb4', autocommit=autocommit, connect_timeout=5)
+    if not migrate:
+        return conn
     key = (ref, p['database'])
     if key not in _READY:
         with _LOCK:

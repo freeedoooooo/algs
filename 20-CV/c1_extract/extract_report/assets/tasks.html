@@ -13,10 +13,10 @@
   <a href="/sources">资料</a>
   <a href="/templates">模板</a>
   <a href="/staging">校验</a>
-  <a class="off" title="P2 开放">入库</a>
+  <a href="/load">入库</a>
   <a href="/tasks" class="on">任务</a>
   <span class="spacer"></span>
-  <span class="navnote">P1 · 预览链路</span>
+  <span class="navnote">P2 · 提取校验入库</span>
 </nav>
 <div class="pagebody">
   <div class="pagehead">
@@ -28,6 +28,9 @@
         <option value="">全部状态</option>
         <option value="extracting">提取中</option>
         <option value="previewed">已预览</option>
+        <option value="loading">入库中</option>
+        <option value="loaded">已入库</option>
+        <option value="partial">部分入库</option>
         <option value="failed">失败</option>
       </select>
       <select id="fmode">
@@ -61,6 +64,16 @@
     </div>
     <div class="dbody" id="dbody"></div>
     <div class="dfoot" id="dfoot"></div>
+  </div>
+</div>
+<div class="drawer" id="receipt" hidden>
+  <div class="dpanel">
+    <div class="dhead">
+      <h2 id="rctitle">入库回执</h2>
+      <span class="spacer"></span>
+      <button type="button" class="dclose" id="rcclose">关闭 (Esc)</button>
+    </div>
+    <div class="dbody" id="rcbody"></div>
   </div>
 </div>
 <script src="/static/shell.js"></script>

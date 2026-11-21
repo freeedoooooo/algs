@@ -285,6 +285,67 @@ P1b 模板消费＝选择器＋重命名（transform 留 P2）。
 
 ---
 
+## 〇.12、P2 入库模式（2026-11-21，已完成）
+
+设计稿 [design-p2-load.md](design-p2-load.md) 已批准并实现。用户拍板 6 项：
+① 触发＝**上传时选 mode=load**＋目的地＋映射（预登记入库意图）；② 执行＝**校验完
+手动点「入库」**；③ 门禁＝**仅 confirmed**（pending/edited/rejected 任一存在整任务
+409 带计数）；④ **rejected 也阻止**（出口＝校验台 ✓ 重新确认）；⑤ **只写已有表**
+（不自动建表）；⑥ transform＝**最小集 trim＋number**（入库时消费，暂存值保真）。
+**零 DDL**（load 三表已在 001 baseline）。
+
+1. **db.connect(ref, autocommit, migrate=True)**：`migrate=False` 用于目标业务库
+   ——绝不把平台表建进人家库（设计级陷阱，先于 loader 修掉）。
+2. **store/loader.py**：`connect_dest`（LookupError→BadRequest）；`list_tables/
+   list_columns`（information_schema，DATABASE() 内）；`validate_column_map`
+   （全覆盖/无重复目标列/upsert·update 须业务键）；`preflight`（目标表存在＋列存在）；
+   `apply_transform`（trim/number 纯函数，失败保留原值＋error 条目）；`review_gate`；
+   `write_record`＝**应用层 upsert**（SELECT 1 WHERE bk→UPDATE 非键列/INSERT，
+   不依赖唯一索引）；`_ident` 反引号双写防注入＋值全参数化。
+3. **catalog**：dest/mapping CRUD（重名/引用守卫 409；透传模板禁建映射 400）；
+   `set_task_load`；`add_load_log`（SELECT-then-INSERT，UNIQUE 回执防重）；
+   `list_load_logs`；task 投影补 load 信息块。
+4. **service**：`launch_load`（STATE 单任务串行复用，mode/stage='load'；门禁 409
+   带四态计数；二次 preflight）；`run_load`（回执跳过→transform→写目标库→回执；
+   **错误分类**：IntegrityError/DataError/ProgrammingError/LoadRecordError→单条
+   隔离继续；其他 MySQLError/OSError→连接级中止保留回执→partial；平台库写失败→
+   failed）；终态 loaded/partial；loading/partial/loaded 记录只读（_review_target 守卫）。
+5. **app**：upload/tasks_create mode=load 早失败预检（`_load_preflight`：dest/mapping
+   归属＋模板匹配＋目标库 preflight，失败不建 task）；/load 页＋dests/mappings CRUD
+   路由＋test（仅 safe_detail）/tables/columns introspection＋load-log/quarantine
+   读路由＋POST /api/tasks/{id}/load。
+6. **前端**：/load 双 panel 页（目的地抽屉＋映射抽屉：dest→tables→columns→模板
+   字段行→列 select＋业务键 checkbox）；upload mode radio＋destsel/mapsel（按模板＋
+   目的地过滤）；tasks 详情入库信息行＋门禁计数＋入库/回执按钮；staging 入库按钮＋
+   loading 轮询自动刷新＋只读横幅；**shell.js 共用回执/隔离抽屉**（两页同 markup）；
+   templates 编辑器 transform 下拉（无转换/trim/trim+number，路由原先丢 transform 已修）；
+   nav「入库」五页启用。
+7. **单测**：test_load_rules.py 22 项（transform/gate/column_map/write_record，
+   FakeCur 无 DB）＋collect 11 项＝33 OK。
+
+- **验证**：**两套验收顺序 7/7＋6/6 全 PASS**（records 新增第 7 项：合成目标表
+  `_accept_p2_load`＋合成模板/映射，dest conn_ref=C1_EXTRACT_DB 同实例；覆盖
+  introspection/映射契约 400/上传预检 400×3/门禁 409（pending·rejected）/全确认→
+  loaded/回执逐条/loaded 重入 409＋只读 409/引用禁删 409/transform 消费＋超长值
+  DataError 隔离→partial/ALTER 后重试幂等（回执跳过）/partial 只读 409/跨 task
+  upsert 命中→update 行数不增；**新增全量基线守恒检查**（清理后逐项比对）。
+  浏览器金路径（8799）：/load 抽屉建目的地＋测试连接（仅 host:port/库名）→映射
+  抽屉 introspection→字段行＋业务键→保存→提取页 mode=load 三 select 联动→UI 上传
+  CCB 原件 task 184（29 条预登记）→校验台门禁横幅 409→全部确认→入库→loading
+  横幅＋自动刷新→loaded 只读→回执抽屉 29 条（首 insert 余 update，账号列恒同值
+  upsert 收敛 1 行）→任务详情入库信息行＋gateinfo 计数（task 185）＋入库 alert 409
+  →模板 transform 下拉往返；控制台仅预期 409 无 JS 错。合成 task 184/185 child-first
+  清净＋映射/目的地/模板删除＋DROP 表，**基线全还原**（135/1867/1867＋98/14870953
+  ＋5 files＋tasks 21/30/41/42/51–56/80＋templates 1/versions 1＋load 三表空）；
+  8799/8797 free、tmp/input+tmp/work 空。
+- **已知缺口（不预埋）**：无 reviewer 身份（B 轮审计平台化首补）；隔离区只读无解决
+  UI；partial 记录只读→坏值记录无法修值只能重试（永久坏值＝永久 partial，裁决接受）；
+  无回滚/删除已入库数据；单目的地单表（无多表 union/多目的地扇出）。
+- **8765**：须用户重启一次载入 P2（load 路由＋/load 页＋upload mode＋入库按钮）。
+  重启前 nav「入库」404、上传页无入库模式。
+
+---
+
 ## 一、C1 已完成（已验证）
 
 用户 5 项演进（2026-11-20 提出，全部批准落地）：
@@ -335,7 +396,7 @@ P1b 模板消费＝选择器＋重命名（transform 留 P2）。
 - **108 案例**：首行 / 错字问题挂起（见项目记忆 mvp-deferred-todos）。
 - **曾问未立项**：Word 输出、双层 PDF 导出、漏提覆盖视图（11-20 问过，未立项）。
 - **环境**：torch 残装 `shm.dll WinError127`（实为 paddle↔torch 加载顺序冲突，11-20 已修 check_env，torch 不能卸）。
-- **P1a 校验台已完成**（见 §〇.5）；**P1b 模板管理＋collect 选择器/重命名已完成**（见 §〇.11）；**P2**：入库模式（load_dest/load_mapping 消费＋transform/type）。
+- **P1a 校验台已完成**（见 §〇.5）；**P1b 模板管理＋collect 选择器/重命名已完成**（见 §〇.11）；**P2 入库模式已完成**（见 §〇.12）。后续候选：B 轮审计平台化（reviewer 身份首补）／隔离区解决 UI／多表 union／引擎升级研究（Docling vs MinerU，未立项）。
 - 快照简化决策已被 C1 吞并（run.json 退役、records 三表为事实源、export 按需导出）。
 
 ---
@@ -366,12 +427,15 @@ P1b 模板消费＝选择器＋重命名（transform 留 P2）。
 
 1. C1 存储演进＋任务化命名/去外键＋P1a 校验台＋小重构轮（A/B）＋UI 打磨轮
    ＋任务级台账/报告打磨/B 编排拆分轮＋校验台两处打磨轮＋三页紧凑规整统一轮
-   ＋**P1b 模板管理＋collect 选择器消费轮**
-   均已完成：代码＋验收＋浏览器＋文档全部收尾（见 §〇.6–§〇.11）。
+   ＋P1b 模板管理＋collect 选择器消费轮＋**P2 入库模式轮**
+   均已完成：代码＋验收＋浏览器＋文档全部收尾（见 §〇.6–§〇.12）。
 2. 建议事项：**用户 8765 重启一次**——载入 A 轮错误分类＋台账任务级形状
-   /api/staging/ledger＋B 拆分（app.py 路由 / service.py 引擎）＋**P1b（模板 CRUD
-   路由＋/templates 页＋collect 消费）**。重启前校验入口台账报读取失败、
-   nav「模板」404、选模板不生效；其余页面正常。
-3. 新需求从 **P2 入库模式**起步（设计先行，用户确认后执行）：load_dest/load_mapping
-   消费＋transform/type 开放（P1b 存而不消费）；多表 union 选择可作后续小轮。
+   /api/staging/ledger＋B 拆分（app.py 路由 / service.py 引擎）＋P1b（模板 CRUD
+   路由＋/templates 页＋collect 消费）＋**P2（load 路由＋/load 页＋upload mode=load
+   ＋任务/校验台入库按钮＋回执抽屉）**。重启前校验入口台账报读取失败、
+   nav「模板」「入库」404、选模板不生效、上传页无入库模式；其余页面正常。
+3. 新需求候选（设计先行，用户确认后执行）：**B 轮审计平台化**（reviewer 身份首补，
+   load_log 记「谁入的库」）／隔离区解决 UI／多表 union／引擎升级研究
+   （Docling vs MinerU，未立项）。对外文案用「字段级溯源/审计追溯」，
+   UI「血缘回溯」保留（产品定位见项目记忆）。
 4. 其余沿用 §二挂起项。

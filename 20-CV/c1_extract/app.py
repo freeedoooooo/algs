@@ -201,6 +201,11 @@ def templates_page():
     return HTMLResponse(asset('templates.html'))
 
 
+@app.get('/load', response_class=HTMLResponse)
+def load_page():
+    return HTMLResponse(asset('load.html'))
+
+
 @app.get('/healthz')
 def health():
     return {'ok': True, 'service': 'c1-extract',
@@ -232,6 +237,35 @@ async def _json_body(request):
         raise store_errors.BadRequest('请求体不是合法 JSON')
 
 
+def _load_preflight(body, tpl):
+    """mode=load 预登记校验（上传与 tasks_create 共用）：dest/mapping 归属＋
+    模板匹配＋目标库预检。失败抛 StoreError→400/404，不建 task（早失败）。"""
+    catalog = _load('store.catalog')
+    try:
+        dest_id = int(body.get('load_dest_id'))
+        mapping_id = int(body.get('load_mapping_id'))
+    except (TypeError, ValueError):
+        raise store_errors.BadRequest('入库模式须选择目的地与映射')
+    mapping = catalog.get_mapping(mapping_id)
+    if mapping is None:
+        raise store_errors.NotFound('映射不存在')
+    if mapping['load_dest_id'] != dest_id:
+        raise store_errors.BadRequest('映射不属于所选目的地')
+    if mapping['template_id'] != tpl['template_id']:
+        raise store_errors.BadRequest('映射与所选模板不匹配')
+    sj = tpl.get('schema_json')
+    fields = ([f.get('name') for f in sj.get('fields') or []]
+              if isinstance(sj, dict) else [])
+    fields = [f for f in fields if f]
+    if not fields:
+        raise store_errors.BadRequest('透传模板无固定目标字段，不可入库')
+    _load('store.loader').preflight(
+        mapping['conn_ref'], mapping['target_table'],
+        mapping['column_map_json'], mapping['write_mode'],
+        mapping['business_key_json'], fields)
+    return {'dest_id': dest_id, 'mapping_id': mapping_id}
+
+
 @app.post('/api/upload')
 async def upload(request: Request):
     if service.STATE['running']:
@@ -244,11 +278,12 @@ async def upload(request: Request):
         return JSONResponse({'ok': False, 'error': '没有收到文件'},
                             status_code=400)
     mode = body.get('mode') or 'preview'
-    if mode != 'preview':
+    if mode not in ('preview', 'load'):
         return JSONResponse(
-            {'ok': False, 'error': '入库模式在 P2 开放，当前请用预览模式'},
+            {'ok': False, 'error': 'mode 仅支持 preview/load'},
             status_code=400)
     tpl = service.resolve_template(body.get('template_version_id'))
+    load_ctx = _load_preflight(body, tpl) if mode == 'load' else None
     # 调试参数：校验一次，非法值回退默认并把警告带回页面（不让整批失败）
     params, warns = params_mod.normalize(body.get('params'))
 
@@ -284,7 +319,8 @@ async def upload(request: Request):
             paths.append(path)
             info = service.register_file(name, data)
             ctx.append(dict(info, name=name, path=path))
-        result = service.launch(paths, params, warns, ctx, mode, tpl)
+        result = service.launch(paths, params, warns, ctx, mode, tpl,
+                                load=load_ctx)
         launched = True
         return result
     finally:
@@ -374,7 +410,7 @@ async def api_templates_add(request: Request):
     body = await _json_body(request)
     vid = _load('store.catalog').create_template(
         body.get('name'), body.get('description'),
-        body.get('schema'), body.get('mapping'))
+        body.get('schema'), body.get('mapping'), body.get('transform'))
     return {'ok': True, 'version_id': vid}
 
 
@@ -416,8 +452,117 @@ def api_template_version_get(template_id: int, version_id: int):
 async def api_template_version_add(template_id: int, request: Request):
     body = await _json_body(request)
     vid = _load('store.catalog').create_version(
-        template_id, body.get('schema'), body.get('mapping'))
+        template_id, body.get('schema'), body.get('mapping'),
+        body.get('transform'))
     return {'ok': True, 'version_id': vid}
+
+
+# ---- P2 入库：目的地 / 映射 / introspection（凭据只回 safe_detail 脱敏描述）----
+
+@app.get('/api/load/dests')
+def api_load_dests():
+    return {'items': _load('store.catalog').list_dests()}
+
+
+@app.post('/api/load/dests')
+async def api_load_dest_add(request: Request):
+    body = await _json_body(request)
+    did = _load('store.catalog').create_dest(
+        body.get('name'), body.get('conn_ref'), body.get('db_type') or 'mysql')
+    return {'ok': True, 'id': did}
+
+
+@app.delete('/api/load/dests/{dest_id}')
+def api_load_dest_del(dest_id: int):
+    _load('store.catalog').delete_dest(dest_id)
+    return {'ok': True}
+
+
+def _dest_or_404(dest_id):
+    dest = _load('store.catalog').get_dest(dest_id)
+    if dest is None:
+        raise store_errors.NotFound('目的地不存在')
+    return dest
+
+
+@app.post('/api/load/dests/{dest_id}/test')
+def api_load_dest_test(dest_id: int):
+    """测试连接：只回 host:port/库名（safe_detail），永不回显凭据。"""
+    dest = _dest_or_404(dest_id)
+    conn = _load('store.loader').connect_dest(dest['conn_ref'])
+    try:
+        with conn.cursor() as cur:
+            cur.execute('SELECT 1')
+    except Exception as e:
+        return JSONResponse(
+            {'ok': False,
+             'error': '目标库连接失败（{}）'.format(type(e).__name__)},
+            status_code=503)
+    finally:
+        conn.close()
+    return {'ok': True,
+            'detail': _load('store.db').safe_detail(dest['conn_ref'])}
+
+
+@app.get('/api/load/dests/{dest_id}/tables')
+def api_load_dest_tables(dest_id: int):
+    dest = _dest_or_404(dest_id)
+    return {'items': _load('store.loader').list_tables(dest['conn_ref'])}
+
+
+@app.get('/api/load/dests/{dest_id}/columns')
+def api_load_dest_columns(dest_id: int, table: str = None):
+    dest = _dest_or_404(dest_id)
+    if not table:
+        raise store_errors.BadRequest('table 参数必填')
+    return {'items': _load('store.loader').list_columns(dest['conn_ref'], table)}
+
+
+@app.get('/api/load/mappings')
+def api_load_mappings():
+    return {'items': _load('store.catalog').list_mappings()}
+
+
+@app.post('/api/load/mappings')
+async def api_load_mapping_add(request: Request):
+    body = await _json_body(request)
+    try:
+        dest_id = int(body.get('load_dest_id'))
+        tpl_id = int(body.get('template_id'))
+    except (TypeError, ValueError):
+        raise store_errors.BadRequest('须选择目的地与模板')
+    mid = _load('store.catalog').create_mapping(
+        dest_id, tpl_id, body.get('target_table'), body.get('column_map'),
+        body.get('write_mode') or 'upsert', body.get('business_key'))
+    return {'ok': True, 'id': mid}
+
+
+@app.delete('/api/load/mappings/{mapping_id}')
+def api_load_mapping_del(mapping_id: int):
+    _load('store.catalog').delete_mapping(mapping_id)
+    return {'ok': True}
+
+
+@app.get('/api/tasks/{task_id}/load-log')
+def api_task_load_log(task_id: int):
+    if _load('store.catalog').get_task(task_id) is None:
+        raise store_errors.NotFound('任务不存在')
+    return {'ok': True, 'items': _load('store.catalog').list_load_logs(task_id)}
+
+
+@app.post('/api/tasks/{task_id}/load')
+def api_task_load(task_id: int):
+    """手动入库闸门：门禁/预检在 service.launch_load，失败类型化上抛。"""
+    return service.launch_load(task_id)
+
+
+@app.get('/api/tasks/{task_id}/quarantine')
+def api_task_quarantine(task_id: int):
+    """隔离区只读展示（本轮无解决 UI）：任务内全部隔离条目。"""
+    if _load('store.catalog').get_task(task_id) is None:
+        raise store_errors.NotFound('任务不存在')
+    return {'ok': True,
+            'items': _load('store.catalog').list_quarantine(task_id=task_id)}
 
 
 @app.get('/api/tasks')
@@ -497,14 +642,17 @@ def api_staging_ledger():
 def _review_target(task_id, task_file_id):
     """校验台写操作公共守卫：返回 file_index。
 
-    task 不存在 / 文件不属于 task → NotFound；已入库 → Conflict（P2 前置守卫）。
+    task 不存在 / 文件不属于 task → NotFound；入库中/部分入库/已入库 → Conflict。
     files 序与 content_db._task_files 的 ORDER BY tf.id 一致。
     """
     t = _load('store.catalog').get_task(task_id)
     if t is None:
         raise store_errors.NotFound('任务不存在')
-    if t['state'] == 'loaded':
-        raise store_errors.Conflict('任务已入库，记录只读')
+    if t['state'] in ('loading', 'partial', 'loaded'):
+        raise store_errors.Conflict(
+            {'loading': '入库进行中，记录只读',
+             'partial': '任务部分入库，记录只读（可重新入库）',
+             'loaded': '任务已入库，记录只读'}[t['state']])
     fi = next((i for i, f in enumerate(t['files'])
                if f['task_file_id'] == task_file_id), None)
     if fi is None:
@@ -565,6 +713,11 @@ async def api_tasks_create(request: Request):
                             status_code=400)
     params, warns = params_mod.normalize(body.get('params'))
     tpl = service.resolve_template(body.get('template_version_id'))
+    mode = body.get('mode') or 'preview'
+    if mode not in ('preview', 'load'):
+        return JSONResponse({'ok': False, 'error': 'mode 仅支持 preview/load'},
+                            status_code=400)
+    load_ctx = _load_preflight(body, tpl) if mode == 'load' else None
     in_dir = tempfile.mkdtemp(prefix='in_', dir=config.TMP_INPUT)
     launched = False
     try:
@@ -585,7 +738,8 @@ async def api_tasks_create(request: Request):
             ctx.append({'name': name, 'path': path,
                         'file_id': row['id'], 'sha256': row['sha256'],
                         'dedup': True})
-        result = service.launch(paths, params, warns, ctx, 'preview', tpl)
+        result = service.launch(paths, params, warns, ctx, mode, tpl,
+                                load=load_ctx)
         launched = True
         return result
     finally:

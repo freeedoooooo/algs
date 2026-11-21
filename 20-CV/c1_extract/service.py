@@ -88,17 +88,20 @@ def resolve_template(version_id=None):
     if not tv:
         raise RuntimeError('平台库无可用模板版本')
     return {'name': tv['name'], 'version': tv['version'],
-            'version_id': tv['id'],
+            'version_id': tv['id'], 'template_id': tv['template_id'],
             'schema_json': tv['schema_json'],
             'mapping_json': tv['mapping_json'],
             'transform_json': tv['transform_json']}
 
 
-def launch(paths, params, warns, ctx, mode='preview', tpl=None):
-    """登记任务（DB 必选，失败上抛 503）→ 建日志 → 重置 STATE → 起后台线程。"""
+def launch(paths, params, warns, ctx, mode='preview', tpl=None, load=None):
+    """登记任务（DB 必选，失败上抛 503）→ 建日志 → 重置 STATE → 起后台线程。
+    load={'dest_id','mapping_id'}：mode=load 的预登记入库意图（执行须手动点入库）。"""
     tpl = tpl or resolve_template()
     catalog = _load('store.catalog')
     task_id = catalog.create_task(mode, tpl['version_id'], params)
+    if load:
+        catalog.set_task_load(task_id, load['dest_id'], load['mapping_id'])
     for f in ctx:
         f['task_file_id'] = catalog.add_task_file(task_id, f['file_id'])
         f['state'] = 'pending'
@@ -126,6 +129,9 @@ def launch(paths, params, warns, ctx, mode='preview', tpl=None):
                   if not k.startswith('_'))))
     for w in warns:
         log.warn('params', w)
+    if load:
+        log.info('load', '入库预登记：目的地 {} · 映射 {}（全部确认后手动入库）'
+                 .format(load['dest_id'], load['mapping_id']))
     threading.Thread(target=task_batch, args=(paths, params, log, task_ctx),
                      daemon=True).start()
     return {'ok': True, 'count': len(paths), 'task_id': task_id,
@@ -296,3 +302,188 @@ def task_batch(paths, params=None, log=None, task_ctx=None):
                 rmtree_retry(f['scratch'])
         if task_ctx.get('in_scratch'):
             rmtree_retry(task_ctx['in_scratch'])
+
+
+# ---- P2 入库引擎（design-p2-load.md）：手动闸门 → 后台逐条写入＋幂等回执 ----
+
+def launch_load(task_id):
+    """POST /api/tasks/{id}/load 的编排：状态/门禁/预检全过才起线程。
+    校验失败抛 StoreError（app 处理器映射 HTTP）；目标库连不上→503。"""
+    catalog = _load('store.catalog')
+    errors = _load('store.errors')
+    if STATE['running']:
+        raise errors.Conflict('已有任务正在处理，请等它完成')
+    task = catalog.get_task(task_id)
+    if task is None:
+        raise errors.NotFound('任务不存在')
+    if task['mode'] != 'load' or not task.get('load'):
+        raise errors.BadRequest('任务非入库模式（上传时须选 mode=load）')
+    state = task['state']
+    if state == 'loaded':
+        raise errors.Conflict('任务已入库')
+    if state == 'loading':
+        raise errors.Conflict('入库进行中')
+    if state not in ('previewed', 'partial'):
+        raise errors.Conflict('任务状态 {} 不可入库（须先提取完成）'.format(state))
+    mapping = catalog.get_mapping(task['load']['mapping_id'])
+    if mapping is None:
+        raise errors.NotFound('入库映射不存在')
+    tpl = resolve_template(task['template']['version_id'])
+    sj = tpl.get('schema_json')
+    fields = ([f.get('name') for f in sj.get('fields') or []]
+              if isinstance(sj, dict) else [])
+    fields = [f for f in fields if f]
+    if not fields:
+        raise errors.BadRequest('透传模板无固定目标字段，不可入库')
+    loader = _load('store.loader')
+    loader.preflight(mapping['conn_ref'], mapping['target_table'],
+                     mapping['column_map_json'], mapping['write_mode'],
+                     mapping['business_key_json'], fields)
+    doc = _load('store.content').get_records(task_id)
+    recs = [r for f in (doc['files'] if doc else []) for r in f['records']]
+    if not recs:
+        raise errors.Conflict('无暂存记录，不可入库')
+    c = loader.review_gate(recs)
+    blocked = c['pending'] + c['edited'] + c['rejected']
+    if blocked:
+        raise errors.Conflict(
+            '{} 条待校验 / {} 条已修改未确认 / {} 条已拒绝，'
+            '请先处理完（仅全部 confirmed 可入库）'.format(
+                c['pending'], c['edited'], c['rejected']))
+    label = 'task_{}_load'.format(task_id)
+    tasklog = _load('tasklog')
+    log = tasklog.TaskLog(label, log_path=os.path.join(config.LOG_DIR,
+                                                       label + '.log'),
+                          on_emit=_on_log)
+    with LOCK:
+        STATE.update(running=True, ready=False, error=None, steps=[],
+                     cases=[], started=time.time(), elapsed=0,
+                     params={}, warnings=[], logs=[], progress=0,
+                     stage='load', log_file=label + '.log',
+                     mode='load', template=tpl, task_id=task_id)
+    log.stage('load', '任务 {} 入库 → {}（{} · 共 {} 条）'.format(
+        task_id, mapping['target_table'], mapping['write_mode'], len(recs)))
+    threading.Thread(target=run_load,
+                     args=(task_id, task, mapping, tpl, log),
+                     daemon=True).start()
+    return {'ok': True, 'task_id': task_id}
+
+
+def run_load(task_id, task, mapping, tpl, log):
+    """后台线程：逐记录 回执跳过→transform→写目标库→回执/隔离。
+    单条数据级错误→隔离继续；连接级失败→中止（已写回执保留）→partial。
+    平台库写失败→整任务 failed（DB 必选）。完成态最后发布。"""
+    catalog = _load('store.catalog')
+    content = _load('store.content')
+    loader = _load('store.loader')
+    import pymysql
+    dest_id = task['load']['dest_id']
+    table = mapping['target_table']
+    cm, wm = mapping['column_map_json'], mapping['write_mode']
+    bk = mapping['business_key_json']
+    transform = tpl.get('transform_json')
+    try:
+        catalog.set_task_state(task_id, 'loading')
+        for f in task['files']:
+            catalog.set_task_file_state(f['task_file_id'], 'loading')
+        doc = content.get_records(task_id)
+        receipts = {(r['task_file_id'], r['record_index'])
+                    for r in catalog.list_load_logs(task_id)}
+        total = sum(len(f['records']) for f in doc['files'])
+        written = skipped = quarantined = done = 0
+        aborted = None
+        conn = loader.connect_dest(mapping['conn_ref'])
+        try:
+            for f in doc['files']:
+                for rec in f['records']:
+                    done += 1
+                    with LOCK:
+                        STATE['progress'] = int(done / total * 100) if total else 100
+                    key = (f['task_file_id'], rec['index'])
+                    if key in receipts:
+                        skipped += 1
+                        continue
+                    vals, errs = loader.apply_transform(rec['values'], transform)
+                    if errs:
+                        catalog.add_quarantine(
+                            task_id, f['task_file_id'], rec['index'], 'load',
+                            '；'.join(e['reason'] for e in errs),
+                            {'values': rec['values'], 'errors': errs})
+                        quarantined += 1
+                        log.warn('load', '记录 {} 隔离：{}'.format(
+                            rec['index'], errs[0]['reason']))
+                        continue
+                    try:
+                        with conn.cursor() as cur:
+                            action, pk = loader.write_record(
+                                cur, table, cm, vals, wm, bk)
+                        conn.commit()
+                    except loader.LoadRecordError as e:
+                        conn.rollback()
+                        catalog.add_quarantine(
+                            task_id, f['task_file_id'], rec['index'], 'load',
+                            e.msg, {'values': rec['values']})
+                        quarantined += 1
+                        log.warn('load', '记录 {} 隔离：{}'.format(
+                            rec['index'], e.msg))
+                        continue
+                    except pymysql.MySQLError as e:
+                        try:
+                            conn.rollback()
+                        except Exception:
+                            pass
+                        if isinstance(e, (pymysql.IntegrityError,
+                                          pymysql.DataError,
+                                          pymysql.ProgrammingError)):
+                            catalog.add_quarantine(
+                                task_id, f['task_file_id'], rec['index'],
+                                'load', str(e), {'values': rec['values']})
+                            quarantined += 1
+                            log.warn('load', '记录 {} 隔离：{}'.format(
+                                rec['index'], e))
+                            continue
+                        aborted = '{}: {}'.format(type(e).__name__, e)
+                        log.error('load', '目标库连接中断，中止：{}'.format(aborted))
+                        break
+                    except OSError as e:
+                        aborted = '{}: {}'.format(type(e).__name__, e)
+                        log.error('load', '目标库连接中断，中止：{}'.format(aborted))
+                        break
+                    catalog.add_load_log(task_id, f['task_file_id'],
+                                         rec['index'], dest_id, table,
+                                         pk, action)
+                    written += 1
+                if aborted:
+                    break
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        if aborted:
+            state, err = 'partial', '目标库连接中断：{}'.format(aborted)
+        elif quarantined:
+            state, err = 'partial', '{} 条隔离（详见隔离区）'.format(quarantined)
+        else:
+            state, err = 'loaded', None
+        catalog.set_task_state(task_id, state, err)
+        for f in task['files']:
+            catalog.set_task_file_state(f['task_file_id'], state)
+        log.ok('done', '入库完成：写入 {} · 回执跳过 {} · 隔离 {}'.format(
+            written, skipped, quarantined))
+        with LOCK:
+            STATE.update(running=False, ready=True, error=err,
+                         elapsed=round(time.time()
+                                       - (STATE['started'] or time.time()), 1),
+                         progress=100, stage='done')
+    except Exception as e:
+        log.error('error', '出错：' + str(e))
+        log.error('error', traceback.format_exc(limit=3).strip())
+        try:
+            catalog.set_task_state(task_id, 'failed', str(e))
+        except Exception as e2:
+            log.warn('store', '任务状态写入失败：{}'.format(e2))
+        with LOCK:
+            STATE.update(running=False, ready=False, error=str(e),
+                         stage='error')
+        print(traceback.format_exc(limit=3))

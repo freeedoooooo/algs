@@ -14,7 +14,7 @@
   <a href="/sources">资料</a>
   <a href="/templates" class="on">模板</a>
   <a href="/staging">校验</a>
-  <a class="off" title="P2 开放">入库</a>
+  <a href="/load">入库</a>
   <a href="/tasks">任务</a>
   <span class="spacer"></span>
   <span class="navnote">P1 · 模板管理</span>
@@ -83,7 +83,7 @@
         <label class="flab">字段映射（目标字段名 ← 源列）</label>
         <div id="frows"></div>
         <button type="button" class="btn mini ghost" id="addfield">＋添加字段</button>
-        <div class="hint">目标字段名＝记录键（未来入库列）；源列可按键名或列序号。保存即生成不可变新版本。</div>
+        <div class="hint">目标字段名＝记录键（入库列映射的键）；源列可按键名或列序号；转换规则在入库时消费（暂存值保真不动）。保存即生成不可变新版本。</div>
       </div>
       <div class="fsec" id="versec" hidden>
         <label class="flab">版本历史</label>

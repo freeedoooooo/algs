@@ -11,7 +11,7 @@ extract_file.content（原件 LONGBLOB）只在 get_file_content 里取，
 """
 import json
 
-from . import db
+from . import db, loader
 from .errors import BadRequest, Conflict, NotFound
 
 _FILE_COLS = ('id, name, sha256, kind, size_bytes, tags, note, created_at')
@@ -405,10 +405,14 @@ def _task_doc(cur, task_id):
     cur.execute(
         'SELECT r.id, r.mode, r.state, r.error, r.params_json,'
         ' r.created_at, r.updated_at, t.name AS tpl_name, tv.version,'
-        ' tv.id AS version_id'
+        ' tv.id AS version_id, tv.template_id,'
+        ' r.load_dest_id, r.load_mapping_id,'
+        ' ld.name AS dest_name, lm.target_table, lm.write_mode'
         ' FROM extract_task r'
         ' JOIN extract_template_version tv ON tv.id=r.template_version_id'
         ' JOIN extract_template t ON t.id=tv.template_id'
+        ' LEFT JOIN extract_load_dest ld ON ld.id=r.load_dest_id'
+        ' LEFT JOIN extract_load_mapping lm ON lm.id=r.load_mapping_id'
         ' WHERE r.id=%s', (task_id,))
     rows = _rows(cur)
     if not rows:
@@ -428,9 +432,16 @@ def _task_doc(cur, task_id):
     return {
         'task_id': r['id'], 'mode': r['mode'],
         'template': {'name': r['tpl_name'], 'version': r['version'],
-                     'version_id': r['version_id']},
+                     'version_id': r['version_id'],
+                     'template_id': r['template_id']},
         'params': _j(r['params_json']) or {},
         'state': r['state'], 'error': r['error'],
+        'load': ({'dest_id': r['load_dest_id'],
+                  'mapping_id': r['load_mapping_id'],
+                  'dest_name': r['dest_name'],
+                  'target_table': r['target_table'],
+                  'write_mode': r['write_mode']}
+                 if r['load_dest_id'] else None),
         'files': files,
         'created_at': str(r['created_at']),
         'updated_at': str(r['updated_at']),
@@ -505,6 +516,243 @@ def list_quarantine(task_id=None, state=None):
         for r in rows:
             r['payload_json'] = _j(r['payload_json'])
             r['created_at'] = str(r['created_at'])
+        return rows
+    finally:
+        conn.close()
+
+
+# ---- extract_load_dest / extract_load_mapping / extract_load_log（P2）----
+
+def list_dests():
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('SELECT id, name, db_type, conn_ref, created_at'
+                        ' FROM extract_load_dest ORDER BY id')
+            rows = _rows(cur)
+        for r in rows:
+            r['created_at'] = str(r['created_at'])
+        return rows
+    finally:
+        conn.close()
+
+
+def get_dest(dest_id):
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('SELECT id, name, db_type, conn_ref, created_at'
+                        ' FROM extract_load_dest WHERE id=%s', (dest_id,))
+            rows = _rows(cur)
+        if not rows:
+            return None
+        rows[0]['created_at'] = str(rows[0]['created_at'])
+        return rows[0]
+    finally:
+        conn.close()
+
+
+def create_dest(name, conn_ref, db_type='mysql'):
+    name = str(name or '').strip()
+    conn_ref = str(conn_ref or '').strip()
+    if not name:
+        raise BadRequest('目的地名称不能为空')
+    if not conn_ref:
+        raise BadRequest('conn_ref 不能为空（凭据引用名，非密码）')
+    if db_type != 'mysql':
+        raise BadRequest('首个实现仅支持 mysql')
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('SELECT id FROM extract_load_dest WHERE name=%s',
+                        (name,))
+            if cur.fetchone():
+                raise Conflict('目的地名称已存在')
+            cur.execute('INSERT INTO extract_load_dest (name, db_type,'
+                        ' conn_ref) VALUES (%s,%s,%s)',
+                        (name, db_type, conn_ref))
+            conn.commit()
+            return cur.lastrowid
+    finally:
+        conn.close()
+
+
+def delete_dest(dest_id):
+    """被映射引用禁删 Conflict（引用完整性归应用层）。"""
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('SELECT id FROM extract_load_dest WHERE id=%s',
+                        (dest_id,))
+            if not cur.fetchone():
+                raise NotFound('目的地不存在')
+            cur.execute('SELECT COUNT(*) FROM extract_load_mapping'
+                        ' WHERE load_dest_id=%s', (dest_id,))
+            if cur.fetchone()[0]:
+                raise Conflict('该目的地已被映射引用，禁止删除')
+            cur.execute('DELETE FROM extract_load_dest WHERE id=%s', (dest_id,))
+            conn.commit()
+    finally:
+        conn.close()
+
+
+_MAPPING_COLS = (
+    ' m.id, m.load_dest_id, d.name AS dest_name, d.conn_ref,'
+    ' m.template_id, t.name AS tpl_name, m.target_table,'
+    ' m.column_map_json, m.write_mode, m.business_key_json, m.created_at')
+_MAPPING_JOIN = (
+    ' FROM extract_load_mapping m'
+    ' JOIN extract_load_dest d ON d.id=m.load_dest_id'
+    ' JOIN extract_template t ON t.id=m.template_id')
+
+
+def _mapping_doc(r):
+    r['column_map_json'] = _j(r['column_map_json'])
+    r['business_key_json'] = _j(r['business_key_json'])
+    r['created_at'] = str(r['created_at'])
+    return r
+
+
+def list_mappings():
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('SELECT' + _MAPPING_COLS + _MAPPING_JOIN +
+                        ' ORDER BY m.id')
+            return [_mapping_doc(r) for r in _rows(cur)]
+    finally:
+        conn.close()
+
+
+def get_mapping(mapping_id):
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('SELECT' + _MAPPING_COLS + _MAPPING_JOIN +
+                        ' WHERE m.id=%s', (mapping_id,))
+            rows = _rows(cur)
+        return _mapping_doc(rows[0]) if rows else None
+    finally:
+        conn.close()
+
+
+def create_mapping(load_dest_id, template_id, target_table, column_map,
+                   write_mode='upsert', business_key=None):
+    """契约校验（覆盖/业务键/写入模式）在建时做；目标列存在性归预检。
+    透传模板（schema 无 fields）不可入库。UNIQUE(dest,tpl,table)→Conflict。"""
+    target_table = str(target_table or '').strip()
+    if not target_table:
+        raise BadRequest('目标表名不能为空')
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('SELECT id FROM extract_load_dest WHERE id=%s',
+                        (load_dest_id,))
+            if not cur.fetchone():
+                raise NotFound('目的地不存在')
+            _tpl_exists(cur, template_id)
+            cur.execute(
+                'SELECT tv.schema_json FROM extract_template_version tv'
+                ' JOIN extract_template t ON t.id=tv.template_id'
+                ' WHERE tv.template_id=%s AND tv.version=t.current_version',
+                (template_id,))
+            row = cur.fetchone()
+            sj = _j(row[0]) if row else None
+            fields = ([f.get('name') for f in sj.get('fields') or []]
+                      if isinstance(sj, dict) else [])
+            fields = [f for f in fields if f]
+            if not fields:
+                raise BadRequest('透传模板无固定目标字段，不可登记入库映射')
+            loader.validate_column_map(fields, column_map, write_mode,
+                                       business_key)
+            cur.execute('SELECT id FROM extract_load_mapping'
+                        ' WHERE load_dest_id=%s AND template_id=%s'
+                        ' AND target_table=%s',
+                        (load_dest_id, template_id, target_table))
+            if cur.fetchone():
+                raise Conflict('同目的地＋模板＋目标表的映射已存在')
+            cur.execute(
+                'INSERT INTO extract_load_mapping (load_dest_id, template_id,'
+                ' target_table, column_map_json, write_mode, business_key_json)'
+                ' VALUES (%s,%s,%s,%s,%s,%s)',
+                (load_dest_id, template_id, target_table,
+                 json.dumps(column_map, ensure_ascii=False), write_mode,
+                 json.dumps(business_key, ensure_ascii=False)
+                 if business_key else None))
+            conn.commit()
+            return cur.lastrowid
+    finally:
+        conn.close()
+
+
+def delete_mapping(mapping_id):
+    """被任务引用禁删 Conflict（入库意图的血缘完整）。"""
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('SELECT id FROM extract_load_mapping WHERE id=%s',
+                        (mapping_id,))
+            if not cur.fetchone():
+                raise NotFound('映射不存在')
+            cur.execute('SELECT COUNT(*) FROM extract_task'
+                        ' WHERE load_mapping_id=%s', (mapping_id,))
+            if cur.fetchone()[0]:
+                raise Conflict('该映射已被任务引用，禁止删除')
+            cur.execute('DELETE FROM extract_load_mapping WHERE id=%s',
+                        (mapping_id,))
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def set_task_load(task_id, dest_id, mapping_id):
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('UPDATE extract_task SET load_dest_id=%s,'
+                        ' load_mapping_id=%s WHERE id=%s',
+                        (dest_id, mapping_id, task_id))
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def add_load_log(task_id, task_file_id, record_index, load_dest_id,
+                 target_table, target_pk, action):
+    """幂等回执：唯一键已存在→跳过返回 False（单任务串行，先查后插无竞态）。"""
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('SELECT id FROM extract_load_log'
+                        ' WHERE task_file_id=%s AND record_index=%s'
+                        ' AND load_dest_id=%s AND target_table=%s',
+                        (task_file_id, record_index, load_dest_id,
+                         target_table))
+            if cur.fetchone():
+                return False
+            cur.execute(
+                'INSERT INTO extract_load_log (task_id, task_file_id,'
+                ' record_index, load_dest_id, target_table, target_pk, action)'
+                ' VALUES (%s,%s,%s,%s,%s,%s,%s)',
+                (task_id, task_file_id, record_index, load_dest_id,
+                 target_table, str(target_pk)[:255], action))
+            conn.commit()
+            return True
+    finally:
+        conn.close()
+
+
+def list_load_logs(task_id):
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('SELECT id, task_file_id, record_index, load_dest_id,'
+                        ' target_table, target_pk, action, loaded_at'
+                        ' FROM extract_load_log WHERE task_id=%s'
+                        ' ORDER BY task_file_id, record_index', (task_id,))
+            rows = _rows(cur)
+        for r in rows:
+            r['loaded_at'] = str(r['loaded_at'])
         return rows
     finally:
         conn.close()

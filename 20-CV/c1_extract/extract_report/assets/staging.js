@@ -47,7 +47,9 @@ function collectKeys(){
   });
   return out;
 }
-function readOnly(){ return !!(taskDoc&&taskDoc.state==='loaded'); }
+function readOnly(){
+  return !!(taskDoc&&['loading','partial','loaded'].indexOf(taskDoc.state)>=0);
+}
 function recState(r){ return (r.review||{}).state||'pending'; }
 function renderTable(){
   keys=collectKeys();
@@ -574,13 +576,21 @@ views.addEventListener('click',function(e){
 function loadStaging(){
   document.getElementById('err').hidden=true;
   var mb=document.getElementById('modebanner');
-  if(readOnly()){
+  var st=taskDoc&&taskDoc.state;
+  if(st==='loading'){
+    mb.className='banner info';
+    mb.textContent='入库进行中 · 记录只读（完成后自动刷新）';
+  }else if(st==='partial'){
+    mb.className='banner warn';
+    mb.textContent='任务部分入库 · 记录只读 · 可点「重新入库」重试无回执记录';
+  }else if(readOnly()){
     mb.className='banner warn';
     mb.textContent='任务已入库 · 记录只读（改值 / 确认 / 拒绝已锁定）';
   }else{
     mb.className='banner info';
     mb.textContent='双击单元格改值（自动转已修改）· ✓ 确认 · ✗ 拒绝 · 单击/悬停血缘回溯不变';
   }
+  updateLoadButtons();
   var u='/api/tasks/'+encodeURIComponent(task)+'/staging'+
     (curFile?('?file='+encodeURIComponent(curFile)):'');
   var eu='/api/tasks/'+encodeURIComponent(task)+'/extract'+
@@ -611,6 +621,48 @@ function loadStaging(){
     showErr('读取预览数据失败：'+e.message);
   });
 }
+
+/* ---- P2 手动入库闸门：仅 mode=load 且 previewed/partial 显示；
+   门禁计数由后端 409 兜底，点击后轮询任务态直至入库完成自动刷新。 ---- */
+var loadPoll=null;
+function updateLoadButtons(){
+  var lb=document.getElementById('loadbtn'), rb=document.getElementById('rcbtn');
+  var t=taskDoc||{}, isLoad=t.mode==='load'&&t.load;
+  lb.hidden=!(isLoad&&(t.state==='previewed'||t.state==='partial'));
+  lb.textContent=t.state==='partial'?'重新入库':'入库';
+  rb.hidden=!(isLoad&&(t.state==='loaded'||t.state==='partial'));
+}
+document.getElementById('loadbtn').onclick=function(){
+  var lb=this; lb.disabled=true;
+  fetch('/api/tasks/'+encodeURIComponent(task)+'/load',{method:'POST'})
+    .then(function(r){
+      return r.json().catch(function(){return {};}).then(function(j){
+        return {s:r.status,j:j};
+      });
+    }).then(function(o){
+      lb.disabled=false;
+      if(!o.j.ok){ showErr('不能入库：'+(o.j.error||('HTTP '+o.s))); return; }
+      document.getElementById('err').hidden=true;
+      var mb=document.getElementById('modebanner');
+      mb.className='banner info';
+      mb.textContent='入库进行中 · 记录只读（完成后自动刷新）';
+      taskDoc.state='loading'; renderTable(); updateLoadButtons();
+      clearInterval(loadPoll);
+      loadPoll=setInterval(function(){
+        fetch('/api/tasks/'+encodeURIComponent(task)).then(function(r){
+          return r.json();
+        }).then(function(j){
+          if(!j.task) return;
+          taskDoc=j.task;
+          if(taskDoc.state!=='loading'){
+            clearInterval(loadPoll); loadPoll=null;
+            loadStaging();
+          }
+        }).catch(function(){});
+      },1500);
+    }).catch(function(){ lb.disabled=false; showErr('入库请求失败：平台库不可用'); });
+};
+document.getElementById('rcbtn').onclick=function(){ openReceiptDrawer(task); };
 
 /* ---- 任务级台账（无 task 入口）：客户端搜索/筛选，与资料/任务页工具栏同构 ---- */
 var ledgerItems=[], lq='', lprog='';

@@ -85,14 +85,69 @@ function renderDetail(j){
       ps.map(function(k){return escHtml(k)+'='+escHtml(r.params[k]);}).join('<br>')+
       '</div></details>';
   }
+  var isLoad=r.mode==='load'&&r.load;
+  if(isLoad){
+    html+='<div class="msg" style="margin-top:10px">入库目的地 <b>'+
+      escHtml(r.load.dest_name||'—')+'</b> · 目标表 <code class="mono">'+
+      escHtml(r.load.target_table||'—')+'</code> · '+escHtml(r.load.write_mode||'')+
+      '</div><div class="msg" id="gateinfo" style="margin-top:4px"></div>';
+  }
   document.getElementById('dbody').innerHTML=html;
   var n=(r.files||[]).reduce(function(s,f){return s+(f.records_n||0);},0);
-  document.getElementById('dfoot').innerHTML=
-    '<span>共 '+(r.files||[]).length+' 个文件 · 暂存记录 '+n+' 条</span><span class="spacer" style="flex:1"></span>'+
-    '<span>校验编辑 P1 开放 · 入库 P2 开放</span>';
+  var foot='<span>共 '+(r.files||[]).length+' 个文件 · 暂存记录 '+n+' 条</span>'+
+    '<span class="spacer" style="flex:1"></span>';
+  if(isLoad){
+    if(r.state==='previewed'||r.state==='partial')
+      foot+='<button type="button" class="btn mini" id="loadbtn">'+
+        (r.state==='partial'?'重新入库':'入库')+'</button>';
+    if(r.state==='loaded'||r.state==='partial')
+      foot+='<button type="button" class="btn mini ghost" id="rcbtn">回执 / 隔离</button>';
+  }
+  document.getElementById('dfoot').innerHTML=foot;
+  var lb=document.getElementById('loadbtn');
+  if(lb) lb.onclick=function(){ doLoad(r.task_id,lb); };
+  var rb=document.getElementById('rcbtn');
+  if(rb) rb.onclick=function(){ openReceiptDrawer(r.task_id); };
+  if(isLoad&&(r.state==='previewed'||r.state==='partial')) loadGateInfo(r.task_id);
   clearTimeout(pollTimer);
   if(live&&live.running) pollTimer=setTimeout(function(){refreshDetail(r.task_id);},1500);
 }
+/* 门禁计数提示：仅全部 confirmed 可入库（后端 409 兜底，这里先给可见预期） */
+function loadGateInfo(taskId){
+  fetch('/api/tasks/'+taskId+'/staging').then(function(r){
+    if(!r.ok) throw new Error();
+    return r.json();
+  }).then(function(doc){
+    if(curTask!==taskId) return;
+    var el=document.getElementById('gateinfo');
+    if(!el) return;
+    var c={pending:0,edited:0,confirmed:0,rejected:0};
+    (doc.files||[]).forEach(function(f){
+      (f.records||[]).forEach(function(rec){
+        var s=(rec.review||{}).state||'pending';
+        if(c[s]!=null) c[s]++;
+      });
+    });
+    var blocked=c.pending+c.edited+c.rejected;
+    el.innerHTML=blocked?
+      ('门禁：待校验 '+c.pending+' · 已修改未确认 '+c.edited+' · 已拒绝 '+c.rejected+
+       ' · 已确认 '+c.confirmed+'（须全部确认）'):
+      ('门禁通过：全部 '+c.confirmed+' 条已确认，可入库');
+  }).catch(function(){});
+}
+function doLoad(taskId,btn){
+  btn.disabled=true;
+  fetch('/api/tasks/'+taskId+'/load',{method:'POST'}).then(function(r){
+    return r.json().catch(function(){return {};}).then(function(j){
+      return {s:r.status,j:j};
+    });
+  }).then(function(o){
+    if(!o.j.ok){ alert('不能入库：'+(o.j.error||('HTTP '+o.s))); btn.disabled=false; return; }
+    refreshDetail(taskId);
+  }).catch(function(){ alert('入库请求失败：平台库不可用'); btn.disabled=false; });
+}
+
+/* ---- 回执 / 隔离抽屉：共用 shell.js openReceiptDrawer ---- */
 function refreshDetail(taskId){
   fetch('/api/tasks/'+taskId).then(function(r){
     if(!r.ok) throw new Error();
@@ -115,7 +170,9 @@ function closeDetail(){
 document.getElementById('dclose').onclick=closeDetail;
 detail.addEventListener('click',function(e){ if(e.target===detail) closeDetail(); });
 document.addEventListener('keydown',function(e){
-  if(!detail.hidden&&e.key==='Escape') closeDetail();
+  if(e.key!=='Escape') return;
+  if(!detail.hidden) closeDetail();
+  closeReceiptDrawer();
 });
 
 load();
