@@ -454,6 +454,83 @@ P1b 模板消费＝选择器＋重命名（transform 留 P2）。
 
 ---
 
+## 〇.15、P2c 单一提取入口＋入库时绑定＋删迁移门禁（2026-11-21，已完成）
+
+设计稿 docs/design-p2c-load-entry.md（大白话版批准后实施）。三件事一轮做完：
+**P2c 功能改造**、**用户实测撞出的 run_load 首绑崩溃修复**、**schema_version
+事故→用户裁决「连门禁一起删」**。
+
+### A. P2c：提取就是提取，入库时再选目标
+
+1. **上传不再有模式**：upload/tasks_create 携带退役键
+   mode/load_datasource_id/load_table_id → 400「上传不再携带入库目标，
+   请在任务入库时选择」（防旧浏览器缓存，非兼容 shim）。上传页只剩
+   文件＋模板＋参数。
+2. **绑定只随一次成功的入库启动落库**（service.launch_load 单一接缝，
+   原 app._load_preflight 删除）：状态守卫→已绑定带 target 键 409
+   「已绑定入库目标，不可改（重试沿用原目标）」／未绑定必须带 target→
+   归属/模板匹配/透传 400、lt·ds 存在 404、loader.preflight→records→
+   review_gate 409→**全过才 set_task_load**→起线程。门禁/预检失败
+   **不留绑定**，下次随便另选——不需要专门改绑功能。partial 重试沿用
+   原绑定（回执键 ds×table 不变）。
+3. **extract_task.mode 列已删**（零成本窗口核过：当时 11 任务全 preview、
+   绑定 0、回执 0）：先查状态→整库备份 pre_p2c_20261121_222705.sql→
+   ALTER DROP COLUMN→守恒 PASS→脚本用完即删。
+4. **前端**：tasks「模式」列→「入库目标」（target_table·write_mode 或 —）、
+   fmode 筛选删；previewed 未绑定→「入库…」开抽屉；shell.js 新增共享
+   **openLoadTargetDrawer(taskId, templateId, onDone)**（与回执抽屉同构）：
+   数据源 select→映射 select（ds×templateId 双过滤）→门禁计数→提交；
+   0 候选引导去 /load；400/409 内联；选择内存保留（ltKeep，门禁失败
+   修完重开不必重选）。staging.js 同形改造。/load 页零改动。
+5. **run_load 首绑崩溃（用户实测撞出，已修）**：run_load 从**绑定前**取的
+   task 快照读 `task['load']['datasource_id']`，首次绑定 load=None →
+   TypeError 崩在 try 外 → STATE 卡 running=True、任务停在 previewed。
+   修复：`datasource_id = ds['id']`（launch_load 已解析的数据源行）。
+
+### B. schema_version 事故 → 裁决：连门禁一起删
+
+**事故链**：用户在 8765 实测入库，把测试数据写进了平台簿记表
+schema_version（映射 lt9 目标＝schema_version）；又在 DB 客户端把该表
+手动重建为 VARCHAR(255)（两份备份 20:12/22:27 均证明原为 INT 单行 (1)）。
+门禁 `_migrate` 拿 int 文件名编号比原始列值：VARCHAR 返回 str '1'，
+`1 in {'1'}` False → 重跑 001 → 非幂等 INSERT '1' → 1062 →
+**每次 db.connect 都 503，全平台瘫痪**。
+
+**用户裁决**（先拒「门禁加固」：「是不是给我增加了不必要的麻烦」；
+再「我不需要这个功能，给我彻底清理掉这些不必要的麻烦」；最终
+**「连门禁一起删」**，代价已告知：以后部署/升级须人工跑 SQL）：
+
+1. **db.py 门禁整体删除**：_migrate/_READY/_LOCK/migrate 参数全删，
+   connect()＝纯连接（不建表不迁移）；connect_direct 保留。
+   store/__init__、loader、check_env 文案同步。
+2. **001_baseline.sql 改人工安装脚本**：schema_version DDL 删除，
+   头部注明用法；全 IF NOT EXISTS＋INSERT IGNORE，重跑无副作用。
+   README 部署步骤加「2.5) 人工建表」。
+3. **库手术**（先整库备份 **pre_gate_removal_20261121_231838.sql** 32MB→
+   子级清净→DROP→守恒 PASS→脚本删）：任务 228（loaded，绑 lt9）全子级
+   删除（staging field/lineage 各 6→record 6→artifact 8→quarantine 12→
+   load_log 6→tf246→task）；**lt8、lt9 两条映射都指向 schema_version，
+   一并删**（lt8 无引用，lt9 仅 228 引用；字段行先清）；DROP TABLE
+   schema_version。**file 56 保留**（tasks 80/226 共享的真实文件）；
+   tasks 217–226、测试模板1、产品库/产品库2 全无损。
+4. **验收 item1 改写**（两套）：「迁移门禁幂等」→「连接零副作用」
+   （重开连接行数/字节零变更）；db._READY.clear() 等门禁引用全删。
+5. **教训（已入记忆）**：① 入库目标可选到平台系统表（loader 无守卫）——
+   祸根是拿簿记表当业务表，不是门禁本身；② 用户会在 DB 客户端手改平台表，
+   schema 漂移是真实故障模式；③ 跑套件期间不建议用户重启/重试（独占窗口
+   包括用户自己的 8765 操作）；④ 事故修复只做最小修复，不夹带加固。
+
+### C. 验证
+
+（套件/浏览器结果待补）
+
+- **8765**：须用户再重启一次。累计未载入：A 轮＋台账＋B 拆分＋P1b＋P2＋
+  P2b＋B 结构＋**P2c＋run_load 修复＋删门禁**。重启前：上传页旧控件提交
+  400、入库走旧契约；旧进程仍带门禁代码（视 _READY 缓存状态或 503 或
+  重建 schema_version 表）——**务必重启载入新代码**。
+
+---
+
 ## 一、C1 已完成（已验证）
 
 用户 5 项演进（2026-11-20 提出，全部批准落地）：
@@ -536,18 +613,24 @@ P1b 模板消费＝选择器＋重命名（transform 留 P2）。
 1. C1 存储演进＋任务化命名/去外键＋P1a 校验台＋小重构轮（A/B）＋UI 打磨轮
    ＋任务级台账/报告打磨/B 编排拆分轮＋校验台两处打磨轮＋三页紧凑规整统一轮
    ＋P1b 模板管理＋collect 选择器消费轮＋P2 入库模式轮＋P2b 入库数据源重构轮
-   ＋**B 结构清理轮（catalog 按域拆包＋web/ 资产迁移＋feature-map）**
-   均已完成：代码＋验收＋浏览器＋文档全部收尾（见 §〇.6–§〇.14）。
+   ＋B 结构清理轮＋**P2c 单一提取入口/入库时绑定＋run_load 首绑修复＋
+   删迁移门禁（schema_version 已 DROP，001 改人工安装脚本）**
+   均已完成：代码＋验收＋浏览器＋文档全部收尾（见 §〇.6–§〇.15）。
 2. 建议事项：**用户 8765 重启一次**——载入 A 轮错误分类＋台账任务级形状
    /api/staging/ledger＋B 拆分（app.py 路由 / service.py 引擎）＋P1b（模板 CRUD
    路由＋/templates 页＋collect 消费）＋P2（load 路由＋入库按钮＋回执抽屉）＋
-   P2b（数据源/映射新路由＋/load 左右页＋upload 新契约键）＋**B 结构清理
-   （web/ 静态挂载＋catalog 包）**。重启前校验入口台账报读取失败、nav「模板」
-   「入库」404 或旧页、选模板不生效、上传页入库模式报 400（旧契约键）、
-   **/static 404（资产已迁 web/，页面样式脚本缺失）**；其余页面正常。
-   另：**「产品库2」数据源行来源待用户确认**（§〇.14.5，未动不删）。
+   P2b（数据源/映射新路由＋/load 左右页）＋B 结构清理（web/ 静态挂载＋
+   catalog 包）＋**P2c（上传无模式＋入库目标抽屉＋mode 列已删）＋run_load
+   首绑修复＋删门禁（db.connect 纯连接）**。重启前：/static 404、nav 旧页、
+   上传页旧控件提交 400、入库走旧契约、旧门禁代码视缓存状态或 503 或
+   重建 schema_version。
+   另：**「产品库2」数据源行来源待用户确认**（§〇.14.5，未动不删）；
+   **tasks 217–225 卡 pending**（用户实测期重启孤儿，是否重跑由用户定）。
+   **警示：入库目标别选平台系统表**（loader 无守卫；schema_version 事故
+   根因，见 §〇.15.B；该表已删，但 extract_* 业务表同样不该当目标）。
 3. 新需求候选（设计先行，用户确认后执行）：**B 轮审计平台化**（reviewer 身份首补，
    load_log 记「谁入的库」）／隔离区解决 UI／多表 union／引擎升级研究
-   （Docling vs MinerU，未立项）。对外文案用「字段级溯源/审计追溯」，
+   （Docling vs MinerU，未立项）／入库目标守卫（禁选 extract_* 平台表，
+   小改可选）。对外文案用「字段级溯源/审计追溯」，
    UI「血缘回溯」保留（产品定位见项目记忆）。
 4. 其余沿用 §二挂起项。

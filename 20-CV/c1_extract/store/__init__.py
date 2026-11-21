@@ -7,7 +7,7 @@ content_db.py  暂存三表（record/field/lineage）读写与跨任务查询
 artifact.py    产物附件接缝（DB-only）
 artifact_db.py 产物附件 repo（MySQL BLOB，task_file 粒度）
 loader.py      目标业务库写入（连接/introspection/字段校验/写入/transform/门禁）
-db.py          薄驱动接口 + PyMySQL 实现 + conn_ref 解析 + 迁移执行器
+db.py          薄驱动接口 + PyMySQL 实现 + conn_ref 解析（建表人工跑 001）
 errors.py      类型化业务错误（StoreError.code → HTTP；DB 故障原样上抛 503）
 
 业务层只调 repo，不出现 SQL / 裸路径拼接；懒加载（import 不碰 DB）。

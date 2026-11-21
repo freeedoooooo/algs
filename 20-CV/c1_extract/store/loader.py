@@ -3,7 +3,7 @@ store/loader.py — 目标业务库写入（design-p2-load.md ＋ design-p2b-dat
 
 平台表 SQL 归 catalog；本模块只管目标库：introspection（information_schema
 只读）、预检、应用层 upsert 写入。目标库连接来自数据源行显式参数
-（connect_direct，不跑迁移）——绝不把平台表建进人家库。
+（connect_direct）——绝不把平台表建进人家库。
 数据源密码明文存库（2026-11-21 裁决），但日志永不打印/回显。
 
 纯函数（apply_transform/review_gate/validate_fields/write_record）无 DB 依赖，
@@ -29,7 +29,7 @@ def _ident(name):
 
 
 def connect_datasource(ds):
-    """数据源行 → 目标库连接（显式参数，不跑迁移）。连接失败原样上抛→503。"""
+    """数据源行 → 目标库连接（显式参数直连）。连接失败原样上抛→503。"""
     return db.connect_direct({
         'host': ds['host'], 'port': ds['port'], 'user': ds['user'],
         'password': ds['password'], 'database': ds['db_name']})

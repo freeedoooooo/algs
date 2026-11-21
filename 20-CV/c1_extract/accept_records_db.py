@@ -5,7 +5,7 @@ design-task-schema.md：DB 唯一事实源，task_id / task_file_id 粒度，无
 前置：C1_EXTRACT_DB 已配置（env 或 data/secrets.json，用户配置的库）。
 用法（从 20-CV）：D:/miniforge3/envs/paddle/python.exe -u c1_extract/accept_records_db.py
 
-1 迁移门禁幂等+真实 task 投影往返一致 · 2 重跑级联替换（应用层）· 3 patch/set_review ·
+1 连接零副作用+真实 task 投影往返一致 · 2 重跑级联替换（应用层）· 3 patch/set_review ·
 4 跨 task 查询 · 5 真链路（临时服务 8799，含 P1 校验路由冒烟）· 6 断库显式 503（临时服务 8797）·
 7 P2c 入库（合成目标表 _accept_p2_load＋合成模板/数据源/映射：上传不带模式、
 入库时绑定目标（预检/门禁失败不留绑定可换目标）、已绑定锁死 409、
@@ -341,7 +341,7 @@ def main():
     except LookupError as e:
         print(str(e))
         return 1
-    db.connect().close()  # 触发 001 baseline 迁移门禁
+    db.connect().close()  # 连通探针（纯连接，不建表不迁移）
     base0 = baseline()
     sweep_stale_scratch()
     syn_tasks, syn_fids, up = [], [], []
@@ -361,19 +361,12 @@ def main():
 
 
 def _main(syn_tasks, syn_fids, up, p2):
-    print('[1/7] 迁移门禁幂等 + 真实 task 投影往返一致')
+    print('[1/7] 连接零副作用 + 真实 task 投影往返一致')
     c0 = counts()
-    db._READY.clear()       # 强制重跑门禁：baseline 已应用，应零变更
-    conn = db.connect()
-    try:
-        with conn.cursor() as cur:
-            cur.execute('SELECT version FROM schema_version ORDER BY version')
-            vers = [r[0] for r in cur.fetchall()]
-    finally:
-        conn.close()
-    check('门禁重跑零变更 + schema baseline [1]',
-          counts() == c0 and vers == [1],
-          '{} vs {} · {}'.format(c0, counts(), vers))
+    db.connect().close()    # 纯连接：不得建表/写行（自动迁移门禁已删）
+    db.connect().close()
+    check('连接重开零变更', counts() == c0,
+          '{} vs {}'.format(c0, counts()))
     tv = catalog.get_template_version()
     real = []
     for task in catalog.list_tasks():

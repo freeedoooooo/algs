@@ -26,7 +26,7 @@ c1_extract/
 │   ├── artifact.py     产物附件接缝
 │   ├── artifact_db.py  产物 BLOB repo（task_file 粒度）
 │   ├── loader.py       目标业务库：连接/introspection/字段校验/写入/transform/门禁
-│   ├── db.py           conn_ref 解析＋迁移执行器＋connect_direct（目标库）
+│   ├── db.py           conn_ref 解析＋connect_direct（目标库）；纯连接不建表
 │   ├── errors.py       类型化业务错误（StoreError.code → HTTP）
 │   └── migrations/001_baseline.sql
 ├── pipeline/           提取引擎：engines/ocr/pdf/plain/ppstruct/resplit/structure/runner
@@ -70,7 +70,7 @@ c1_extract/
 | extract_load_datasource / extract_load_table(_field) / extract_load_log | store/catalog/load.py |
 | extract_staging_record / field / lineage | store/content_db.py（门面 content.py） |
 | extract_artifact | store/artifact_db.py（门面 artifact.py） |
-| schema_version | store/db.py 迁移执行器（migrations/001_baseline.sql） |
+| （建表/升级） | store/migrations/001_baseline.sql 人工安装脚本（无自动迁移器，2026-11-21 裁决删门禁） |
 
 ## 四、按命令查
 
@@ -86,7 +86,8 @@ c1_extract/
 ## 五、跨功能共享件（改一处动全身）
 
 - **service.py STATE/LOCK**：单任务串行闸门，上传/资料库发起/入库共用。
-- **store/db.py**：平台库凭据只经 conn_ref（C1_EXTRACT_DB）＋迁移门禁；
+- **store/db.py**：平台库凭据只经 conn_ref（C1_EXTRACT_DB）；建表/升级人工跑
+  migrations/001_baseline.sql（自动迁移门禁已删）；
   目标库走 connect_direct（数据源行参数，明文裁决仅限 load 数据源）。
 - **store/errors.py ＋ app.py 异常处理器**：StoreError→400/404/409，
   DB 故障→503，编程错误→500。

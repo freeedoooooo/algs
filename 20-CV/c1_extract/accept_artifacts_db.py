@@ -5,7 +5,7 @@ design-task-schema.md：DB 唯一事实源，附件键＝task_file_id，无外�
 前置：C1_EXTRACT_DB 已配置（env 或 data/secrets.json，用户配置的库）。
 用法（从 20-CV）：D:/miniforge3/envs/paddle/python.exe -u c1_extract/accept_artifacts_db.py
 
-1 迁移门禁幂等+读回 sha 自洽 · 2 真链路无持久磁盘+BLOB · 3 /files 路由/ETag/raw403 ·
+1 连接零副作用+读回 sha 自洽 · 2 真链路无持久磁盘+BLOB · 3 /files 路由/ETag/raw403 ·
 4 tasks/报告/暂存全查库 · 5 导出字节一致 · 6 断库显式 503。
 上传字节取自 extract_file.content；断库用不可达 DSN 的临时服务模拟，
 不触碰真实库可用性。破坏性操作只落临时 task 与临时导出目录，验完按 id 清理
@@ -241,7 +241,7 @@ def main():
     except LookupError as e:
         print(str(e))
         return 1
-    db.connect().close()  # 触发 001 baseline 迁移门禁
+    db.connect().close()  # 连通探针（纯连接，不建表不迁移）
     sweep_stale_scratch()
     up = []
     try:
@@ -256,11 +256,11 @@ def main():
 
 
 def _main(up):
-    print('[1/6] 迁移门禁幂等 + 读回 sha 自洽')
+    print('[1/6] 连接零副作用 + 读回 sha 自洽')
     c0 = art_counts()
-    db._READY.clear()       # 强制重跑门禁：baseline 已应用，应零变更
+    db.connect().close()    # 纯连接：不得建表/写行（自动迁移门禁已删）
     db.connect().close()
-    check('门禁重跑行数/字节不变', art_counts() == c0,
+    check('连接重开行数/字节不变', art_counts() == c0,
           '{} vs {}'.format(c0, art_counts()))
     conn = db.connect()
     try:

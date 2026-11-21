@@ -1,8 +1,9 @@
--- 001_baseline.sql — 平台库最终态基线（design-task-schema.md ＋ design-p2b-datasource.md）
+-- 001_baseline.sql — 平台库基线·人工安装脚本（design-task-schema.md ＋ design-p2b-datasource.md）
 -- 由历史迁移压缩而成：任务化命名（task/task_file/file/load_datasource）、
 -- 无外键约束（引用完整性与级联删除归应用层，见设计稿 §2）、表/列注释齐全。
 -- MySQL 8.x / InnoDB / utf8mb4，JSON 原生类型，时间 DATETIME（应用层 UTC）。
--- 注意：执行器按半角分号朴素切分，注释与 COMMENT 字符串内不得出现半角分号。
+-- 用法：部署新库或改表结构时人工对库执行（无自动迁移器，2026-11-21 裁决）。
+-- 全部 CREATE TABLE IF NOT EXISTS＋INSERT IGNORE，对已建库重跑无副作用。
 
 CREATE TABLE IF NOT EXISTS extract_file (
   id         BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '文件 ID',
@@ -173,11 +174,6 @@ CREATE TABLE IF NOT EXISTS extract_artifact (
   UNIQUE KEY uk_artifact (task_file_id, name),
   KEY idx_artifact_sha (sha256)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='产物附件：报告/图片/CSV/extract.json 全量 BLOB，键＝任务文件粒度';
-
-CREATE TABLE IF NOT EXISTS schema_version (
-  version    INT PRIMARY KEY COMMENT '已应用的迁移编号',
-  applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '应用时间（UTC）'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='迁移器版本簿记（非业务表）';
 
 -- 种子：内置模板「原始透传」（三个 JSON 空 = passthrough，不可删）
 INSERT IGNORE INTO extract_template (name, description, current_version)

@@ -24,8 +24,9 @@ uvicorn c1_extract.app:app --host 0.0.0.0 --port 8765 --workers 1
 ```
 
 - **平台库必选**：凭据经 conn_ref `C1_EXTRACT_DB`（环境变量或 `data/secrets.json`，
-  git 排除）解析，DSN 形如 `mysql://user:pass@host:3306/db`。首次连接自动跑迁移
-  （`store/migrations/001_baseline.sql`，schema_version 门禁）。DB 不可达：上传 503 不建任务、
+  git 排除）解析，DSN 形如 `mysql://user:pass@host:3306/db`。**建表/升级人工执行**
+  `store/migrations/001_baseline.sql`（无自动迁移器，2026-11-21 裁决删除；
+  脚本全 IF NOT EXISTS＋INSERT IGNORE，重跑无副作用）。DB 不可达：上传 503 不建任务、
   运行中写失败整任务 failed、读端点 503，不降级。
 - 加载大模型的服务建议 **workers=1**：多 worker 会各自加载一份模型，内存翻倍；要扩容应横向起多实例，前面挂 Nginx 反代。
 - 内置 `GET /healthz` 健康检查；配置（端口、模型、阈值、路径）集中在 `config.py`。
@@ -42,6 +43,10 @@ python -m pip install -r requirements.txt
 
 # 2) 配置平台库（二选一）
 #    环境变量 C1_EXTRACT_DB=mysql://...  或  data/secrets.json {"C1_EXTRACT_DB": "mysql://..."}
+
+# 2.5) 人工建表（无自动迁移器）：对平台库执行 store/migrations/001_baseline.sql
+#      mysql -h <host> -u <user> -p <db> < store/migrations/001_baseline.sql
+#      脚本全 IF NOT EXISTS＋INSERT IGNORE，已建库重跑无副作用；升级改表 likewise 人工执行
 
 # 3) 装完自检（只读、不加载模型，秒级）
 python check_env.py
@@ -107,9 +112,9 @@ c1_extract/
 ├── accept_artifacts_db.py     产物入库六项验收（两套脚本严禁并行）
 ├── export_artifacts.py        DB → 磁盘树按需导出（file:// 直开 / 审计 / 迁移）
 ├── store/                     存储层（DB 唯一事实源）
-│   ├── db.py                  驱动接缝 + conn_ref 解析 + 迁移执行器
+│   ├── db.py                  驱动接缝 + conn_ref 解析（纯连接，不建表）
 │   ├── errors.py              类型化业务异常（StoreError/BadRequest/NotFound/Conflict→HTTP 码）
-│   ├── migrations/            001_baseline.sql 单基线（schema_version 门禁，首连自动跑）
+│   ├── migrations/            001_baseline.sql 人工安装脚本（部署/改表时手动对库跑）
 │   ├── catalog/               目录元数据 repo，按业务域拆分（__init__ 全量重导出，
 │   │   │                      调用方 catalog.xxx() 不感知边界）
 │   │   ├── files.py           源文件域（extract_file ＋ content 原件字节）
@@ -396,8 +401,8 @@ D:\miniforge3\envs\paddle\python.exe -u c1_extract/accept_records_db.py
 D:\miniforge3\envs\paddle\python.exe -u c1_extract/accept_artifacts_db.py
 ```
 
-各六项契约：records＝迁移门禁幂等+投影往返 / 重跑级联 / patch / 跨任务查询 /
-真链路（8799）/ 断库 503（8797 不可达 DSN）；artifacts＝门禁幂等+sha 自洽 /
+各六项契约：records＝连接零副作用+投影往返 / 重跑级联 / patch / 跨任务查询 /
+真链路（8799）/ 断库 503（8797 不可达 DSN）；artifacts＝连接零副作用+sha 自洽 /
 真链路无持久磁盘+BLOB / /files mime+ETag 304+raw 403 / tasks+报告+暂存全查库 /
 导出逐字节一致+records 重建 / 断库 503。破坏性操作只落合成 task，验完按 id 清理
 （应用层级联：先子表后父表）；真实 task/file 只读；用户的 8765 全程不动。

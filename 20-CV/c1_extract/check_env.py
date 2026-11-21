@@ -99,7 +99,7 @@ def check_models():
 def check_platform_db():
     """平台库（MySQL）连通性：必选项（DB 唯一事实源，不通＝服务不可用）。
 
-    只读探针（SELECT VERSION()，不触发迁移、不写库）；只回显脱敏 host/库名，
+    只读探针（SELECT VERSION()，不写库）；只回显脱敏 host/库名，
     凭据永不打印。未配引用 / 连不上 → FAIL。
     """
     ref = config.PLATFORM_DB_REF
