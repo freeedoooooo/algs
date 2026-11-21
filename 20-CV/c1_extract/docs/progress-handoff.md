@@ -27,10 +27,12 @@ run / run_file / source_file / 001-006 等旧命名仅存档意义，**当前代
 - 验收：两套脚本各 **6/6 PASS**（顺序跑，严禁并行）；浏览器验证 tasks/staging/
   sources/上传金路径全过；用户 8765 跑新代码真实上传成功（task 41/42）。
 - **当前库态**：task 21/30/41/42 全 previewed；file 3/19/26（建行/交行/招行流水）。
-- **环境已知缺口**（与本轮无关，未修）：paddlex 3.7.2 缺 `[ocr]` extra，
-  **图片/扫描件路线 PP-StructureV3 建管线报 DependencyError**；有文本层 PDF 与
-  CSV/TXT 路线不受影响。修法：`pip install "paddlex[ocr]==3.7.2"`（须用户确认，
-  可能牵动 opencv 等锁版本）。
+- **环境缺口已修（2026-11-21，用户批准）**：paddlex 3.7.2 原只装 `[ocr-core]`，
+  图片/扫描件路线 PP-StructureV3 门禁要完整 `[ocr]` extra（21 包）→ 已
+  `pip install "paddlex[ocr]==3.7.2"` 补齐 13 缺失包，requirements.txt 同步改
+  `paddlex[ocr]`；paddlepaddle/numpy/opencv-contrib 锁版本零变动。
+  **运行中的 8765 进程须重启才生效**（deps.is_dep_available 有 lru_cache，
+  旧进程缓存了「缺包」判定）。
 - **git 历史凭据警告**：secrets.json 与 pre_005/pre_006 备份曾被 git 跟踪
   （含 DB 密码与真实流水），已 `git rm --cached` + .gitignore 排除，但**历史仍在**；
   仓库若公开应轮换凭据并清历史（filter-repo）。

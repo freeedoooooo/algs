@@ -16,13 +16,15 @@ jinja2==3.1.6                     # 对照报告 HTML 模板渲染（extract_rep
 # StaticFiles / FileResponse 在 Starlette 1.x 用 anyio，也不需要 aiofiles。
 
 # ---- Paddle 推理（核心，体积最大）----
-# paddleocr 3.7.0 只声明 paddlex[ocr-core]，并不会装 paddlepaddle，必须显式列出。
+# paddleocr 3.7.0 只声明 paddlex[ocr-core]（仅够 OCR 文字识别），并不会装 paddlepaddle。
+# 图片/扫描件路线的 PP-StructureV3 门禁要完整 ocr extra（21 包，含公式/表格后处理依赖），
+# 故显式装 paddlex[ocr]；ocr-core 是其子集，opencv-contrib 等锁版本不变。
 paddlepaddle==3.2.0
 paddleocr==3.7.0
-paddlex[ocr-core]==3.7.2          # 约束：>=3.7.0,<3.8.0，与 paddleocr 必须同代
+paddlex[ocr]==3.7.2               # 约束：>=3.7.0,<3.8.0，与 paddleocr 必须同代
 
 # ---- 图像处理 ----
-# 注意：cv2 来自 opencv-contrib-python（paddlex 的 ocr-core extra 指定），
+# 注意：cv2 来自 opencv-contrib-python（paddlex 的 ocr extra 指定），
 #       不是 opencv-python；两个都装会造成 cv2 冲突。
 opencv-contrib-python==4.10.0.84
 numpy==2.2.6

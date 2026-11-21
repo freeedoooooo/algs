@@ -53,7 +53,8 @@ uvicorn c1_extract.app:app --host 0.0.0.0 --port 8765 --workers 1    # 生产式
 `requirements.txt` 锁的是本机实测版本，几个容易踩的点：
 
 - `paddleocr 3.7.0` **不声明 paddlepaddle**，必须单独安装；GPU 机器把 `paddlepaddle==3.2.0` 换成对应 CUDA 版 `paddlepaddle-gpu`。
-- `cv2` 来自 `opencv-contrib-python==4.10.0.84`（paddlex 的 `ocr-core` extra 指定），**不是** `opencv-python`，两个都装会冲突。
+- `cv2` 来自 `opencv-contrib-python==4.10.0.84`（paddlex 的 `ocr` extra 指定），**不是** `opencv-python`，两个都装会冲突。
+- `paddlex[ocr]`（不是 `[ocr-core]`）：图片/扫描件路线的 PP-StructureV3 依赖门禁要完整 ocr extra；ocr-core 只够 PDF 文本层路线的 OCR 文字识别。
 - 上传走 base64 JSON，所以不需要 `python-multipart`；Starlette 1.x 的静态文件也不需要 `aiofiles`。
 - `pdfplumber` / `PyMuPDF` 是本项目自己用的，paddle 不带，别漏。
 - `jinja2` 渲染报告 HTML 模板（`extract_report/templates/`），纯 Python 无二进制依赖。
