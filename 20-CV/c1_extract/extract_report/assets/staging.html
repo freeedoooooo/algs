@@ -26,16 +26,21 @@
     <span class="mono" id="tasktag"></span>
     <span id="tplbadge"></span>
     <span class="spacer"></span>
+    <div class="toolbar" id="ledgerbar" hidden>
+      <input type="search" id="lq" placeholder="搜索任务 id / 文件名 / 模板…">
+      <select id="lprog">
+        <option value="">全部进度</option>
+        <option value="todo">有待校验</option>
+        <option value="edited">有已修改</option>
+        <option value="done">校验完</option>
+      </select>
+    </div>
     <span id="filelinks"></span>
     <a class="btn ghost mini" id="tasklink" href="/tasks">返回</a>
   </div>
   <div class="banner info" id="modebanner">双击单元格改值（自动转已修改）· ✓ 确认 · ✗ 拒绝 · 单击/悬停血缘回溯不变</div>
   <div class="banner err" id="err" hidden></div>
   <div class="panel" id="taskpick" hidden>
-    <div class="pickbar">
-      <b>校验台账</b>
-      <span class="hint">按任务汇总校验进度 · 点任务行展开文件 · 点文件行进入校验台 · 也可从「任务」页详情进入</span>
-    </div>
     <div class="listwrap ledgerwrap">
       <table class="list" id="ledger" hidden>
         <thead><tr>

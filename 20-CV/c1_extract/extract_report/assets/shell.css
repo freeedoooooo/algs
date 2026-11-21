@@ -3,7 +3,7 @@
    调色板与 upload.css 一致：#2563eb 主色 / #f4f6fa 底 / #e2e7f0 边框。 */
 *{box-sizing:border-box}
 body{margin:0;background:#f4f6fa;color:#1f2738;
-  font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+  font:14px/1.5 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
 a{color:#2563eb;text-decoration:none}
 button{font:inherit;cursor:pointer}
 
@@ -22,23 +22,23 @@ button{font:inherit;cursor:pointer}
 .topnav .navnote{font-size:11px;color:#5c6a82;white-space:nowrap}
 
 /* ---- 列表页主体 ---- */
-.pagebody{max-width:1180px;margin:0 auto;padding:18px 20px 40px}
-.pagehead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
-.pagehead h1{font-size:17px;font-weight:600;margin:0;color:#25324a}
+.pagebody{max-width:1180px;margin:0 auto;padding:14px 18px 28px}
+.pagehead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.pagehead h1{font-size:16px;font-weight:600;margin:0;color:#25324a}
 .pagehead .spacer{flex:1}
 .pagehead .sub{font-size:12px;color:#6b7688}
 .toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .toolbar input[type=search],.toolbar input[type=text],.toolbar select{
-  font:inherit;font-size:13px;padding:6px 10px;border:1px solid #cbd5e1;
-  border-radius:7px;background:#fff;color:#1f2738}
+  font:inherit;font-size:13px;padding:5px 9px;border:1px solid #cbd5e1;
+  border-radius:6px;background:#fff;color:#1f2738}
 .toolbar input[type=search]{width:220px}
-.btn{font-size:13px;padding:6px 16px;border-radius:7px;border:1px solid #2563eb;
+.btn{font-size:13px;padding:5px 14px;border-radius:6px;border:1px solid #2563eb;
   background:#2563eb;color:#fff}
 .btn:hover{background:#1d4fd7}
 .btn:disabled{background:#b9c6dd;border-color:#b9c6dd;cursor:not-allowed}
 .btn.ghost{background:#fff;color:#2563eb}
 .btn.ghost:hover{background:#f0f6ff}
-.btn.mini{font-size:12px;padding:3px 10px;border-radius:6px}
+.btn.mini{font-size:12px;padding:2px 9px;border-radius:6px}
 .btn.danger{border-color:#e2e7f0;background:#fff;color:#b42318}
 .btn.danger:hover{border-color:#b42318;background:#fdecea}
 .linkbtn{font-size:12px;color:#2563eb;background:none;border:0;padding:2px 6px;
@@ -51,21 +51,21 @@ button{font:inherit;cursor:pointer}
 .panel{background:#fff;border:1px solid #e2e7f0;border-radius:10px;overflow:hidden}
 table.list{width:100%;border-collapse:collapse;font-size:13px}
 table.list th{font-size:12px;font-weight:500;color:#6b7688;text-align:left;
-  padding:8px 12px;background:#f7f9fd;border-bottom:1px solid #e2e7f0;
+  padding:6px 10px;background:#f7f9fd;border-bottom:1px solid #e2e7f0;
   white-space:nowrap}
-table.list td{padding:7px 12px;border-bottom:1px solid #eef2f8;vertical-align:middle}
+table.list td{padding:5px 10px;border-bottom:1px solid #eef2f8;vertical-align:middle}
 table.list tr:last-child td{border-bottom:0}
 table.list tbody tr:hover{background:#f7f9fd}
 table.list .num{font-variant-numeric:tabular-nums;white-space:nowrap}
-table.list .namecell{display:flex;align-items:center;gap:9px;min-width:0}
+table.list .namecell{display:flex;align-items:center;gap:8px;min-width:0}
 table.list .namecell .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   max-width:340px;color:#25324a}
-.empty{padding:34px 16px;text-align:center;color:#8a94a6;font-size:13px}
+.empty{padding:24px 16px;text-align:center;color:#8a94a6;font-size:13px}
 .empty b{display:block;color:#5a6a85;font-weight:500;margin-bottom:6px}
 
 /* ---- 缩略图（40×40 内嵌文件名行；图片点击放大，文件角标新窗口） ---- */
-.thumb{width:40px;height:40px;object-fit:cover;border:1px solid #e2e7f0;
-  border-radius:6px;cursor:pointer;background:#fff;flex:none}
+.thumb{width:28px;height:28px;object-fit:cover;border:1px solid #e2e7f0;
+  border-radius:5px;cursor:pointer;background:#fff;flex:none}
 .thumb.file{display:flex;align-items:center;justify-content:center;
   color:#6b7688;font-size:10px;font-weight:600;text-decoration:none}
 .thumb.file:hover,img.thumb:hover{border-color:#2563eb;color:#2563eb}
@@ -82,7 +82,7 @@ table.list .namecell .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowr
 
 /* ---- 提示横幅（降级/只读/错误） ---- */
 .banner{display:flex;align-items:center;gap:8px;font-size:12px;
-  padding:8px 14px;border-radius:8px;margin-bottom:12px}
+  padding:6px 12px;border-radius:7px;margin-bottom:10px}
 .banner.warn{background:#fdf3d7;color:#92600a;border:1px solid #f2dfae}
 .banner.info{background:#e7f0ff;color:#2563eb;border:1px solid #c9dcff}
 .banner.err{background:#fdecea;color:#b42318;border:1px solid #f4c7c3}
@@ -90,7 +90,7 @@ table.list .namecell .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowr
 
 /* ---- 分页 ---- */
 .pager{display:flex;align-items:center;gap:10px;justify-content:flex-end;
-  padding:10px 12px;font-size:12px;color:#6b7688}
+  padding:8px 10px;font-size:12px;color:#6b7688}
 .pager button{font-size:12px;padding:3px 12px;border-radius:6px;
   border:1px solid #cbd5e1;background:#fff;color:#2563eb}
 .pager button:disabled{color:#b9c6dd;cursor:not-allowed}
@@ -101,13 +101,13 @@ table.list .namecell .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowr
 .drawer[hidden]{display:none}
 .drawer .dpanel{width:min(560px,94vw);height:100%;background:#fff;
   box-shadow:-6px 0 28px rgba(20,30,60,.2);display:flex;flex-direction:column}
-.drawer .dhead{display:flex;align-items:center;gap:10px;padding:12px 16px;
+.drawer .dhead{display:flex;align-items:center;gap:10px;padding:10px 14px;
   border-bottom:1px solid #e2e7f0;flex:none}
 .drawer .dhead h2{font-size:15px;font-weight:600;margin:0;color:#25324a}
 .drawer .dhead .spacer{flex:1}
-.drawer .dbody{flex:1;min-height:0;overflow:auto;padding:12px 16px}
+.drawer .dbody{flex:1;min-height:0;overflow:auto;padding:10px 14px}
 .drawer .dfoot{flex:none;display:flex;align-items:center;gap:10px;
-  padding:10px 16px;border-top:1px solid #e2e7f0;font-size:12px;color:#6b7688}
+  padding:8px 14px;border-top:1px solid #e2e7f0;font-size:12px;color:#6b7688}
 .dclose{font-size:12px;padding:4px 12px;border-radius:6px;border:1px solid #cbd5e1;
   background:#fff;color:#5a6a85}
 .dclose:hover{border-color:#2563eb;color:#2563eb}

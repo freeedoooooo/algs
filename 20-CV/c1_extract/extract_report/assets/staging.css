@@ -2,7 +2,7 @@
    + 源图回溯框双向血缘侧栏 + 筛选 chips / 任务级校验台账。
    舞台公共样式（框/视图切换/翻页胶囊/全屏浮层/光标提示）在 stage.css，先于本文件加载。 */
 .pagebody.wide{max-width:1500px}
-.filetabs{display:flex;align-items:center;gap:4px;margin-bottom:10px;
+.filetabs{display:flex;align-items:center;gap:4px;margin-bottom:8px;
   overflow-x:auto;padding-bottom:2px}
 .filetabs[hidden]{display:none}
 .ftab{flex:none;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
@@ -24,7 +24,7 @@
 .lineage{flex:none;width:560px;max-width:46vw;max-height:calc(100vh - 210px);
   display:flex;flex-direction:column;position:sticky;top:12px;overflow:auto}
 .lineage[hidden]{display:none}
-.lhead{display:flex;align-items:center;gap:8px;padding:9px 12px;
+.lhead{display:flex;align-items:center;gap:8px;padding:7px 10px;
   border-bottom:1px solid #e2e7f0;font-size:13px;color:#25324a}
 .lhead b{font-weight:600}
 .lsub{flex:1;font-size:11px;color:#8a94a6;font-weight:400}
@@ -56,7 +56,7 @@
     writing-mode:horizontal-tb;letter-spacing:normal}
 }
 /* 任务级校验台账（无 task 参数入口）：任务行汇总，展开文件子行 */
-.ledgerwrap{max-height:62vh;overflow:auto;border-top:1px solid #eef2f8}
+.ledgerwrap{max-height:62vh;overflow:auto}
 #ledgerrows tr{cursor:pointer}
 #ledgerrows tr:hover{background:#f3f7fd}
 #ledgerrows td.led-edited{color:#b45309;font-weight:600}
@@ -68,7 +68,7 @@ tr.led-task.open .led-caret{transform:rotate(90deg)}
 .led-subname{padding-left:14px}
 
 /* P1 校验台：筛选 chips / 批量确认 / 双击改值 / 改值标记 / 行操作 / 台账入口 */
-.reviewbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px}
+.reviewbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 8px}
 .reviewbar[hidden]{display:none}
 .reviewbar .spacer{flex:1}
 .chips{display:flex;gap:4px;flex-wrap:wrap}
@@ -85,5 +85,3 @@ td.cell.edited{box-shadow:inset 0 -2px 0 #d8970a}
 .rowbtn.ok:hover{border-color:#0f9d6e;color:#0f9d6e;background:#e5f6ec}
 .rowbtn.no:hover{border-color:#b42318;color:#b42318;background:#fdecea}
 #taskpick{margin-bottom:12px}
-.pickbar{display:flex;align-items:center;gap:10px;padding:12px 14px;font-size:13px;flex-wrap:wrap}
-.pickbar .hint{font-size:12px;color:#8a94a6}
