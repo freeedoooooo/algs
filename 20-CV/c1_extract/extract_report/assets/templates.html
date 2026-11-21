@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>提取模板 · 结构化平台</title>
+<link rel="stylesheet" href="/static/shell.css">
+<link rel="stylesheet" href="/static/templates.css">
+</head>
+<body>
+<nav class="topnav">
+  <span class="brand">结构化平台</span>
+  <a href="/">提取</a>
+  <a href="/sources">资料</a>
+  <a href="/templates" class="on">模板</a>
+  <a href="/staging">校验</a>
+  <a class="off" title="P2 开放">入库</a>
+  <a href="/tasks">任务</a>
+  <span class="spacer"></span>
+  <span class="navnote">P1 · 模板管理</span>
+</nav>
+<div class="pagebody">
+  <div class="pagehead">
+    <h1>提取模板</h1>
+    <span class="spacer"></span>
+    <div class="toolbar">
+      <input type="search" id="q" placeholder="搜索模板名 / 说明…">
+      <button type="button" class="btn" id="newbtn">新建模板</button>
+    </div>
+  </div>
+  <div class="banner err" id="err" hidden></div>
+  <div class="banner info" id="ok" hidden></div>
+  <div class="panel">
+    <table class="list">
+      <thead><tr>
+        <th>模板名</th><th>说明</th><th>当前版本</th><th>版本数</th>
+        <th>更新时间</th><th>操作</th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="empty" hidden>
+      <b>没有匹配的模板</b>
+      点右上「新建模板」定义目标字段与源列映射；无需映射时用内置「原始透传」。
+    </div>
+  </div>
+</div>
+<div class="drawer wide" id="edit" hidden>
+  <div class="dpanel">
+    <div class="dhead">
+      <h2 id="etitle">新建模板</h2>
+      <span id="everbadge"></span>
+      <span class="spacer"></span>
+      <button type="button" class="dclose" id="eclose">关闭 (Esc)</button>
+    </div>
+    <div class="dbody">
+      <div class="fsec">
+        <label class="flab" for="ename">模板名</label>
+        <input type="text" class="tin" id="ename" placeholder="如：银行流水 · 明细字段">
+      </div>
+      <div class="fsec">
+        <label class="flab" for="edesc">说明（可选）</label>
+        <input type="text" class="tin" id="edesc" placeholder="用途 / 适用文件…">
+      </div>
+      <div class="fsec">
+        <label class="flab" for="refsel">参考文件（可选，辅助选表选列）</label>
+        <select class="tin" id="refsel">
+          <option value="">不用参考（手填源表）</option>
+        </select>
+        <div class="hint" id="refhint">选一个已预览任务的文件，列出其候选源表与源列。</div>
+      </div>
+      <div class="fsec">
+        <label class="flab" for="tblsel">源表（单表 / 版本）</label>
+        <select class="tin" id="tblsel" disabled>
+          <option value="">—</option>
+        </select>
+        <span id="tmanual">
+          <input type="number" class="tin tidx" id="tindex" min="0" placeholder="表序号">
+          <input type="text" class="tin tkw" id="tkw" placeholder="或表头关键词（取第一张命中）">
+        </span>
+        <div class="hint">序号＝候选表顺序：各页非合并表在前，跨页合并表在后。</div>
+      </div>
+      <div class="fsec">
+        <label class="flab">字段映射（目标字段名 ← 源列）</label>
+        <div id="frows"></div>
+        <button type="button" class="btn mini ghost" id="addfield">＋添加字段</button>
+        <div class="hint">目标字段名＝记录键（未来入库列）；源列可按键名或列序号。保存即生成不可变新版本。</div>
+      </div>
+      <div class="fsec" id="versec" hidden>
+        <label class="flab">版本历史</label>
+        <div id="verlist"></div>
+      </div>
+    </div>
+    <div class="dfoot">
+      <span class="msg" id="emsg"></span>
+      <span class="spacer"></span>
+      <button type="button" class="btn danger" id="delbtn" hidden>删除模板</button>
+      <button type="button" class="btn" id="savebtn">保存为新版本</button>
+    </div>
+  </div>
+</div>
+<script src="/static/shell.js"></script>
+<script src="/static/templates.js"></script>
+</body>
+</html>

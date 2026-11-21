@@ -88,7 +88,10 @@ def resolve_template(version_id=None):
     if not tv:
         raise RuntimeError('平台库无可用模板版本')
     return {'name': tv['name'], 'version': tv['version'],
-            'version_id': tv['id']}
+            'version_id': tv['id'],
+            'schema_json': tv['schema_json'],
+            'mapping_json': tv['mapping_json'],
+            'transform_json': tv['transform_json']}
 
 
 def launch(paths, params, warns, ctx, mode='preview', tpl=None):
@@ -240,9 +243,9 @@ def task_batch(paths, params=None, log=None, task_ctx=None):
             report_mod.build([rec],
                              os.path.join(case_abs, config.EXTRACT_REPORT_NAME),
                              params=params)
-            # L2 记录层：passthrough 收集 + 逐格血缘 → DB 三表（事实源）
+            # L2 记录层：按模板分发（空映射=passthrough）+ 逐格溯源 → DB 三表
             tpl = task_ctx['template']
-            recs = collect.passthrough(rec)
+            recs = collect.build(rec, tpl)
             rdoc = collect.build_records_doc(
                 rec, recs, task_id=task_ctx.get('task_id'),
                 task_file_id=fc.get('task_file_id'),
@@ -251,8 +254,10 @@ def task_batch(paths, params=None, log=None, task_ctx=None):
             content.save_records(rdoc)
             fc['records_n'] = len(recs)
             fc['state'] = 'previewed'
-            log.ok('collect', '暂存记录 {} 条（passthrough · 逐格血缘）'.format(
-                len(recs)), case=name)
+            nfields = len((tpl.get('mapping_json') or {}).get('fields') or [])
+            log.ok('collect', '暂存记录 {} 条（{} · 逐格溯源）'.format(
+                len(recs), '映射 {} 字段'.format(nfields) if nfields
+                else 'passthrough'), case=name)
             if fc.get('task_file_id'):
                 db('set_task_file_state', fc['task_file_id'], 'previewed')
                 _ingest_case(fc['task_file_id'], case_abs)

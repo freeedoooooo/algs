@@ -196,6 +196,11 @@ def staging_page():
     return HTMLResponse(asset('staging.html'))
 
 
+@app.get('/templates', response_class=HTMLResponse)
+def templates_page():
+    return HTMLResponse(asset('templates.html'))
+
+
 @app.get('/healthz')
 def health():
     return {'ok': True, 'service': 'c1-extract',
@@ -362,6 +367,57 @@ def api_sources_del(file_id: int):
 @app.get('/api/templates')
 def api_templates():
     return {'items': _load('store.catalog').list_templates()}
+
+
+@app.post('/api/templates')
+async def api_templates_add(request: Request):
+    body = await _json_body(request)
+    vid = _load('store.catalog').create_template(
+        body.get('name'), body.get('description'),
+        body.get('schema'), body.get('mapping'))
+    return {'ok': True, 'version_id': vid}
+
+
+@app.get('/api/templates/{template_id}')
+def api_template_get(template_id: int):
+    return _load('store.catalog').get_template(template_id)
+
+
+@app.patch('/api/templates/{template_id}')
+async def api_template_patch(template_id: int, request: Request):
+    body = await _json_body(request)
+    _load('store.catalog').update_template(
+        template_id, name=body.get('name'),
+        description=body.get('description'),
+        current_version=body.get('current_version'))
+    return {'ok': True}
+
+
+@app.delete('/api/templates/{template_id}')
+def api_template_del(template_id: int):
+    _load('store.catalog').delete_template(template_id)
+    return {'ok': True}
+
+
+@app.get('/api/templates/{template_id}/versions')
+def api_template_versions(template_id: int):
+    return {'items': _load('store.catalog').list_versions(template_id)}
+
+
+@app.get('/api/templates/{template_id}/versions/{version_id}')
+def api_template_version_get(template_id: int, version_id: int):
+    tv = _load('store.catalog').get_template_version(version_id=version_id)
+    if not tv or tv['template_id'] != template_id:
+        raise _load('store.errors').NotFound('模板版本不存在')
+    return tv
+
+
+@app.post('/api/templates/{template_id}/versions')
+async def api_template_version_add(template_id: int, request: Request):
+    body = await _json_body(request)
+    vid = _load('store.catalog').create_version(
+        template_id, body.get('schema'), body.get('mapping'))
+    return {'ok': True, 'version_id': vid}
 
 
 @app.get('/api/tasks')
