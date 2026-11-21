@@ -157,7 +157,7 @@ P1b 模板消费＝选择器＋重命名（transform 留 P2）。
 
 ---
 
-## 〇.9、校验台按钮层级＋血缘细竖条（2026-11-21，已完成；用户三条×两轮迭代）
+## 〇.9、校验台按钮层级＋血缘细竖条＋序号/标题微调（2026-11-21，已完成；三轮迭代）
 
 1. **任务页「预览数据」→校验台是刻意设计**（P1a 裁决：暂存页原地升级成校验台，
    不另建预览页）。用户问是否刻意→答是；「文案暗示只读、实际可改值」的盲点已提出，
@@ -170,15 +170,26 @@ P1b 模板消费＝选择器＋重命名（transform 留 P2）。
    终态＝**默认收起成右侧 34px 细竖条**（用户裁决）：`.lineage.collapsed`
    width/max-width:34px＋align-self:stretch（随表格等高）＋lhead 竖排
    （#ltitle/.ltoggle writing-mode:vertical-rl，隐藏 .stage/.lsub/.lhint）；
-   整条竖栏可点展开（lhead 委托），展开态仅「收起 ▴」钮折叠；
+   整条竖栏可点展开（lhead 委托），展开态仅箭头钮折叠；
    **点单元格/行自动弹出**（pinField/selectRecord 调 showLineage()）；
    收起时 clearSel＋closeLb；换文件保留折叠偏好；窄屏 media 回退横条。
-   按钮 `btn ghost mini ltoggle`（id ltoggle，收起 ▴／展开＋aria-expanded）。
+   按钮 `btn ghost mini ltoggle`（id ltoggle）＝**左右小箭头**（第三轮用户裁决，
+   取代文字「收起/展开」）：收起态 ‹（title 展开血缘回溯）／展开态 ›（title 收起），
+   竖条内 writing-mode:horizontal-tb 保持横排；aria-expanded 同步。
    staging.css 局部 .dclose 覆盖已删（shell.css 共享 .dclose 仍供任务/上传页使用，未动）。
+4. **第三轮三条微调**：① 箭头见上；② **ltitle 去冗余**——恒为「血缘回溯」，
+   选中记录号只在 lsub 显示一次（`页N · 原图/矫正图 · 选中记录 #N`／未选 `· 全表`），
+   不再「记录 #N 血缘回溯」重复；③ **显示序号 1 起**——renderTable idx 格与
+   `recordNo(i)`（框提示/lsub）统一 `(r.index==null?i:r.index)+1`；
+   **data-i 与 PATCH/review API 下标仍 0 起**（契约未动）；报告页本就 1 起，无需改。
 - **验证**：node --check；8799 只读浏览器：默认 34×943 竖条＋表格 1044 全宽、三页图
   仍预加载（展开瞬时）；点格弹出 527px＋钉住框 1＋胶囊 18px/262px 图高 714 零位移；
   竖条点击/按钮/点格三路展开全通；光箱开→收起即关；task42 换页签保留折叠；
   返回 href=/tasks?task=21；控制台零消息；截图确认默认/展开两态。
+  第三轮 DOM 级复核（8799 task21/file25，只读未 PATCH）：idx 首=1 尾=29 共 29、
+  recordNo(0)=1、框提示「记录 #1」、data-i=0 且 API index=0 不变；竖条 arrow=‹
+  title=展开·w=34·横排；点格后 arrow=› title=收起·lsub「选中记录 #1」·ltitle 恒「血缘回溯」；
+  再收起 arrow=‹；控制台零消息（视口隐藏未截图，DOM 断言为准）。
   **本轮纯前端页面资产**（staging.html/css/js）：builder 只内联 stage/report 资产，
   报告 BLOB 与后端零改动→两套验收无回归面，未重跑（node＋浏览器金路径为准）。
 - **8765**：/static 即时生效，本轮改动无需重启即可见。

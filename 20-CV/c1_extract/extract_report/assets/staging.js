@@ -61,7 +61,7 @@ function renderTable(){
     if(stateFilter&&st!==stateFilter) return '';
     shown++;
     var orig=r.original||{};
-    return '<tr data-i="'+i+'"><td class="idx">'+(r.index==null?i:r.index)+'</td>'+
+    return '<tr data-i="'+i+'"><td class="idx">'+((r.index==null?i:r.index)+1)+'</td>'+
       keys.map(function(k){
         var v=(r.values||{})[k];
         var ed=orig[k]!==undefined&&
@@ -122,7 +122,7 @@ function viewSize(meta,view){
   if(view==='rect') return meta.rectified_size||meta.size||[0,0];
   return meta.size||[0,0];
 }
-function recordNo(i){ var r=records[i]||{}; return r.index==null?i:r.index; }
+function recordNo(i){ var r=records[i]||{}; return (r.index==null?i:r.index)+1; }
 function rowPages(i){
   var s={};
   allAnchors.forEach(function(x){ if(x.i===i&&x.a.page!=null) s[x.a.page]=true; });
@@ -236,12 +236,12 @@ function showPage(p){
   updateHead();
 }
 function updateHead(){
-  document.getElementById('ltitle').textContent=
-    selIdx>=0?('记录 #'+recordNo(selIdx)+' 血缘回溯'):'血缘回溯 · 全表';
+  /* 选中记录号只在 lsub 显示一次，标题不重复 */
+  document.getElementById('ltitle').textContent='血缘回溯';
   var meta=metaOf(curPage);
   document.getElementById('lsub').textContent=meta&&meta.size?
     ('页'+curPage+' · '+(curView==='rect'?'矫正图':'原图')+
-      (selIdx>=0?(' · 选中记录 #'+recordNo(selIdx)):'')):'';
+      (selIdx>=0?(' · 选中记录 #'+recordNo(selIdx)):' · 全表')):'';
 }
 function applySelection(){
   document.querySelectorAll('#recrows tr').forEach(function(tr){
@@ -320,13 +320,14 @@ function selectRecord(i){
   if(a0) ensureViewFor(a0.a.space);
   clearPin(); clearHover(); applySelection(); markLeft(); updateHead();
 }
-/* 收起＝折叠成标题栏（展开入口常驻），不是整块消失：
-   旧实现 hidden=true 后只有换文件才复显，点单元格再也打不开。 */
+/* 收起＝右侧细竖条（不占表格宽度）：点竖条或点数据自动弹出。
+   箭头方向即动作方向：展开态 › 折向右栏，收起态 ‹ 向左弹出。 */
 function setCollapsed(on){
   var panel=document.getElementById('lineage');
   panel.classList.toggle('collapsed',on);
   var b=document.getElementById('ltoggle');
-  b.textContent=on?'展开':'收起 ▴';
+  b.textContent=on?'‹':'›';
+  b.title=on?'展开血缘回溯':'收起血缘回溯';
   b.setAttribute('aria-expanded',on?'false':'true');
   if(on){ clearSel(); closeLb(); }else alignPagers();
 }
