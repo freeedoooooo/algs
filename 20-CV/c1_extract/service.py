@@ -391,7 +391,9 @@ def run_load(task_id, task, ds, lt, tpl, log):
     content = _load('store.content')
     loader = _load('store.loader')
     import pymysql
-    datasource_id = task['load']['datasource_id']
+    # ds 来自 launch_load 已解析的数据源行；task 快照取于绑定前，
+    # 首次绑定的任务 task['load'] 为 None，不能从它取 id
+    datasource_id = ds['id']
     table = lt['target_table']
     cm, bk = loader.fields_to_map(lt['fields'])
     wm = lt['write_mode']
