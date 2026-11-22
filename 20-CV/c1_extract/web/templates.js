@@ -150,17 +150,17 @@ function fillCol(div,col){
 function addRow(target,col,fx){
   var div=document.createElement('div');
   div.className='frow';
-  div.innerHTML='<input type="text" class="tin fname" placeholder="目标字段名" value="'+
-    escHtml(target||'')+'">'+
-    '<select class="tin fcol"></select>'+
+  div.innerHTML='<select class="tin fcol"></select>'+
     '<input type="number" class="tin fidx" min="0" placeholder="列序号" hidden>'+
+    '<input type="text" class="tin fname" placeholder="目标字段名" value="'+
+    escHtml(target||'')+'">'+
     '<select class="tin fxform" title="入库时应用的转换（暂存值保持不变）">'+
       '<option value="">无转换</option>'+
       '<option value="trim">trim</option>'+
       '<option value="trim,number">trim+number</option>'+
     '</select>'+
-    '<button type="button" class="btn mini danger fdel">删</button>'+
-    '<span class="fdest"></span>';
+    '<span class="fdest"></span>'+
+    '<button type="button" class="btn mini danger fdel">删</button>';
   frows.appendChild(div);
   fillCol(div,col);
   div.querySelector('.fxform').value=fx||'';
@@ -257,12 +257,12 @@ function manualMode(hint){
   cands=null; tblsel.disabled=true;
   tblsel.innerHTML='<option value="">—</option>';
   tmanual.hidden=false;
-  if(hint) refhint.textContent=hint;
+  refhint.textContent=hint||'';
   refreshCols();
 }
 refsel.onchange=function(){
   var v=refsel.value;
-  if(!v){manualMode('选择一个已预览任务的文件，系统将列出其候选源表与源列。');return;}
+  if(!v){manualMode();return;}
   var p=v.split(':');
   refhint.textContent='正在加载参考…';
   api('GET','/api/tasks/'+p[0]+'/extract?file='+p[1]).then(function(doc){
@@ -276,7 +276,7 @@ refsel.onchange=function(){
     tblsel.disabled=false; tmanual.hidden=true;
     var want=(pendingTable&&typeof pendingTable.index==='number')?pendingTable.index:0;
     tblsel.value=String(want>=0&&want<cands.length?want:0);
-    refhint.textContent='共 '+cands.length+' 张候选表（合并页表已跳过）。';
+    refhint.textContent='共 '+cands.length+' 张候选表。';
     autofillRows(); refreshCols();
   }).catch(function(e){
     manualMode('参考加载失败：'+e.message+'，可手动填写源表。');
@@ -304,10 +304,10 @@ function loadVersions(id){
           '<button type="button" class="btn mini ghost" data-setcur="'+
           v.version+'">设为当前</button>')+
         '</div>';
-    }).join('')||'<div class="hint">无版本</div>';
+    }).join('')||'<div class="sthint">无版本</div>';
   }).catch(function(e){
     document.getElementById('verlist').innerHTML=
-      '<div class="hint">版本历史加载失败：'+escHtml(e.message)+'</div>';
+      '<div class="sthint">版本历史加载失败：'+escHtml(e.message)+'</div>';
   });
 }
 document.getElementById('verlist').addEventListener('click',function(e){
@@ -326,7 +326,7 @@ function openEditor(id){
   cur=id; cands=null; pendingTable=null;
   emsg.textContent=''; frows.innerHTML='';
   refsel.value=''; tindex.value=''; tkw.value='';
-  manualMode('选择一个已预览任务的文件，系统将列出其候选源表与源列。');
+  manualMode();
   document.getElementById('ok').hidden=true;
   if(id==null){
     document.getElementById('etitle').textContent='新建模板';

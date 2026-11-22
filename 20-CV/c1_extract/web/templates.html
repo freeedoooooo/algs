@@ -6,6 +6,7 @@
 <title>提取模板 · 结构化平台</title>
 <link rel="stylesheet" href="/static/shell.css">
 <link rel="stylesheet" href="/static/templates.css">
+<link rel="stylesheet" href="/static/hint.css">
 </head>
 <body>
 <nav class="topnav">
@@ -61,18 +62,22 @@
         <input type="text" class="tin" id="ename" placeholder="如：银行流水 · 明细字段">
       </div>
       <div class="fsec">
-        <label class="flab" for="edesc">说明（可选）</label>
+        <label class="flab" for="edesc">说明</label>
         <input type="text" class="tin" id="edesc" placeholder="用途 / 适用文件…">
       </div>
       <div class="fsec">
-        <label class="flab" for="refsel">参考文件（可选，辅助选表选列）</label>
+        <label class="flab" for="refsel">参考文件
+          <span class="hint" tabindex="0" data-tip="选择一个已预览任务的文件，系统列出它的候选源表与源列，方便下方选表选列。不选择也可以，改为手动填写源表。">?</span>
+        </label>
         <select class="tin" id="refsel">
           <option value="">不使用参考（手动填写源表）</option>
         </select>
-        <div class="hint" id="refhint">选择一个已预览任务的文件，系统将列出其候选源表与源列。</div>
+        <div class="sthint" id="refhint"></div>
       </div>
       <div class="fsec">
-        <label class="flab" for="tblsel">源表（单表 / 版本）</label>
+        <label class="flab" for="tblsel">源表
+          <span class="hint" tabindex="0" data-tip="每个模板版本对应一张源表。&#10;序号即候选表顺序：各页非合并表在前，跨页合并表在后。&#10;未选参考文件时，可手动填表序号或表头关键词（取第一张匹配表）。">?</span>
+        </label>
         <select class="tin" id="tblsel" disabled>
           <option value="">—</option>
         </select>
@@ -80,13 +85,21 @@
           <input type="number" class="tin tidx" id="tindex" min="0" placeholder="表序号">
           <input type="text" class="tin tkw" id="tkw" placeholder="或表头关键词（取第一张匹配表）">
         </span>
-        <div class="hint">序号即候选表顺序：各页非合并表在前，跨页合并表在后。</div>
       </div>
       <div class="fsec">
-        <label class="flab">字段定义（目标字段名 ← 源列）</label>
+        <label class="flab">字段定义
+          <span class="hint" tabindex="0" data-tip="选定源列，给它起目标字段名（即记录键，入库规则按它对齐目标列）。&#10;源列可按列名或列序号指定；转换在入库时生效，暂存值保持不变。&#10;每次保存生成新的不可变版本，旧任务不受影响。">?</span>
+        </label>
+        <div class="frow fhead" aria-hidden="true">
+          <span class="fcol">原始列名</span>
+          <span class="fidx" hidden></span>
+          <span class="fname">目标字段名</span>
+          <span class="fxform">转换</span>
+          <span class="fdest">入库去向</span>
+          <span class="fdel"></span>
+        </div>
         <div id="frows"></div>
         <button type="button" class="btn mini ghost" id="addfield">＋添加字段</button>
-        <div class="hint">目标字段名即记录键，入库规则按它对齐目标列；源列可按字段名或列序号指定；转换规则在入库时生效，暂存值保持不变。每次保存将生成新的不可变版本。</div>
       </div>
       <div class="fsec" id="versec" hidden>
         <label class="flab">版本历史</label>
@@ -102,6 +115,7 @@
   </div>
 </div>
 <script src="/static/shell.js"></script>
+<script src="/static/hint.js"></script>
 <script src="/static/templates.js"></script>
 </body>
 </html>

@@ -12,11 +12,14 @@ select.tin{width:auto;min-width:220px;max-width:100%}
 #tmanual .tidx{width:90px}
 #tmanual .tkw{width:280px}
 #tmanual[hidden]{display:none}
-.hint{font-size:12px;color:#8a94a6;margin-top:4px}
+.sthint{font-size:12px;color:#8a94a6;margin-top:4px}
 .frow{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.fhead{margin-bottom:4px}
+.fhead span{font-size:11px;color:#6b7688}
+.fhead .fdel{width:32px}
 .frow select.tin{min-width:0}
 .frow .fname{flex:1;min-width:0}
-.frow .fcol{width:210px;flex:none}
+.frow .fcol{flex:1;min-width:0}
 .frow .fxform{width:118px;flex:none}
 .frow .fidx{width:80px;flex:none}
 .frow .fidx[hidden]{display:none}
