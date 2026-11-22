@@ -305,7 +305,7 @@ var reportFrame=document.getElementById('reportFrame'),
 /* 完成提示：跳数据预览（task id 键） */
 function showStgLink(taskId){
   if(!taskId) return;
-  stglink.href='/staging?task='+taskId;
+  stglink.href='/review?task='+taskId;
   stglink.hidden=false;
 }
 /* 右侧报告区三态：idle 占位 / 任务进度 / done 报告（+「查看日志」浮钮） */
@@ -442,8 +442,7 @@ fetch('/api/status').then(function(r){return r.json();}).then(function(s){
   else loadHistory();
 });
 
-/* ---- 从资料库选择：抽屉多选已登记文件 → POST /api/tasks（不再收 base64） ---- */
-var srcdrawer=document.getElementById('srcdrawer'),
+/* ---- 从资料库选择：抽屉多选已登记文件 → POST /api/tasks（不再收 base64） ---- */var srcdrawer=document.getElementById('srcdrawer'),
     srclist=document.getElementById('srclist'),
     srcgo=document.getElementById('srcgo'),
     srcSel={}, srcQ='', srcTimer=null;
@@ -533,7 +532,7 @@ srcgo.onclick=async function(){
     srcgo.disabled=false;
   }
 };
-/* 资料页「提取」跳转：/?from_source=<id> → 打开抽屉并预选 */
+/* 资料页「提取」跳转：/extract?from_source=<id> → 打开抽屉并预选 */
 var fromSrc=new URLSearchParams(location.search).get('from_source');
 if(fromSrc) openSrcDrawer(+fromSrc);
 

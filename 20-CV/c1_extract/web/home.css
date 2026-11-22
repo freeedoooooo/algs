@@ -1,0 +1,50 @@
+/* web/home.css — 工作台首页私有样式（快速提取条/状态卡/待办列表；
+   通用 token 全在 shell.css，这里只补工作台特有的版式） */
+.quick{padding:12px 14px;margin-bottom:12px}
+.qhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.qhead .spacer{flex:1}
+.qhead b{font-size:14px}
+.qt{font-size:12px;color:#6b7688;display:flex;align-items:center;gap:6px}
+.qt select{max-width:260px}
+.qmsg{font-size:12px;color:#8a94a6}
+.qmsg.err{color:#b42318}
+.qmsg.ok{color:#177245}
+.qmsg.run{color:#2563eb}
+#hdrop{border:1.5px dashed #c3ccd9;border-radius:8px;padding:16px 14px;
+  text-align:center;color:#6b7688;cursor:pointer;background:#fafbfd;
+  display:flex;align-items:center;justify-content:center;gap:10px}
+#hdrop b{font-weight:600;color:#374151}
+#hdrop .sub{font-size:12px;color:#8a94a6}
+#hdrop.on{border-color:#2563eb;background:#f2f6ff}
+.picked{list-style:none;margin:8px 0 0;padding:0;display:flex;
+  flex-wrap:wrap;gap:6px}
+.picked li{display:flex;align-items:center;gap:6px;border:1px solid #dbe2ec;
+  border-radius:6px;padding:3px 6px;font-size:12px;background:#fff}
+.picked .fdel{border:0;background:none;cursor:pointer;color:#8a94a6;
+  font-size:14px;line-height:1}
+.picked .fdel:hover{color:#b42318}
+
+.cards{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.card{flex:1 1 220px;background:#fff;border:1px solid #dbe2ec;border-radius:10px;
+  padding:12px 14px;min-width:220px}
+.card.zero{opacity:.6}
+.card.alert{border-color:#e4a4a0}
+.ctitle{display:flex;align-items:baseline;gap:8px;font-size:14px;font-weight:600}
+.ctitle span{font-weight:400;font-size:11px;color:#8a94a6}
+.cnum{font-size:26px;font-weight:700;color:#2563eb;margin:6px 0 2px}
+.card.zero .cnum{color:#8a94a6}
+.csub{font-size:12px;color:#6b7688;min-height:16px;margin-bottom:6px}
+.clink{font-size:12px;color:#2563eb;text-decoration:none}
+.clink:hover{text-decoration:underline}
+
+#todo .thead{display:flex;align-items:center;margin-bottom:8px}
+#todo .thead b{font-size:14px}
+#todo .clink{margin-left:auto}
+#todorows .act{white-space:nowrap;display:flex;gap:8px;align-items:center}
+#todorows .warn{color:#b42318}
+#todotable{width:100%;border-collapse:collapse;font-size:13px}
+#todotable th{color:#6b7688;font-weight:500;text-align:left;
+  padding:4px 8px;border-bottom:1px solid #dbe2ec}
+#todotable td{padding:5px 8px;border-bottom:1px solid #edf1f6}
+#todorows .desc{color:#6b7688;display:inline-block;max-width:260px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}

@@ -6,10 +6,11 @@ c1_extract/app.py — Web 工具入口（FastAPI + uvicorn）。只负责 HTTP �
     D:\\miniforge3\\envs\\paddle\\python.exe c1_extract/app.py
     浏览器打开 http://127.0.0.1:8765
 
-路由：
-    GET  /              提取页（web/upload.html + /static 资源）
-    GET  /sources       资料库页 · GET /tasks 任务页 · GET /staging 暂存只读视图
-    GET  /healthz       健康检查
+路由（页面地址＝产品名词，模板文件名是历史内部名，对应关系见 docs/功能映射表）：
+    GET  /              工作台首页（web/home.html）
+    GET  /extract       提取页（upload.html） · /sources 资料 · /templates 模板
+    GET  /review        校验台（staging.html） · /rules 入库规则（load.html）
+    GET  /tasks         任务页 · GET /healthz 健康检查
     POST /api/upload    上传（base64 JSON，不依赖 python-multipart）
     GET  /api/status    处理进度
     GET  /extract-report   对照报告（重定向到最新 task_file 的报告真实地址）
@@ -186,6 +187,11 @@ def asset(name):
 
 @app.get('/', response_class=HTMLResponse)
 def index():
+    return HTMLResponse(asset('home.html'))
+
+
+@app.get('/extract', response_class=HTMLResponse)
+def extract_page():
     return HTMLResponse(asset('upload.html'))
 
 
@@ -199,8 +205,8 @@ def tasks_page():
     return HTMLResponse(asset('tasks.html'))
 
 
-@app.get('/staging', response_class=HTMLResponse)
-def staging_page():
+@app.get('/review', response_class=HTMLResponse)
+def review_page():
     return HTMLResponse(asset('staging.html'))
 
 
@@ -209,8 +215,8 @@ def templates_page():
     return HTMLResponse(asset('templates.html'))
 
 
-@app.get('/load', response_class=HTMLResponse)
-def load_page():
+@app.get('/rules', response_class=HTMLResponse)
+def rules_page():
     return HTMLResponse(asset('load.html'))
 
 

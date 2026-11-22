@@ -1,0 +1,235 @@
+/* web/home.js — 工作台首页：快速提取条 + 三张状态卡 + 待办列表。
+   数字口径见 design-home-workbench.md §2.1；计数纯前端拼装
+   （/api/tasks ＋ /api/staging/ledger），无新端点、无状态落库。 */
+var hpicked=[], tplId=null;
+var hdrop=document.getElementById('hdrop'), hpick=document.getElementById('hpick');
+var hlist=document.getElementById('hlist'), hgo=document.getElementById('hgo');
+var hmsg=document.getElementById('hmsg'), htpl=document.getElementById('htpl');
+var TKEY='c1.home_tpl';
+var items=[], led=[];
+var pollT=null, loopT=null, lastTaskId=null;
+
+function say(t,cls){ hmsg.textContent=t; hmsg.className='qmsg'+(cls?' '+cls:''); }
+
+/* ---- 模板下拉：与提取页同源；记住上次选择（H3） ---- */
+fetch('/api/templates').then(function(r){return r.json();}).then(function(j){
+  var its=j.items||[];
+  if(!its.length){ htpl.innerHTML='<option value="">原始透传 v1</option>'; return; }
+  htpl.innerHTML=its.map(function(t){
+    return '<option value="'+(t.current_version_id||'')+'" data-tid="'+t.id+'">'+
+      escHtml((t.name||'原始透传')+' v'+(t.current_version||1))+'</option>';
+  }).join('');
+  var saved=Number(localStorage.getItem(TKEY));
+  if(saved) for(var i=0;i<htpl.options.length;i++)
+    if(htpl.options[i].value===String(saved)){ htpl.selectedIndex=i; break; }
+}).catch(function(){ htpl.innerHTML='<option value="">原始透传 v1</option>'; });
+htpl.addEventListener('change',function(){
+  try{ localStorage.setItem(TKEY,htpl.value); }catch(e){}
+});
+
+/* ---- 快速提取：选文件 → 就地提交（复用 /api/upload 通道） ---- */
+var ALLOWED=['png','jpg','jpeg','bmp','webp','tif','tiff','pdf','csv','txt','md'];
+hdrop.onclick=function(){ hpick.click(); };
+hdrop.ondragover=function(e){e.preventDefault();hdrop.classList.add('on');};
+hdrop.ondragleave=function(){hdrop.classList.remove('on');};
+hdrop.ondrop=function(e){
+  e.preventDefault();hdrop.classList.remove('on');addFiles(e.dataTransfer.files);
+};
+hpick.onchange=function(){ addFiles(hpick.files); hpick.value=''; };
+function addFiles(fs){
+  var rejected=[];
+  for(var i=0;i<fs.length;i++){
+    var f=fs[i];
+    var e=(f.name.split('.').pop()||'').toLowerCase();
+    if(ALLOWED.indexOf(e)<0){ rejected.push(f.name); continue; }
+    if(f.size>20*1024*1024){ rejected.push(f.name+'（超 20MB）'); continue; }
+    if(hpicked.some(function(p){return p.name===f.name&&p.size===f.size;})) continue;
+    hpicked.push(f);
+  }
+  if(rejected.length) say('已忽略：'+rejected.join('、'),'err');
+  else if(hpicked.length) say('已选 '+hpicked.length+' 个文件，点「开始提取」');
+  renderPicked();
+}
+function renderPicked(){
+  hlist.hidden=hpicked.length===0;
+  hlist.innerHTML=hpicked.map(function(f,i){
+    return '<li><span title="'+escHtml(f.name)+'">'+escHtml(f.name)+'</span>'+
+      '<span>'+ (f.size/1024).toFixed(0)+' KB</span>'+
+      '<button type="button" class="fdel" data-i="'+i+'" title="移除">×</button></li>';
+  }).join('');
+  hgo.disabled=hpicked.length===0;
+}
+hlist.addEventListener('click',function(e){
+  var b=e.target.closest?e.target.closest('.fdel'):null;
+  if(!b) return;
+  hpicked.splice(Number(b.getAttribute('data-i')),1);
+  renderPicked();
+  if(!hpicked.length) say('等待文件');
+});
+
+hgo.onclick=function(){
+  hgo.disabled=true; say('读取文件…','run');
+  Promise.all(hpicked.map(function(f){
+    return b64(f).then(function(d){ return {name:f.name,data:d}; });
+  })).then(function(files){
+    return fetch('/api/upload',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({files:files,
+        template_version_id:htpl.value?Number(htpl.value):null})
+    }).then(function(r){return r.json();});
+  }).then(function(j){
+    if(!j.ok) throw new Error(j.error||'提交失败');
+    say('已提交，提取中…','run');
+    pollStatus();
+  }).catch(function(e){
+    say('出错：'+e.message,'err'); hgo.disabled=hpicked.length===0;
+  });
+};
+function pollStatus(){
+  fetch('/api/status').then(function(r){return r.json();}).then(function(s){
+    if(s.running){ pollT=setTimeout(pollStatus,800); return; }
+    clearTimeout(pollT); pollT=null;
+    if(s.error){ say('提取出错：'+s.error,'err'); refresh(); return; }
+    if(s.ready&&s.task_id){
+      lastTaskId=s.task_id;
+      say('提取完成 · 任务 #'+s.task_id,'ok');
+      hpicked=[]; renderPicked(); refresh();
+    }
+  }).catch(function(){ pollT=setTimeout(pollStatus,1500); });
+}
+
+/* ---- 状态卡数字（design-home-workbench §2.1 口径） ---- */
+function nums(){
+  var busy=items.filter(function(t){
+    return t.state==='extracting'||t.state==='pending';
+  });
+  var reviewFiles=0, reviewTasks={}, loadTasks=[];
+  led.forEach(function(t){
+    if(t.task_state!=='previewed') return;
+    var pend=0;
+    (t.files||[]).forEach(function(f){
+      if(f.pending_n+f.edited_n>0){ reviewFiles++; reviewTasks[t.task_id]=1; }
+      pend+=f.pending_n+f.edited_n;
+    });
+    if(pend===0&&t.records_n>0) loadTasks.push(t);
+  });
+  var failed=items.filter(function(t){
+    return t.state==='failed'||t.state==='partial';
+  });
+  return {busy:busy, reviewFiles:reviewFiles,
+    reviewTasks:Object.keys(reviewTasks).length,
+    loadTasks:loadTasks, failed:failed};
+}
+function setCard(id,n,sub,zero){
+  document.getElementById('n'+id).textContent=n;
+  document.getElementById('s'+id).textContent=sub;
+  document.getElementById('card'+id).classList.toggle('zero',!!zero);
+}
+function renderCards(){
+  var v=nums();
+  setCard(1, v.busy.length,
+    v.busy.length?('任务 '+v.busy.map(function(t){return '#'+t.task_id;}).join('、')):'就绪 · 拖文件即可开始',
+    !v.busy.length);
+  setCard(2, v.reviewFiles,
+    v.reviewFiles? v.reviewTasks+' 个任务待逐条核对':'没有待校验的记录', !v.reviewFiles);
+  setCard(3, v.loadTasks.length,
+    v.loadTasks.length? '校验完毕，可直接入库':'暂无校验完毕待入库的任务',
+    !v.loadTasks.length);
+  /* H1：只有 1 个待入库 → 点卡直接弹向导 */
+  var l3=document.getElementById('l3');
+  if(v.loadTasks.length===1){
+    l3.textContent='立即入库 #'+v.loadTasks[0].task_id+' →';
+    l3.onclick=function(e){ e.preventDefault(); startLoad(v.loadTasks[0].task_id); };
+  }else{ l3.textContent='去入库 →'; l3.onclick=null; }
+  return v;
+}
+
+/* ---- 待办列表：需要你动手的，新在前，最多 8 行 ---- */
+function fileNames(t){
+  return (t.files||[]).map(function(f){return f.name;}).join('、');
+}
+function todoRow(seq,taskId,name,what,act,href,warn){
+  return '<tr><td class="seq">'+seq+'</td>'+
+    '<td class="mono">#'+taskId+'</td>'+
+    '<td><span class="desc" title="'+escHtml(name)+'">'+escHtml(name||'—')+'</span></td>'+
+    '<td class="'+(warn?'warn':'')+'">'+escHtml(what)+'</td>'+
+    '<td><span class="act">'+act+'</span></td></tr>';
+}
+function renderTodo(v){
+  var rows=[];
+  led.forEach(function(t){
+    if(t.task_state!=='previewed') return;
+    var pend=0;
+    (t.files||[]).forEach(function(f){ pend+=f.pending_n+f.edited_n; });
+    if(pend>0) rows.push({id:t.task_id,name:fileNames(t),
+      what:'还有 '+pend+' 条未校验',act:'<a class="clink" href="/review?task='+
+        t.task_id+'">去校验</a>',t:t.created_at});
+  });
+  v.loadTasks.forEach(function(t){
+    rows.push({id:t.task_id,name:fileNames(t),
+      what:'校验完毕，待入库',
+      act:'<button type="button" class="linkbtn" data-load="'+t.task_id+'">去入库</button>',
+      t:t.created_at});
+  });
+  v.busy.forEach(function(t){
+    rows.push({id:t.task_id,name:fileNames(t),what:'提取中…',
+      act:'<a class="clink" href="/extract">看进度</a>',t:t.created_at});
+  });
+  v.failed.forEach(function(t){
+    rows.push({id:t.task_id,name:fileNames(t),
+      what:t.state==='partial'?'部分入库，有隔离记录':'提取失败',
+      act:'<a class="clink" href="/tasks">处理</a>',t:t.created_at});
+  });
+  rows.sort(function(a,b){ return (a.t<b.t?1:(a.t>b.t?-1:0)); });
+  var shown=rows.slice(0,8);
+  var tb=document.getElementById('todorows'), table=document.getElementById('todotable');
+  var empty=document.getElementById('todoempty');
+  empty.hidden=shown.length>0; table.hidden=shown.length===0;
+  tb.innerHTML=shown.map(function(r,i){
+    return todoRow(i+1,r.id,r.name,r.what,r.act);
+  }).join('');
+}
+document.getElementById('todorows').addEventListener('click',function(e){
+  var b=e.target.closest?e.target.closest('[data-load]'):null;
+  if(b) startLoad(Number(b.getAttribute('data-load')));
+});
+
+/* ---- 去入库＝四步向导（wizard.js 全站挂载，红线：④前不落库） ---- */
+function startLoad(taskId){
+  var t=items.filter(function(x){return x.task_id===taskId;})[0];
+  openLoadWizard({taskId:taskId,
+    templateId:(t&&t.template)?t.template.template_id:null,
+    onDone:function(){ refresh(); }});
+}
+
+/* ---- 拉数 + 轮询（仅页面可见时，5s） ---- */
+function render(){
+  var v=renderCards();
+  renderTodo(v);
+}
+function refresh(){
+  Promise.all([
+    fetch('/api/tasks').then(function(r){return r.json();}),
+    fetch('/api/staging/ledger').then(function(r){return r.json();})
+  ]).then(function(res){
+    items=res[0].items||[]; led=res[1].items||[];
+    render();
+  }).catch(function(e){
+    items=[]; led=[];
+    render();
+    say('平台库不可用：'+e.message,'err');
+  });
+}
+
+refresh();
+document.addEventListener('visibilitychange',function(){
+  if(document.hidden){ clearTimeout(pollT); pollT=null; return; }
+  loop();
+});
+function loop(){
+  clearInterval(loopT);
+  loopT=setInterval(function(){
+    if(!document.hidden&&!hpicked.length) refresh();
+  },5000);
+}
+loop();

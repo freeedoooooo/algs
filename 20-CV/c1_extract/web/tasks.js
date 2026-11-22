@@ -31,7 +31,8 @@ function render(){
       '<td class="mono">#'+r.task_id+'</td>'+
       '<td class="num">'+(r.files||[]).length+'</td>'+
       '<td>'+tplLabel(r.template)+'</td>'+
-      '<td>'+(r.load?escHtml(r.load.target_table+' · '+r.load.write_mode):'—')+'</td>'+
+      '<td>'+(r.load?escHtml(r.load.target_table+' · '+
+        modeLabel(r.load.write_mode||'')):'—')+'</td>'+
       '<td>'+stateBadge(r.state)+'</td>'+
       '<td class="num">'+fmtTime(r.created_at)+'</td>'+
       '<td><button type="button" class="linkbtn" data-task="'+r.task_id+'">详情</button></td>'+
@@ -55,7 +56,7 @@ rows.addEventListener('click',function(e){
 function fileRow(f,taskId){
   var links='';
   if(f.task_file_id){
-    links='<a class="linkbtn" target="_blank" href="/staging?task='+taskId+
+    links='<a class="linkbtn" target="_blank" href="/review?task='+taskId+
       '&file='+f.task_file_id+'">预览数据</a>'+
       '<a class="linkbtn" target="_blank" href="'+fileUrl(f.task_file_id,'对照报告.html')+'">对照报告</a>';
   }
@@ -179,6 +180,9 @@ document.addEventListener('keydown',function(e){
   closeReceiptDrawer();
 });
 
+var st0=new URLSearchParams(location.search).get('state');   // ?state= 深链（工作台③多任务跳转）
+if(st0&&document.querySelector('#fstate option[value="'+st0+'"]'))
+  document.getElementById('fstate').value=st0;
 load();
 var focus=new URLSearchParams(location.search).get('task');
 if(focus) openDetail(Number(focus));

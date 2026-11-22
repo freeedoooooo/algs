@@ -208,8 +208,8 @@ function bindPager(el,onGo,onSize){
   var el=document.getElementById('flowbar');
   if(!el) return;
   var cur=el.getAttribute('data-cur');
-  var steps=[['src','原件','/sources'],['1','① 提取','/'],
-             ['2','② 校验','/staging'],['3','③ 入库','/load']];
+  var steps=[['src','原件','/sources'],['1','① 提取','/extract'],
+             ['2','② 校验','/review'],['3','③ 入库','/rules']];
   el.innerHTML=steps.map(function(s,i){
     var sep=i?'<span class="fbsep">→</span>':'';
     return sep+(s[0]===cur

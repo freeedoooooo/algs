@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>工作台 · 结构化平台</title>
+<link rel="stylesheet" href="/static/shell.css">
+<link rel="stylesheet" href="/static/wizard.css">
+<link rel="stylesheet" href="/static/home.css">
+</head>
+<body>
+<nav class="topnav">
+  <span class="brand">结构化平台</span>
+  <a href="/" class="on">工作台</a>
+  <a href="/extract">提取</a>
+  <a href="/sources">资料</a>
+  <a href="/templates">模板</a>
+  <a href="/review">校验</a>
+  <a href="/rules">入库</a>
+  <a href="/tasks">任务</a>
+  <span class="spacer"></span>
+  <span class="navnote">本地文档入库工作台</span>
+</nav>
+<div class="pagebody">
+
+  <div class="pagehead">
+    <h1>工作台</h1>
+    <span class="sub">现在该干嘛，看这三张卡</span>
+  </div>
+
+  <section class="panel quick">
+    <div class="qhead">
+      <b>快速提取</b>
+      <label class="qt">模板
+        <select id="htpl"></select>
+      </label>
+      <span class="spacer"></span>
+      <span class="qmsg" id="hmsg">等待文件</span>
+      <button type="button" class="btn mini" id="hgo" disabled>开始提取</button>
+    </div>
+    <div id="hdrop">
+      <b>点击或拖拽文件到此处</b>
+      <span class="sub">pdf/csv/png/jpg/bmp/webp/txt/md，可多选，单个 ≤ 20MB</span>
+    </div>
+    <input type="file" id="hpick" multiple hidden
+           accept=".png,.jpg,.jpeg,.bmp,.webp,.tif,.tiff,.pdf,.csv,.txt,.md">
+    <ul class="picked" id="hlist" hidden></ul>
+  </section>
+
+  <section class="cards">
+    <div class="card" id="card1">
+      <div class="ctitle">① 提取<span>把文件变成表格记录</span></div>
+      <div class="cnum" id="n1">—</div>
+      <div class="csub" id="s1"></div>
+      <a class="clink" href="/extract">去提取页 →</a>
+    </div>
+    <div class="card" id="card2">
+      <div class="ctitle">② 校验<span>逐条核对改错</span></div>
+      <div class="cnum" id="n2">—</div>
+      <div class="csub" id="s2"></div>
+      <a class="clink" href="/review?prog=todo">去校验 →</a>
+    </div>
+    <div class="card" id="card3">
+      <div class="ctitle">③ 入库<span>写进业务库</span></div>
+      <div class="cnum" id="n3">—</div>
+      <div class="csub" id="s3"></div>
+      <a class="clink" href="/tasks?state=previewed" id="l3">去入库 →</a>
+    </div>
+  </section>
+
+  <section class="panel" id="todo">
+    <div class="thead"><b>需要处理的事</b><span class="spacer"></span>
+      <a class="clink" href="/tasks">全部任务 →</a></div>
+    <table class="list" id="todotable" hidden>
+      <thead><tr><th class="seq">序号</th><th>任务</th><th>文件</th>
+        <th>事项</th><th>操作</th></tr></thead>
+      <tbody id="todorows"></tbody>
+    </table>
+    <div class="empty" id="todoempty" hidden>
+      <b>没有待办</b>拖个文件开始，或到 <a href="/sources">资料</a> 查看原件。
+    </div>
+  </section>
+
+</div>
+<div class="drawer" id="receipt" hidden>
+  <div class="dpanel">
+    <div class="dhead">
+      <h2 id="rctitle">入库回执</h2>
+      <span class="spacer"></span>
+      <button type="button" class="dclose" id="rcclose">关闭 (Esc)</button>
+    </div>
+    <div class="dbody" id="rcbody"></div>
+  </div>
+</div>
+<script src="/static/shell.js"></script>
+<script src="/static/wizard.js"></script>
+<script src="/static/home.js"></script>
+</body>
+</html>

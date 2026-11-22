@@ -33,7 +33,7 @@ document.getElementById('filetabs').addEventListener('click',function(e){
   var b=e.target.closest?e.target.closest('[data-rf]'):null;
   if(!b) return;
   curFile=b.getAttribute('data-rf');
-  history.replaceState(null,'','/staging?task='+encodeURIComponent(task)+
+  history.replaceState(null,'','/review?task='+encodeURIComponent(task)+
     '&file='+encodeURIComponent(curFile));
   renderTabs(); loadStaging();
 });
@@ -673,7 +673,9 @@ document.getElementById('loadbtn').onclick=function(){
 document.getElementById('rcbtn').onclick=function(){ openReceiptDrawer(task); };
 
 /* ---- 任务级台账（无 task 入口）：客户端搜索/筛选，与资料/任务页工具栏同构 ---- */
-var ledgerItems=[], lq='', lprog='', ledPage=1, ledSize=getListPer();
+var ledgerItems=[], lq='',
+    lprog=new URLSearchParams(location.search).get('prog')||'',
+    ledPage=1, ledSize=getListPer();
 var pgLed=bindPager(document.getElementById('ledpager'),function(d){
   ledPage+=d; renderLedger();
 },function(n){ ledSize=n; ledPage=1; renderLedger(); });
@@ -754,6 +756,7 @@ if(!task){
     lq=this.value.trim().toLowerCase(); ledPage=1; renderLedger();
   });
   document.getElementById('lprog').onchange=function(){ lprog=this.value; ledPage=1; renderLedger(); };
+  if(lprog) document.getElementById('lprog').value=lprog;   // ?prog=todo 深链（工作台）
   fetch('/api/staging/ledger').then(function(r){
     if(!r.ok) return r.json().then(function(j){throw new Error(j.error||('HTTP '+r.status));});
     return r.json();
@@ -779,7 +782,7 @@ document.getElementById('ledgerrows').addEventListener('click',function(e){
   var tr=e.target.closest?e.target.closest('tr[data-task]'):null;
   if(!tr) return;
   if(tr.classList.contains('led-file')){
-    location.href='/staging?task='+tr.getAttribute('data-task')+
+    location.href='/review?task='+tr.getAttribute('data-task')+
       '&file='+tr.getAttribute('data-file');
     return;
   }

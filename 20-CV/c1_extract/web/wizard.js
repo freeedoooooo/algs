@@ -135,7 +135,7 @@ function wzStep1(b){
     wz.dsList.map(wzDsOpt).join('')+'</select></div>'+
     '<div class="wzrow"><label>目标表</label><select id="wztable2" disabled>'+
     '<option value="">先选业务库</option></select></div>'+
-    '<div class="hint">没有合适的业务库？到 <a href="/load" target="_blank">入库规则</a> '+
+    '<div class="hint">没有合适的业务库？到 <a href="/rules" target="_blank">入库规则</a> '+
     '页新建（新窗口打开，不丢这里的进度）。字段对齐下一步做。</div>';
   b.innerHTML=html;
   var ds1=b.querySelector('#wzds1'), rule1=b.querySelector('#wzrule1');
