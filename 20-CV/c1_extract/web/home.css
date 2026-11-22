@@ -10,11 +10,11 @@
 .qmsg.err{color:#b42318}
 .qmsg.ok{color:#177245}
 .qmsg.run{color:#2563eb}
-#hdrop{border:1.5px dashed #c3ccd9;border-radius:8px;padding:16px 14px;
+#hdrop{border:1.5px dashed #c3ccd9;border-radius:8px;padding:34px 14px;
   text-align:center;color:#6b7688;cursor:pointer;background:#fafbfd;
-  display:flex;align-items:center;justify-content:center;gap:10px}
-#hdrop b{font-weight:600;color:#374151}
-#hdrop .sub{font-size:12px;color:#8a94a6}
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px}
+#hdrop b{font-weight:600;color:#374151;font-size:14px}
+#hdrop .sub{font-size:12px;color:#8a94a6;max-width:560px;line-height:1.7}
 #hdrop.on{border-color:#2563eb;background:#f2f6ff}
 .picked{list-style:none;margin:8px 0 0;padding:0;display:flex;
   flex-wrap:wrap;gap:6px}
