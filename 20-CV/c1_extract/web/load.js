@@ -75,7 +75,7 @@ function renderMaps(){
   document.getElementById('maprows').innerHTML=info.rows.map(function(m,i){
     var bk=m.business_keys||[];
     return '<tr>'+
-      '<td class="num">'+seqNo(info,i)+'</td>'+
+      '<td class="seq">'+seqNo(info,i)+'</td>'+
       '<td class="mono">'+m.id+'</td>'+
       '<td><code class="mono">'+escHtml(m.target_table)+'</code></td>'+
       '<td>'+escHtml(m.tpl_name||'—')+'</td>'+

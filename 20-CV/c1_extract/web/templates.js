@@ -48,9 +48,9 @@ function render(){
   page=info.page;
   rows.innerHTML=info.rows.map(function(r,i){
     return '<tr>'+
-      '<td class="num">'+seqNo(info,i)+'</td>'+
+      '<td class="seq">'+seqNo(info,i)+'</td>'+
       '<td class="mono">'+r.id+'</td>'+
-      '<td><b>'+escHtml(r.name)+'</b></td>'+
+      '<td>'+escHtml(r.name)+'</td>'+
       '<td><span class="desc" title="'+escHtml(r.description||'')+'">'+
         escHtml(r.description||'—')+'</span></td>'+
       '<td class="num">v'+r.current_version+'</td>'+

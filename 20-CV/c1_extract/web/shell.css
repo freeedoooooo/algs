@@ -57,6 +57,8 @@ table.list td{padding:5px 10px;border-bottom:1px solid #eef2f8;vertical-align:mi
 table.list tr:last-child td{border-bottom:0}
 table.list tbody tr:hover{background:#f7f9fd}
 table.list .num{font-variant-numeric:tabular-nums;white-space:nowrap}
+table.list .seq{text-align:center;font-variant-numeric:tabular-nums;
+  white-space:nowrap;width:1%}
 table.list .namecell{display:flex;align-items:center;gap:8px;min-width:0}
 table.list .namecell .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   max-width:340px;color:#25324a}

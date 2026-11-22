@@ -18,7 +18,7 @@
 .stgmain tbody tr{cursor:pointer}
 .stgmain tbody tr.sel{background:#e7f0ff}
 .stgmain tbody tr.sel:hover{background:#dbe8ff}
-.idx{color:#8a94a6;font-variant-numeric:tabular-nums}
+.idx{color:#8a94a6;font-variant-numeric:tabular-nums;text-align:center}
 
 /* 右侧血缘侧栏容器（吸顶 + 限高），内部舞台用报告同款 .stage */
 .lineage{flex:none;width:560px;max-width:46vw;max-height:calc(100vh - 210px);

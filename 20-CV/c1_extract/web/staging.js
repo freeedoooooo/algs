@@ -54,7 +54,7 @@ function recState(r){ return (r.review||{}).state||'pending'; }
 function renderTable(){
   keys=collectKeys();
   var ro=readOnly();
-  document.getElementById('rechead').innerHTML='<tr><th>#</th>'+
+  document.getElementById('rechead').innerHTML='<tr><th class="seq">序号</th>'+
     keys.map(function(k){return '<th>'+escHtml(k)+'</th>';}).join('')+
     '<th>状态</th>'+(ro?'':'<th>操作</th>')+'</tr>';
   var shown=0;
@@ -710,7 +710,7 @@ function renderLedger(){
   document.getElementById('ledgerrows').innerHTML=info.rows.map(function(r,i){
     var tpl=r.template||{};
     var main='<tr class="led-task" data-task="'+r.task_id+'" title="点击展开/收起文件子行">'+
-      '<td class="num">'+seqNo(info,i)+'</td>'+
+      '<td class="seq">'+seqNo(info,i)+'</td>'+
       '<td class="mono"><span class="led-caret">▸</span>#'+r.task_id+'</td>'+
       '<td>'+r.files.length+' 个文件</td>'+
       '<td>'+escHtml((tpl.name||'原始透传')+' v'+(tpl.version||1))+'</td>'+

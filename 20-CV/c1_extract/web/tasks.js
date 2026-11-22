@@ -27,7 +27,7 @@ function render(){
   page=info.page;
   rows.innerHTML=info.rows.map(function(r,i){
     return '<tr>'+
-      '<td class="num">'+seqNo(info,i)+'</td>'+
+      '<td class="seq">'+seqNo(info,i)+'</td>'+
       '<td class="mono">#'+r.task_id+'</td>'+
       '<td class="num">'+(r.files||[]).length+'</td>'+
       '<td>'+tplLabel(r.template)+'</td>'+
