@@ -12,7 +12,7 @@ function render(items){
   rows.innerHTML=items.map(function(r,i){
     var sha=String(r.sha256||'');
     return '<tr data-id="'+r.id+'">'+
-      '<td class="num">'+((page-1)*size+i+1)+'</td>'+
+      '<td class="seq">'+((page-1)*size+i+1)+'</td>'+
       '<td class="mono">'+r.id+'</td>'+
       '<td><div class="namecell">'+thumbHtml(r.name,srcUrl(r))+
         '<span class="nm" title="'+escHtml(r.name)+'">'+escHtml(r.name)+'</span></div></td>'+
