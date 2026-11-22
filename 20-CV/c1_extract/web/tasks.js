@@ -1,7 +1,8 @@
 /* web/tasks.js — 任务列表（task 表投影）+ 详情抽屉 + 处理中轮询 */
-var items=[], curTask=null, pollTimer=null;
+var items=[], curTask=null, pollTimer=null, page=1;
 var rows=document.getElementById('rows'),empty=document.getElementById('empty');
 var detail=document.getElementById('detail');
+var pg=bindPager(document.getElementById('pager'),function(d){ page+=d; render(); });
 
 function tplLabel(t){
   t=t||{};
@@ -20,8 +21,9 @@ function filtered(){
   });
 }
 function render(){
-  var list=filtered();
-  rows.innerHTML=list.map(function(r){
+  var info=pageSlice(filtered(),page);
+  page=info.page;
+  rows.innerHTML=info.rows.map(function(r){
     return '<tr>'+
       '<td class="mono">#'+r.task_id+'</td>'+
       '<td class="num">'+(r.files||[]).length+'</td>'+
@@ -32,15 +34,16 @@ function render(){
       '<td><button type="button" class="linkbtn" data-task="'+r.task_id+'">详情</button></td>'+
       '</tr>';
   }).join('');
-  empty.hidden=list.length>0;
+  empty.hidden=info.total===0;
+  pg.render(info);
 }
 function load(){
   fetch('/api/tasks').then(function(r){return r.json();}).then(function(j){
     items=j.items||[]; render();
   }).catch(function(){ items=[]; render(); });
 }
-document.getElementById('q').addEventListener('input',render);
-document.getElementById('fstate').onchange=render;
+document.getElementById('q').addEventListener('input',function(){ page=1; render(); });
+document.getElementById('fstate').onchange=function(){ page=1; render(); };
 rows.addEventListener('click',function(e){
   var b=e.target.closest?e.target.closest('[data-task]'):null;
   if(b) openDetail(Number(b.getAttribute('data-task')));

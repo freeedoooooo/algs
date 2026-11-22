@@ -1,6 +1,7 @@
 /* web/sources.js — 资料库：列表/搜索/过滤/分页 + 上传登记 + 删除保护 */
-var page=1, PER=20, total=0, q='', kind='', qTimer=null;
+var page=1, total=0, q='', kind='', qTimer=null;
 var rows=document.getElementById('rows'),empty=document.getElementById('empty');
+var pg=bindPager(document.getElementById('pager'),function(d){ page+=d; load(); });
 
 function srcUrl(row){
   return '/srcfiles/'+row.id;
@@ -23,10 +24,7 @@ function render(items){
       '</td></tr>';
   }).join('');
   empty.hidden=items.length>0;
-  document.getElementById('pager').hidden=total<=PER;
-  document.getElementById('pginfo').textContent='共 '+total+' 条 · 第 '+page+' 页';
-  document.getElementById('prev').disabled=page<=1;
-  document.getElementById('next').disabled=page*PER>=total;
+  pg.render({page:page,pages:Math.max(1,Math.ceil(total/LIST_PER)),total:total});
 }
 function load(){
   var u='/api/sources?page='+page+'&q='+encodeURIComponent(q)+
@@ -34,8 +32,7 @@ function load(){
   fetch(u).then(function(r){
     if(r.status===503){
       document.getElementById('degraded').hidden=false;
-      render([]); total=0;
-      document.getElementById('pager').hidden=true;
+      total=0; render([]);
       return null;
     }
     document.getElementById('degraded').hidden=true;
@@ -53,8 +50,6 @@ document.getElementById('q').addEventListener('input',function(){
   qTimer=setTimeout(function(){ q=v; page=1; load(); },300);
 });
 document.getElementById('kind').onchange=function(){ kind=this.value; page=1; load(); };
-document.getElementById('prev').onclick=function(){ if(page>1){page--;load();} };
-document.getElementById('next').onclick=function(){ if(page*PER<total){page++;load();} };
 
 rows.addEventListener('click',function(e){
   var b=e.target.closest?e.target.closest('[data-del]'):null;

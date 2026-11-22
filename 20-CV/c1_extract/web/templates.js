@@ -1,7 +1,8 @@
 /* web/templates.js — 模板管理：列表＋编辑抽屉（结构化字段行
    表单＋参考文件预览辅助选表选列）＋版本历史。契约见 design-p1b-templates.md §二。 */
-var items=[], cur=null, origName='', origDesc='', cands=null, pendingTable=null;
+var items=[], cur=null, origName='', origDesc='', cands=null, pendingTable=null, page=1;
 var rows=document.getElementById('rows'), empty=document.getElementById('empty');
+var pg=bindPager(document.getElementById('pager'),function(d){ page+=d; render(); });
 var edit=document.getElementById('edit');
 var ename=document.getElementById('ename'), edesc=document.getElementById('edesc');
 var refsel=document.getElementById('refsel'), refhint=document.getElementById('refhint');
@@ -40,7 +41,9 @@ function render(){
     if(!q) return true;
     return ((r.name||'')+' '+(r.description||'')).toLowerCase().indexOf(q)>=0;
   });
-  rows.innerHTML=list.map(function(r){
+  var info=pageSlice(list,page);
+  page=info.page;
+  rows.innerHTML=info.rows.map(function(r){
     return '<tr>'+
       '<td><b>'+escHtml(r.name)+'</b></td>'+
       '<td><span class="desc" title="'+escHtml(r.description||'')+'">'+
@@ -66,7 +69,7 @@ function load(){
     showErr('平台库未连接：模板目录暂不可用（'+e.message+'）');
   });
 }
-document.getElementById('q').addEventListener('input',render);
+document.getElementById('q').addEventListener('input',function(){ page=1; render(); });
 rows.addEventListener('click',function(e){
   var b=e.target.closest?e.target.closest('[data-edit],[data-ver],[data-del]'):null;
   if(!b) return;
