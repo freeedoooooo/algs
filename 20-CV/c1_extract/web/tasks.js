@@ -116,22 +116,16 @@ function renderDetail(j){
   clearTimeout(pollTimer);
   if(live&&live.running) pollTimer=setTimeout(function(){refreshDetail(r.task_id);},1500);
 }
-/* 门禁计数提示：仅全部 confirmed 可入库（后端 409 兜底，这里先给可见预期） */
+/* 门禁计数提示：仅全部 confirmed 可入库（后端 409 兜底，这里先给可见预期）。
+   走 /gate 轻量计数端点——旧版为此全量拉 /staging（~150KB×每次刷新轮询）。 */
 function loadGateInfo(taskId){
-  fetch('/api/tasks/'+taskId+'/staging').then(function(r){
+  fetch('/api/tasks/'+taskId+'/gate').then(function(r){
     if(!r.ok) throw new Error();
     return r.json();
-  }).then(function(doc){
+  }).then(function(c){
     if(curTask!==taskId) return;
     var el=document.getElementById('gateinfo');
     if(!el) return;
-    var c={pending:0,edited:0,confirmed:0,rejected:0};
-    (doc.files||[]).forEach(function(f){
-      (f.records||[]).forEach(function(rec){
-        var s=(rec.review||{}).state||'pending';
-        if(c[s]!=null) c[s]++;
-      });
-    });
     var blocked=c.pending+c.edited+c.rejected;
     el.innerHTML=blocked?
       ('门禁：待校验 '+c.pending+' · 已修改未确认 '+c.edited+' · 已拒绝 '+c.rejected+

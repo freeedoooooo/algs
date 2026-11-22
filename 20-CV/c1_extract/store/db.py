@@ -14,9 +14,14 @@ store/db.py — 薄驱动接缝（JDBC 式）+ conn_ref 解析。
 """
 import os
 import json
+import time
+import threading
 from urllib.parse import urlsplit, unquote
 
 from .. import config
+
+_TL = threading.local()      # 平台库线程局部连接（见 connect() 文档）
+_IDLE_PING_S = 5.0           # 闲置超过该秒数，归还前先 ping 验活
 
 
 def resolve_conn(ref):
@@ -54,15 +59,95 @@ def safe_detail(ref):
         return str(e)
 
 
-def connect(ref=None, autocommit=False):
-    """DB-API 连接（纯连接，不建表不迁移）；pymysql 懒导入。"""
+class _Borrowed:
+    """连接代理：归还行为由 on_release 决定（复用套接字或真关闭）。"""
+
+    def __init__(self, conn, on_release):
+        object.__setattr__(self, '_conn', conn)
+        object.__setattr__(self, '_on_release', on_release)
+        object.__setattr__(self, '_released', False)
+
+    def cursor(self, *a, **k):
+        return self._conn.cursor(*a, **k)
+
+    def commit(self):
+        self._conn.commit()
+
+    def rollback(self):
+        self._conn.rollback()
+
+    def close(self):
+        if not self._released:
+            object.__setattr__(self, '_released', True)
+            self._on_release()
+
+    def __getattr__(self, k):
+        return getattr(self._conn, k)
+
+
+def _new_conn(ref, autocommit):
     import pymysql
-    ref = ref or config.PLATFORM_DB_REF
     p = _parts(resolve_conn(ref))
     return pymysql.connect(
         host=p['host'], port=p['port'], user=p['user'],
         password=p['password'], database=p['database'],
         charset='utf8mb4', autocommit=autocommit, connect_timeout=5)
+
+
+def connect(ref=None, autocommit=False):
+    """DB-API 连接（纯连接，不建表不迁移）；pymysql 懒导入。
+
+    平台库默认参数走**线程局部连接复用**（库在远端，一次连接约 250ms）：
+    close()＝「归还」——回滚未竟事务、保留套接字给本线程下一次取用；
+    取用未还期间再次 connect()（嵌套）自动退回独立连接，事务互扰为零；
+    闲置 >5s 的缓存连接归还前 ping 验活，断连即弃、下次重建（VPN 漂移自愈）。
+    每次取用归还后回滚 ⇒ 下一条语句开新事务，读数永远是新鲜快照
+    （REPEATABLE READ 不会跨取用泄漏）。
+    """
+    ref = ref or config.PLATFORM_DB_REF
+    if autocommit or ref != config.PLATFORM_DB_REF:
+        return _new_conn(ref, autocommit)
+    st = getattr(_TL, 'st', None)
+    if st is None:
+        st = _TL.st = {'conn': None, 'depth': 0, 'at': 0.0}
+    if st['depth']:                       # 嵌套取用：独立新连接，用完真关
+        st['depth'] += 1
+        nc = _new_conn(ref, autocommit)
+
+        def _release_nested():
+            st['depth'] -= 1
+            try:
+                nc.close()
+            except Exception:
+                pass
+        return _Borrowed(nc, _release_nested)
+    c = st['conn']
+    if c is not None and time.monotonic() - st['at'] > _IDLE_PING_S:
+        try:
+            c.ping(reconnect=True)
+        except Exception:
+            try:
+                c.close()
+            except Exception:
+                pass
+            st['conn'] = c = None
+    if c is None:
+        c = st['conn'] = _new_conn(ref, autocommit)
+    st['depth'] += 1
+
+    def _release():
+        st['depth'] -= 1
+        st['at'] = time.monotonic()
+        try:
+            c.rollback()                  # 未竟事务清零；套接字留下复用
+        except Exception:
+            try:
+                c.close()
+            except Exception:
+                pass
+            if st['conn'] is c:
+                st['conn'] = None         # 死连接摘除，下次取用重建
+    return _Borrowed(c, _release)
 
 
 def connect_direct(p, autocommit=False):

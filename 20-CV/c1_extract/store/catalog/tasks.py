@@ -61,36 +61,35 @@ def set_task_file_state(task_file_id, state):
         conn.close()
 
 
-def _task_doc(cur, task_id):
-    """task 表投影（tasks API 的唯一数据源，无 task.json 附件）。"""
-    cur.execute(
-        'SELECT r.id, r.state, r.error, r.params_json,'
-        ' r.created_at, r.updated_at, t.name AS tpl_name, tv.version,'
-        ' tv.id AS version_id, tv.template_id,'
-        ' r.load_datasource_id, r.load_table_id,'
-        ' d.name AS datasource_name, d.db_name,'
-        ' lt.target_table, lt.write_mode'
-        ' FROM extract_task r'
-        ' JOIN extract_template_version tv ON tv.id=r.template_version_id'
-        ' JOIN extract_template t ON t.id=tv.template_id'
-        ' LEFT JOIN extract_load_datasource d ON d.id=r.load_datasource_id'
-        ' LEFT JOIN extract_load_table lt ON lt.id=r.load_table_id'
-        ' WHERE r.id=%s', (task_id,))
-    rows = _rows(cur)
-    if not rows:
-        return None
-    r = rows[0]
-    cur.execute(
-        'SELECT tf.id, tf.file_id, tf.state, s.name,'
-        ' (SELECT COUNT(*) FROM extract_staging_record sr'
-        '   WHERE sr.task_file_id=tf.id) AS records_n'
-        ' FROM extract_task_file tf'
-        ' JOIN extract_file s ON s.id=tf.file_id'
-        ' WHERE tf.task_id=%s ORDER BY tf.id', (task_id,))
-    files = [{'name': f['name'], 'state': f['state'],
-              'file_id': f['file_id'],
-              'task_file_id': f['id'], 'records_n': f['records_n']}
-             for f in _rows(cur)]
+_HEAD_SQL = (
+    'SELECT r.id, r.state, r.error, r.params_json,'
+    ' r.created_at, r.updated_at, t.name AS tpl_name, tv.version,'
+    ' tv.id AS version_id, tv.template_id,'
+    ' r.load_datasource_id, r.load_table_id,'
+    ' d.name AS datasource_name, d.db_name,'
+    ' lt.target_table, lt.write_mode'
+    ' FROM extract_task r'
+    ' JOIN extract_template_version tv ON tv.id=r.template_version_id'
+    ' JOIN extract_template t ON t.id=tv.template_id'
+    ' LEFT JOIN extract_load_datasource d ON d.id=r.load_datasource_id'
+    ' LEFT JOIN extract_load_table lt ON lt.id=r.load_table_id')
+
+_FILES_SQL_TAIL = (
+    ' SELECT tf.task_id, tf.id, tf.file_id, tf.state, s.name,'
+    ' (SELECT COUNT(*) FROM extract_staging_record sr'
+    '   WHERE sr.task_file_id=tf.id) AS records_n'
+    ' FROM extract_task_file tf'
+    ' JOIN extract_file s ON s.id=tf.file_id')
+
+
+def _file_row(f):
+    return {'name': f['name'], 'state': f['state'],
+            'file_id': f['file_id'],
+            'task_file_id': f['id'], 'records_n': f['records_n']}
+
+
+def _mk_doc(r, files):
+    """task 头行＋文件行 → tasks API 投影（_task_doc/list_tasks 共用形状）。"""
     return {
         'task_id': r['id'],
         'template': {'name': r['tpl_name'], 'version': r['version'],
@@ -111,6 +110,17 @@ def _task_doc(cur, task_id):
     }
 
 
+def _task_doc(cur, task_id):
+    """task 表投影（tasks API 的唯一数据源，无 task.json 附件）。"""
+    cur.execute(_HEAD_SQL + ' WHERE r.id=%s', (task_id,))
+    rows = _rows(cur)
+    if not rows:
+        return None
+    cur.execute(_FILES_SQL_TAIL + ' WHERE tf.task_id=%s ORDER BY tf.id',
+                (task_id,))
+    return _mk_doc(rows[0], [_file_row(f) for f in _rows(cur)])
+
+
 def get_task(task_id):
     conn = db.connect()
     try:
@@ -121,15 +131,26 @@ def get_task(task_id):
 
 
 def list_tasks():
-    """任务列表（新任务在前）：逐个表投影，P0 规模足够。"""
+    """任务列表（新任务在前）：2 条批量查询（远端库每往返约 35ms，
+    旧版逐任务 2×N 在 44 任务时要 3.7s）。投影与 get_task 逐键一致。"""
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT id FROM extract_task ORDER BY id DESC')
-            ids = [r[0] for r in cur.fetchall()]
-            return [_task_doc(cur, i) for i in ids]
+            cur.execute(_HEAD_SQL + ' ORDER BY r.id DESC')
+            heads = _rows(cur)
+            if not heads:
+                return []
+            ids = [h['id'] for h in heads]
+            cur.execute(_FILES_SQL_TAIL + ' WHERE tf.task_id IN ('
+                        + ','.join(['%s'] * len(ids)) + ')'
+                        + ' ORDER BY tf.task_id, tf.id', ids)
+            files = _rows(cur)
     finally:
         conn.close()
+    by_task = {}
+    for f in files:
+        by_task.setdefault(f['task_id'], []).append(_file_row(f))
+    return [_mk_doc(h, by_task.get(h['id'], [])) for h in heads]
 
 
 def task_file_ids(task_id):

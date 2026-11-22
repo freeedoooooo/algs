@@ -53,6 +53,7 @@ config = _load('config')  # 必须在 paddle 相关导入之前：设置模型�
 params_mod = _load('params')  # 调试参数 schema / 校验（纯 Python，不碰模型）
 service = _load('service')  # 运行引擎：STATE/LOCK、launch、task_batch
 from fastapi import FastAPI, Request
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import (HTMLResponse, JSONResponse, FileResponse,
                                RedirectResponse, PlainTextResponse, Response)
 from fastapi.staticfiles import StaticFiles
@@ -78,6 +79,9 @@ async def lifespan(_app):
 
 
 app = FastAPI(title='结构化平台', version='0.1', lifespan=lifespan)
+# 响应压缩（2026-11-21 性能轮）：报告 HTML 均值 530KB/最大 1.9MB、
+# 记录 JSON ~150KB，远端访问下文本 1KB 起压可省 ~85% 传输。
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 # ---- 错误分类：业务错误类型化（StoreError.code→HTTP），DB 故障 503，
 # 编程错误 500（uvicorn 记 traceback）。不再把一切异常伪装成「平台库不可用」。----
@@ -554,6 +558,13 @@ async def api_load_table_patch(lt_id: int, request: Request):
 def api_load_table_del(lt_id: int):
     _load('store.catalog').delete_load_table(lt_id)
     return {'ok': True}
+
+
+@app.get('/api/tasks/{task_id}/gate')
+def api_task_gate(task_id: int):
+    """门禁四态计数（轻量）：任务详情/入库目标抽屉用，不拉记录内容。"""
+    counts = _load('store.content_db').gate_counts(task_id)
+    return dict(counts, ok=True)
 
 
 @app.get('/api/tasks/{task_id}/load-log')

@@ -281,6 +281,32 @@ def query_fields(field=None, q=None, task=None, state=None, limit=200):
         conn.close()
 
 
+def gate_counts(task_id):
+    """门禁四态计数（性能轮）：1 条 GROUP BY，不拉记录内容。
+
+    供任务详情/入库目标抽屉显示「还差几条没校验」——旧版为此全量拉
+    /staging（~150KB）。不存在的任务返回全 0（只读端点，无副作用）。
+    """
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT COUNT(sr.id),'
+                " SUM(sr.review_state='pending'),"
+                " SUM(sr.review_state='edited'),"
+                " SUM(sr.review_state='confirmed'),"
+                " SUM(sr.review_state='rejected')"
+                ' FROM extract_staging_record sr'
+                ' JOIN extract_task_file tf ON tf.id=sr.task_file_id'
+                ' WHERE tf.task_id=%s', (task_id,))
+            r = cur.fetchone()
+    finally:
+        conn.close()
+    return {'records_n': int(r[0] or 0), 'pending': int(r[1] or 0),
+            'edited': int(r[2] or 0), 'confirmed': int(r[3] or 0),
+            'rejected': int(r[4] or 0)}
+
+
 def ledger():
     """校验台账（只读）：按 task 聚合记录数与四态校验进度，新任务在前。
 

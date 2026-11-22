@@ -147,19 +147,13 @@ function closeLoadTargetDrawer(){
   var d=document.getElementById('ltdrawer');
   if(d) d.hidden=true;
 }
-function ltGateText(doc){
-  var c={pending:0,edited:0,confirmed:0,rejected:0};
-  ((doc||{}).files||[]).forEach(function(f){
-    (f.records||[]).forEach(function(rec){
-      var s=(rec.review||{}).state||'pending';
-      if(c[s]!=null) c[s]++;
-    });
-  });
-  var blocked=c.pending+c.edited+c.rejected;
+function ltGateText(c){
+  c=c||{};
+  var blocked=(c.pending||0)+(c.edited||0)+(c.rejected||0);
   return blocked?
     ('门禁：待校验 '+c.pending+' · 已修改未确认 '+c.edited+' · 已拒绝 '+c.rejected+
-     ' · 已确认 '+c.confirmed+'（须全部确认）'):
-    ('门禁通过：全部 '+c.confirmed+' 条已确认，可入库');
+     ' · 已确认 '+(c.confirmed||0)+'（须全部确认）'):
+    ('门禁通过：全部 '+(c.confirmed||0)+' 条已确认，可入库');
 }
 function ltRefreshMaps(){
   var dsSel=document.getElementById('ltds'), mapSel=document.getElementById('ltmap');
@@ -242,7 +236,7 @@ function openLoadTargetDrawer(taskId,templateId,onDone){
   Promise.all([
     fetch('/api/load/datasources').then(function(r){return r.json();}),
     fetch('/api/load/tables').then(function(r){return r.json();}),
-    fetch('/api/tasks/'+taskId+'/staging').then(function(r){return r.json();})
+    fetch('/api/tasks/'+taskId+'/gate').then(function(r){return r.json();})
   ]).then(function(res){
     if(!ltCtx||ltCtx.taskId!==taskId) return;
     ltAll.ds=res[0].items||[]; ltAll.maps=res[1].items||[];
