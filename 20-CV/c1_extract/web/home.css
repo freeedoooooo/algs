@@ -37,14 +37,10 @@
 .clink{font-size:12px;color:#2563eb;text-decoration:none}
 .clink:hover{text-decoration:underline}
 
+#todo{padding:12px 14px}
 #todo .thead{display:flex;align-items:center;margin-bottom:8px}
 #todo .thead b{font-size:14px}
 #todo .clink{margin-left:auto}
-#todorows .act{white-space:nowrap;display:flex;gap:8px;align-items:center}
 #todorows .warn{color:#b42318}
-#todotable{width:100%;border-collapse:collapse;font-size:13px}
-#todotable th{color:#6b7688;font-weight:500;text-align:left;
-  padding:4px 8px;border-bottom:1px solid #dbe2ec}
-#todotable td{padding:5px 8px;border-bottom:1px solid #edf1f6}
 #todorows .desc{color:#6b7688;display:inline-block;max-width:260px;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}

@@ -27,7 +27,6 @@
     <span class="spacer"></span>
     <span class="msg">左侧选择业务库（一个业务库对应一个数据库），右侧配置入库规则；记录须先完成提取与校验，全部确认后手动入库</span>
   </div>
-  <div class="flowbar" id="flowbar" data-cur="3"></div>
   <div class="banner err" id="err" hidden></div>
   <div class="banner info" id="ok" hidden></div>
   <div class="loadwrap">
@@ -148,9 +147,9 @@
       <div class="fsec">
         <label class="flab" for="mpmode">写入方式</label>
         <select class="tin" id="mpmode">
-          <option value="upsert">已存在的行覆盖更新，不存在的新增</option>
-          <option value="insert">全部作为新行插入，重复记录不做合并（可在回执中核对）</option>
-          <option value="update">仅更新已存在的行，匹配不到的记录不写入</option>
+          <option value="upsert" title="已存在的行覆盖更新，不存在的新增">覆盖或新增</option>
+          <option value="insert" title="全部作为新行插入，重复记录不做合并（可在回执中核对）">仅新增</option>
+          <option value="update" title="仅更新已存在的行，匹配不到的记录不写入">仅更新</option>
         </select>
       </div>
       <div class="fsec">

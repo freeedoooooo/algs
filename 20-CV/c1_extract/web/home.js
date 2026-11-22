@@ -10,6 +10,7 @@ var items=[], led=[];
 var pollT=null, loopT=null, lastTaskId=null;
 
 function say(t,cls){ hmsg.textContent=t; hmsg.className='qmsg'+(cls?' '+cls:''); }
+function sayHtml(html,cls){ hmsg.innerHTML=html; hmsg.className='qmsg'+(cls?' '+cls:''); }
 
 /* ---- 模板下拉：与提取页同源；记住上次选择（H3） ---- */
 fetch('/api/templates').then(function(r){return r.json();}).then(function(j){
@@ -79,7 +80,7 @@ hgo.onclick=function(){
     }).then(function(r){return r.json();});
   }).then(function(j){
     if(!j.ok) throw new Error(j.error||'提交失败');
-    say('已提交，正在提取…','run');
+    sayHtml('已提交，正在提取…　<a class="linkbtn" href="/extract">查看进度</a>','run');
     pollStatus();
   }).catch(function(e){
     say('提交失败：'+e.message,'err'); hgo.disabled=hpicked.length===0;
@@ -89,10 +90,13 @@ function pollStatus(){
   fetch('/api/status').then(function(r){return r.json();}).then(function(s){
     if(s.running){ pollT=setTimeout(pollStatus,800); return; }
     clearTimeout(pollT); pollT=null;
-    if(s.error){ say('提取失败：'+s.error,'err'); refresh(); return; }
+    if(s.error){
+      sayHtml('提取失败，未生成暂存：'+escHtml(s.error)+
+        '　<a class="linkbtn" href="/tasks">查看详情</a>','err'); refresh(); return; }
     if(s.ready&&s.task_id){
       lastTaskId=s.task_id;
-      say('提取完成，任务 #'+s.task_id,'ok');
+      sayHtml('提取完成，任务 #'+s.task_id+
+        '　<a class="linkbtn" href="/review?task='+s.task_id+'">前往校验</a>','ok');
       hpicked=[]; renderPicked(); refresh();
     }
   }).catch(function(){ pollT=setTimeout(pollStatus,1500); });
@@ -130,8 +134,8 @@ function renderCards(){
   setCard(1, v.busy.length,
     v.busy.length?('任务 '+v.busy.map(function(t){return '#'+t.task_id;}).join('、')):'暂无进行中的提取任务',
     !v.busy.length);
-  setCard(2, v.reviewFiles,
-    v.reviewFiles? v.reviewTasks+' 个任务待逐条核对':'暂无待校验记录', !v.reviewFiles);
+  setCard(2, v.reviewTasks,
+    v.reviewFiles? '共 '+v.reviewFiles+' 个文件待逐条核对':'暂无待校验记录', !v.reviewFiles);
   setCard(3, v.loadTasks.length,
     v.loadTasks.length? '校验完成，等待入库':'暂无待入库任务',
     !v.loadTasks.length);
@@ -153,7 +157,7 @@ function todoRow(seq,taskId,name,what,act,href,warn){
     '<td class="mono">#'+taskId+'</td>'+
     '<td><span class="desc" title="'+escHtml(name)+'">'+escHtml(name||'—')+'</span></td>'+
     '<td class="'+(warn?'warn':'')+'">'+escHtml(what)+'</td>'+
-    '<td><span class="act">'+act+'</span></td></tr>';
+    '<td style="white-space:nowrap">'+act+'</td></tr>';
 }
 function renderTodo(v){
   var rows=[];
@@ -162,26 +166,32 @@ function renderTodo(v){
     var pend=0;
     (t.files||[]).forEach(function(f){ pend+=f.pending_n+f.edited_n; });
     if(pend>0) rows.push({id:t.task_id,name:fileNames(t),
-      what:'尚有 '+pend+' 条记录待校验',act:'<a class="clink" href="/review?task='+
+      what:'② 尚有 '+pend+' 条记录待校验',act:'<a class="linkbtn" href="/review?task='+
         t.task_id+'">前往校验</a>',t:t.created_at});
   });
   v.loadTasks.forEach(function(t){
     rows.push({id:t.task_id,name:fileNames(t),
-      what:'校验完成，待入库',
+      what:'③ 校验完成，待入库',
       act:'<button type="button" class="linkbtn" data-load="'+t.task_id+'">前往入库</button>',
       t:t.created_at});
   });
   v.busy.forEach(function(t){
-    rows.push({id:t.task_id,name:fileNames(t),what:'提取中…',
-      act:'<a class="clink" href="/extract">查看进度</a>',t:t.created_at});
+    rows.push({id:t.task_id,name:fileNames(t),what:'① 提取中…',
+      act:'<a class="linkbtn" href="/extract">查看进度</a>',t:t.created_at});
   });
   v.failed.forEach(function(t){
     rows.push({id:t.task_id,name:fileNames(t),
-      what:t.state==='partial'?'部分入库，存在隔离记录':'提取失败',
-      act:'<a class="clink" href="/tasks">查看详情</a>',t:t.created_at});
+      what:t.state==='partial'?'③ 部分入库，存在隔离记录':'① 提取失败',
+      act:'<a class="linkbtn" href="/tasks">查看详情</a>',t:t.created_at});
   });
   rows.sort(function(a,b){ return (a.t<b.t?1:(a.t>b.t?-1:0)); });
   var shown=rows.slice(0,8);
+  var note=document.getElementById('todonote');
+  if(rows.length>shown.length){
+    note.hidden=false;
+    note.textContent='待办共 '+rows.length+' 项，此处仅显示最近 8 项；'
+      +'各阶段完整数量见上方状态卡。';
+  }else note.hidden=true;
   var tb=document.getElementById('todorows'), table=document.getElementById('todotable');
   var empty=document.getElementById('todoempty');
   empty.hidden=shown.length>0; table.hidden=shown.length===0;

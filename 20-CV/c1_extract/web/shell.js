@@ -34,11 +34,12 @@ function thumbHtml(name,url){
   return '<a class="thumb file" href="'+escHtml(url)+'" target="_blank" title="'+
     escHtml(name)+'"><span>'+escHtml(label.slice(0,4))+'</span></a>';
 }
-/* 写入方式存库值不变（upsert/insert/update），显示层与 load.html 下拉保持同一口径 */
+/* 写入方式存库值不变（upsert/insert/update），显示层统一用短标签；
+   完整解释见 load.html 下拉 title 悬浮提示 */
 var MODE_LABEL={
-  upsert:'已存在的行覆盖更新，不存在的新增',
-  insert:'全部作为新行插入，重复记录不做合并（可在回执中核对）',
-  update:'仅更新已存在的行，匹配不到的记录不写入'
+  upsert:'覆盖或新增',
+  insert:'仅新增',
+  update:'仅更新'
 };
 function modeLabel(m){ return MODE_LABEL[m]||m||'—'; }
 var STATE_LABEL={
@@ -201,21 +202,6 @@ function bindPager(el,onGo,onSize){
     if(e.key==='Escape') closeReceiptDrawer();
   });
 })();
-/* ---- 流程条（仅入库页挂载，禁止各页自绘；提取/校验页经用户确认不上）。
-   markup 约定：<div class="flowbar" id="flowbar" data-cur="3"></div>
-   data-cur：1=提取 2=校验 3=入库；当前节点高亮不可点，其余可点。 ---- */
-(function(){
-  var el=document.getElementById('flowbar');
-  if(!el) return;
-  var cur=el.getAttribute('data-cur');
-  var steps=[['src','原件','/sources'],['1','① 提取','/extract'],
-             ['2','② 校验','/review'],['3','③ 入库','/rules']];
-  el.innerHTML=steps.map(function(s,i){
-    var sep=i?'<span class="fbsep">→</span>':'';
-    return sep+(s[0]===cur
-      ?'<span class="fbnode on">'+s[1]+'</span>'
-      :'<a class="fbnode" href="'+s[2]+'">'+s[1]+'</a>');
-  }).join('');
-})();
+/* ---- 流程条组件已移除（2026-11-22 用户确认入库页也不需要） ---- */
 /* 字段名规范化（自动对齐共用口径）：小写＋去空格/下划线 */
 function normKey(s){ return String(s==null?'':s).toLowerCase().replace(/[\s_]/g,''); }

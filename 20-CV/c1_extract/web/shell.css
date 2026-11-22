@@ -28,15 +28,7 @@ button{font:inherit;cursor:pointer}
 .pagehead .spacer{flex:1}
 .pagehead .sub{font-size:12px;color:#6b7688}
 
-/* ---- 流程条（提取/校验/入库三页共用，shell.js 统一渲染） ---- */
-.flowbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-  font-size:12px;color:#6b7688;margin-bottom:10px}
-.flowbar .fbsep{color:#b7c0cf}
-.flowbar .fbnode{padding:3px 12px;border-radius:999px;border:1px solid #dbe2ec;
-  background:#fff;color:#5a6a85;text-decoration:none;white-space:nowrap}
-a.fbnode:hover{border-color:#2563eb;color:#2563eb}
-.flowbar .fbnode.on{background:#2563eb;border-color:#2563eb;color:#fff;
-  font-weight:600;cursor:default}
+/* ---- 流程条组件已移除（见 shell.js） ---- */
 .toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .toolbar input[type=search],.toolbar input[type=text],.toolbar select{
   font:inherit;font-size:13px;padding:5px 9px;border:1px solid #cbd5e1;
