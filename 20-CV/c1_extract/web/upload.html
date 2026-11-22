@@ -22,6 +22,7 @@
 </nav>
 <div class="app">
   <aside class="console">
+    <div class="flowbar" id="flowbar" data-cur="1"></div>
     <div id="drop">
       <b>点击或拖拽文件到此处</b>
       pdf/csv/png/jpg/bmp/webp/txt/md，可多选，单个 ≤ 20MB
@@ -40,7 +41,7 @@
     <div class="tplrow">
       <label for="tplsel">模板</label>
       <select id="tplsel"></select>
-      <span class="hint" tabindex="0" data-tip="映射模板=固定目标字段（入库须用）。&#10;原始透传=每表每行一条，键=表头原文，&#10;只可预览，不可入库。">?</span>
+      <span class="hint" tabindex="0" data-tip="模板＝怎么读这份文件。&#10;固定字段模板：产出规范字段，可入库。&#10;原始透传：每表每行一条，键=表头原文，&#10;只可预览，不可入库。">?</span>
     </div>
     <div class="row">
       <button id="go" disabled>开始提取</button>

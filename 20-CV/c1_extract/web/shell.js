@@ -34,6 +34,13 @@ function thumbHtml(name,url){
   return '<a class="thumb file" href="'+escHtml(url)+'" target="_blank" title="'+
     escHtml(name)+'"><span>'+escHtml(label.slice(0,4))+'</span></a>';
 }
+/* 写入方式存库值不变（upsert/insert/update），显示层统一用这三句人话 */
+var MODE_LABEL={
+  upsert:'已存在的行覆盖更新，不存在的新增',
+  insert:'全部当新行插入，重复照插（靠回执可查）',
+  update:'只覆盖已存在的行，对不上号的不动'
+};
+function modeLabel(m){ return MODE_LABEL[m]||m||'—'; }
 var STATE_LABEL={
   pending:['待处理','gray'], extracting:['提取中','blue'],
   previewed:['已预览','green'], reviewed:['已校验','purple'],
@@ -105,7 +112,7 @@ function openReceiptDrawer(taskId){
       logs.map(function(l){
         return '<tr><td class="mono">'+l.task_file_id+'</td>'+
           '<td class="num">'+(l.record_index+1)+'</td>'+
-          '<td>'+escHtml(l.action)+'</td>'+
+          '<td>'+escHtml({insert:'新增',update:'覆盖'}[l.action]||l.action)+'</td>'+
           '<td><code class="mono">'+escHtml(l.target_pk)+'</code></td>'+
           '<td class="num">'+fmtTime(l.loaded_at)+'</td></tr>';
       }).join('')+'</tbody></table>':
@@ -194,120 +201,21 @@ function bindPager(el,onGo,onSize){
     if(e.key==='Escape') closeReceiptDrawer();
   });
 })();
-/* P2c 入库目标抽屉（tasks/staging 共用）：未绑定任务入库时选数据源＋映射。
-    markup 动态注入；映射按 数据源×任务模板 双过滤；门禁计数可见预期；
-   服务端校验/门禁/预检全过才登记目标并写入，失败内联显示且不登记（可另选）。
-   选择内存保留：门禁失败修完校验重开不必重选。 */
-var ltCtx=null, ltAll={ds:[],maps:[]}, ltKeep={ds:'',lt:''};
-function closeLoadTargetDrawer(){
-  var d=document.getElementById('ltdrawer');
-  if(d) d.hidden=true;
-}
-function ltGateText(c){
-  c=c||{};
-  var blocked=(c.pending||0)+(c.edited||0)+(c.rejected||0);
-  return blocked?
-    ('门禁：待校验 '+c.pending+' · 已修改未确认 '+c.edited+' · 已拒绝 '+c.rejected+
-     ' · 已确认 '+(c.confirmed||0)+'（须全部确认）'):
-    ('门禁通过：全部 '+(c.confirmed||0)+' 条已确认，可入库');
-}
-function ltRefreshMaps(){
-  var dsSel=document.getElementById('ltds'), mapSel=document.getElementById('ltmap');
-  var go=document.getElementById('ltgo');
-  var list=ltAll.maps.filter(function(m){
-    return String(m.template_id)===String(ltCtx.templateId)&&
-           String(m.datasource_id)===String(dsSel.value);
-  });
-  mapSel.innerHTML=list.length?list.map(function(m){
-    return '<option value="'+m.id+'">'+escHtml(m.target_table+' · '+m.write_mode)+'</option>';
-  }).join(''):'<option value="">无匹配映射（到入库页新建）</option>';
-  if(ltKeep.lt&&list.some(function(m){return String(m.id)===ltKeep.lt;}))
-    mapSel.value=ltKeep.lt;
-  ltKeep.lt=mapSel.value;
-  go.disabled=!mapSel.value;
-}
-function openLoadTargetDrawer(taskId,templateId,onDone){
-  ltCtx={taskId:taskId,templateId:templateId,onDone:onDone};
-  var d=document.getElementById('ltdrawer');
-  if(!d){
-    d=document.createElement('div');
-    d.className='drawer'; d.id='ltdrawer';
-    d.innerHTML='<div class="dpanel">'+
-      '<div class="dhead"><h2 id="lttitle">选择入库目标</h2><span class="spacer"></span>'+
-      '<button type="button" class="dclose" id="ltclose">关闭 (Esc)</button></div>'+
-      '<div class="dbody">'+
-      '<div class="banner err" id="lterr" hidden></div>'+
-      '<div class="ltrow"><label for="ltds">数据源</label><select id="ltds"></select></div>'+
-      '<div class="ltrow"><label for="ltmap">映射</label><select id="ltmap"></select></div>'+
-      '<div class="msg" id="ltgate" style="margin-top:8px"></div>'+
-      '<div class="msg" style="margin-top:6px">映射＝数据源×表×模板的绑定，在 '+
-      '<a href="/load" target="_blank">入库页</a> 管理。校验/门禁/预检全过才登记目标并写入；'+
-      '未通过不登记，下次可另选。</div>'+
-      '</div>'+
-      '<div class="dfoot"><span class="spacer" style="flex:1"></span>'+
-      '<button type="button" class="btn" id="ltgo">入库</button></div>'+
-      '</div>';
-    document.body.appendChild(d);
-    document.getElementById('ltclose').onclick=closeLoadTargetDrawer;
-    d.addEventListener('click',function(e){ if(e.target===d) closeLoadTargetDrawer(); });
-    document.addEventListener('keydown',function(e){
-      if(e.key==='Escape') closeLoadTargetDrawer();
-    });
-    document.getElementById('ltds').onchange=function(){
-      ltKeep.ds=this.value; ltRefreshMaps();
-    };
-    document.getElementById('ltmap').onchange=function(){ ltKeep.lt=this.value; };
-    document.getElementById('ltgo').onclick=function(){
-      var btn=this, err=document.getElementById('lterr');
-      var dsSel=document.getElementById('ltds'), mapSel=document.getElementById('ltmap');
-      if(!dsSel.value||!mapSel.value) return;
-      btn.disabled=true; err.hidden=true;
-      fetch('/api/tasks/'+ltCtx.taskId+'/load',{
-        method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({load_datasource_id:Number(dsSel.value),
-                             load_table_id:Number(mapSel.value)})
-      }).then(function(r){
-        return r.json().catch(function(){return {};}).then(function(j){
-          return {s:r.status,j:j};
-        });
-      }).then(function(o){
-        btn.disabled=false;
-        if(!o.j.ok){
-          err.textContent='不能入库：'+(o.j.error||('HTTP '+o.s));
-          err.hidden=false; return;
-        }
-        closeLoadTargetDrawer();
-        if(ltCtx.onDone) ltCtx.onDone();
-      }).catch(function(){
-        btn.disabled=false;
-        err.textContent='入库请求失败：平台库不可用'; err.hidden=false;
-      });
-    };
-  }
-  document.getElementById('lttitle').textContent='任务 #'+taskId+' · 选择入库目标';
-  document.getElementById('lterr').hidden=true;
-  document.getElementById('ltgate').textContent='加载数据源与门禁计数…';
-  document.getElementById('ltgo').disabled=true;
-  d.hidden=false;
-  Promise.all([
-    fetch('/api/load/datasources').then(function(r){return r.json();}),
-    fetch('/api/load/tables').then(function(r){return r.json();}),
-    fetch('/api/tasks/'+taskId+'/gate').then(function(r){return r.json();})
-  ]).then(function(res){
-    if(!ltCtx||ltCtx.taskId!==taskId) return;
-    ltAll.ds=res[0].items||[]; ltAll.maps=res[1].items||[];
-    var dsSel=document.getElementById('ltds');
-    dsSel.innerHTML=ltAll.ds.length?ltAll.ds.map(function(x){
-      return '<option value="'+x.id+'">'+escHtml(x.name+' · '+x.host+'/'+x.db_name)+'</option>';
-    }).join(''):'<option value="">暂无数据源（到入库页新建）</option>';
-    if(ltKeep.ds&&ltAll.ds.some(function(x){return String(x.id)===ltKeep.ds;}))
-      dsSel.value=ltKeep.ds;
-    ltKeep.ds=dsSel.value;
-    document.getElementById('ltgate').textContent=ltGateText(res[2]);
-    ltRefreshMaps();
-  }).catch(function(){
-    document.getElementById('ltgate').textContent='';
-    var err=document.getElementById('lterr');
-    err.textContent='读取失败：平台库不可用'; err.hidden=false;
-  });
-}
+/* ---- 流程条（提取/校验/入库三页共用，禁止各页自绘）。
+   markup 约定：<div class="flowbar" id="flowbar" data-cur="2"></div>
+   data-cur：1=提取 2=校验 3=入库；当前节点高亮不可点，其余可点。 ---- */
+(function(){
+  var el=document.getElementById('flowbar');
+  if(!el) return;
+  var cur=el.getAttribute('data-cur');
+  var steps=[['src','原件','/sources'],['1','① 提取','/'],
+             ['2','② 校验','/staging'],['3','③ 入库','/load']];
+  el.innerHTML=steps.map(function(s,i){
+    var sep=i?'<span class="fbsep">→</span>':'';
+    return sep+(s[0]===cur
+      ?'<span class="fbnode on">'+s[1]+'</span>'
+      :'<a class="fbnode" href="'+s[2]+'">'+s[1]+'</a>');
+  }).join('');
+})();
+/* 字段名规范化（自动对齐共用口径）：小写＋去空格/下划线 */
+function normKey(s){ return String(s==null?'':s).toLowerCase().replace(/[\s_]/g,''); }

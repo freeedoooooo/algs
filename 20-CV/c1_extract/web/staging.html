@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="/static/shell.css">
 <link rel="stylesheet" href="/static/stage.css">
 <link rel="stylesheet" href="/static/staging.css">
+<link rel="stylesheet" href="/static/wizard.css">
 </head>
 <body>
 <nav class="topnav">
@@ -40,6 +41,7 @@
     <button type="button" class="btn ghost mini" id="rcbtn" hidden>回执 / 隔离</button>
     <a class="btn ghost mini" id="tasklink" href="/tasks">返回</a>
   </div>
+  <div class="flowbar" id="flowbar" data-cur="2"></div>
   <div class="banner info" id="modebanner">双击单元格改值（自动转已修改）· ✓ 确认 · ✗ 拒绝 · 单击/悬停血缘回溯不变</div>
   <div class="banner err" id="err" hidden></div>
   <div class="panel" id="taskpick" hidden>
@@ -126,6 +128,7 @@
   </div>
 </div>
 <script src="/static/shell.js"></script>
+<script src="/static/wizard.js"></script>
 <script src="/static/stage.js"></script>
 <script src="/static/staging.js"></script>
 </body>

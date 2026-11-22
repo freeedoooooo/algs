@@ -257,7 +257,7 @@ def task_batch(paths, params=None, log=None, task_ctx=None):
             fc['state'] = 'previewed'
             nfields = len((tpl.get('mapping_json') or {}).get('fields') or [])
             log.ok('collect', '暂存记录 {} 条（{} · 逐格溯源）'.format(
-                len(recs), '映射 {} 字段'.format(nfields) if nfields
+                len(recs), '字段 {} 个'.format(nfields) if nfields
                 else 'passthrough'), case=name)
             if fc.get('task_file_id'):
                 db('set_task_file_state', fc['task_file_id'], 'previewed')
@@ -328,18 +328,18 @@ def launch_load(task_id, target=None):
         ds_id, lt_id = bound['datasource_id'], bound['load_table_id']
     else:
         if not target:
-            raise errors.BadRequest('请选择入库数据源与映射')
+            raise errors.BadRequest('请选择业务库与入库规则')
         ds_id, lt_id = target['datasource_id'], target['load_table_id']
     lt = catalog.get_load_table(lt_id)
     if lt is None:
-        raise errors.NotFound('入库映射不存在')
+        raise errors.NotFound('入库规则不存在')
     ds = catalog.get_datasource(ds_id)
     if ds is None:
-        raise errors.NotFound('数据源不存在')
+        raise errors.NotFound('业务库不存在')
     if lt['datasource_id'] != ds_id:
-        raise errors.BadRequest('映射不属于所选数据源')
+        raise errors.BadRequest('入库规则不属于所选业务库')
     if lt['template_id'] != task['template']['template_id']:
-        raise errors.BadRequest('映射与任务模板不匹配')
+        raise errors.BadRequest('入库规则与任务模板不匹配')
     tpl = resolve_template(task['template']['version_id'])
     sj = tpl.get('schema_json')
     fields = ([f.get('name') for f in sj.get('fields') or []]
@@ -381,6 +381,90 @@ def launch_load(task_id, target=None):
                      args=(task_id, task, ds, lt, tpl, log),
                      daemon=True).start()
     return {'ok': True, 'task_id': task_id}
+
+
+def preview_load(task_id, table_id=None, draft=None):
+    """入库向导 dry-run：镜像 run_load 的分类（回执跳过→转换→去重依据 SELECT），
+    只读目标库，不写、不绑定、不动 STATE。计数供向导第 3 步「过目」展示；
+    执行时仍以 launch_load 校验为权威。draft＝向导未落库的规则草稿（同字段形状）。"""
+    catalog = _load('store.catalog')
+    errors = _load('store.errors')
+    loader = _load('store.loader')
+    task = catalog.get_task(task_id)
+    if task is None:
+        raise errors.NotFound('任务不存在')
+    bound = task.get('load')
+    if bound:
+        if draft is not None:
+            raise errors.Conflict('任务已绑定入库目标，预览不再接受草稿')
+        table_id = bound['load_table_id']
+    elif table_id is None and draft is None:
+        raise errors.BadRequest('请选择业务库与入库规则')
+    if table_id is not None and draft is not None:
+        raise errors.BadRequest('预览只认一种目标：规则 id 或草稿')
+    if table_id is not None:
+        lt = catalog.get_load_table(int(table_id))
+        if lt is None:
+            raise errors.NotFound('入库规则不存在')
+        if lt['template_id'] != task['template']['template_id']:
+            raise errors.BadRequest('入库规则与任务模板不匹配')
+        ds = catalog.get_datasource(lt['datasource_id'])
+        field_rows, table, wm = lt['fields'], lt['target_table'], lt['write_mode']
+    else:
+        ds = catalog.get_datasource(int(draft.get('datasource_id') or 0))
+        field_rows = draft.get('fields') or []
+        table = str(draft.get('target_table') or '')
+        wm = str(draft.get('write_mode') or 'upsert')
+    if ds is None:
+        raise errors.NotFound('业务库不存在')
+    tpl = resolve_template(task['template']['version_id'])
+    sj = tpl.get('schema_json')
+    fields = ([f.get('name') for f in sj.get('fields') or []]
+              if isinstance(sj, dict) else [])
+    fields = [f for f in fields if f]
+    if not fields:
+        raise errors.BadRequest('透传模板无固定字段，不可入库')
+    loader.preflight(ds, table, field_rows, wm, fields)
+    doc = _load('store.content').get_records(task_id)
+    recs = [(f['task_file_id'], r)
+            for f in (doc['files'] if doc else []) for r in f['records']]
+    if not recs:
+        raise errors.Conflict('无暂存记录')
+    cm, bk = loader.fields_to_map(field_rows)
+    transform = tpl.get('transform_json')
+    receipts = {(r['task_file_id'], r['record_index'])
+                for r in catalog.list_load_logs(task_id)}
+    counts = {'insert': 0, 'update': 0, 'skip': 0, 'quarantine': 0}
+    conn = loader.connect_datasource(ds)
+    try:
+        for tf, rec in recs:
+            if (tf, rec['index']) in receipts:
+                counts['skip'] += 1
+                continue
+            vals, errs = loader.apply_transform(rec['values'], transform)
+            if errs:
+                counts['quarantine'] += 1
+                continue
+            if wm == 'insert':
+                counts['insert'] += 1
+                continue
+            mapped = {cm[k]: v for k, v in vals.items() if k in cm}
+            where = ' AND '.join(
+                '{}=%s'.format(loader._ident(c)) for c in bk)
+            with conn.cursor() as cur:
+                cur.execute('SELECT 1 FROM {} WHERE {} LIMIT 1'.format(
+                    loader._ident(table), where),
+                    [mapped[c] for c in bk])
+                found = cur.fetchone() is not None
+            if found:
+                counts['update'] += 1
+            elif wm == 'update':
+                counts['quarantine'] += 1
+            else:
+                counts['insert'] += 1
+    finally:
+        conn.close()
+    return dict(counts, total=len(recs), write_mode=wm, ok=True)
 
 
 def run_load(task_id, task, ds, lt, tpl, log):

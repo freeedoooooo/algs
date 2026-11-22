@@ -27,6 +27,16 @@ button{font:inherit;cursor:pointer}
 .pagehead h1{font-size:16px;font-weight:600;margin:0;color:#25324a}
 .pagehead .spacer{flex:1}
 .pagehead .sub{font-size:12px;color:#6b7688}
+
+/* ---- 流程条（提取/校验/入库三页共用，shell.js 统一渲染） ---- */
+.flowbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  font-size:12px;color:#6b7688;margin-bottom:10px}
+.flowbar .fbsep{color:#b7c0cf}
+.flowbar .fbnode{padding:3px 12px;border-radius:999px;border:1px solid #dbe2ec;
+  background:#fff;color:#5a6a85;text-decoration:none;white-space:nowrap}
+a.fbnode:hover{border-color:#2563eb;color:#2563eb}
+.flowbar .fbnode.on{background:#2563eb;border-color:#2563eb;color:#fff;
+  font-weight:600;cursor:default}
 .toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .toolbar input[type=search],.toolbar input[type=text],.toolbar select{
   font:inherit;font-size:13px;padding:5px 9px;border:1px solid #cbd5e1;
@@ -116,11 +126,13 @@ table.list .namecell .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowr
 .dclose{font-size:12px;padding:4px 12px;border-radius:6px;border:1px solid #cbd5e1;
   background:#fff;color:#5a6a85}
 .dclose:hover{border-color:#2563eb;color:#2563eb}
-/* P2c 入库目标抽屉表单行（tasks/staging 共用，shell.js 动态注入） */
-.ltrow{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px}
-.ltrow label{color:#25324a;flex:none}
-.ltrow select{font:inherit;font-size:12px;padding:4px 8px;border:1px solid #cbd5e1;
-  border-radius:6px;background:#fff;color:#1f2738;flex:1;min-width:0}
+/* 字段对齐行共用件（load 页规则抽屉＋wizard 向导 step2） */
+.bklab{display:flex;align-items:center;gap:4px;font-size:12px;color:#6b7688;
+  flex:none;white-space:nowrap;cursor:pointer}
+.bklab input{margin:0}
+.mbadge{width:18px;flex:none;text-align:center;font-size:13px;cursor:default}
+.mbadge.ok{color:#177245}
+.mbadge.warn{color:#b42318;font-weight:700}
 
 /* ---- 全屏图片预览（列表页共用，无取数功能） ---- */
 .lightbox{position:fixed;inset:0;background:rgba(10,15,30,.9);z-index:99;

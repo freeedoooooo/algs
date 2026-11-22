@@ -53,7 +53,7 @@ def create_datasource(name, host, port, user, password, db_name,
     host = str(host or '').strip()
     db_name = str(db_name or '').strip()
     if not name:
-        raise BadRequest('数据源名称不能为空')
+        raise BadRequest('业务库名称不能为空')
     if not host or not db_name:
         raise BadRequest('主机与库名不能为空')
     if db_type != 'mysql':
@@ -68,7 +68,7 @@ def create_datasource(name, host, port, user, password, db_name,
             cur.execute('SELECT id FROM extract_load_datasource'
                         ' WHERE name=%s', (name,))
             if cur.fetchone():
-                raise Conflict('数据源名称已存在')
+                raise Conflict('业务库名称已存在')
             cur.execute(
                 'INSERT INTO extract_load_datasource (name, db_type, host,'
                 ' port, user, password, db_name)'
@@ -95,15 +95,15 @@ def update_datasource(ds_id, name=None, host=None, port=None, user=None,
             cur.execute('SELECT id FROM extract_load_datasource WHERE id=%s',
                         (ds_id,))
             if not cur.fetchone():
-                raise NotFound('数据源不存在')
+                raise NotFound('业务库不存在')
             if name is not None:
                 name = str(name).strip()
                 if not name:
-                    raise BadRequest('数据源名称不能为空')
+                    raise BadRequest('业务库名称不能为空')
                 cur.execute('SELECT id FROM extract_load_datasource'
                             ' WHERE name=%s AND id<>%s', (name, ds_id))
                 if cur.fetchone():
-                    raise Conflict('数据源名称已存在')
+                    raise Conflict('业务库名称已存在')
                 cur.execute('UPDATE extract_load_datasource SET name=%s'
                             ' WHERE id=%s', (name, ds_id))
             if user is not None:
@@ -126,8 +126,8 @@ def update_datasource(ds_id, name=None, host=None, port=None, user=None,
                 cur.execute('SELECT COUNT(*) FROM extract_load_table'
                             ' WHERE datasource_id=%s', (ds_id,))
                 if cur.fetchone()[0]:
-                    raise Conflict('已被映射引用，目标（主机/端口/库名）锁定；'
-                                   '账号密码可改，换目标请新建数据源')
+                    raise Conflict('已被入库规则引用，目标（主机/端口/库名）锁定；'
+                                   '账号密码可改，换目标库请新建业务库')
                 sets = ', '.join('{}=%s'.format(k) for k in target)
                 cur.execute('UPDATE extract_load_datasource SET ' + sets +
                             ' WHERE id=%s', list(target.values()) + [ds_id])
@@ -144,11 +144,11 @@ def delete_datasource(ds_id):
             cur.execute('SELECT id FROM extract_load_datasource WHERE id=%s',
                         (ds_id,))
             if not cur.fetchone():
-                raise NotFound('数据源不存在')
+                raise NotFound('业务库不存在')
             cur.execute('SELECT COUNT(*) FROM extract_load_table'
                         ' WHERE datasource_id=%s', (ds_id,))
             if cur.fetchone()[0]:
-                raise Conflict('该数据源已被映射引用，禁止删除')
+                raise Conflict('该业务库已被入库规则引用，禁止删除')
             cur.execute('DELETE FROM extract_load_datasource WHERE id=%s',
                         (ds_id,))
             conn.commit()
@@ -255,7 +255,7 @@ def _tpl_schema_fields(cur, template_id):
               if isinstance(sj, dict) else [])
     fields = [f for f in fields if f]
     if not fields:
-        raise BadRequest('透传模板无固定目标字段，不可登记入库映射')
+        raise BadRequest('透传模板无固定目标字段，不可登记入库规则')
     return fields
 
 
@@ -285,7 +285,7 @@ def create_load_table(datasource_id, template_id, target_table, write_mode,
             cur.execute('SELECT id FROM extract_load_datasource WHERE id=%s',
                         (datasource_id,))
             if not cur.fetchone():
-                raise NotFound('数据源不存在')
+                raise NotFound('业务库不存在')
             _tpl_exists(cur, template_id)
             schema_fields = _tpl_schema_fields(cur, template_id)
             loader.validate_fields(schema_fields, fields, write_mode)
@@ -294,7 +294,7 @@ def create_load_table(datasource_id, template_id, target_table, write_mode,
                         ' AND target_table=%s',
                         (datasource_id, template_id, target_table))
             if cur.fetchone():
-                raise Conflict('同数据源＋模板＋目标表的映射已存在')
+                raise Conflict('同业务库＋模板＋目标表的入库规则已存在')
             cur.execute(
                 'INSERT INTO extract_load_table (datasource_id, template_id,'
                 ' target_table, write_mode) VALUES (%s,%s,%s,%s)',
@@ -317,11 +317,11 @@ def update_load_table(lt_id, write_mode=None, fields=None):
                         ' FROM extract_load_table WHERE id=%s', (lt_id,))
             row = cur.fetchone()
             if not row:
-                raise NotFound('映射不存在')
+                raise NotFound('入库规则不存在')
             cur.execute('SELECT COUNT(*) FROM extract_task'
                         ' WHERE load_table_id=%s', (lt_id,))
             if cur.fetchone()[0]:
-                raise Conflict('该映射已被任务引用，只读（删除亦禁止）')
+                raise Conflict('该入库规则已被任务引用，只读（删除亦禁止）')
             wm = write_mode if write_mode is not None else row[1]
             fs = fields
             if fs is None:
@@ -350,11 +350,11 @@ def delete_load_table(lt_id):
             cur.execute('SELECT id FROM extract_load_table WHERE id=%s',
                         (lt_id,))
             if not cur.fetchone():
-                raise NotFound('映射不存在')
+                raise NotFound('入库规则不存在')
             cur.execute('SELECT COUNT(*) FROM extract_task'
                         ' WHERE load_table_id=%s', (lt_id,))
             if cur.fetchone()[0]:
-                raise Conflict('该映射已被任务引用，禁止删除')
+                raise Conflict('该入库规则已被任务引用，禁止删除')
             cur.execute('DELETE FROM extract_load_table_field'
                         ' WHERE load_table_id=%s', (lt_id,))
             cur.execute('DELETE FROM extract_load_table WHERE id=%s', (lt_id,))

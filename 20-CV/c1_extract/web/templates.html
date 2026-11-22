@@ -22,6 +22,7 @@
 <div class="pagebody">
   <div class="pagehead">
     <h1>提取模板</h1>
+    <span class="sub">模板＝怎么读这份文件；产出＝一串字段（字段进哪个库表在「入库」配）</span>
     <span class="spacer"></span>
     <div class="toolbar">
       <input type="search" id="q" placeholder="搜索模板名 / 说明…">
@@ -81,10 +82,10 @@
         <div class="hint">序号＝候选表顺序：各页非合并表在前，跨页合并表在后。</div>
       </div>
       <div class="fsec">
-        <label class="flab">字段映射（目标字段名 ← 源列）</label>
+        <label class="flab">字段定义（目标字段名 ← 源列）</label>
         <div id="frows"></div>
         <button type="button" class="btn mini ghost" id="addfield">＋添加字段</button>
-        <div class="hint">目标字段名＝记录键（入库列映射的键）；源列可按键名或列序号；转换规则在入库时消费（暂存值保真不动）。保存即生成不可变新版本。</div>
+        <div class="hint">目标字段名＝记录键（入库规则按它对齐目标列）；源列可按键名或列序号；转换规则在入库时消费（暂存值保真不动）。保存即生成不可变新版本。</div>
       </div>
       <div class="fsec" id="versec" hidden>
         <label class="flab">版本历史</label>

@@ -478,7 +478,7 @@ def api_load_datasource_del(ds_id: int):
 def _ds_or_404(ds_id):
     ds = _load('store.catalog').get_datasource(ds_id)
     if ds is None:
-        raise store_errors.NotFound('数据源不存在')
+        raise store_errors.NotFound('业务库不存在')
     return ds
 
 
@@ -533,7 +533,7 @@ async def api_load_table_add(request: Request):
         ds_id = int(body.get('datasource_id'))
         tpl_id = int(body.get('template_id'))
     except (TypeError, ValueError):
-        raise store_errors.BadRequest('须选择数据源与模板')
+        raise store_errors.BadRequest('须选择业务库与模板')
     lt_id = _load('store.catalog').create_load_table(
         ds_id, tpl_id, body.get('target_table'),
         body.get('write_mode') or 'upsert', body.get('fields'))
@@ -544,7 +544,7 @@ async def api_load_table_add(request: Request):
 def api_load_table_get(lt_id: int):
     lt = _load('store.catalog').get_load_table(lt_id)
     if lt is None:
-        raise store_errors.NotFound('映射不存在')
+        raise store_errors.NotFound('入库规则不存在')
     return lt
 
 
@@ -588,8 +588,20 @@ async def api_task_load(task_id: int, request: Request):
             target = {'datasource_id': int(body.get('load_datasource_id')),
                       'load_table_id': int(body.get('load_table_id'))}
         except (TypeError, ValueError):
-            raise store_errors.BadRequest('入库目标须为数据源/映射 id')
+            raise store_errors.BadRequest('入库目标须为业务库/入库规则 id')
     return service.launch_load(task_id, target)
+
+
+@app.post('/api/tasks/{task_id}/load-preview')
+async def api_task_load_preview(task_id: int, request: Request):
+    """入库向导 dry-run（只读）：{load_table_id} 或 {draft:{datasource_id,
+    target_table,write_mode,fields}}；已绑定任务可空体。返回 新增/覆盖/跳过/隔离 计数。"""
+    body = await _json_body(request)
+    draft = body.get('draft')
+    table_id = body.get('load_table_id')
+    return service.preview_load(task_id,
+                                table_id=None if draft else table_id,
+                                draft=draft if isinstance(draft, dict) else None)
 
 
 @app.get('/api/tasks/{task_id}/quarantine')

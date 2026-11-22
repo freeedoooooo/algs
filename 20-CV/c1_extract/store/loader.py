@@ -65,13 +65,13 @@ def validate_fields(fields, field_rows, write_mode='upsert', columns=None):
     """映射契约校验（建映射/编辑/预检共用）。columns=None 跳过存在性检查。
     field_rows=[{template_field,target_column,is_business_key}]。"""
     if write_mode not in ('insert', 'upsert', 'update'):
-        raise BadRequest('非法写入模式：{}'.format(write_mode))
+        raise BadRequest('非法写入方式：{}'.format(write_mode))
     if not isinstance(field_rows, list) or not field_rows:
-        raise BadRequest('字段映射须为非空数组')
+        raise BadRequest('字段对齐行不能为空')
     cm, seen_f, seen_c = {}, set(), set()
     for f in field_rows:
         if not isinstance(f, dict):
-            raise BadRequest('字段映射行须为对象')
+            raise BadRequest('字段对齐行格式不对')
         tf, tc = f.get('template_field'), f.get('target_column')
         if not isinstance(tf, str) or not tf.strip():
             raise BadRequest('模板字段名不能为空')
@@ -80,19 +80,19 @@ def validate_fields(fields, field_rows, write_mode='upsert', columns=None):
         if tf in seen_f:
             raise BadRequest('模板字段重复：{}'.format(tf))
         if tc in seen_c:
-            raise BadRequest('多个字段映射到同一目标列')
+            raise BadRequest('多个字段指向同一目标列')
         seen_f.add(tf)
         seen_c.add(tc)
         cm[tf] = tc
     missing = [f for f in fields if f not in cm]
     if missing:
-        raise BadRequest('缺字段映射：{}'.format('、'.join(missing)))
+        raise BadRequest('以下字段还没对齐目标列：{}'.format('、'.join(missing)))
     extra = set(cm) - set(fields)
     if extra:
         raise BadRequest('未知字段：{}'.format('、'.join(sorted(extra))))
     bk = [f['target_column'] for f in field_rows if f.get('is_business_key')]
     if write_mode in ('upsert', 'update') and not bk:
-        raise BadRequest('{} 模式须勾选至少一个业务键字段'.format(write_mode))
+        raise BadRequest('{} 方式须至少选一个去重依据字段'.format(write_mode))
     if columns is not None:
         cols = set(columns)
         bad = [c for c in list(cm.values()) + bk if c not in cols]
@@ -190,6 +190,6 @@ def write_record(cur, table, column_map, values, write_mode, business_key):
                 list(sets.values()) + bvals)
         return 'update', pk
     if write_mode == 'update':
-        raise LoadRecordError('目标行不存在（业务键 {}）'.format(pk))
+        raise LoadRecordError('目标行不存在（去重依据 {}）'.format(pk))
     _insert(cur, table, mapped)
     return 'insert', pk

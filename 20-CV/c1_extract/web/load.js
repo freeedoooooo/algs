@@ -1,6 +1,6 @@
-/* web/load.js — 入库配置（P2b）：左数据源列表 · 右映射列表。
-   一个数据源＝一个库（明文配置）；映射＝数据源×表×模板绑定，字段行编辑。
-   契约见 design-p2b-datasource.md。 */
+/* web/load.js — 入库规则（高级）：左业务库列表 · 右入库规则列表。
+   一个业务库＝一个库（明文配置）；规则＝业务库×表×模板绑定，字段行编辑。
+   契约见 design-p2b-datasource.md＋design-ux-load-wizard.md（用词改齐）。 */
 var dss=[], maps=[], tpls=[], cols=[];
 var curDs=null, editDs=null, editLt=null, ltLocked=false;
 var dsPage=1, mapPage=1, dsSize=getListPer(), mapSize=getListPer();
@@ -42,14 +42,14 @@ function dsById(id){
   return null;
 }
 
-/* ---- 左：数据源列表 ---- */
+/* ---- 左：业务库列表 ---- */
 function renderDs(){
   var info=pageSlice(dss,dsPage,dsSize);
   dsPage=info.page;
   document.getElementById('dslist').innerHTML=info.rows.map(function(d,i){
     return '<div class="dsitem'+(d.id===curDs?' active':'')+'" data-ds="'+d.id+'">'+
       '<div class="dsmain"><b>'+seqNo(info,i)+'. '+escHtml(d.name)+'</b>'+
-        '<span class="badge">'+d.table_count+' 映射</span></div>'+
+        '<span class="badge">'+d.table_count+' 规则</span></div>'+
       '<div class="dsmeta mono">'+escHtml('ID '+d.id+' · '+d.host+':'+d.port+'/'+d.db_name)+'</div>'+
       '<div class="dsops">'+
         '<button type="button" class="linkbtn" data-test="'+d.id+'">试连</button>'+
@@ -61,10 +61,10 @@ function renderDs(){
   document.getElementById('dsempty').hidden=dss.length>0;
   pgDs.render(info);
 }
-/* ---- 右：所选数据源的映射列表 ---- */
+/* ---- 右：所选业务库的入库规则列表 ---- */
 function renderMaps(){
   var d=dsById(curDs);
-  document.getElementById('maptitle').textContent=d?('入库映射 · '+d.name):'入库映射';
+  document.getElementById('maptitle').textContent=d?('入库规则 · '+d.name):'入库规则';
   document.getElementById('newmap').disabled=!d;
   var list=maps.filter(function(m){return m.datasource_id===curDs;});
   var info=pageSlice(list,mapPage,mapSize);
@@ -79,7 +79,7 @@ function renderMaps(){
       '<td class="mono">'+m.id+'</td>'+
       '<td><code class="mono">'+escHtml(m.target_table)+'</code></td>'+
       '<td>'+escHtml(m.tpl_name||'—')+'</td>'+
-      '<td>'+escHtml(m.write_mode)+'</td>'+
+      '<td>'+escHtml(modeLabel(m.write_mode))+'</td>'+
       '<td class="num">'+m.field_count+'</td>'+
       '<td><span class="mono">'+escHtml(bk.join(', ')||'—')+'</span></td>'+
       '<td style="white-space:nowrap">'+
@@ -102,11 +102,11 @@ function loadAll(keepSel){
     document.getElementById('err').hidden=true;
   }).catch(function(e){
     dss=[]; maps=[]; tpls=[]; curDs=null; renderDs(); renderMaps();
-    showErr('平台库未连接：入库配置暂不可用（'+e.message+'）');
+    showErr('平台库未连接：入库规则暂不可用（'+e.message+'）');
   });
 }
 
-/* ---- 数据源：选中 / 试连 / 编辑 / 删除 ---- */
+/* ---- 业务库：选中 / 试连 / 编辑 / 删除 ---- */
 document.getElementById('dslist').addEventListener('click',function(e){
   var t=e.target;
   var test=t.closest?t.closest('[data-test]'):null;
@@ -124,9 +124,9 @@ document.getElementById('dslist').addEventListener('click',function(e){
   var del=t.closest?t.closest('[data-delds]'):null;
   if(del){
     var did=del.getAttribute('data-delds'), name=del.getAttribute('data-name');
-    if(!window.confirm('删除数据源「'+name+'」？')) return;
+    if(!window.confirm('删除业务库「'+name+'」？')) return;
     api('DELETE','/api/load/datasources/'+did).then(function(){
-      showOk('已删除数据源「'+name+'」。');
+      showOk('已删除业务库「'+name+'」。');
       if(curDs===Number(did)) curDs=null;
       loadAll(true);
     }).catch(function(e2){ showErr(e2.message); });
@@ -136,11 +136,11 @@ document.getElementById('dslist').addEventListener('click',function(e){
   if(item){ curDs=Number(item.getAttribute('data-ds')); mapPage=1; renderDs(); renderMaps(); }
 });
 
-/* ---- 数据源抽屉 ---- */
+/* ---- 业务库抽屉 ---- */
 var DS_FIELDS=['dsname','dshost','dsport','dsuser','dspass','dsdb'];
 function openDs(d){
   editDs=d||null;
-  document.getElementById('dstitle').textContent=d?'编辑数据源':'新建数据源';
+  document.getElementById('dstitle').textContent=d?'编辑业务库':'新建业务库';
   document.getElementById('dsname').value=d?d.name:'';
   document.getElementById('dshost').value=d?d.host:'';
   document.getElementById('dsport').value=d?d.port:'3306';
@@ -171,12 +171,44 @@ document.getElementById('dssave').onclick=function(){
   var p=editDs?api('PATCH','/api/load/datasources/'+editDs.id,body)
               :api('POST','/api/load/datasources',body);
   p.then(function(){
-    closeDs(); showOk('已保存数据源「'+v.dsname+'」。');
+    closeDs(); showOk('已保存业务库「'+v.dsname+'」。');
     return loadAll(true);
   }).catch(function(e){ dsmsg.textContent=e.message; });
 };
 
-/* ---- 映射抽屉 ---- */
+/* ---- 入库规则抽屉 ---- */
+/* 字段自动对齐（design-ux-load-wizard §1.3，纯前端）：规范化全等自动选中，
+   ✓=已对齐（灰底自动可改），？=待确认；只填当前为空的行，不动手动/预置值。 */
+function autoMatchRows(){
+  if(ltLocked||!cols.length) return;
+  var byNorm={};
+  cols.forEach(function(c){ var k=normKey(c.name); if(!(k in byNorm)) byNorm[k]=c.name; });
+  Array.prototype.forEach.call(mprows.children,function(div){
+    var sel=div.querySelector('.fcol');
+    if(!sel||sel.value) return;
+    var fname=div.querySelector('.fname').value;
+    var hit=byNorm[normKey(fname)];
+    if(hit){ sel.value=hit; sel.setAttribute('data-auto','1'); }
+  });
+}
+function recomputeMatchBar(){
+  var rows=mprows.querySelectorAll('.frow'), M=rows.length, X=0, A=0;
+  Array.prototype.forEach.call(rows,function(div){
+    var sel=div.querySelector('.fcol'), badge=div.querySelector('.mbadge');
+    if(sel.value){ X++; if(sel.getAttribute('data-auto')==='1') A++; }
+    if(badge){
+      badge.className='mbadge '+(sel.value?'ok':'warn');
+      badge.textContent=sel.value?'✓':'？';
+      badge.title=sel.value?(sel.getAttribute('data-auto')==='1'?'自动对齐，可改':'已对齐'):'待选择目标列';
+    }
+  });
+  var bar=document.getElementById('mpmatch');
+  if(!bar) return;
+  if(!M){ bar.textContent=''; return; }
+  var K=M-X;
+  bar.textContent=A?('已自动匹配 '+A+'/'+M+' 个字段'+(K?'，剩 '+K+' 个待确认':'，全部对上')):
+    (K?('剩 '+K+'/'+M+' 个字段待确认'):(M+' 个字段已全部对齐'));
+}
 function fillCols(){
   Array.prototype.forEach.call(mprows.children,function(div){
     var sel=div.querySelector('.fcol'), keep=sel.value||sel.getAttribute('data-col')||'';
@@ -188,6 +220,8 @@ function fillCols(){
     if(keep&&cols.some(function(c){return c.name===keep;})) sel.value=keep;
     sel.disabled=ltLocked;
   });
+  autoMatchRows();
+  recomputeMatchBar();
 }
 function syncBk(){
   var ins=mpmode.value==='insert';
@@ -205,8 +239,9 @@ function buildRows(names,preset){
     div.innerHTML='<input type="text" class="tin fname" readonly value="'+
       escHtml(f)+'">'+
       '<select class="tin fcol" data-col="'+escHtml(p.col||'')+'"></select>'+
+      '<span class="mbadge"></span>'+
       '<label class="bklab"><input type="checkbox" class="fbk"'+
-      (p.bk?' checked':'')+'>业务键</label>';
+      (p.bk?' checked':'')+'>去重依据</label>';
     mprows.appendChild(div);
   });
   fillCols(); syncBk();
@@ -240,14 +275,14 @@ function loadColumns(table,after){
   });
 }
 function loadTplFields(){
-  mprows.innerHTML='';
+  mprows.innerHTML=''; recomputeMatchBar();
   if(!mptpl.value) return;
   api('GET','/api/templates/'+mptpl.value).then(function(j){
     var sj=j.schema_json;
     var fs=(sj&&typeof sj==='object'&&!Array.isArray(sj)&&sj.fields)||[];
     var names=fs.map(function(f){return f.name;}).filter(Boolean);
     if(!names.length){
-      mprows.innerHTML='<div class="hint">该模板无固定目标字段（透传），不可入库。请选映射模板。</div>';
+      mprows.innerHTML='<div class="hint">该模板无固定目标字段（透传），不可入库。请选有固定字段的模板。</div>';
       return;
     }
     buildRows(names,null);
@@ -259,7 +294,7 @@ function openMap(lt){
   editLt=lt||null;
   ltLocked=!!(lt&&lt.task_refs>0);
   var d=dsById(curDs);
-  document.getElementById('mptitle').textContent=lt?'编辑映射':'新建映射';
+  document.getElementById('mptitle').textContent=lt?'编辑入库规则':'新建入库规则';
   document.getElementById('mpds').value=d?(d.name+' · '+d.host+':'+d.port+'/'+d.db_name):'';
   mptpl.innerHTML='<option value="">选择模板</option>'+
     tpls.map(function(t){
@@ -270,7 +305,7 @@ function openMap(lt){
   mptpl.disabled=ltLocked||!!lt;
   document.getElementById('mplock').hidden=!ltLocked;
   document.getElementById('mpsave').disabled=ltLocked;
-  mpmsg.textContent=''; cols=[]; mprows.innerHTML='';
+  mpmsg.textContent=''; cols=[]; mprows.innerHTML=''; recomputeMatchBar();
   document.getElementById('mpthint').textContent='';
   if(lt){
     mptpl.value=String(lt.template_id);
@@ -301,6 +336,13 @@ document.addEventListener('keydown',function(e){
 mptpl.onchange=loadTplFields;
 mptable.onchange=function(){ if(mptable.value) loadColumns(mptable.value); };
 mpmode.onchange=syncBk;
+/* 手动改选＝取消自动标记，徽标与计数条同步刷新 */
+mprows.addEventListener('change',function(e){
+  if(e.target&&e.target.classList&&e.target.classList.contains('fcol')){
+    e.target.removeAttribute('data-auto');
+    recomputeMatchBar();
+  }
+});
 
 document.getElementById('mpsave').onclick=function(){
   mpmsg.textContent='';
@@ -314,14 +356,14 @@ document.getElementById('mpsave').onclick=function(){
     var f=div.querySelector('.fname').value;
     var c=div.querySelector('.fcol').value;
     if(!c){ err='字段「'+f+'」未选目标列'; return; }
-    if(seen[c]){ err='多个字段映射到同一目标列：'+c; return; }
+    if(seen[c]){ err='多个字段指向同一目标列：'+c; return; }
     seen[c]=1;
     fields.push({template_field:f,target_column:c,
                  is_business_key:div.querySelector('.fbk').checked?1:0});
   });
   if(err){ mpmsg.textContent=err; return; }
   if(mpmode.value!=='insert'&&!fields.some(function(f){return f.is_business_key;})){
-    mpmsg.textContent=mpmode.value+' 模式须勾选至少一个业务键'; return;
+    mpmsg.textContent='「'+modeLabel(mpmode.value)+'」须至少选一个去重依据'; return;
   }
   var p=editLt
     ?api('PATCH','/api/load/tables/'+editLt.id,
@@ -330,8 +372,8 @@ document.getElementById('mpsave').onclick=function(){
          {datasource_id:curDs,template_id:Number(mptpl.value),
           target_table:mptable.value,write_mode:mpmode.value,fields:fields});
   p.then(function(){
-    closeDmap(); showOk('已保存映射（'+(editLt?editLt.target_table:mptable.value)+
-      ' · '+mpmode.value+'）。');
+    closeDmap(); showOk('已保存入库规则（'+(editLt?editLt.target_table:mptable.value)+
+      ' · '+modeLabel(mpmode.value)+'）。');
     return loadAll(true);
   }).catch(function(e){ mpmsg.textContent=e.message; });
 };
@@ -346,9 +388,9 @@ document.getElementById('maprows').addEventListener('click',function(e){
   var del=t.closest?t.closest('[data-delmap]'):null;
   if(!del) return;
   var id=del.getAttribute('data-delmap'), name=del.getAttribute('data-name');
-  if(!window.confirm('删除映射「'+name+'」？')) return;
+  if(!window.confirm('删除入库规则「'+name+'」？')) return;
   api('DELETE','/api/load/tables/'+id).then(function(){
-    showOk('已删除映射。'); loadAll(true);
+    showOk('已删除入库规则。'); loadAll(true);
   }).catch(function(e2){ showErr(e2.message); });
 });
 

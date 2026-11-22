@@ -1,4 +1,4 @@
-/* web/load.css — 入库配置页私有样式（左数据源右映射；表单 token 复用 templates.css） */
+/* web/load.css — 入库规则（高级）页私有样式（左业务库右规则；表单 token 复用 templates.css） */
 .loadwrap{display:flex;gap:12px;align-items:flex-start}
 .dspanel{width:300px;flex:none}
 .mapwrap{flex:1;min-width:0}
@@ -14,6 +14,3 @@
 #mptpl,#mptable,#mpmode{width:100%}
 #mprows .frow .fname{background:#f7f9fd;color:#25324a}
 #mprows .frow .fcol{width:240px}
-.bklab{display:flex;align-items:center;gap:4px;font-size:12px;color:#6b7688;
-  flex:none;white-space:nowrap;cursor:pointer}
-.bklab input{margin:0}

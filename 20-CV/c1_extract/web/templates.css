@@ -20,6 +20,9 @@ select.tin{width:auto;min-width:220px;max-width:100%}
 .frow .fidx{width:80px;flex:none}
 .frow .fidx[hidden]{display:none}
 .frow .fdel{flex:none}
+.frow .fdest{font-size:11px;color:#8a94a6;flex:none;max-width:220px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.frow .fdest.has{color:#177245}
 #addfield{margin-top:2px}
 .vrow{display:flex;align-items:center;gap:10px;padding:5px 0;font-size:13px;
   border-bottom:1px solid #eef2f8}

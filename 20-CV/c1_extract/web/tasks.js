@@ -88,10 +88,10 @@ function renderDetail(j){
   }
   var hasLoad=!!r.load;
   if(hasLoad){
-    html+='<div class="msg" style="margin-top:10px">入库数据源 <b>'+
+    html+='<div class="msg" style="margin-top:10px">业务库 <b>'+
       escHtml(r.load.datasource_name||'—')+'</b> · 库 '+escHtml(r.load.db_name||'—')+
       ' · 目标表 <code class="mono">'+
-      escHtml(r.load.target_table||'—')+'</code> · '+escHtml(r.load.write_mode||'')+
+      escHtml(r.load.target_table||'—')+'</code> · '+escHtml(modeLabel(r.load.write_mode||''))+
       '</div>';
   }
   if(r.state==='previewed'||r.state==='partial')
@@ -109,8 +109,8 @@ function renderDetail(j){
   var lb=document.getElementById('loadbtn');
   if(lb) lb.onclick=function(){
     if(!hasLoad&&r.state==='previewed'){
-      openLoadTargetDrawer(r.task_id,(r.template||{}).template_id,
-        function(){ refreshDetail(r.task_id); });
+      openLoadWizard({taskId:r.task_id, templateId:(r.template||{}).template_id,
+        onDone:function(){ refreshDetail(r.task_id); }});
       return;
     }
     doLoad(r.task_id,lb);

@@ -622,8 +622,8 @@ function loadStaging(){
   });
 }
 
-/* ---- P2c 手动入库闸门：previewed/partial 可见；未绑定开目标抽屉（入库时
-   选数据源＋映射），已绑定直接提交。门禁计数由后端 409 兜底，点击后轮询
+/* ---- P2c 手动入库闸门：previewed/partial 可见；未绑定打开库向导（入库时
+   选业务库＋规则），已绑定直接提交。门禁计数由后端 409 兜底，点击后轮询
    任务态直至入库完成自动刷新。 ---- */
 var loadPoll=null;
 function updateLoadButtons(){
@@ -636,8 +636,9 @@ function updateLoadButtons(){
 document.getElementById('loadbtn').onclick=function(){
   var t=taskDoc||{};
   if(!t.load&&t.state==='previewed'){
-    openLoadTargetDrawer(task,(t.template||{}).template_id,
-      function(){ loadStaging(); });
+    openLoadWizard({taskId:task, templateId:(t.template||{}).template_id,
+      getSample:function(){ return Promise.resolve(records.slice(0,3)); },
+      onDone:function(){ loadStaging(); }});
     return;
   }
   var lb=this; lb.disabled=true;

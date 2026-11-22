@@ -161,12 +161,51 @@ function addRow(target,col,fx){
       '<option value="trim">trim</option>'+
       '<option value="trim,number">trim+number</option>'+
     '</select>'+
-    '<button type="button" class="btn mini danger fdel">删</button>';
+    '<button type="button" class="btn mini danger fdel">删</button>'+
+    '<span class="fdest"></span>';
   frows.appendChild(div);
   fillCol(div,col);
   div.querySelector('.fxform').value=fx||'';
   div.querySelector('.fcol').onchange=function(){syncIdx(div);};
+  div.querySelector('.fname').addEventListener('input',updateDestHints);
   div.querySelector('.fdel').onclick=function(){div.remove();};
+  updateDestHints();
+}
+/* ---- 「这些字段去了哪」（design-ux-load-wizard §1.4）：编辑抽屉字段行尾部
+   并排显示该模板已配入库规则的目标列；无规则＝未配置入库。纯前端拼装。 ---- */
+var destMap=null;   // null=本模板未查/新建；{field:[{表.列}…]}=已加载
+function loadDestHints(id){
+  destMap=null;
+  api('GET','/api/load/tables').then(function(j){
+    var rules=(j.items||[]).filter(function(m){return m.template_id===id;});
+    if(!rules.length){ destMap={}; updateDestHints(); return; }
+    Promise.all(rules.map(function(m){
+      return api('GET','/api/load/tables/'+m.id).catch(function(){return null;});
+    })).then(function(details){
+      var map={};
+      details.forEach(function(d){
+        if(!d) return;
+        (d.fields||[]).forEach(function(f){
+          (map[f.template_field]=map[f.template_field]||[]).push(
+            d.target_table+'.'+f.target_column);
+        });
+      });
+      destMap=map; updateDestHints();
+    });
+  }).catch(function(){});
+}
+function updateDestHints(){
+  if(!destMap) return;
+  Array.prototype.forEach.call(frows.children,function(div){
+    var h=div.querySelector('.fdest');
+    if(!h) return;
+    var f=(div.querySelector('.fname').value||'').trim();
+    var d=f&&(destMap[f]||[]);
+    if(!f||!d.length){ h.textContent=f?'未配置入库':''; h.className='fdest'; return; }
+    var uniq=[], seen={};
+    d.forEach(function(x){ if(!seen[x]){seen[x]=1;uniq.push(x);} });
+    h.textContent='入库 → '+uniq.join(' / '); h.className='fdest has';
+  });
 }
 function refreshCols(){
   Array.prototype.forEach.call(frows.children,function(div){
@@ -273,6 +312,7 @@ function openEditor(id,focusVer){
     document.getElementById('everbadge').innerHTML='';
     ename.value=''; edesc.value=''; origName=''; origDesc='';
     delbtn.hidden=true;
+    destMap=null;
     document.getElementById('versec').hidden=true;
     addRow('',null);
     edit.hidden=false; loadRefs();
@@ -300,6 +340,7 @@ function openEditor(id,focusVer){
     delbtn.hidden=false;
     document.getElementById('versec').hidden=false;
     loadVersions(id);
+    loadDestHints(id);
     edit.hidden=false; loadRefs();
     if(focusVer)
       document.getElementById('versec').scrollIntoView({block:'nearest'});
@@ -326,7 +367,7 @@ savebtn.onclick=function(){
   });
   if(err){emsg.textContent=err;return;}
   if(!fields.length){
-    emsg.textContent='至少一个字段；无需映射请用内置「原始透传」';return;
+    emsg.textContent='至少一个字段；不需要固定字段请用内置「原始透传」';return;
   }
   var table;
   if(cands&&!tblsel.disabled) table={index:Number(tblsel.value)};
