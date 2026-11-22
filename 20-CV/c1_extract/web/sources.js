@@ -76,7 +76,7 @@ document.getElementById('picker').onchange=async function(){
   var fs=this.files; this.value='';
   if(!fs.length) return;
   var msg=document.getElementById('upmsg');
-  msg.hidden=false; msg.textContent='登记中…';
+  msg.hidden=false; msg.textContent='正在登记…';
   var added=0,reused=0,fail=[];
   for(var i=0;i<fs.length;i++){
     var f=fs[i];

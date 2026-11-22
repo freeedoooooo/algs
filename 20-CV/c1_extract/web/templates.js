@@ -214,7 +214,7 @@ document.getElementById('addfield').onclick=function(){addRow('',null);};
 
 /* ---- 参考文件 ---- */
 function loadRefs(){
-  refsel.innerHTML='<option value="">不用参考（手填源表）</option>';
+  refsel.innerHTML='<option value="">不使用参考（手动填写源表）</option>';
   api('GET','/api/tasks').then(function(j){
     (j.items||[]).forEach(function(t){
       (t.files||[]).forEach(function(f){
@@ -227,7 +227,7 @@ function loadRefs(){
       });
     });
   }).catch(function(){
-    refhint.textContent='参考列表暂不可用（平台库未连接），可手填源表。';
+    refhint.textContent='参考列表暂不可用（平台库未连接），可手动填写源表。';
   });
 }
 function manualMode(hint){
@@ -256,7 +256,7 @@ refsel.onchange=function(){
     refhint.textContent='共 '+cands.length+' 张候选表（合并页表已跳过）。';
     refreshCols();
   }).catch(function(e){
-    manualMode('参考加载失败：'+e.message+'，可手填源表。');
+    manualMode('参考加载失败：'+e.message+'，可手动填写源表。');
   });
 };
 tblsel.onchange=refreshCols;

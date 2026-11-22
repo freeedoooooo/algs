@@ -75,7 +75,7 @@ function updateBadge(){
     var el=document.getElementById('pf_'+p.key);
     if(el && String(el.value)!==String(p.default)) n++;
   });
-  b.textContent=n?('已改 '+n+' 项'):'默认';
+  b.textContent=n?('已修改 '+n+' 项'):'默认';
   b.classList.toggle('on',n>0);
 }
 fetch('/api/params').then(function(r){return r.json();}).then(function(j){
@@ -201,7 +201,7 @@ function setPickMode(on){
 document.getElementById('lbPick').onclick=function(){ setPickMode(!pickMode); };
 function renderPickVals(){
   var el=document.getElementById('pickvals');
-  if(el) el.textContent=pickVals.length?pickVals.join(', '):'（尚未取点）';
+  if(el) el.textContent=pickVals.length?pickVals.join(', '):'（尚未拾取坐标）';
 }
 function naturalX(img,clientX){
   var r=img.getBoundingClientRect();

@@ -2,7 +2,7 @@
 <details class="panel" open>
     <summary class="panel-head"><span class="panel-title">表格内容</span><span class="cnt">{{ n }} 张</span><span
             class="meta">路线：{{ route }}</span>{% if tables %}<span class="hint" tabindex="0"
-            data-tip="坐标宿主：{{ spaces }}。&#10;悬停高亮单格，点击钉住（再点取消）。&#10;反向定位：图上点单元格区域（叠加框隐藏时也可），&#10;或悬停/点击可见格框，均可定位并钉住本格。&#10;点图命中优先级：跨页合并＞表格＞文本。&#10;光标旁即时提示单击动作（十字＝定位，放大镜＝放大）。&#10;Alt+单击：强制放大。">?</span>{% endif %}<span class="spacer"></span>{% if has_coord %}
+            data-tip="坐标空间：{{ spaces }}。&#10;悬停高亮单元格，点击钉住（再次点击取消）。&#10;反向定位：在图上点击单元格区域（叠加框隐藏时同样有效），&#10;或悬停/点击可见格框，均可定位并钉住本格。&#10;点击图像的命中优先级：跨页合并＞表格＞文本。&#10;光标旁会即时提示单击后的动作（十字表示定位，放大镜表示放大）。&#10;Alt+单击：强制放大。">?</span>{% endif %}<span class="spacer"></span>{% if has_coord %}
         <button type="button" class="allcells" data-card="{{ card }}">显示整表网格</button>
         {% endif %}{% if notes %}
         <button type="button" class="auxbtn" data-aux="aux-diag-{{ card }}"
