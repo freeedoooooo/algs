@@ -170,13 +170,16 @@ function addRow(target,col,fx){
   updateDestHints();
 }
 /* ---- 「这些字段去了哪」（design-ux-load-wizard §1.4）：编辑抽屉字段行尾部
-   并排显示该模板已配入库规则的目标列；无规则＝未配置入库。纯前端拼装。 ---- */
+   显示该字段在入库规则里的目标列。本模板没有任何入库规则时**不显示**
+   （避免逐行刷「未配置」噪音）；有规则时按字段显示 去向/未配去向。 ---- */
 var destMap=null;   // null=本模板未查/新建；{field:[{表.列}…]}=已加载
+var destHasRules=false;
 function loadDestHints(id){
-  destMap=null;
+  destMap=null; destHasRules=false;
   api('GET','/api/load/tables').then(function(j){
     var rules=(j.items||[]).filter(function(m){return m.template_id===id;});
     if(!rules.length){ destMap={}; updateDestHints(); return; }
+    destHasRules=true;
     Promise.all(rules.map(function(m){
       return api('GET','/api/load/tables/'+m.id).catch(function(){return null;});
     })).then(function(details){
@@ -198,17 +201,37 @@ function updateDestHints(){
     var h=div.querySelector('.fdest');
     if(!h) return;
     var f=(div.querySelector('.fname').value||'').trim();
-    var d=f&&(destMap[f]||[]);
-    if(!f||!d.length){ h.textContent=f?'未配置入库':''; h.className='fdest'; return; }
+    if(!f||!destHasRules){ h.textContent=''; h.title=''; return; }
+    var d=destMap[f]||[];
+    if(!d.length){
+      h.textContent='未配去向'; h.title='该字段还没有出现在任何入库规则的目标列中';
+      h.className='fdest'; return;
+    }
     var uniq=[], seen={};
     d.forEach(function(x){ if(!seen[x]){seen[x]=1;uniq.push(x);} });
-    h.textContent='入库 → '+uniq.join(' / '); h.className='fdest has';
+    h.textContent='入库 → '+uniq.join(' / '); h.title='入库规则中的目标列';
+    h.className='fdest has';
   });
 }
 function refreshCols(){
   Array.prototype.forEach.call(frows.children,function(div){
     fillCol(div,readCol(div));
   });
+}
+/* 选定参考表后：字段行为空（或仅剩未填过的预置空行）时自动按源列整表
+   填充（列名＝字段名＝源列，用户删掉不要的、改名即可）；
+   任一行已填过内容时不覆盖手工工作。 */
+function autofillRows(){
+  var keys=currentKeys();
+  if(!keys.length) return;
+  var dirty=Array.prototype.some.call(frows.children,function(div){
+    return (div.querySelector('.fname').value||'').trim()!=='' ||
+      readCol(div)!==null ||
+      div.querySelector('.fxform').value!=='';
+  });
+  if(dirty) return;
+  frows.innerHTML='';
+  keys.forEach(function(k){ addRow(k,{name:k}); });
 }
 document.getElementById('addfield').onclick=function(){addRow('',null);};
 
@@ -254,12 +277,12 @@ refsel.onchange=function(){
     var want=(pendingTable&&typeof pendingTable.index==='number')?pendingTable.index:0;
     tblsel.value=String(want>=0&&want<cands.length?want:0);
     refhint.textContent='共 '+cands.length+' 张候选表（合并页表已跳过）。';
-    refreshCols();
+    autofillRows(); refreshCols();
   }).catch(function(e){
     manualMode('参考加载失败：'+e.message+'，可手动填写源表。');
   });
 };
-tblsel.onchange=refreshCols;
+tblsel.onchange=function(){autofillRows();refreshCols();};
 
 /* ---- 编辑抽屉 ---- */
 function closeEditor(){edit.hidden=true;cur=null;}

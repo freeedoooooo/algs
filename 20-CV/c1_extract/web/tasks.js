@@ -103,7 +103,7 @@ function renderDetail(j){
     '<span class="spacer" style="flex:1"></span>';
   if(r.state==='previewed'||r.state==='partial')
     foot+='<button type="button" class="btn mini" id="loadbtn">'+
-      (r.state==='partial'?'重新入库':(hasLoad?'入库':'入库…'))+'</button>';
+      (r.state==='partial'?'重新入库':'入库')+'</button>';
   if(hasLoad&&(r.state==='loaded'||r.state==='partial'))
     foot+='<button type="button" class="btn mini ghost" id="rcbtn">回执 / 隔离</button>';
   document.getElementById('dfoot').innerHTML=foot;

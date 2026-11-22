@@ -630,7 +630,7 @@ function updateLoadButtons(){
   var lb=document.getElementById('loadbtn'), rb=document.getElementById('rcbtn');
   var t=taskDoc||{}, hasLoad=!!t.load;
   lb.hidden=!(t.state==='previewed'||t.state==='partial');
-  lb.textContent=t.state==='partial'?'重新入库':(hasLoad?'入库':'入库…');
+  lb.textContent=t.state==='partial'?'重新入库':'入库';
   rb.hidden=!(hasLoad&&(t.state==='loaded'||t.state==='partial'));
 }
 document.getElementById('loadbtn').onclick=function(){
