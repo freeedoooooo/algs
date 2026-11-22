@@ -201,8 +201,8 @@ function bindPager(el,onGo,onSize){
     if(e.key==='Escape') closeReceiptDrawer();
   });
 })();
-/* ---- 流程条（提取/校验/入库三页共用，禁止各页自绘）。
-   markup 约定：<div class="flowbar" id="flowbar" data-cur="2"></div>
+/* ---- 流程条（仅入库页挂载，禁止各页自绘；提取/校验页经用户确认不上）。
+   markup 约定：<div class="flowbar" id="flowbar" data-cur="3"></div>
    data-cur：1=提取 2=校验 3=入库；当前节点高亮不可点，其余可点。 ---- */
 (function(){
   var el=document.getElementById('flowbar');

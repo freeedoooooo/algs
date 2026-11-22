@@ -1,4 +1,4 @@
-/* web/load.js — 入库规则（高级）：左业务库列表 · 右入库规则列表。
+/* web/load.js — 入库规则：左业务库列表 · 右入库规则列表。
    一个业务库＝一个库（明文配置）；规则＝业务库×表×模板绑定，字段行编辑。
    契约见 design-p2b-datasource.md＋design-ux-load-wizard.md（用词改齐）。 */
 var dss=[], maps=[], tpls=[], cols=[];
@@ -64,7 +64,7 @@ function renderDs(){
 /* ---- 右：所选业务库的入库规则列表 ---- */
 function renderMaps(){
   var d=dsById(curDs);
-  document.getElementById('maptitle').textContent=d?('入库规则 · '+d.name):'入库规则';
+  document.getElementById('maptitle').textContent='入库规则';
   document.getElementById('newmap').disabled=!d;
   var list=maps.filter(function(m){return m.datasource_id===curDs;});
   var info=pageSlice(list,mapPage,mapSize);

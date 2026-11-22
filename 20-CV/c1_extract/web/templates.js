@@ -58,7 +58,6 @@ function render(){
       '<td class="num">'+fmtTime(r.updated_at)+'</td>'+
       '<td style="white-space:nowrap">'+
         '<button type="button" class="linkbtn" data-edit="'+r.id+'">编辑</button>'+
-        '<button type="button" class="linkbtn" data-ver="'+r.id+'">版本</button>'+
         '<button type="button" class="linkbtn danger" data-del="'+r.id+
         '" data-name="'+escHtml(r.name)+'">删除</button>'+
       '</td></tr>';
@@ -76,16 +75,15 @@ function load(){
 }
 document.getElementById('q').addEventListener('input',function(){ page=1; render(); });
 rows.addEventListener('click',function(e){
-  var b=e.target.closest?e.target.closest('[data-edit],[data-ver],[data-del]'):null;
+  var b=e.target.closest?e.target.closest('[data-edit],[data-del]'):null;
   if(!b) return;
   if(b.hasAttribute('data-del')){
     delTemplate(Number(b.getAttribute('data-del')),b.getAttribute('data-name'));
     return;
   }
-  var id=Number(b.getAttribute('data-edit')||b.getAttribute('data-ver'));
-  openEditor(id,b.hasAttribute('data-ver'));
+  openEditor(Number(b.getAttribute('data-edit')));
 });
-document.getElementById('newbtn').onclick=function(){openEditor(null,false);};
+document.getElementById('newbtn').onclick=function(){openEditor(null);};
 
 /* ---- 候选表 / 键（与 collect._candidate_tables / _keys 同序同规则） ---- */
 function candidates(doc){
@@ -301,7 +299,7 @@ document.getElementById('verlist').addEventListener('click',function(e){
   }).catch(function(e2){emsg.textContent=e2.message;});
 });
 
-function openEditor(id,focusVer){
+function openEditor(id){
   cur=id; cands=null; pendingTable=null;
   emsg.textContent=''; frows.innerHTML='';
   refsel.value=''; tindex.value=''; tkw.value='';
@@ -342,8 +340,6 @@ function openEditor(id,focusVer){
     loadVersions(id);
     loadDestHints(id);
     edit.hidden=false; loadRefs();
-    if(focusVer)
-      document.getElementById('versec').scrollIntoView({block:'nearest'});
   }).catch(function(e){showErr(e.message);});
 }
 
@@ -400,7 +396,7 @@ savebtn.onclick=function(){
   }).then(function(){
     if(cur==null){
       var it=items.filter(function(r){return r.name===name;})[0];
-      if(it) openEditor(it.id,false);
+      if(it) openEditor(it.id);
     }else{
       origName=name; origDesc=desc;
       loadVersions(cur);
