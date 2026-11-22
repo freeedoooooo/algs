@@ -52,7 +52,7 @@ function renderDs(){
         '<span class="badge">'+d.table_count+' 规则</span></div>'+
       '<div class="dsmeta mono">'+escHtml('ID '+d.id+' · '+d.host+':'+d.port+'/'+d.db_name)+'</div>'+
       '<div class="dsops">'+
-        '<button type="button" class="linkbtn" data-test="'+d.id+'">试连</button>'+
+        '<button type="button" class="linkbtn" data-test="'+d.id+'">测试</button>'+
         '<button type="button" class="linkbtn" data-editds="'+d.id+'">编辑</button>'+
         '<button type="button" class="linkbtn danger" data-delds="'+d.id+
           '" data-name="'+escHtml(d.name)+'">删除</button>'+
@@ -112,11 +112,11 @@ document.getElementById('dslist').addEventListener('click',function(e){
   var test=t.closest?t.closest('[data-test]'):null;
   if(test){
     var tid=test.getAttribute('data-test');
-    test.disabled=true; test.textContent='试连中…';
+    test.disabled=true; test.textContent='测试中…';
     api('POST','/api/load/datasources/'+tid+'/test').then(function(j){
       showOk('连接成功：'+j.detail);
     }).catch(function(e2){ showErr('连接失败：'+e2.message); })
-     .then(function(){ test.disabled=false; test.textContent='试连'; });
+     .then(function(){ test.disabled=false; test.textContent='测试'; });
     return;
   }
   var ed=t.closest?t.closest('[data-editds]'):null;
@@ -199,14 +199,14 @@ function recomputeMatchBar(){
     if(badge){
       badge.className='mbadge '+(sel.value?'ok':'warn');
       badge.textContent=sel.value?'✓':'？';
-      badge.title=sel.value?(sel.getAttribute('data-auto')==='1'?'自动对齐，可改':'已对齐'):'待选择目标列';
+      badge.title=sel.value?(sel.getAttribute('data-auto')==='1'?'已自动对齐，可修改':'已对齐'):'待选择目标列';
     }
   });
   var bar=document.getElementById('mpmatch');
   if(!bar) return;
   if(!M){ bar.textContent=''; return; }
   var K=M-X;
-  bar.textContent=A?('已自动匹配 '+A+'/'+M+' 个字段'+(K?'，剩 '+K+' 个待确认':'，全部对上')):
+  bar.textContent=A?('已自动匹配 '+A+'/'+M+' 个字段'+(K?'，剩 '+K+' 个待确认':'，全部匹配')):
     (K?('剩 '+K+'/'+M+' 个字段待确认'):(M+' 个字段已全部对齐'));
 }
 function fillCols(){
@@ -258,7 +258,7 @@ function loadTables(){
     mptable.innerHTML='<option value="">选择目标表</option>'+
       ts.map(function(t){return '<option value="'+escHtml(t)+'">'+escHtml(t)+'</option>';}).join('');
     mptable.disabled=ltLocked;
-    document.getElementById('mpthint').textContent='共 '+ts.length+' 张表（只读 introspection）。';
+    document.getElementById('mpthint').textContent='共 '+ts.length+' 张表（仅读取表结构，不做修改）。';
   }).catch(function(e){
     mptable.innerHTML='<option value="">加载失败</option>';
     document.getElementById('mpthint').textContent='目标表加载失败：'+e.message;
@@ -282,7 +282,7 @@ function loadTplFields(){
     var fs=(sj&&typeof sj==='object'&&!Array.isArray(sj)&&sj.fields)||[];
     var names=fs.map(function(f){return f.name;}).filter(Boolean);
     if(!names.length){
-      mprows.innerHTML='<div class="hint">该模板无固定目标字段（透传），不可入库。请选有固定字段的模板。</div>';
+      mprows.innerHTML='<div class="hint">该模板无固定目标字段（原始透传），不支持入库。请选择固定字段模板。</div>';
       return;
     }
     buildRows(names,null);
@@ -346,8 +346,8 @@ mprows.addEventListener('change',function(e){
 
 document.getElementById('mpsave').onclick=function(){
   mpmsg.textContent='';
-  if(!editLt&&!mptpl.value){ mpmsg.textContent='请选模板'; return; }
-  if(!editLt&&!mptable.value){ mpmsg.textContent='请选目标表'; return; }
+  if(!editLt&&!mptpl.value){ mpmsg.textContent='请选择模板'; return; }
+  if(!editLt&&!mptable.value){ mpmsg.textContent='请选择目标表'; return; }
   var rows=mprows.querySelectorAll('.frow');
   if(!rows.length){ mpmsg.textContent='该模板无固定目标字段，不可入库'; return; }
   var fields=[], seen={}, err=null;
@@ -355,7 +355,7 @@ document.getElementById('mpsave').onclick=function(){
     if(err) return;
     var f=div.querySelector('.fname').value;
     var c=div.querySelector('.fcol').value;
-    if(!c){ err='字段「'+f+'」未选目标列'; return; }
+    if(!c){ err='字段「'+f+'」尚未选择目标列'; return; }
     if(seen[c]){ err='多个字段指向同一目标列：'+c; return; }
     seen[c]=1;
     fields.push({template_field:f,target_column:c,

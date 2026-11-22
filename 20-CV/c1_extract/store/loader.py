@@ -71,7 +71,7 @@ def validate_fields(fields, field_rows, write_mode='upsert', columns=None):
     cm, seen_f, seen_c = {}, set(), set()
     for f in field_rows:
         if not isinstance(f, dict):
-            raise BadRequest('字段对齐行格式不对')
+            raise BadRequest('字段对齐配置格式不正确')
         tf, tc = f.get('template_field'), f.get('target_column')
         if not isinstance(tf, str) or not tf.strip():
             raise BadRequest('模板字段名不能为空')
@@ -86,13 +86,13 @@ def validate_fields(fields, field_rows, write_mode='upsert', columns=None):
         cm[tf] = tc
     missing = [f for f in fields if f not in cm]
     if missing:
-        raise BadRequest('以下字段还没对齐目标列：{}'.format('、'.join(missing)))
+        raise BadRequest('以下字段尚未对齐目标列：{}'.format('、'.join(missing)))
     extra = set(cm) - set(fields)
     if extra:
         raise BadRequest('未知字段：{}'.format('、'.join(sorted(extra))))
     bk = [f['target_column'] for f in field_rows if f.get('is_business_key')]
     if write_mode in ('upsert', 'update') and not bk:
-        raise BadRequest('{} 方式须至少选一个去重依据字段'.format(write_mode))
+        raise BadRequest('{} 方式须至少选择一列作为去重依据'.format(write_mode))
     if columns is not None:
         cols = set(columns)
         bad = [c for c in list(cm.values()) + bk if c not in cols]
@@ -136,7 +136,7 @@ def apply_transform(values, transform_json):
                     v = float(''.join(str(v).split()).replace(',', ''))
                 except (TypeError, ValueError):
                     errors.append({'field': target, 'value': out[target],
-                                   'reason': '无法转数值：{}'.format(out[target])})
+                                   'reason': '无法转换为数值：{}'.format(out[target])})
                     break
             else:
                 errors.append({'field': target, 'value': out[target],
@@ -190,6 +190,6 @@ def write_record(cur, table, column_map, values, write_mode, business_key):
                 list(sets.values()) + bvals)
         return 'update', pk
     if write_mode == 'update':
-        raise LoadRecordError('目标行不存在（去重依据 {}）'.format(pk))
+        raise LoadRecordError('目标行不存在（去重依据：{}）'.format(pk))
     _insert(cur, table, mapped)
     return 'insert', pk

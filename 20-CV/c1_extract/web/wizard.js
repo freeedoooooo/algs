@@ -127,7 +127,7 @@ function wzStep1(b){
       dsWithRules.map(wzDsOpt).join('')+'</select></div>'+
       '<div class="wzrow"><label>入库规则</label><select id="wzrule1"></select></div>';
   }else{
-    html+='<div class="hint">这个模板还没有已配好的规则，用下方「新建」。</div>';
+    html+='<div class="hint">该模板还没有已配置的入库规则，请使用下方「新建入库规则」。</div>';
   }
   html+='<div class="wzsec">新建入库规则</div>'+
     '<div class="wzrow"><label>业务库</label><select id="wzds2">'+
@@ -135,8 +135,8 @@ function wzStep1(b){
     wz.dsList.map(wzDsOpt).join('')+'</select></div>'+
     '<div class="wzrow"><label>目标表</label><select id="wztable2" disabled>'+
     '<option value="">先选业务库</option></select></div>'+
-    '<div class="hint">没有合适的业务库？到 <a href="/rules" target="_blank">入库规则</a> '+
-    '页新建（新窗口打开，不丢这里的进度）。字段对齐下一步做。</div>';
+    '<div class="hint">如需新的业务库，请到 <a href="/rules" target="_blank">入库规则</a> '+
+    '页新建（在新窗口打开，不影响当前进度）。字段对齐将在下一步完成。</div>';
   b.innerHTML=html;
   var ds1=b.querySelector('#wzds1'), rule1=b.querySelector('#wzrule1');
   var ds2=b.querySelector('#wzds2'), tb2=b.querySelector('#wztable2');
@@ -167,7 +167,7 @@ function wzStep1(b){
     ds1.onchange=fillRule1; fillRule1();
     rule1.onchange=function(){
       wz.rule1=rule1.value; wz.ds1=ds1.value;
-      if(rule1.value) wzMsg('已选规则：下一步直接「过目」');
+      if(rule1.value) wzMsg('已选规则：下一步直接进入「过目」');
     };
   }
   ds2.value=wz.ds2||'';
@@ -205,8 +205,8 @@ function wzAdvance(){
       wz.mode='new'; wz.dsId=Number(wz.ds2); wz.table=wz.table2;
       wz.tfields=null; wzGo(2); return;  /* step2 拉字段+列 */
     }
-    if(wz.rule1){ wzMsg('规则与业务库不一致，请重选',true); return; }
-    wzMsg('请先选一条已有规则，或选业务库＋目标表新建',true);
+    if(wz.rule1){ wzMsg('规则与业务库不一致，请重新选择',true); return; }
+    wzMsg('请先选择一条已有规则，或选择业务库与目标表新建规则',true);
     return;
   }
   if(wz.step===2){ if(wzCollect()) wzGo(3); return; }
@@ -235,8 +235,8 @@ function wzStep2(b){
     return;
   }
   if(!wz.tfields.length){
-    b.innerHTML='<div class="empty">该模板无固定字段（透传），不能入库。'+
-      '请关闭向导，用有固定字段的模板重新提取。</div>';
+    b.innerHTML='<div class="empty">该模板无固定字段（原始透传），不支持入库。'+
+      '请关闭向导，改用固定字段模板重新提取。</div>';
     return;
   }
   var html='<div class="wzrow"><label>写入方式</label><select id="wzwm">'+
@@ -260,8 +260,8 @@ function wzStep2(b){
       '<label class="bklab"><input type="checkbox" class="wzfbk">'+
       '去重依据</label></div>';
   });
-  html+='</div><div class="hint">系统按名字自动对齐（忽略大小写/空格/下划线），'+
-    '✓=已对齐可改，？=待你确认；去重依据请勾选业务上唯一的列（例如：发票号）。</div>';
+  html+='</div><div class="hint">系统按字段名自动对齐（忽略大小写、空格与下划线），'+
+    '✓ 表示已对齐（可修改），？ 表示待确认；「去重依据」请勾选业务上唯一的列（如发票号）。</div>';
   b.innerHTML=html;
   var wm=b.querySelector('#wzwm');
   function applyInsertMode(){
@@ -295,7 +295,7 @@ function wzMatchBar(){
 }
 function wzCollect(){
   if(!wz.tfields||!wz.tfields.length){
-    wzMsg('该模板无固定字段，不能入库',true); return false;
+    wzMsg('该模板无固定字段，不支持入库',true); return false;
   }
   var rows=document.querySelectorAll('#wzrows .wzfr');
   var fields=[], seen={}, err=null;
@@ -303,7 +303,7 @@ function wzCollect(){
     if(err) return;
     var f=div.querySelector('.wzfn').textContent;
     var c=div.querySelector('.wzfc').value;
-    if(!c){ err='字段「'+f+'」还没对上目标列'; return; }
+    if(!c){ err='字段「'+f+'」尚未选择目标列'; return; }
     if(seen[c]){ err='多个字段指向同一目标列：'+c; return; }
     seen[c]=1;
     fields.push({template_field:f,target_column:c,
@@ -324,7 +324,7 @@ function wzSummary(){
   var rows=[['业务库',wz.mode==='exist'?(wzDsName((wzRule()||{}).datasource_id)):wzDsName(wz.dsId)],
             ['目标表',wz.table],
             ['写入方式',modeLabel(wm||'')],
-            ['去重依据',wz.mode==='exist'?'（在规则里配好）':(bkCols.join('、')||'—')]];
+            ['去重依据',wz.mode==='exist'?'（已在入库规则中配置）':(bkCols.join('、')||'—')]];
   return '<div class="wzsum">'+rows.map(function(r){
     return '<div class="wzsr"><span>'+escHtml(r[0])+'</span><b>'+escHtml(r[1]||'—')+'</b></div>';
   }).join('')+'</div>';
@@ -338,7 +338,7 @@ function wzStep3(b){
   wz.previewErr='';
   b.innerHTML=wzSummary()+
     '<div class="wzsec">将发生什么</div>'+
-    '<div class="wzcnt" id="wzcnt"><span class="wzb">计数计算中…</span></div>'+
+    '<div class="wzcnt" id="wzcnt"><span class="wzb">正在统计…</span></div>'+
     '<div class="wzsec">记录样例（前 3 条）</div>'+
     '<div id="wzsamp"><div class="empty">加载样例…</div></div>';
   wzFooter();
@@ -390,7 +390,7 @@ function wzStep3(b){
 }
 /* ---- step4 执行（唯一落库点；失败补偿删除新建规则） ---- */
 function wzExecute(){
-  wz.busy=true; wz.step=4; wzRender(); wzMsg('提交中…');
+  wz.busy=true; wz.step=4; wzRender(); wzMsg('正在提交…');
   var p=Promise.resolve();
   if(wz.mode==='new'){
     p=wzApi('POST','/api/load/tables',{
@@ -419,7 +419,7 @@ function wzExecute(){
       if(!wz) return;
       wz.busy=false; wz.step=3; wzRender();
       wzMsg('入库失败：'+e.message+
-        (recycled?'（新建的规则已回收，未写入业务库）':'')+'，可返回调整后重试',true);
+        (recycled?'（新建的规则已删除，未写入业务库）':'')+'，可返回调整后重试',true);
     });
   });
 }

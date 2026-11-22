@@ -125,7 +125,7 @@ function add(fs){
     picked.push(f);
   }
   if(rejected.length)
-    msg.innerHTML='<span class="err">不支持的格式已忽略：'+escHtml(rejected.join('、'))+'</span>';
+    msg.innerHTML='<span class="err">以下文件不支持，已忽略：'+escHtml(rejected.join('、'))+'</span>';
   render();
 }
 function fileRow(name,size,url){
@@ -252,7 +252,7 @@ bindThumbs(list);
 var LV={info:'INFO',ok:' OK ',stage:'STEP',warn:'WARN',error:'ERR '};
 function say(rows,fallback){
   if(!rows||!rows.length){
-    log.textContent=(fallback||[]).join('\n')||'等待日志…';
+    log.textContent=(fallback||[]).join('\n')||'暂无日志输出';
     return;
   }
   var html=rows.map(function(r){
@@ -284,7 +284,7 @@ function poll(){
     }
     if(s.running){timer=setTimeout(poll,800);return;}
     if(s.ready){
-      msg.textContent='完成。改参数后直接重测。';
+      msg.textContent='提取完成。可调整参数后，用同一批文件重新提取。';
       go.disabled=false;
       showStgLink(s.task_id);
       showResult(s.cases);
@@ -399,7 +399,7 @@ histsel.addEventListener('change',function(){
 });
 
 go.onclick=async function(){
-  go.disabled=true;msg.textContent='读取文件…';
+  go.disabled=true;msg.textContent='正在读取文件…';
   rightState('run');
   stglink.hidden=true;
   log.innerHTML='';

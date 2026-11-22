@@ -9,7 +9,7 @@
 </head>
 <body>
 <nav class="topnav">
-  <span class="brand">结构化平台</span>
+  <a class="brand" href="/">结构化平台</a>
   <a href="/">工作台</a>
   <a href="/extract">提取</a>
   <a href="/sources">资料</a>
@@ -18,12 +18,12 @@
   <a href="/rules">入库</a>
   <a href="/tasks">任务</a>
   <span class="spacer"></span>
-  <span class="navnote">P1 · 模板管理</span>
+  <span class="navnote">定义文件的字段提取方式</span>
 </nav>
 <div class="pagebody">
   <div class="pagehead">
     <h1>提取模板</h1>
-    <span class="sub">模板＝怎么读这份文件；产出＝一串字段（字段进哪个库表在「入库」配）</span>
+    <span class="sub">模板定义文件的读取方式，产出一组规范字段；字段写入哪个库表在「入库」页配置</span>
     <span class="spacer"></span>
     <div class="toolbar">
       <input type="search" id="q" placeholder="搜索模板名 / 说明…">
@@ -69,7 +69,7 @@
         <select class="tin" id="refsel">
           <option value="">不用参考（手填源表）</option>
         </select>
-        <div class="hint" id="refhint">选一个已预览任务的文件，列出其候选源表与源列。</div>
+        <div class="hint" id="refhint">选择一个已预览任务的文件，系统将列出其候选源表与源列。</div>
       </div>
       <div class="fsec">
         <label class="flab" for="tblsel">源表（单表 / 版本）</label>
@@ -80,13 +80,13 @@
           <input type="number" class="tin tidx" id="tindex" min="0" placeholder="表序号">
           <input type="text" class="tin tkw" id="tkw" placeholder="或表头关键词（取第一张命中）">
         </span>
-        <div class="hint">序号＝候选表顺序：各页非合并表在前，跨页合并表在后。</div>
+        <div class="hint">序号即候选表顺序：各页非合并表在前，跨页合并表在后。</div>
       </div>
       <div class="fsec">
         <label class="flab">字段定义（目标字段名 ← 源列）</label>
         <div id="frows"></div>
         <button type="button" class="btn mini ghost" id="addfield">＋添加字段</button>
-        <div class="hint">目标字段名＝记录键（入库规则按它对齐目标列）；源列可按键名或列序号；转换规则在入库时消费（暂存值保真不动）。保存即生成不可变新版本。</div>
+        <div class="hint">目标字段名即记录键，入库规则按它对齐目标列；源列可按字段名或列序号指定；转换规则在入库时生效，暂存值保持不变。每次保存将生成新的不可变版本。</div>
       </div>
       <div class="fsec" id="versec" hidden>
         <label class="flab">版本历史</label>

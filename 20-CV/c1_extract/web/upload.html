@@ -10,7 +10,7 @@
 </head>
 <body>
 <nav class="topnav">
-  <span class="brand">结构化平台</span>
+  <a class="brand" href="/">结构化平台</a>
   <a href="/">工作台</a>
   <a href="/extract" class="on">提取</a>
   <a href="/sources">资料</a>
@@ -19,19 +19,19 @@
   <a href="/rules">入库</a>
   <a href="/tasks">任务</a>
   <span class="spacer"></span>
-  <span class="navnote">P2 · 提取校验入库</span>
+  <span class="navnote">上传文件，生成结构化记录</span>
 </nav>
 <div class="app">
   <aside class="console">
     <div id="drop">
       <b>点击或拖拽文件到此处</b>
-      pdf/csv/png/jpg/bmp/webp/txt/md，可多选，单个 ≤ 20MB
+      支持 pdf / csv / png / jpg / bmp / webp / txt / md，可多选，单个文件不超过 20MB。
     </div>
     <input type="file" id="picker" multiple
       accept=".png,.jpg,.jpeg,.bmp,.webp,.tif,.tiff,.pdf,.csv,.txt,.md">
     <div class="srcrow">
       <button type="button" class="ghost mini" id="fromsrc">从资料库选择 ▸</button>
-      <span class="hint" tabindex="0" data-tip="选已登记的文件直接发起提取，&#10;不必重新上传。">?</span>
+      <span class="hint" tabindex="0" data-tip="从资料库已登记的文件中直接选择并发起提取，&#10;无需重复上传。">?</span>
     </div>
     <ul class="files" id="filelist"></ul>
     <div class="filebar" id="filebar" hidden>
@@ -41,11 +41,11 @@
     <div class="tplrow">
       <label for="tplsel">模板</label>
       <select id="tplsel"></select>
-      <span class="hint" tabindex="0" data-tip="模板＝怎么读这份文件。&#10;固定字段模板：产出规范字段，可入库。&#10;原始透传：每表每行一条，键=表头原文，&#10;只可预览，不可入库。">?</span>
+      <span class="hint" tabindex="0" data-tip="模板定义文件的读取方式。&#10;固定字段模板：按预设字段提取，产出规范记录，支持入库。&#10;原始透传：按原表逐行输出，表头作为字段名，&#10;仅支持预览，不支持入库。">?</span>
     </div>
     <div class="row">
       <button id="go" disabled>开始提取</button>
-      <span class="hint" tabindex="0" data-tip="首次加载模型约 20~40 秒，之后复用更快。">?</span>
+      <span class="hint" tabindex="0" data-tip="首次加载模型约需 20~40 秒，后续任务复用模型，速度更快。">?</span>
       <span id="msg"></span>
     </div>
     <details class="params" id="parampanel">
@@ -53,7 +53,7 @@
         <span class="params-title">参数</span>
         <span class="pbadge" id="parambadge">默认</span>
         <span class="hint" tabindex="0" onclick="event.preventDefault()"
-              data-tip="按优先级排，留默认即可；仅影响本次上传。">?</span>
+              data-tip="参数按重要程度排序，通常保持默认值即可；&#10;修改仅对本次上传生效。">?</span>
         <span class="spacer"></span>
         <button type="button" class="mini" id="resetparams">恢复默认</button>
       </summary>
@@ -65,7 +65,7 @@
     <div class="reportempty" id="reportempty">
       <div class="re-inner">
         <b>对照报告将显示在这里</b>
-        <span>选择文件后点「开始提取」。</span>
+        <span>选择文件后点击「开始提取」，生成对照报告。</span>
       </div>
     </div>
     <div class="runpanel" id="runpanel" hidden>
@@ -103,10 +103,10 @@
         <input type="search" id="srcq" placeholder="搜索文件名…">
       </div>
       <div class="banner warn" id="srcdegraded" hidden>
-        平台库未连接，资料目录暂不可用。可直接在左侧上传文件（会自动留档）。
+        平台库未连接，资料库暂不可用。可直接在左侧上传文件，系统会自动登记留档。
       </div>
       <ul class="srclist" id="srclist"></ul>
-      <div class="empty" id="srcempty" hidden><b>资料库是空的</b>先在左侧上传，或到资料页登记。</div>
+      <div class="empty" id="srcempty" hidden><b>资料库暂无文件</b>可在左侧上传文件，或到「资料」页登记。</div>
     </div>
     <div class="dfoot">
       <span id="srccount">已选 0 个</span>
@@ -118,7 +118,7 @@
 <div class="lightbox" id="lightbox" hidden>
   <div class="lbtop">
     <button type="button" id="lbPick">取 x 坐标</button>
-    <span class="hint" tabindex="0" data-tip="取数=原图像素&#10;适用 doc_unwarp=off">?</span>
+    <span class="hint" tabindex="0" data-tip="坐标取自原图像素。&#10;适用于 doc_unwarp 关闭（off）的情况。">?</span>
     <button type="button" id="lbZoom">1:1 像素</button>
     <span class="spacer"></span>
     <button type="button" id="lbClose">关闭 (Esc)</button>
@@ -130,7 +130,7 @@
     </div>
   </div>
   <div class="pickbar" id="pickbar" hidden>
-    <span class="picklabel">点图取 x</span>
+    <span class="picklabel">点击图片取 x 坐标</span>
     <span class="pickvals" id="pickvals"></span>
     <button type="button" data-pick="fill">填入列边界</button>
     <button type="button" data-pick="copy">复制</button>

@@ -154,7 +154,7 @@ function addRow(target,col,fx){
     escHtml(target||'')+'">'+
     '<select class="tin fcol"></select>'+
     '<input type="number" class="tin fidx" min="0" placeholder="列序号" hidden>'+
-    '<select class="tin fxform" title="入库时转换（暂存值保真不动）">'+
+    '<select class="tin fxform" title="入库时应用的转换（暂存值保持不变）">'+
       '<option value="">无转换</option>'+
       '<option value="trim">trim</option>'+
       '<option value="trim,number">trim+number</option>'+
@@ -239,12 +239,12 @@ function manualMode(hint){
 }
 refsel.onchange=function(){
   var v=refsel.value;
-  if(!v){manualMode('选一个已预览任务的文件，列出其候选源表与源列。');return;}
+  if(!v){manualMode('选择一个已预览任务的文件，系统将列出其候选源表与源列。');return;}
   var p=v.split(':');
-  refhint.textContent='加载参考…';
+  refhint.textContent='正在加载参考…';
   api('GET','/api/tasks/'+p[0]+'/extract?file='+p[1]).then(function(doc){
     cands=candidates(doc);
-    if(!cands.length){manualMode('该文件未抽出表格，请手填源表。');return;}
+    if(!cands.length){manualMode('该文件未解析出表格，请手动填写源表。');return;}
     tblsel.innerHTML=cands.map(function(c,i){
       var head=(c.t.headers||[]).slice(0,4).join(' / ');
       return '<option value="'+i+'">#'+i+' · '+c.scope+' · '+
@@ -303,7 +303,7 @@ function openEditor(id){
   cur=id; cands=null; pendingTable=null;
   emsg.textContent=''; frows.innerHTML='';
   refsel.value=''; tindex.value=''; tkw.value='';
-  manualMode('选一个已预览任务的文件，列出其候选源表与源列。');
+  manualMode('选择一个已预览任务的文件，系统将列出其候选源表与源列。');
   document.getElementById('ok').hidden=true;
   if(id==null){
     document.getElementById('etitle').textContent='新建模板';
@@ -363,13 +363,13 @@ savebtn.onclick=function(){
   });
   if(err){emsg.textContent=err;return;}
   if(!fields.length){
-    emsg.textContent='至少一个字段；不需要固定字段请用内置「原始透传」';return;
+    emsg.textContent='至少需要一个字段；如需逐行原样输出，请使用内置「原始透传」模板';return;
   }
   var table;
   if(cands&&!tblsel.disabled) table={index:Number(tblsel.value)};
   else if(tindex.value!=='') table={index:Number(tindex.value)};
   else if(tkw.value.trim()) table={header_contains:tkw.value.trim()};
-  else{emsg.textContent='请选源表（参考文件，或手填序号 / 表头关键词）';return;}
+  else{emsg.textContent='请选择源表（选择参考文件，或手动填写序号 / 表头关键词）';return;}
   var schema={fields:fields.map(function(f){return {name:f.target,type:'text'};})};
   var mapping={table:table,fields:fields};
   var transform=xf.length?{fields:xf}:null;

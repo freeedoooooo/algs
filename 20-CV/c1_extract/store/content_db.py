@@ -181,14 +181,14 @@ def patch_record(task_id, file_index, index, values):
         with conn.cursor() as cur:
             tfs = _task_files(cur, task_id)
             if file_index >= len(tfs):
-                raise NotFound('文件下标越界')
+                raise NotFound('文件序号超出范围')
             cur.execute(
                 'SELECT id, values_json FROM extract_staging_record'
                 ' WHERE task_file_id=%s AND record_index=%s FOR UPDATE',
                 (tfs[file_index]['id'], index))
             row = cur.fetchone()
             if row is None:
-                raise NotFound('记录下标越界')
+                raise NotFound('记录序号超出范围')
             rid, vj = row
             vals = json.loads(vj)
             unknown = set(values) - set(vals)
@@ -222,13 +222,13 @@ def set_review(task_id, file_index, indexes, state):
     if state not in ('confirmed', 'rejected'):
         raise BadRequest('非法校验状态：{}'.format(state))
     if not indexes:
-        raise BadRequest('未选择记录')
+        raise BadRequest('未选择任何记录')
     conn = db.connect()
     try:
         with conn.cursor() as cur:
             tfs = _task_files(cur, task_id)
             if file_index >= len(tfs):
-                raise NotFound('文件下标越界')
+                raise NotFound('文件序号超出范围')
             ph = ','.join(['%s'] * len(indexes))
             cur.execute(
                 'UPDATE extract_staging_record SET review_state=%s,'

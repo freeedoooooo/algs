@@ -310,7 +310,7 @@ def launch_load(task_id, target=None):
     catalog = _load('store.catalog')
     errors = _load('store.errors')
     if STATE['running']:
-        raise errors.Conflict('已有任务正在处理，请等它完成')
+        raise errors.Conflict('已有任务正在处理，请等待其完成')
     task = catalog.get_task(task_id)
     if task is None:
         raise errors.NotFound('任务不存在')
@@ -320,11 +320,11 @@ def launch_load(task_id, target=None):
     if state == 'loading':
         raise errors.Conflict('入库进行中')
     if state not in ('previewed', 'partial'):
-        raise errors.Conflict('任务状态 {} 不可入库（须先提取完成）'.format(state))
+        raise errors.Conflict('任务状态为 {}，无法入库（须先完成提取）'.format(state))
     bound = task.get('load')
     if bound:
         if target:
-            raise errors.Conflict('已绑定入库目标，不可改（重试沿用原目标）')
+            raise errors.Conflict('已绑定入库目标，不可修改（重试将沿用原目标）')
         ds_id, lt_id = bound['datasource_id'], bound['load_table_id']
     else:
         if not target:
@@ -346,20 +346,20 @@ def launch_load(task_id, target=None):
               if isinstance(sj, dict) else [])
     fields = [f for f in fields if f]
     if not fields:
-        raise errors.BadRequest('透传模板无固定目标字段，不可入库')
+        raise errors.BadRequest('原始透传模板无固定字段，不支持入库')
     loader = _load('store.loader')
     loader.preflight(ds, lt['target_table'], lt['fields'],
                      lt['write_mode'], fields)
     doc = _load('store.content').get_records(task_id)
     recs = [r for f in (doc['files'] if doc else []) for r in f['records']]
     if not recs:
-        raise errors.Conflict('无暂存记录，不可入库')
+        raise errors.Conflict('暂无暂存记录，无法入库')
     c = loader.review_gate(recs)
     blocked = c['pending'] + c['edited'] + c['rejected']
     if blocked:
         raise errors.Conflict(
             '{} 条待校验 / {} 条已修改未确认 / {} 条已拒绝，'
-            '请先处理完（仅全部 confirmed 可入库）'.format(
+            '请先完成校验：仅当全部记录为「已确认」时才可入库'.format(
                 c['pending'], c['edited'], c['rejected']))
     if not bound:
         catalog.set_task_load(task_id, ds_id, lt_id)

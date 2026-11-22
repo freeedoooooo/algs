@@ -75,7 +75,7 @@ function renderDetail(j){
     html+='<div class="banner info">处理中 · '+escHtml(live.stage||'')+
       ' · '+(live.progress||0)+'%（自动刷新）</div>';
   }
-  if(r.error) html+='<div class="banner err">出错：'+escHtml(r.error)+'</div>';
+  if(r.error) html+='<div class="banner err">任务出错：'+escHtml(r.error)+'</div>';
   html+='<div class="msg" style="margin-bottom:10px">模板 '+tplLabel(r.template)+
     ' · 发起 '+fmtTime(r.created_at)+'</div>';
   html+='<table class="list"><thead><tr><th>文件</th><th>状态</th><th>暂存记录</th><th>产物</th></tr></thead><tbody>'+
@@ -146,7 +146,7 @@ function doLoad(taskId,btn){
       return {s:r.status,j:j};
     });
   }).then(function(o){
-    if(!o.j.ok){ alert('不能入库：'+(o.j.error||('HTTP '+o.s))); btn.disabled=false; return; }
+    if(!o.j.ok){ alert('无法入库：'+(o.j.error||('HTTP '+o.s))); btn.disabled=false; return; }
     refreshDetail(taskId);
   }).catch(function(){ alert('入库请求失败：平台库不可用'); btn.disabled=false; });
 }

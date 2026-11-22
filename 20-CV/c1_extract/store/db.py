@@ -41,7 +41,7 @@ def resolve_conn(ref):
 def _parts(dsn):
     u = urlsplit(dsn)
     if u.scheme != 'mysql':
-        raise ValueError('首个驱动实现仅支持 mysql:// DSN')
+        raise ValueError('当前版本仅支持 mysql:// 连接串')
     return {
         'host': u.hostname, 'port': u.port or 3306,
         'user': unquote(u.username or ''),

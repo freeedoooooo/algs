@@ -57,7 +57,7 @@ def create_datasource(name, host, port, user, password, db_name,
     if not host or not db_name:
         raise BadRequest('主机与库名不能为空')
     if db_type != 'mysql':
-        raise BadRequest('首个实现仅支持 mysql')
+        raise BadRequest('当前版本仅支持 MySQL')
     try:
         port = int(port or 3306)
     except (TypeError, ValueError):
@@ -126,8 +126,8 @@ def update_datasource(ds_id, name=None, host=None, port=None, user=None,
                 cur.execute('SELECT COUNT(*) FROM extract_load_table'
                             ' WHERE datasource_id=%s', (ds_id,))
                 if cur.fetchone()[0]:
-                    raise Conflict('已被入库规则引用，目标（主机/端口/库名）锁定；'
-                                   '账号密码可改，换目标库请新建业务库')
+                    raise Conflict('该业务库已被入库规则引用，主机、端口、库名不可修改；'
+                                   '账号与密码可以修改。如需更换目标库，请新建业务库')
                 sets = ', '.join('{}=%s'.format(k) for k in target)
                 cur.execute('UPDATE extract_load_datasource SET ' + sets +
                             ' WHERE id=%s', list(target.values()) + [ds_id])
@@ -255,7 +255,7 @@ def _tpl_schema_fields(cur, template_id):
               if isinstance(sj, dict) else [])
     fields = [f for f in fields if f]
     if not fields:
-        raise BadRequest('透传模板无固定目标字段，不可登记入库规则')
+        raise BadRequest('原始透传模板无固定字段，不支持配置入库规则')
     return fields
 
 
@@ -294,7 +294,7 @@ def create_load_table(datasource_id, template_id, target_table, write_mode,
                         ' AND target_table=%s',
                         (datasource_id, template_id, target_table))
             if cur.fetchone():
-                raise Conflict('同业务库＋模板＋目标表的入库规则已存在')
+                raise Conflict('相同业务库、模板与目标表的入库规则已存在')
             cur.execute(
                 'INSERT INTO extract_load_table (datasource_id, template_id,'
                 ' target_table, write_mode) VALUES (%s,%s,%s,%s)',
@@ -321,7 +321,7 @@ def update_load_table(lt_id, write_mode=None, fields=None):
             cur.execute('SELECT COUNT(*) FROM extract_task'
                         ' WHERE load_table_id=%s', (lt_id,))
             if cur.fetchone()[0]:
-                raise Conflict('该入库规则已被任务引用，只读（删除亦禁止）')
+                raise Conflict('该入库规则已被任务引用，只读且不可删除')
             wm = write_mode if write_mode is not None else row[1]
             fs = fields
             if fs is None:

@@ -76,7 +76,7 @@ def _tpl_exists(cur, template_id):
 def _tpl_payload(schema, mapping, transform):
     for v in (schema, mapping, transform):
         if v is not None and not isinstance(v, dict):
-            raise BadRequest('模板 JSON 须为对象')
+            raise BadRequest('模板定义须为 JSON 对象')
     return (json.dumps(schema), json.dumps(mapping), json.dumps(transform))
 
 
@@ -178,7 +178,7 @@ def update_template(template_id, name=None, description=None,
                             ' WHERE template_id=%s AND version=%s',
                             (template_id, current_version))
                 if not cur.fetchone():
-                    raise BadRequest('版本号不存在')
+                    raise BadRequest('指定版本不存在')
                 cur.execute('UPDATE extract_template SET current_version=%s'
                             ' WHERE id=%s', (current_version, template_id))
             conn.commit()

@@ -82,7 +82,7 @@ function renderTable(){
   document.getElementById('summary').textContent=
     '共 '+records.length+' 条记录 · '+keys.length+' 个字段'+
     (stateFilter?(' · 筛选后 '+shown+' 条'):'')+
-    ' · 点图定位记录，点行/格高亮回溯框'+(ro?'':'，双击格改值');
+    ' · 点击图片定位记录，单击行或单元格高亮回溯框'+(ro?'':'，双击单元格修改取值');
   renderChips();
 }
 function renderChips(){
@@ -227,11 +227,11 @@ function showPage(p){
   var drawn=here.filter(function(x){
     return x.a.cell_bbox&&x.a.space===(curView==='rect'?'rectified':'source');}).length;
   if(!has){ hint.hidden=false;
-    hint.textContent='该页无图像载体（纯文本输入），无法叠框回溯。';
+    hint.textContent='该页无图像载体（纯文本输入），不支持叠加框回溯。';
     document.getElementById('lsub').textContent='';
-  }else if(!allAnchors.length){ hint.hidden=false; hint.textContent='无坐标血缘。'; }
+  }else if(!allAnchors.length){ hint.hidden=false; hint.textContent='该记录暂无坐标信息。'; }
   else if(!drawn){ hint.hidden=false;
-    hint.textContent='当前视图无回溯框：坐标在'+(curView==='rect'?'原图':'矫正图')+'空间，切换视图查看。'; }
+    hint.textContent='当前视图无回溯框：坐标位于'+(curView==='rect'?'原图':'矫正图')+'像素空间，请切换视图查看。'; }
   else hint.hidden=true;
   applySelection();
   alignPagers();
@@ -302,7 +302,7 @@ function pinField(key,i){
   if(i<0||!records[i]) return;
   var target=allAnchors.filter(function(x){
     return x.i===i&&x.key===key&&x.a.cell_bbox;})[0];
-  if(!target){ toast('该单元格没有图像坐标，无法回溯到图'); return; }
+  if(!target){ toast('该单元格没有图像坐标，无法回溯定位'); return; }
   selIdx=i; selKey=key;
   showLineage();
   if(target.a.page!==curPage){
@@ -398,7 +398,7 @@ function patchCell(i,key,val){
   }).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j};});})
   .then(function(o){
     if(!o.ok||!o.j.ok) toast('保存失败：'+((o.j&&o.j.error)||''));
-    else{ records[i]=o.j.record; toast('已保存 · 转为已修改，须重新确认'); }
+    else{ records[i]=o.j.record; toast('已保存，记录转为「已修改」，请重新确认'); }
     renderTable(); applySelection();
   }).catch(function(e){ toast('保存失败：'+e); renderTable(); applySelection(); });
 }
@@ -582,13 +582,13 @@ function loadStaging(){
     mb.textContent='入库进行中 · 记录只读（完成后自动刷新）';
   }else if(st==='partial'){
     mb.className='banner warn';
-    mb.textContent='任务部分入库 · 记录只读 · 可点「重新入库」重试无回执记录';
+    mb.textContent='任务部分入库 · 记录只读 · 可点击「重新入库」重试未写入记录';
   }else if(readOnly()){
     mb.className='banner warn';
-    mb.textContent='任务已入库 · 记录只读（改值 / 确认 / 拒绝已锁定）';
+    mb.textContent='任务已入库 · 记录只读，修改、确认、拒绝操作已锁定';
   }else{
     mb.className='banner info';
-    mb.textContent='双击单元格改值（自动转已修改）· ✓ 确认 · ✗ 拒绝 · 单击/悬停血缘回溯不变';
+    mb.textContent='双击单元格修改取值，记录自动转为「已修改」；✓ 确认 · ✗ 拒绝；单击或悬停可查看血缘回溯';
   }
   updateLoadButtons();
   var u='/api/tasks/'+encodeURIComponent(task)+'/staging'+
@@ -649,7 +649,7 @@ document.getElementById('loadbtn').onclick=function(){
       });
     }).then(function(o){
       lb.disabled=false;
-      if(!o.j.ok){ showErr('不能入库：'+(o.j.error||('HTTP '+o.s))); return; }
+      if(!o.j.ok){ showErr('无法入库：'+(o.j.error||('HTTP '+o.s))); return; }
       document.getElementById('err').hidden=true;
       var mb=document.getElementById('modebanner');
       mb.className='banner info';
@@ -707,8 +707,8 @@ function renderLedger(){
   empty.hidden=list.length>0;
   if(!list.length){
     empty.innerHTML=ledgerItems.length?
-      '<b>没有匹配的任务</b>调整搜索或筛选条件。':
-      '<b>暂无可校验的记录</b>先到「提取」页上传文件。';
+      '<b>无匹配任务</b>请调整搜索关键词或筛选条件。':
+      '<b>暂无可校验的记录</b>请先到「提取」页上传文件。';
   }
   document.getElementById('ledgerrows').innerHTML=info.rows.map(function(r,i){
     var tpl=r.template||{};

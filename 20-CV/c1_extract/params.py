@@ -23,57 +23,57 @@ LIMIT_TYPE_DEFAULT = 'min'
 # ---- 参数 schema：order 即页面优先级顺序 ----
 SCHEMA = [
     dict(key='page', label='PDF 页码', type='str', default='',
-         order=1, group='① 先看哪一页',
-         help='留空（默认）= 提取全部页，多页 PDF 自动启用分页与跨页合并。\n'
-              '填页码（1 起）= 只提取该页。\n'
-              'all / 全部 / * 等同留空。图片 / 纯文本始终单页。'),
-    dict(key='table_strategy', label='表格策略首选', type='select',
+         order=1, group='① 页面范围',
+         help='留空（默认）：提取全部页，多页 PDF 自动启用分页与跨页合并。\n'
+              '填写页码（从 1 开始）：仅提取该页。\n'
+              '填写 all / 全部 / * 等同留空。图片与纯文本始终为单页。'),
+    dict(key='table_strategy', label='表格识别策略', type='select',
          default='auto', options=['auto', 'lines', 'text'],
-         order=2, group='② 表格能不能抽到',
-         help='仅「有文本层的电子 PDF」生效；扫描件 / 图片走模型，不看此项。\n'
-              'auto：自动回退（推荐）。\n'
-              '依次试 人工/自动列边界 → 真实框线 → 文字对齐，取第一个抽出表的。\n'
-              'lines：强制按 PDF 真实框线切。适合框线完整、或一页多表。\n'
-              'text：强制按文字列对齐切。适合无线框表（只有横线 / 空格对齐）。\n'
-              '人工列边界：填下方 column_lines 即可，\n'
-              'auto 会自动优先用，无需单独选策略。'),
+         order=2, group='② 表格识别',
+         help='仅对有文本层的电子 PDF 生效；扫描件与图片由模型识别，不受此项影响。\n'
+              'auto：依次尝试多种策略，取第一个成功抽出表格的结果（推荐）。\n'
+              'lines：按 PDF 真实框线切分，适合框线完整或一页多表。\n'
+              'text：按文字列对齐切分，适合无框线表格。\n'
+              '填写「人工列边界」后，auto 会优先使用，无需单独选择策略。'),
     dict(key='column_lines', label='人工列边界（x 坐标）', type='str', default='',
-         order=3, group='② 表格能不能抽到',
-         help='竖线 x 坐标，逗号/空格分隔，需 ≥1 个且递增。\n'
-              '图片/扫描件用原图像素（仅 doc_unwarp=off 生效），单条即可切开黏连格。\n'
-              '文本层 PDF 用点坐标。留空则 PDF 自动推断、图片不重切。'),
+         order=3, group='② 表格识别',
+         help='竖线 x 坐标列表，以逗号或空格分隔，至少 1 个且递增。\n'
+              '图片/扫描件使用原图像素坐标（仅 doc_unwarp 为 off 时生效），可用于拆分粘连的单元格。\n'
+              '有文本层的 PDF 使用点（pt）坐标。留空时：PDF 自动推断，图片不重新切分。'),
     dict(key='det_thresh', label='文字检测阈值', type='float',
          default=DET_DEFAULT, min=0.05, max=0.95, step=0.05,
-         order=6, group='④ 文字识别',
-         help='调低救漏检、可能增误检。\n默认 0.3，按次覆盖不重建模型。'),
+         order=6, group='③ 文字识别',
+         help='调低可减少漏检，但可能增加误检。\n默认 0.3；按次覆盖，不会重新加载模型。'),
     dict(key='box_thresh', label='文字框阈值', type='float',
          default=BOX_DEFAULT, min=0.05, max=0.95, step=0.05,
-         order=7, group='④ 文字识别',
-         help='默认 0.6，漏检严重试 0.4。'),
+         order=7, group='③ 文字识别',
+         help='默认 0.6；漏检较多时可尝试 0.4。'),
     dict(key='det_unclip', label='检测框外扩比例', type='float',
          default=UNCLIP_DEFAULT, min=1.0, max=3.0, step=0.1,
-         order=8, group='④ 文字识别',
-         help='DBNet 框外扩系数。调大救被切边的字，但易把相邻字并进同框。\n默认 1.5。'),
+         order=8, group='③ 文字识别',
+         help='检测框外扩系数。调大可修复边缘被裁切的文字，但相邻文字可能并入同一框。\n默认 1.5。'),
     dict(key='det_limit_side_len', label='检测分辨率边长', type='int',
          default=LIMIT_SIDE_DEFAULT, min=32, max=4000, step=32,
-         order=9, group='④ 文字识别',
-         help='配合下一项：\nmin 时调大＝放大图救小字；max 时调小＝缩小提速。\n默认 64。'),
+         order=9, group='③ 文字识别',
+         help='与下一项「检测分辨率方向」配合使用：\n'
+              '方向为 min 时调大相当于放大图像，有利于识别小字；\n'
+              '方向为 max 时调小相当于缩小图像，可提升速度。\n默认 64。'),
     dict(key='det_limit_type', label='检测分辨率方向', type='select',
          default=LIMIT_TYPE_DEFAULT, options=['min', 'max'],
-         order=10, group='④ 文字识别',
-         help='min：短边不低于边长（放大图，救小字）。\n'
-              'max：长边不超过边长（缩小图，提速）。\n'
-              '配合「检测分辨率边长」使用。默认 min。'),
+         order=10, group='③ 文字识别',
+         help='min：图像短边不低于该边长（放大图像，有利于识别小字）。\n'
+              'max：图像长边不超过该边长（缩小图像，可提升速度）。\n'
+              '与「检测分辨率边长」配合使用。默认 min。'),
     dict(key='dpi', label='PDF 渲染 DPI', type='int',
          default=config.PDF_DPI, min=72, max=400, step=10,
-         order=11, group='⑤ 渲染精度',
-         help='小字/密集表调高到 150~200；越高越慢。'),
-    dict(key='doc_unwarp', label='文档矫正(UVDoc)', type='select',
+         order=11, group='④ 渲染精度',
+         help='小字或密集表格可调高至 150~200；数值越高，处理耗时越长。'),
+    dict(key='doc_unwarp', label='文档矫正（UVDoc）', type='select',
          default='on', options=['on', 'off'],
-         order=12, group='⑥ 坐标回溯',
-         help='on：方向分类 + UVDoc 去扭曲，适合旋转/弯曲扫描件（框叠矫正图）。\n'
-              'off：关闭预处理，适合平整电子截图，框 1:1 叠原图。\n'
-              '仅影响表格模型；人工列边界重切只在 off 生效。'),
+         order=12, group='⑤ 坐标回溯',
+         help='on：执行方向分类与 UVDoc 扭曲矫正，适用于旋转、弯曲的扫描件（检测框叠加在矫正图上）。\n'
+              'off：关闭预处理，适用于平整的电子截图（检测框按 1:1 叠加在原图上）。\n'
+              '仅影响表格识别；人工列边界重新切分仅在 off 时生效。'),
 ]
 
 _BY_KEY = {p['key']: p for p in SCHEMA}

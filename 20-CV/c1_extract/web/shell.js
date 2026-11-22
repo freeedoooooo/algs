@@ -34,11 +34,11 @@ function thumbHtml(name,url){
   return '<a class="thumb file" href="'+escHtml(url)+'" target="_blank" title="'+
     escHtml(name)+'"><span>'+escHtml(label.slice(0,4))+'</span></a>';
 }
-/* 写入方式存库值不变（upsert/insert/update），显示层统一用这三句人话 */
+/* 写入方式存库值不变（upsert/insert/update），显示层与 load.html 下拉保持同一口径 */
 var MODE_LABEL={
   upsert:'已存在的行覆盖更新，不存在的新增',
-  insert:'全部当新行插入，重复照插（靠回执可查）',
-  update:'只覆盖已存在的行，对不上号的不动'
+  insert:'全部作为新行插入，重复记录不做合并（可在回执中核对）',
+  update:'仅更新已存在的行，匹配不到的记录不写入'
 };
 function modeLabel(m){ return MODE_LABEL[m]||m||'—'; }
 var STATE_LABEL={
@@ -105,9 +105,9 @@ function openReceiptDrawer(taskId){
       return q.stage==='load';
     });
     var html='<div class="msg" style="margin-bottom:6px">回执 '+logs.length+
-      ' 条（重跑幂等：已有回执的记录跳过）</div>';
+      ' 条（重新入库时，已有回执的记录将自动跳过）</div>';
     html+=logs.length?
-      '<table class="list"><thead><tr><th>task_file</th><th>记录</th><th>动作</th>'+
+      '<table class="list"><thead><tr><th>文件ID</th><th>记录</th><th>动作</th>'+
       '<th>目标主键</th><th>时间</th></tr></thead><tbody>'+
       logs.map(function(l){
         return '<tr><td class="mono">'+l.task_file_id+'</td>'+
@@ -116,11 +116,11 @@ function openReceiptDrawer(taskId){
           '<td><code class="mono">'+escHtml(l.target_pk)+'</code></td>'+
           '<td class="num">'+fmtTime(l.loaded_at)+'</td></tr>';
       }).join('')+'</tbody></table>':
-      '<div class="empty">还没有回执</div>';
+      '<div class="empty">暂无回执记录</div>';
     html+='<div class="msg" style="margin:12px 0 6px">隔离 '+qs.length+
-      ' 条（本轮只读；重新入库会重试无回执记录）</div>';
+      ' 条（当前为只读；重新入库将重试未写入的记录）</div>';
     html+=qs.length?
-      '<table class="list"><thead><tr><th>task_file</th><th>记录</th><th>原因</th>'+
+      '<table class="list"><thead><tr><th>文件ID</th><th>记录</th><th>原因</th>'+
       '<th>时间</th></tr></thead><tbody>'+
       qs.map(function(q){
         return '<tr><td class="mono">'+q.task_file_id+'</td>'+
@@ -128,7 +128,7 @@ function openReceiptDrawer(taskId){
           '<td>'+escHtml(q.reason)+'</td>'+
           '<td class="num">'+fmtTime(q.created_at)+'</td></tr>';
       }).join('')+'</tbody></table>':
-      '<div class="empty">无隔离记录</div>';
+      '<div class="empty">暂无隔离记录</div>';
     document.getElementById('rcbody').innerHTML=html;
   }).catch(function(){
     document.getElementById('rcbody').innerHTML=

@@ -42,12 +42,12 @@ function addFiles(fs){
     var f=fs[i];
     var e=(f.name.split('.').pop()||'').toLowerCase();
     if(ALLOWED.indexOf(e)<0){ rejected.push(f.name); continue; }
-    if(f.size>20*1024*1024){ rejected.push(f.name+'（超 20MB）'); continue; }
+    if(f.size>20*1024*1024){ rejected.push(f.name+'（超过 20MB）'); continue; }
     if(hpicked.some(function(p){return p.name===f.name&&p.size===f.size;})) continue;
     hpicked.push(f);
   }
-  if(rejected.length) say('已忽略：'+rejected.join('、'),'err');
-  else if(hpicked.length) say('已选 '+hpicked.length+' 个文件，点「开始提取」');
+  if(rejected.length) say('以下文件不支持或超过 20MB，已忽略：'+rejected.join('、'),'err');
+  else if(hpicked.length) say('已选 '+hpicked.length+' 个文件，点击「开始提取」');
   renderPicked();
 }
 function renderPicked(){
@@ -64,11 +64,11 @@ hlist.addEventListener('click',function(e){
   if(!b) return;
   hpicked.splice(Number(b.getAttribute('data-i')),1);
   renderPicked();
-  if(!hpicked.length) say('等待文件');
+  if(!hpicked.length) say('未选择文件');
 });
 
 hgo.onclick=function(){
-  hgo.disabled=true; say('读取文件…','run');
+  hgo.disabled=true; say('正在读取文件…','run');
   Promise.all(hpicked.map(function(f){
     return b64(f).then(function(d){ return {name:f.name,data:d}; });
   })).then(function(files){
@@ -79,20 +79,20 @@ hgo.onclick=function(){
     }).then(function(r){return r.json();});
   }).then(function(j){
     if(!j.ok) throw new Error(j.error||'提交失败');
-    say('已提交，提取中…','run');
+    say('已提交，正在提取…','run');
     pollStatus();
   }).catch(function(e){
-    say('出错：'+e.message,'err'); hgo.disabled=hpicked.length===0;
+    say('提交失败：'+e.message,'err'); hgo.disabled=hpicked.length===0;
   });
 };
 function pollStatus(){
   fetch('/api/status').then(function(r){return r.json();}).then(function(s){
     if(s.running){ pollT=setTimeout(pollStatus,800); return; }
     clearTimeout(pollT); pollT=null;
-    if(s.error){ say('提取出错：'+s.error,'err'); refresh(); return; }
+    if(s.error){ say('提取失败：'+s.error,'err'); refresh(); return; }
     if(s.ready&&s.task_id){
       lastTaskId=s.task_id;
-      say('提取完成 · 任务 #'+s.task_id,'ok');
+      say('提取完成，任务 #'+s.task_id,'ok');
       hpicked=[]; renderPicked(); refresh();
     }
   }).catch(function(){ pollT=setTimeout(pollStatus,1500); });
@@ -128,19 +128,19 @@ function setCard(id,n,sub,zero){
 function renderCards(){
   var v=nums();
   setCard(1, v.busy.length,
-    v.busy.length?('任务 '+v.busy.map(function(t){return '#'+t.task_id;}).join('、')):'就绪 · 拖文件即可开始',
+    v.busy.length?('任务 '+v.busy.map(function(t){return '#'+t.task_id;}).join('、')):'暂无进行中的提取任务',
     !v.busy.length);
   setCard(2, v.reviewFiles,
-    v.reviewFiles? v.reviewTasks+' 个任务待逐条核对':'没有待校验的记录', !v.reviewFiles);
+    v.reviewFiles? v.reviewTasks+' 个任务待逐条核对':'暂无待校验记录', !v.reviewFiles);
   setCard(3, v.loadTasks.length,
-    v.loadTasks.length? '校验完毕，可直接入库':'暂无校验完毕待入库的任务',
+    v.loadTasks.length? '校验完成，等待入库':'暂无待入库任务',
     !v.loadTasks.length);
   /* H1：只有 1 个待入库 → 点卡直接弹向导 */
   var l3=document.getElementById('l3');
   if(v.loadTasks.length===1){
     l3.textContent='立即入库 #'+v.loadTasks[0].task_id+' →';
     l3.onclick=function(e){ e.preventDefault(); startLoad(v.loadTasks[0].task_id); };
-  }else{ l3.textContent='去入库 →'; l3.onclick=null; }
+  }else{ l3.textContent='前往入库 →'; l3.onclick=null; }
   return v;
 }
 
@@ -162,23 +162,23 @@ function renderTodo(v){
     var pend=0;
     (t.files||[]).forEach(function(f){ pend+=f.pending_n+f.edited_n; });
     if(pend>0) rows.push({id:t.task_id,name:fileNames(t),
-      what:'还有 '+pend+' 条未校验',act:'<a class="clink" href="/review?task='+
-        t.task_id+'">去校验</a>',t:t.created_at});
+      what:'尚有 '+pend+' 条记录待校验',act:'<a class="clink" href="/review?task='+
+        t.task_id+'">前往校验</a>',t:t.created_at});
   });
   v.loadTasks.forEach(function(t){
     rows.push({id:t.task_id,name:fileNames(t),
-      what:'校验完毕，待入库',
-      act:'<button type="button" class="linkbtn" data-load="'+t.task_id+'">去入库</button>',
+      what:'校验完成，待入库',
+      act:'<button type="button" class="linkbtn" data-load="'+t.task_id+'">前往入库</button>',
       t:t.created_at});
   });
   v.busy.forEach(function(t){
     rows.push({id:t.task_id,name:fileNames(t),what:'提取中…',
-      act:'<a class="clink" href="/extract">看进度</a>',t:t.created_at});
+      act:'<a class="clink" href="/extract">查看进度</a>',t:t.created_at});
   });
   v.failed.forEach(function(t){
     rows.push({id:t.task_id,name:fileNames(t),
-      what:t.state==='partial'?'部分入库，有隔离记录':'提取失败',
-      act:'<a class="clink" href="/tasks">处理</a>',t:t.created_at});
+      what:t.state==='partial'?'部分入库，存在隔离记录':'提取失败',
+      act:'<a class="clink" href="/tasks">查看详情</a>',t:t.created_at});
   });
   rows.sort(function(a,b){ return (a.t<b.t?1:(a.t>b.t?-1:0)); });
   var shown=rows.slice(0,8);

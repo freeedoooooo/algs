@@ -11,7 +11,7 @@
 </head>
 <body>
 <nav class="topnav">
-  <span class="brand">结构化平台</span>
+  <a class="brand" href="/">结构化平台</a>
   <a href="/">工作台</a>
   <a href="/extract">提取</a>
   <a href="/sources">资料</a>
@@ -20,7 +20,7 @@
   <a href="/rules">入库</a>
   <a href="/tasks">任务</a>
   <span class="spacer"></span>
-  <span class="navnote">P1 · 校验台</span>
+  <span class="navnote">逐条核对与确认记录</span>
 </nav>
 <div class="pagebody wide">
   <div class="pagehead">
@@ -42,7 +42,7 @@
     <button type="button" class="btn ghost mini" id="rcbtn" hidden>回执 / 隔离</button>
     <a class="btn ghost mini" id="tasklink" href="/tasks">返回</a>
   </div>
-  <div class="banner info" id="modebanner">双击单元格改值（自动转已修改）· ✓ 确认 · ✗ 拒绝 · 单击/悬停血缘回溯不变</div>
+  <div class="banner info" id="modebanner">双击单元格修改取值，记录自动转为「已修改」；✓ 确认 · ✗ 拒绝；单击或悬停可查看血缘回溯</div>
   <div class="banner err" id="err" hidden></div>
   <div class="panel" id="taskpick" hidden>
     <div class="listwrap ledgerwrap">
@@ -56,7 +56,7 @@
         <tbody id="ledgerrows"></tbody>
       </table>
     </div>
-    <div class="empty" id="ledgerempty" hidden><b>暂无可校验的记录</b>先到「提取」页上传文件。</div>
+    <div class="empty" id="ledgerempty" hidden><b>暂无可校验的记录</b>请先到「提取」页上传文件。</div>
     <div class="pager" id="ledpager" hidden>
       <span class="pginfo"></span>
       <button type="button" class="pgprev">上一页</button>
@@ -75,7 +75,7 @@
         <thead id="rechead"></thead>
         <tbody id="recrows"></tbody>
       </table>
-      <div class="empty" id="empty" hidden><b>没有提取记录</b>该文件未抽出表格行。</div>
+      <div class="empty" id="empty" hidden><b>暂无提取记录</b>该文件未解析出表格数据。</div>
     </div>
     <aside class="panel lineage" id="lineage" hidden>
       <div class="lhead">

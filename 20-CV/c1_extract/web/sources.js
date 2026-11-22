@@ -22,7 +22,7 @@ function render(items){
       '<td>'+escHtml(r.tags||'—')+'</td>'+
       '<td class="num">'+fmtTime(r.created_at)+'</td>'+
       '<td style="white-space:nowrap">'+
-        '<a class="linkbtn" href="/extract?from_source='+r.id+'" title="到提取页预选此文件">提取</a>'+
+        '<a class="linkbtn" href="/extract?from_source='+r.id+'" title="在提取页使用此文件">提取</a>'+
         '<button type="button" class="linkbtn danger" data-del="'+r.id+
         '" data-name="'+escHtml(r.name)+'">删除</button>'+
       '</td></tr>';
@@ -59,7 +59,7 @@ rows.addEventListener('click',function(e){
   var b=e.target.closest?e.target.closest('[data-del]'):null;
   if(!b) return;
   var id=b.getAttribute('data-del'),name=b.getAttribute('data-name');
-  if(!confirm('删除「'+name+'」的登记与原件字节？\n已产生的任务产物不受影响。')) return;
+  if(!confirm('确认删除「'+name+'」的登记记录及其原件文件？\n已生成的任务产物不受影响。')) return;
   fetch('/api/sources/'+id,{method:'DELETE'}).then(function(r){return r.json().then(function(j){return {s:r.status,j:j};});})
     .then(function(o){
       if(o.s===409){ alert('不能删除：'+(o.j.error||'已被任务引用')); return; }
@@ -80,7 +80,7 @@ document.getElementById('picker').onchange=async function(){
   var added=0,reused=0,fail=[];
   for(var i=0;i<fs.length;i++){
     var f=fs[i];
-    if(f.size>20*1024*1024){ fail.push(f.name+'（超 20MB）'); continue; }
+    if(f.size>20*1024*1024){ fail.push(f.name+'（超过 20MB）'); continue; }
     try{
       var res=await fetch('/api/sources',{
         method:'POST',headers:{'Content-Type':'application/json'},
@@ -93,7 +93,7 @@ document.getElementById('picker').onchange=async function(){
   }
   var parts=[];
   if(added) parts.push('新登记 '+added+' 个');
-  if(reused) parts.push('哈希命中复用 '+reused+' 个');
+  if(reused) parts.push('内容相同，已复用 '+reused+' 个');
   if(fail.length) parts.push('失败：'+fail.join('、'));
   msg.innerHTML=(fail.length?'<span class="err">':'<span class="ok">')+
     escHtml(parts.join(' · '))+'</span>';

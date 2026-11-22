@@ -263,13 +263,13 @@ def _reject_retired_load_keys(body):
 async def upload(request: Request):
     if service.STATE['running']:
         return JSONResponse(
-            {'ok': False, 'error': '已有任务正在处理，请等它完成'},
+            {'ok': False, 'error': '已有任务正在处理，请等待其完成'},
             status_code=409)
     body = await _json_body(request)
     _reject_retired_load_keys(body)
     files = body.get('files') or []
     if not files:
-        return JSONResponse({'ok': False, 'error': '没有收到文件'},
+        return JSONResponse({'ok': False, 'error': '未收到文件'},
                             status_code=400)
     tpl = service.resolve_template(body.get('template_version_id'))
     # 调试参数：校验一次，非法值回退默认并把警告带回页面（不让整批失败）
@@ -779,7 +779,7 @@ async def api_tasks_create(request: Request):
             if s is None:
                 return JSONResponse(
                     {'ok': False,
-                     'error': '原件字节缺失：file {}'.format(row['id'])},
+                     'error': '原件内容缺失：file {}'.format(row['id'])},
                     status_code=409)
             path = os.path.join(in_dir, name)
             with open(path, 'wb') as fo:

@@ -94,7 +94,7 @@ def delete_file(file_id):
             cur.execute('SELECT COUNT(*) FROM extract_task_file'
                         ' WHERE file_id=%s', (file_id,))
             if cur.fetchone()[0]:
-                raise Conflict('该文件已被任务引用，禁止删除（血缘完整）')
+                raise Conflict('该文件已被任务引用，为保证血缘可追溯，不可删除')
             cur.execute('DELETE FROM extract_file WHERE id=%s', (file_id,))
             conn.commit()
     finally:
