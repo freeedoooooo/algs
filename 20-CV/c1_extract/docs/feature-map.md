@@ -32,7 +32,7 @@ c1_extract/
 ├── pipeline/           提取引擎：engines/ocr/pdf/plain/ppstruct/resplit/structure/runner
 ├── adapter/            引擎信封 → c1-extract 标准（base/paddle/pdfplumber/plain）
 ├── extract_report/     对照报告生成器：cards.py＋builder.py＋templates/（Jinja2）
-├── web/                全部前端资产（六页＋共享件＋报告内联件，见 §二）
+├── web/                全部前端资产（七页＋共享件＋报告内联件，见 §二）
 ├── accept_records_db.py  验收套件 A（7 项，临时服务 8799）
 ├── accept_artifacts_db.py 验收套件 B（6 项，临时服务 8797）
 ├── export_artifacts.py   产物按需导出（审计/file:// 用）
@@ -44,18 +44,20 @@ c1_extract/
 
 | 页面 | 路由（app.py） | 引擎/逻辑 | 存储模块 | 表 | 前端（web/） |
 |---|---|---|---|---|---|
-| 提取 `/` | `GET /` · `POST /api/upload` · `GET /api/status` · `/api/logs` · `/api/params` | service.launch/run（task_batch）· register_file · resolve_template；pipeline 提取；adapter 投影；collect 收集 | catalog.files/tasks/templates · content_db · artifact_db | extract_file · task · task_file · template(_version) · staging 三表 · artifact | upload.html/js/css ＋ shell ＋ hint |
+| 工作台 `/` | `GET /`（计数复用 `/api/tasks`＋`/api/staging/ledger`，无新端点） | 快速提取＝`POST /api/upload` 同通道 | — | — | home.html/js/css ＋ shell ＋ wizard |
+| 提取 `/extract` | `GET /extract` · `POST /api/upload` · `GET /api/status` · `/api/logs` · `/api/params` | service.launch/run（task_batch）· register_file · resolve_template；pipeline 提取；adapter 投影；collect 收集 | catalog.files/tasks/templates · content_db · artifact_db | extract_file · task · task_file · template(_version) · staging 三表 · artifact | upload.html/js/css ＋ shell ＋ hint |
 | 资料 `/sources` | `GET/POST /api/sources` · `DELETE /api/sources/{id}` · `GET /srcfiles/{id}` | service.register_file（sha 去重） | catalog.files | extract_file(+content) | sources.html/js ＋ shell |
 | 模板 `/templates` | `/api/templates` CRUD · `…/versions` CRUD | —（纯目录 CRUD） | catalog.templates | extract_template · extract_template_version | templates.html/js/css ＋ shell |
-| 校验 `/staging` | `GET /api/tasks/{id}/staging` · `PATCH …/staging/{tf}/{idx}` · `POST …/review` · `GET /api/staging/query` · `/api/staging/ledger` | app._review_target（只读守卫） | content.patch_record/set_review/get_records · content_db.query_fields/ledger | extract_staging_record/field/lineage | staging.html/js/css ＋ stage ＋ shell |
-| 入库 `/load` | `/api/load/datasources` CRUD/test/tables/columns · `/api/load/tables` CRUD | loader.connect_datasource/list_tables/list_columns/validate_fields | catalog.load | extract_load_datasource · load_table · load_table_field | load.html/js/css ＋ templates.css（表单 token）＋ shell |
-| 任务 `/tasks` | `GET /api/tasks(+/{id})` · `POST /api/tasks`（资料库发起）· `POST /api/tasks/{id}/load`（可带目标）· `GET …/load-log` · `…/quarantine` · `…/extract` | service.launch_load（目标解析→预检→门禁→**全过才绑定**→写入）/run_load（回执→隔离→重试）· loader.preflight/write_record/apply_transform/review_gate | catalog.tasks/load · content · artifact | extract_task/task_file · load_log · quarantine · staging 三表 · 目标业务表 | tasks.html/js ＋ shell（回执抽屉＋入库目标抽屉） |
+| 校验 `/review` | `GET /api/tasks/{id}/staging` · `PATCH …/staging/{tf}/{idx}` · `POST …/review` · `GET /api/staging/query` · `/api/staging/ledger` | app._review_target（只读守卫） | content.patch_record/set_review/get_records · content_db.query_fields/ledger | extract_staging_record/field/lineage | staging.html/js/css ＋ stage ＋ shell ＋ wizard |
+| 入库规则 `/rules` | `/api/load/datasources` CRUD/test/tables/columns · `/api/load/tables` CRUD | loader.connect_datasource/list_tables/list_columns/validate_fields | catalog.load | extract_load_datasource · load_table · load_table_field | load.html/js/css ＋ templates.css（表单 token）＋ shell |
+| 任务 `/tasks` | `GET /api/tasks(+/{id})` · `POST /api/tasks`（资料库发起）· `POST /api/tasks/{id}/load`（可带目标）· `GET …/load-log` · `…/quarantine` · `…/extract` | service.launch_load（目标解析→预检→门禁→**全过才绑定**→写入）/run_load（回执→隔离→重试）· loader.preflight/write_record/apply_transform/review_gate | catalog.tasks/load · content · artifact | extract_task/task_file · load_log · quarantine · staging 三表 · 目标业务表 | tasks.html/js ＋ shell ＋ wizard（回执抽屉＋入库向导） |
 | 对照报告 | `GET /extract-report`（重定向）· `GET /files/{tf}/{path}`（白名单，raw 403） | extract_report.builder.build（生成期内联资产）· artifact_db 读 | artifact_db | extract_artifact | 报告 BLOB 自包含（内联 report/stage/hint/lightbox，不走 /static） |
 
 ## 二、web/ 资产归属
 
-- **六页私有**：upload.* · sources.*（无 css，用 shell）· templates.* · staging.* · load.* · tasks.*（无 css，用 shell）
-- **页面共享**：shell.css/js（全局壳＋列表小件＋回执抽屉＋入库目标抽屉 openLoadTargetDrawer，tasks/staging 共用）· hint.css/js（「?」悬浮说明：上传页＋报告）· stage.css/js（舞台：校验台＋报告）
+- **七页私有**：home.* · upload.* · sources.*（无 css，用 shell）· templates.* · staging.* · load.* · tasks.*（无 css，用 shell）
+- **页面共享**：shell.css/js（全局壳＋列表小件＋回执抽屉＋流程条）· wizard.css/js（四步入库向导，home/tasks/staging 挂载）· hint.css/js（「?」悬浮说明：提取页＋报告）· stage.css/js（舞台：校验台＋报告）
+- **地址＝产品名词（2026-11-22 修理历史命名）**：页面 URL 用 `/extract /review /rules`，模板文件名仍是历史内部名（upload.html=提取、staging.html=校验、load.html=入库规则）；`/api/*` 路径是内部契约未动，与页面地址无关。
 - **报告专用（生成时内联进 BLOB）**：report.css/js · lightbox.html
 - 页面引用一律绝对路径 `/static/<file>`（app.py 挂载 web/）；改文件名须同步 HTML 引用。
 - 已入库的 9 份报告是静态 BLOB，资产搬迁不影响它们；新报告由 builder 从 web/ 内联。
