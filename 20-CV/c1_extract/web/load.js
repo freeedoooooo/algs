@@ -3,6 +3,9 @@
    契约见 design-p2b-datasource.md。 */
 var dss=[], maps=[], tpls=[], cols=[];
 var curDs=null, editDs=null, editLt=null, ltLocked=false;
+var dsPage=1, mapPage=1;
+var pgDs=bindPager(document.getElementById('dspager'),function(d){ dsPage+=d; renderDs(); });
+var pgMap=bindPager(document.getElementById('mappager'),function(d){ mapPage+=d; renderMaps(); });
 var dds=document.getElementById('dds'), dmap=document.getElementById('dmap');
 var mptpl=document.getElementById('mptpl'), mptable=document.getElementById('mptable');
 var mpmode=document.getElementById('mpmode'), mprows=document.getElementById('mprows');
@@ -37,7 +40,9 @@ function dsById(id){
 
 /* ---- 左：数据源列表 ---- */
 function renderDs(){
-  document.getElementById('dslist').innerHTML=dss.map(function(d){
+  var info=pageSlice(dss,dsPage);
+  dsPage=info.page;
+  document.getElementById('dslist').innerHTML=info.rows.map(function(d){
     return '<div class="dsitem'+(d.id===curDs?' active':'')+'" data-ds="'+d.id+'">'+
       '<div class="dsmain"><b>'+escHtml(d.name)+'</b>'+
         '<span class="badge">'+d.table_count+' 映射</span></div>'+
@@ -50,6 +55,7 @@ function renderDs(){
       '</div></div>';
   }).join('');
   document.getElementById('dsempty').hidden=dss.length>0;
+  pgDs.render(info);
 }
 /* ---- 右：所选数据源的映射列表 ---- */
 function renderMaps(){
@@ -57,10 +63,12 @@ function renderMaps(){
   document.getElementById('maptitle').textContent=d?('入库映射 · '+d.name):'入库映射';
   document.getElementById('newmap').disabled=!d;
   var list=maps.filter(function(m){return m.datasource_id===curDs;});
+  var info=pageSlice(list,mapPage);
+  mapPage=info.page;
   document.getElementById('mapnone').hidden=!!d;
   document.getElementById('maptable').hidden=!d||!list.length;
   document.getElementById('mapempty').hidden=!d||list.length>0;
-  document.getElementById('maprows').innerHTML=list.map(function(m){
+  document.getElementById('maprows').innerHTML=info.rows.map(function(m){
     var bk=m.business_keys||[];
     return '<tr>'+
       '<td><code class="mono">'+escHtml(m.target_table)+'</code></td>'+
@@ -74,6 +82,7 @@ function renderMaps(){
           '" data-name="'+escHtml(m.tpl_name+' → '+m.target_table)+'">删除</button>'+
       '</td></tr>';
   }).join('');
+  pgMap.render(info);
 }
 function loadAll(keepSel){
   return Promise.all([
@@ -118,7 +127,7 @@ document.getElementById('dslist').addEventListener('click',function(e){
     return;
   }
   var item=t.closest?t.closest('[data-ds]'):null;
-  if(item){ curDs=Number(item.getAttribute('data-ds')); renderDs(); renderMaps(); }
+  if(item){ curDs=Number(item.getAttribute('data-ds')); mapPage=1; renderDs(); renderMaps(); }
 });
 
 /* ---- 数据源抽屉 ---- */

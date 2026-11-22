@@ -58,7 +58,8 @@ function render(){
         '" data-name="'+escHtml(r.name)+'">删除</button>'+
       '</td></tr>';
   }).join('');
-  empty.hidden=list.length>0;
+  empty.hidden=info.total===0;
+  pg.render(info);
 }
 function load(){
   return api('GET','/api/templates').then(function(j){

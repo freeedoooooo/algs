@@ -672,7 +672,10 @@ document.getElementById('loadbtn').onclick=function(){
 document.getElementById('rcbtn').onclick=function(){ openReceiptDrawer(task); };
 
 /* ---- 任务级台账（无 task 入口）：客户端搜索/筛选，与资料/任务页工具栏同构 ---- */
-var ledgerItems=[], lq='', lprog='';
+var ledgerItems=[], lq='', lprog='', ledPage=1;
+var pgLed=bindPager(document.getElementById('ledpager'),function(d){
+  ledPage+=d; renderLedger();
+});
 function ledCnt(r){
   return '<td class="num">'+r.records_n+'</td>'+
     '<td class="num">'+r.pending_n+'</td>'+
@@ -694,6 +697,8 @@ function ledMatch(r){
 }
 function renderLedger(){
   var list=ledgerItems.filter(ledMatch);
+  var info=pageSlice(list,ledPage);
+  ledPage=info.page;
   document.getElementById('ledger').hidden=!list.length;
   var empty=document.getElementById('ledgerempty');
   empty.hidden=list.length>0;
@@ -702,7 +707,7 @@ function renderLedger(){
       '<b>没有匹配的任务</b>调整搜索或筛选条件。':
       '<b>暂无可校验的记录</b>先到「提取」页上传文件。';
   }
-  document.getElementById('ledgerrows').innerHTML=list.map(function(r){
+  document.getElementById('ledgerrows').innerHTML=info.rows.map(function(r){
     var tpl=r.template||{};
     var main='<tr class="led-task" data-task="'+r.task_id+'" title="点击展开/收起文件子行">'+
       '<td class="mono"><span class="led-caret">▸</span>#'+r.task_id+'</td>'+
@@ -721,6 +726,7 @@ function renderLedger(){
     }).join('');
     return main+subs;
   }).join('');
+  pgLed.render(info);
 }
 
 var tasktag=document.getElementById('tasktag');
@@ -742,9 +748,9 @@ if(!task){
   document.getElementById('ledgerbar').hidden=false;
   document.querySelector('.pagehead h1').textContent='校验台账';
   document.getElementById('lq').addEventListener('input',function(){
-    lq=this.value.trim().toLowerCase(); renderLedger();
+    lq=this.value.trim().toLowerCase(); ledPage=1; renderLedger();
   });
-  document.getElementById('lprog').onchange=function(){ lprog=this.value; renderLedger(); };
+  document.getElementById('lprog').onchange=function(){ lprog=this.value; ledPage=1; renderLedger(); };
   fetch('/api/staging/ledger').then(function(r){
     if(!r.ok) return r.json().then(function(j){throw new Error(j.error||('HTTP '+r.status));});
     return r.json();

@@ -56,7 +56,6 @@
     writing-mode:horizontal-tb;letter-spacing:normal}
 }
 /* 任务级校验台账（无 task 参数入口）：任务行汇总，展开文件子行 */
-.ledgerwrap{max-height:62vh;overflow:auto}
 #ledgerrows tr{cursor:pointer}
 #ledgerrows tr:hover{background:#f3f7fd}
 #ledgerrows td.led-edited{color:#b45309;font-weight:600}
