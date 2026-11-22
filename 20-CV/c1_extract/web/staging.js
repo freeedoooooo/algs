@@ -715,7 +715,7 @@ function renderLedger(){
     var main='<tr class="led-task" data-task="'+r.task_id+'" title="点击展开/收起文件子行">'+
       '<td class="seq">'+seqNo(info,i)+'</td>'+
       '<td class="mono"><span class="led-caret">▸</span>#'+r.task_id+'</td>'+
-      '<td>'+r.files.length+' 个文件</td>'+
+      '<td>'+r.files.length+' 个资料</td>'+
       '<td>'+escHtml((tpl.name||'原始透传')+' v'+(tpl.version||1))+'</td>'+
       ledCnt(r)+
       '<td>'+stateBadge(r.task_state)+'</td>'+
@@ -724,7 +724,7 @@ function renderLedger(){
       return '<tr class="led-file" data-task="'+r.task_id+'" data-file="'+
         f.task_file_id+'" hidden>'+
         '<td></td>'+
-        '<td class="mono">F'+f.task_file_id+'</td>'+
+        '<td class="mono" title="资料ID（与入库回执中的「资料ID」一致）">资料 #'+f.task_file_id+'</td>'+
         '<td><span class="nm led-subname" title="'+escHtml(f.name)+'">'+
         escHtml(shortName(f.name))+'</span></td>'+
         '<td></td>'+ledCnt(f)+'<td></td><td></td></tr>';

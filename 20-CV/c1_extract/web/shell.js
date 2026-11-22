@@ -108,7 +108,7 @@ function openReceiptDrawer(taskId){
     var html='<div class="msg" style="margin-bottom:6px">回执 '+logs.length+
       ' 条（重新入库时，已有回执的记录将自动跳过）</div>';
     html+=logs.length?
-      '<table class="list"><thead><tr><th>文件ID</th><th>记录</th><th>动作</th>'+
+      '<table class="list"><thead><tr><th>资料ID</th><th>记录</th><th>动作</th>'+
       '<th>目标主键</th><th>时间</th></tr></thead><tbody>'+
       logs.map(function(l){
         return '<tr><td class="mono">'+l.task_file_id+'</td>'+
@@ -121,7 +121,7 @@ function openReceiptDrawer(taskId){
     html+='<div class="msg" style="margin:12px 0 6px">隔离 '+qs.length+
       ' 条（当前为只读；重新入库将重试未写入的记录）</div>';
     html+=qs.length?
-      '<table class="list"><thead><tr><th>文件ID</th><th>记录</th><th>原因</th>'+
+      '<table class="list"><thead><tr><th>资料ID</th><th>记录</th><th>原因</th>'+
       '<th>时间</th></tr></thead><tbody>'+
       qs.map(function(q){
         return '<tr><td class="mono">'+q.task_file_id+'</td>'+

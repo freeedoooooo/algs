@@ -8,6 +8,10 @@ var hmsg=document.getElementById('hmsg'), htpl=document.getElementById('htpl');
 var TKEY='c1.home_tpl';
 var items=[], led=[];
 var pollT=null, loopT=null, lastTaskId=null;
+var todoPage=1, todoSize=getListPer();
+var pgTodo=bindPager(document.getElementById('todopg'),
+  function(d){ todoPage+=d; render(); },
+  function(n){ todoSize=n; todoPage=1; render(); });
 
 function say(t,cls){ hmsg.textContent=t; hmsg.className='qmsg'+(cls?' '+cls:''); }
 function sayHtml(html,cls){ hmsg.innerHTML=html; hmsg.className='qmsg'+(cls?' '+cls:''); }
@@ -135,7 +139,7 @@ function renderCards(){
     v.busy.length?('任务 '+v.busy.map(function(t){return '#'+t.task_id;}).join('、')):'暂无进行中的提取任务',
     !v.busy.length);
   setCard(2, v.reviewTasks,
-    v.reviewFiles? '共 '+v.reviewFiles+' 个文件待逐条核对':'暂无待校验记录', !v.reviewFiles);
+    v.reviewFiles? '共 '+v.reviewFiles+' 个资料待逐条核对':'暂无待校验记录', !v.reviewFiles);
   setCard(3, v.loadTasks.length,
     v.loadTasks.length? '校验完成，等待入库':'暂无待入库任务',
     !v.loadTasks.length);
@@ -148,7 +152,7 @@ function renderCards(){
   return v;
 }
 
-/* ---- 待办列表：需要你动手的，新在前，最多 8 行 ---- */
+/* ---- 待办列表：需要你动手的，新在前，共用分页组件 ---- */
 function fileNames(t){
   return (t.files||[]).map(function(f){return f.name;}).join('、');
 }
@@ -185,19 +189,14 @@ function renderTodo(v){
       act:'<a class="linkbtn" href="/tasks">查看详情</a>',t:t.created_at});
   });
   rows.sort(function(a,b){ return (a.t<b.t?1:(a.t>b.t?-1:0)); });
-  var shown=rows.slice(0,8);
-  var note=document.getElementById('todonote');
-  if(rows.length>shown.length){
-    note.hidden=false;
-    note.textContent='待办共 '+rows.length+' 项，此处仅显示最近 8 项；'
-      +'各阶段完整数量见上方状态卡。';
-  }else note.hidden=true;
+  var info=pageSlice(rows,todoPage,todoSize); todoPage=info.page;
   var tb=document.getElementById('todorows'), table=document.getElementById('todotable');
   var empty=document.getElementById('todoempty');
-  empty.hidden=shown.length>0; table.hidden=shown.length===0;
-  tb.innerHTML=shown.map(function(r,i){
-    return todoRow(i+1,r.id,r.name,r.what,r.act);
+  empty.hidden=rows.length>0; table.hidden=rows.length===0;
+  tb.innerHTML=info.rows.map(function(r,i){
+    return todoRow(seqNo(info,i),r.id,r.name,r.what,r.act);
   }).join('');
+  pgTodo.render(info);
 }
 document.getElementById('todorows').addEventListener('click',function(e){
   var b=e.target.closest?e.target.closest('[data-load]'):null;

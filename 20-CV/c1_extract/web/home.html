@@ -71,11 +71,15 @@
     <div class="thead"><b>需要处理的事</b><span class="spacer"></span>
       <a class="clink" href="/tasks">全部任务 →</a></div>
     <table class="list" id="todotable" hidden>
-      <thead><tr><th class="seq">序号</th><th>任务ID</th><th>文件</th>
+      <thead><tr><th class="seq">序号</th><th>任务ID</th><th>资料</th>
         <th>事项</th><th>操作</th></tr></thead>
       <tbody id="todorows"></tbody>
     </table>
-    <div class="msg" id="todonote" hidden></div>
+    <div class="pager" id="todopg" hidden>
+      <span class="pginfo"></span>
+      <button type="button" class="pgprev">上一页</button>
+      <button type="button" class="pgnext">下一页</button>
+    </div>
     <div class="empty" id="todoempty" hidden>
       <b>暂无待办事项</b>可在上方快速提取，或到 <a href="/sources">资料</a> 页查看原件。
     </div>

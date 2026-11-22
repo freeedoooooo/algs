@@ -78,7 +78,7 @@ function renderDetail(j){
   if(r.error) html+='<div class="banner err">任务出错：'+escHtml(r.error)+'</div>';
   html+='<div class="msg" style="margin-bottom:10px">模板 '+tplLabel(r.template)+
     ' · 发起 '+fmtTime(r.created_at)+'</div>';
-  html+='<table class="list"><thead><tr><th>文件</th><th>状态</th><th>暂存记录</th><th>产物</th></tr></thead><tbody>'+
+  html+='<table class="list"><thead><tr><th>资料</th><th>状态</th><th>暂存记录</th><th>产物</th></tr></thead><tbody>'+
     (r.files||[]).map(function(f){return fileRow(f,r.task_id);}).join('')+'</tbody></table>';
   var ps=Object.keys(r.params||{});
   if(ps.length){
@@ -99,7 +99,7 @@ function renderDetail(j){
     html+='<div class="msg" id="gateinfo" style="margin-top:4px"></div>';
   document.getElementById('dbody').innerHTML=html;
   var n=(r.files||[]).reduce(function(s,f){return s+(f.records_n||0);},0);
-  var foot='<span>共 '+(r.files||[]).length+' 个文件 · 暂存记录 '+n+' 条</span>'+
+  var foot='<span>共 '+(r.files||[]).length+' 个资料 · 暂存记录 '+n+' 条</span>'+
     '<span class="spacer" style="flex:1"></span>';
   if(r.state==='previewed'||r.state==='partial')
     foot+='<button type="button" class="btn mini" id="loadbtn">'+
