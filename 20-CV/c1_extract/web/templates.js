@@ -201,7 +201,12 @@ function updateDestHints(){
     var h=div.querySelector('.fdest');
     if(!h) return;
     var f=(div.querySelector('.fname').value||'').trim();
-    if(!f||!destHasRules){ h.textContent=''; h.title=''; return; }
+    if(!f){ h.textContent=''; h.title=''; return; }
+    if(!destHasRules){
+      h.textContent='—';
+      h.title='本模板尚未配置入库规则；在「入库」页配置后，这里会显示每个字段写入哪张表哪一列';
+      h.className='fdest'; return;
+    }
     var d=destMap[f]||[];
     if(!d.length){
       h.textContent='未配去向'; h.title='该字段还没有出现在任何入库规则的目标列中';
@@ -209,7 +214,7 @@ function updateDestHints(){
     }
     var uniq=[], seen={};
     d.forEach(function(x){ if(!seen[x]){seen[x]=1;uniq.push(x);} });
-    h.textContent='入库 → '+uniq.join(' / '); h.title='入库规则中的目标列';
+    h.textContent=uniq.join(' / '); h.title='入库规则中的目标列';
     h.className='fdest has';
   });
 }
@@ -333,7 +338,7 @@ function openEditor(id){
     document.getElementById('everbadge').innerHTML='';
     ename.value=''; edesc.value=''; origName=''; origDesc='';
     delbtn.hidden=true;
-    destMap=null;
+    loadDestHints(null);
     document.getElementById('versec').hidden=true;
     addRow('',null);
     edit.hidden=false; loadRefs();
