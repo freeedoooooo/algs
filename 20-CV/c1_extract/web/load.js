@@ -3,9 +3,13 @@
    契约见 design-p2b-datasource.md。 */
 var dss=[], maps=[], tpls=[], cols=[];
 var curDs=null, editDs=null, editLt=null, ltLocked=false;
-var dsPage=1, mapPage=1;
-var pgDs=bindPager(document.getElementById('dspager'),function(d){ dsPage+=d; renderDs(); });
-var pgMap=bindPager(document.getElementById('mappager'),function(d){ mapPage+=d; renderMaps(); });
+var dsPage=1, mapPage=1, dsSize=getListPer(), mapSize=getListPer();
+var pgDs=bindPager(document.getElementById('dspager'),
+  function(d){ dsPage+=d; renderDs(); },
+  function(n){ dsSize=n; dsPage=1; renderDs(); });
+var pgMap=bindPager(document.getElementById('mappager'),
+  function(d){ mapPage+=d; renderMaps(); },
+  function(n){ mapSize=n; mapPage=1; renderMaps(); });
 var dds=document.getElementById('dds'), dmap=document.getElementById('dmap');
 var mptpl=document.getElementById('mptpl'), mptable=document.getElementById('mptable');
 var mpmode=document.getElementById('mpmode'), mprows=document.getElementById('mprows');
@@ -40,13 +44,13 @@ function dsById(id){
 
 /* ---- 左：数据源列表 ---- */
 function renderDs(){
-  var info=pageSlice(dss,dsPage);
+  var info=pageSlice(dss,dsPage,dsSize);
   dsPage=info.page;
-  document.getElementById('dslist').innerHTML=info.rows.map(function(d){
+  document.getElementById('dslist').innerHTML=info.rows.map(function(d,i){
     return '<div class="dsitem'+(d.id===curDs?' active':'')+'" data-ds="'+d.id+'">'+
-      '<div class="dsmain"><b>'+escHtml(d.name)+'</b>'+
+      '<div class="dsmain"><b>'+seqNo(info,i)+'. '+escHtml(d.name)+'</b>'+
         '<span class="badge">'+d.table_count+' 映射</span></div>'+
-      '<div class="dsmeta mono">'+escHtml(d.host+':'+d.port+'/'+d.db_name)+'</div>'+
+      '<div class="dsmeta mono">'+escHtml('ID '+d.id+' · '+d.host+':'+d.port+'/'+d.db_name)+'</div>'+
       '<div class="dsops">'+
         '<button type="button" class="linkbtn" data-test="'+d.id+'">试连</button>'+
         '<button type="button" class="linkbtn" data-editds="'+d.id+'">编辑</button>'+
@@ -63,14 +67,16 @@ function renderMaps(){
   document.getElementById('maptitle').textContent=d?('入库映射 · '+d.name):'入库映射';
   document.getElementById('newmap').disabled=!d;
   var list=maps.filter(function(m){return m.datasource_id===curDs;});
-  var info=pageSlice(list,mapPage);
+  var info=pageSlice(list,mapPage,mapSize);
   mapPage=info.page;
   document.getElementById('mapnone').hidden=!!d;
   document.getElementById('maptable').hidden=!d||!list.length;
   document.getElementById('mapempty').hidden=!d||list.length>0;
-  document.getElementById('maprows').innerHTML=info.rows.map(function(m){
+  document.getElementById('maprows').innerHTML=info.rows.map(function(m,i){
     var bk=m.business_keys||[];
     return '<tr>'+
+      '<td class="num">'+seqNo(info,i)+'</td>'+
+      '<td class="mono">'+m.id+'</td>'+
       '<td><code class="mono">'+escHtml(m.target_table)+'</code></td>'+
       '<td>'+escHtml(m.tpl_name||'—')+'</td>'+
       '<td>'+escHtml(m.write_mode)+'</td>'+

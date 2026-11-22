@@ -91,9 +91,12 @@ table.list .namecell .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowr
 /* ---- 分页 ---- */
 .pager{display:flex;align-items:center;gap:10px;justify-content:flex-end;
   padding:8px 10px;font-size:12px;color:#6b7688}
+.pager[hidden]{display:none}
 .pager button{font-size:12px;padding:3px 12px;border-radius:6px;
   border:1px solid #cbd5e1;background:#fff;color:#2563eb}
 .pager button:disabled{color:#b9c6dd;cursor:not-allowed}
+.pager .pagesize{font-size:12px;padding:3px 6px;border-radius:6px;
+  border:1px solid #cbd5e1;background:#fff;color:#3b4a63}
 
 /* ---- 抽屉（右侧叠加层：资料库选择 / 任务详情） ---- */
 .drawer{position:fixed;inset:0;z-index:60;background:rgba(15,23,38,.45);

@@ -672,10 +672,10 @@ document.getElementById('loadbtn').onclick=function(){
 document.getElementById('rcbtn').onclick=function(){ openReceiptDrawer(task); };
 
 /* ---- 任务级台账（无 task 入口）：客户端搜索/筛选，与资料/任务页工具栏同构 ---- */
-var ledgerItems=[], lq='', lprog='', ledPage=1;
+var ledgerItems=[], lq='', lprog='', ledPage=1, ledSize=getListPer();
 var pgLed=bindPager(document.getElementById('ledpager'),function(d){
   ledPage+=d; renderLedger();
-});
+},function(n){ ledSize=n; ledPage=1; renderLedger(); });
 function ledCnt(r){
   return '<td class="num">'+r.records_n+'</td>'+
     '<td class="num">'+r.pending_n+'</td>'+
@@ -697,7 +697,7 @@ function ledMatch(r){
 }
 function renderLedger(){
   var list=ledgerItems.filter(ledMatch);
-  var info=pageSlice(list,ledPage);
+  var info=pageSlice(list,ledPage,ledSize);
   ledPage=info.page;
   document.getElementById('ledger').hidden=!list.length;
   var empty=document.getElementById('ledgerempty');
@@ -707,9 +707,10 @@ function renderLedger(){
       '<b>没有匹配的任务</b>调整搜索或筛选条件。':
       '<b>暂无可校验的记录</b>先到「提取」页上传文件。';
   }
-  document.getElementById('ledgerrows').innerHTML=info.rows.map(function(r){
+  document.getElementById('ledgerrows').innerHTML=info.rows.map(function(r,i){
     var tpl=r.template||{};
     var main='<tr class="led-task" data-task="'+r.task_id+'" title="点击展开/收起文件子行">'+
+      '<td class="num">'+seqNo(info,i)+'</td>'+
       '<td class="mono"><span class="led-caret">▸</span>#'+r.task_id+'</td>'+
       '<td>'+r.files.length+' 个文件</td>'+
       '<td>'+escHtml((tpl.name||'原始透传')+' v'+(tpl.version||1))+'</td>'+
@@ -720,6 +721,7 @@ function renderLedger(){
       return '<tr class="led-file" data-task="'+r.task_id+'" data-file="'+
         f.task_file_id+'" hidden>'+
         '<td></td>'+
+        '<td class="mono">F'+f.task_file_id+'</td>'+
         '<td><span class="nm led-subname" title="'+escHtml(f.name)+'">'+
         escHtml(shortName(f.name))+'</span></td>'+
         '<td></td>'+ledCnt(f)+'<td></td><td></td></tr>';

@@ -1,8 +1,11 @@
 /* web/templates.js — 模板管理：列表＋编辑抽屉（结构化字段行
    表单＋参考文件预览辅助选表选列）＋版本历史。契约见 design-p1b-templates.md §二。 */
-var items=[], cur=null, origName='', origDesc='', cands=null, pendingTable=null, page=1;
-var rows=document.getElementById('rows'), empty=document.getElementById('empty');
-var pg=bindPager(document.getElementById('pager'),function(d){ page+=d; render(); });
+var items=[], cur=null, origName='', origDesc='', cands=null, pendingTable=null,
+    page=1, size=getListPer();
+var rows=document.getElementById('rows');
+var pg=bindPager(document.getElementById('pager'),
+  function(d){ page+=d; render(); },
+  function(n){ size=n; page=1; render(); });
 var edit=document.getElementById('edit');
 var ename=document.getElementById('ename'), edesc=document.getElementById('edesc');
 var refsel=document.getElementById('refsel'), refhint=document.getElementById('refhint');
@@ -41,10 +44,12 @@ function render(){
     if(!q) return true;
     return ((r.name||'')+' '+(r.description||'')).toLowerCase().indexOf(q)>=0;
   });
-  var info=pageSlice(list,page);
+  var info=pageSlice(list,page,size);
   page=info.page;
-  rows.innerHTML=info.rows.map(function(r){
+  rows.innerHTML=info.rows.map(function(r,i){
     return '<tr>'+
+      '<td class="num">'+seqNo(info,i)+'</td>'+
+      '<td class="mono">'+r.id+'</td>'+
       '<td><b>'+escHtml(r.name)+'</b></td>'+
       '<td><span class="desc" title="'+escHtml(r.description||'')+'">'+
         escHtml(r.description||'—')+'</span></td>'+
@@ -58,7 +63,6 @@ function render(){
         '" data-name="'+escHtml(r.name)+'">删除</button>'+
       '</td></tr>';
   }).join('');
-  empty.hidden=info.total===0;
   pg.render(info);
 }
 function load(){

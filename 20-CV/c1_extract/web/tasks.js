@@ -1,8 +1,10 @@
 /* web/tasks.js — 任务列表（task 表投影）+ 详情抽屉 + 处理中轮询 */
-var items=[], curTask=null, pollTimer=null, page=1;
-var rows=document.getElementById('rows'),empty=document.getElementById('empty');
+var items=[], curTask=null, pollTimer=null, page=1, size=getListPer();
+var rows=document.getElementById('rows');
 var detail=document.getElementById('detail');
-var pg=bindPager(document.getElementById('pager'),function(d){ page+=d; render(); });
+var pg=bindPager(document.getElementById('pager'),
+  function(d){ page+=d; render(); },
+  function(n){ size=n; page=1; render(); });
 
 function tplLabel(t){
   t=t||{};
@@ -21,10 +23,11 @@ function filtered(){
   });
 }
 function render(){
-  var info=pageSlice(filtered(),page);
+  var info=pageSlice(filtered(),page,size);
   page=info.page;
-  rows.innerHTML=info.rows.map(function(r){
+  rows.innerHTML=info.rows.map(function(r,i){
     return '<tr>'+
+      '<td class="num">'+seqNo(info,i)+'</td>'+
       '<td class="mono">#'+r.task_id+'</td>'+
       '<td class="num">'+(r.files||[]).length+'</td>'+
       '<td>'+tplLabel(r.template)+'</td>'+
@@ -34,7 +37,6 @@ function render(){
       '<td><button type="button" class="linkbtn" data-task="'+r.task_id+'">详情</button></td>'+
       '</tr>';
   }).join('');
-  empty.hidden=info.total===0;
   pg.render(info);
 }
 function load(){

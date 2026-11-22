@@ -1,15 +1,19 @@
 /* web/sources.js — 资料库：列表/搜索/过滤/分页 + 上传登记 + 删除保护 */
-var page=1, total=0, q='', kind='', qTimer=null;
+var page=1, total=0, q='', kind='', size=getListPer(), qTimer=null;
 var rows=document.getElementById('rows'),empty=document.getElementById('empty');
-var pg=bindPager(document.getElementById('pager'),function(d){ page+=d; load(); });
+var pg=bindPager(document.getElementById('pager'),
+  function(d){ page+=d; load(); },
+  function(n){ size=n; page=1; load(); });
 
 function srcUrl(row){
   return '/srcfiles/'+row.id;
 }
 function render(items){
-  rows.innerHTML=items.map(function(r){
+  rows.innerHTML=items.map(function(r,i){
     var sha=String(r.sha256||'');
     return '<tr data-id="'+r.id+'">'+
+      '<td class="num">'+((page-1)*size+i+1)+'</td>'+
+      '<td class="mono">'+r.id+'</td>'+
       '<td><div class="namecell">'+thumbHtml(r.name,srcUrl(r))+
         '<span class="nm" title="'+escHtml(r.name)+'">'+escHtml(r.name)+'</span></div></td>'+
       '<td>'+(KIND_LABEL[r.kind]||escHtml(r.kind))+'</td>'+
@@ -24,10 +28,10 @@ function render(items){
       '</td></tr>';
   }).join('');
   empty.hidden=items.length>0;
-  pg.render({page:page,pages:Math.max(1,Math.ceil(total/LIST_PER)),total:total});
+  pg.render({page:page,pages:Math.max(1,Math.ceil(total/size)),total:total,per:size});
 }
 function load(){
-  var u='/api/sources?page='+page+'&q='+encodeURIComponent(q)+
+  var u='/api/sources?page='+page+'&size='+size+'&q='+encodeURIComponent(q)+
     '&kind='+encodeURIComponent(kind);
   fetch(u).then(function(r){
     if(r.status===503){

@@ -349,8 +349,10 @@ def extract_report():
 
 
 @app.get('/api/sources')
-def api_sources(q: str = None, kind: str = None, tag: str = None, page: int = 1):
-    return _load('store.catalog').list_files(q, kind, tag, page)
+def api_sources(q: str = None, kind: str = None, tag: str = None,
+                page: int = 1, size: int = 20):
+    return _load('store.catalog').list_files(
+        q, kind, tag, page, per_page=max(1, min(size, 200)))
 
 
 @app.post('/api/sources')

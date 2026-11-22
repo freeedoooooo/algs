@@ -128,23 +128,47 @@ function openReceiptDrawer(taskId){
       '<div class="empty">读取失败：平台库不可用</div>';
   });
 }
-/* ---- 列表分页共用组件（资料/任务/模板/校验台账/入库，规约：每页 20，
-   不足一页自动隐藏；翻页后滚回列表顶部；筛选变化由各页自行回第 1 页）。
+/* ---- 列表分页共用组件（资料/任务/模板/校验台账/入库）。
+   每页条数用户可选（10/20/50/100，默认 20，localStorage 记忆，全站点统一）；
+   列表为空时隐藏分页条；翻页后滚回列表顶部；筛选变化由各页自行回第 1 页。
    markup 约定：
      <div class="pager" id="…" hidden><span class="pginfo"></span>
        <button type="button" class="pgprev">上一页</button>
        <button type="button" class="pgnext">下一页</button></div>
-   用法：var pg=bindPager(el,function(d){page+=d;render();});
-        pg.render(pageSlice(list,page))  // 前端分页
-        pg.render({page:p,pages:ps,total:total})  // 服务端分页（资料页） */
-var LIST_PER=20;
-function pageSlice(list,page){
-  var pages=Math.max(1,Math.ceil(list.length/LIST_PER));
-  var p=Math.min(Math.max(1,page||1),pages);
-  return {rows:list.slice((p-1)*LIST_PER,p*LIST_PER),page:p,pages:pages,total:list.length};
+   用法：var pg=bindPager(el,function(d){page+=d;render();},
+                        function(n){size=n;page=1;render();});
+        pg.render(pageSlice(list,page,size))  // 前端分页
+        pg.render({page:p,pages:ps,total:total,per:size})  // 服务端分页（资料页） */
+var PAGE_SIZES=[10,20,50,100];
+function getListPer(){
+  var n=Number(localStorage.getItem('c1.list_per'));
+  return PAGE_SIZES.indexOf(n)>=0?n:20;
 }
-function bindPager(el,onGo){
+function pageSlice(list,page,per){
+  per=per||getListPer();
+  var pages=Math.max(1,Math.ceil(list.length/per));
+  var p=Math.min(Math.max(1,page||1),pages);
+  return {rows:list.slice((p-1)*per,p*per),page:p,pages:pages,total:list.length,per:per};
+}
+function seqNo(info,i){ return (info.page-1)*info.per+i+1; }
+function bindPager(el,onGo,onSize){
   var prev=el.querySelector('.pgprev'),next=el.querySelector('.pgnext');
+  var sel=null;
+  if(onSize){
+    sel=document.createElement('select');
+    sel.className='pagesize';
+    sel.title='每页条数';
+    PAGE_SIZES.forEach(function(n){
+      var o=document.createElement('option');
+      o.value=n;o.textContent=n+' 条/页';
+      sel.appendChild(o);
+    });
+    el.insertBefore(sel,el.firstChild);
+    sel.onchange=function(){
+      try{localStorage.setItem('c1.list_per',sel.value);}catch(e){}
+      onSize(Number(sel.value));
+    };
+  }
   function go(d){
     onGo(d);
     if(el.parentNode) el.parentNode.scrollIntoView({behavior:'smooth',block:'start'});
@@ -152,7 +176,8 @@ function bindPager(el,onGo){
   prev.onclick=function(){ if(!prev.disabled) go(-1); };
   next.onclick=function(){ if(!next.disabled) go(1); };
   return {render:function(info){
-    el.hidden=info.total<=LIST_PER;
+    el.hidden=info.total===0;
+    if(sel) sel.value=info.per||getListPer();
     el.querySelector('.pginfo').textContent=
       '共 '+info.total+' 条 · 第 '+info.page+'/'+info.pages+' 页';
     prev.disabled=info.page<=1;
