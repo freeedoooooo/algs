@@ -23,8 +23,8 @@ D:\miniforge3\envs\paddle\python.exe c1_extract/app.py
 uvicorn c1_extract.app:app --host 0.0.0.0 --port 8765 --workers 1
 ```
 
-- **平台库必选**：凭据经 conn_ref `C1_EXTRACT_DB`（环境变量或 `data/secrets.json`，
-  git 排除）解析，DSN 形如 `mysql://user:pass@host:3306/db`。**建表/升级人工执行**
+- **平台库必选**：DSN 配在 `config.PLATFORM_DB`（形如 `mysql://user:pass@host:3306/db`，
+  环境变量 `C1_EXTRACT_DB` 优先，方便部署覆盖）。**建表/升级人工执行**
   `store/migrations/001_baseline.sql`（无自动迁移器，2026-11-21 裁决删除；
   脚本全 IF NOT EXISTS＋INSERT IGNORE，重跑无副作用）。DB 不可达：上传 503 不建任务、
   运行中写失败整任务 failed、读端点 503，不降级。
@@ -42,7 +42,7 @@ python -m pip install -U pip
 python -m pip install -r requirements.txt
 
 # 2) 配置平台库（二选一）
-#    环境变量 C1_EXTRACT_DB=mysql://...  或  data/secrets.json {"C1_EXTRACT_DB": "mysql://..."}
+#    改 config.PLATFORM_DB 默认值，或 环境变量 C1_EXTRACT_DB=mysql://...
 
 # 2.5) 人工建表（无自动迁移器）：对平台库执行 store/migrations/001_baseline.sql
 #      mysql -h <host> -u <user> -p <db> < store/migrations/001_baseline.sql
@@ -71,7 +71,7 @@ uvicorn c1_extract.app:app --host 0.0.0.0 --port 8765 --workers 1    # 生产式
 
 | 变量 | 默认 | 用途 |
 |---|---|---|
-| `C1_EXTRACT_DB` | 无（**必选**，可放 `data/secrets.json`） | 平台库 DSN（conn_ref，凭据不落日志） |
+| `C1_EXTRACT_DB` | 无（默认用 `config.PLATFORM_DB` 内置 DSN） | 平台库 DSN（回显仅 host/库名，不带密码） |
 | `C1_EXTRACT_DATA_ROOT` | 包内 `data/` | secrets / 备份等数据根目录 |
 | `C1_EXTRACT_HOST` | `127.0.0.1` | 监听地址，服务器设 `0.0.0.0` |
 | `C1_EXTRACT_PORT` | `8765` | 端口 |
@@ -147,7 +147,7 @@ c1_extract/
 │   ├── stage.css/js           舞台共用件（校验台＋报告）
 │   ├── hint.css/js            「?」悬浮说明（上传页＋报告）
 │   └── report.css/js · lightbox.html   报告专用（生成时内联进 BLOB）
-├── data/                      secrets.json（git 排除）/ backup/（迁移前整库备份）
+├── data/                      backup/（迁移前整库备份；DSN 已入 config.py，无 secrets.json）
 ├── logs/                      任务日志（运行时生成，每任务一个 task_<id>.log）
 └── docs/                      设计稿与交接文档
 ```

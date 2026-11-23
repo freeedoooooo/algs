@@ -801,5 +801,5 @@ if __name__ == '__main__':
 
     print('>> 结构化平台 地址： http://{}:{}'.format(config.HOST, config.PORT))
     print('>> 结构化平台 存储： {}'.format(
-        _load('store.db').safe_detail(config.PLATFORM_DB_REF)))
+        _load('store.db').safe_detail(config.PLATFORM_DB)))
     uvicorn.run(app, host=config.HOST, port=config.PORT, log_level='warning')

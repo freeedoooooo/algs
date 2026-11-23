@@ -1,7 +1,6 @@
 # 运维态与运行期目录：config.py 启动时自动创建，不必入库
 logs/
 tmp/
-data/secrets.json
 data/backup/
 
 # Python / 虚拟环境 / 本地环境变量

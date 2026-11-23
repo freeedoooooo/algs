@@ -1,7 +1,7 @@
 """
-store/db.py — 薄驱动接缝（JDBC 式）+ conn_ref 解析。
+store/db.py — 薄驱动接缝（JDBC 式）+ DSN 解析。
 
-接口只有 connect(ref) → DB-API 连接；catalog / loader 只用 DB-API 通用能力
+接口只有 connect(dsn) → DB-API 连接；catalog / loader 只用 DB-API 通用能力
 （cursor / execute / commit / rollback），换库 = 新增驱动实现。
 首个实现 PyMySQL（锁版本见 requirements）；MySQL 8 caching_sha2_password
 非 SSL 首次认证需 cryptography（已锁）。
@@ -9,11 +9,11 @@ store/db.py — 薄驱动接缝（JDBC 式）+ conn_ref 解析。
 建表/升级不自动执行：migrations/001_baseline.sql 是人工安装脚本，
 部署或改表结构时由人对着库跑（2026-11-21 裁决：删自动迁移门禁）。
 
-凭据引用制：conn_ref 是名字不是密码；解析顺序 env → data/secrets.json（git 排除）。
-凭据永不落日志 / 不回显（错误信息只带 host/库名）。
+DSN 来源：config.PLATFORM_DB（环境变量 C1_EXTRACT_DB 优先，默认值直接写在
+config.py，2026-11-23 裁决：退役 secrets.json 引用制）。
+回显永不带密码（错误信息只带 host/库名）。
 """
 import os
-import json
 import time
 import threading
 from urllib.parse import urlsplit, unquote
@@ -24,18 +24,13 @@ _TL = threading.local()      # 平台库线程局部连接（见 connect() 文�
 _IDLE_PING_S = 5.0           # 闲置超过该秒数，归还前先 ping 验活
 
 
-def resolve_conn(ref):
-    """conn_ref → DSN。未配置抛 LookupError（调用方显式报错）。"""
-    v = os.getenv(ref)
-    if not v:
-        p = os.path.join(config.DATA_DIR, 'secrets.json')
-        if os.path.isfile(p):
-            with open(p, encoding='utf-8') as f:
-                v = (json.load(f) or {}).get(ref)
-    if not v:
-        raise LookupError('凭据引用 {} 未配置（环境变量或 data/secrets.json）'
-                          .format(ref))
-    return v
+def resolve_conn(dsn):
+    """DSN 直通（config.PLATFORM_DB 即 DSN，env C1_EXTRACT_DB 已在 config 展开）。
+
+    未配置抛 LookupError（调用方显式报错）。"""
+    if not dsn:
+        raise LookupError('平台库 DSN 未配置（config.PLATFORM_DB 或环境变量 C1_EXTRACT_DB）')
+    return dsn
 
 
 def _parts(dsn):
@@ -50,10 +45,10 @@ def _parts(dsn):
     }
 
 
-def safe_detail(ref):
+def safe_detail(dsn):
     """脱敏连接描述（仅 host/库名），供测试连接回显与日志。"""
     try:
-        p = _parts(resolve_conn(ref))
+        p = _parts(resolve_conn(dsn))
         return '{}:{}/{}'.format(p['host'], p['port'], p['database'])
     except Exception as e:
         return str(e)
@@ -85,16 +80,16 @@ class _Borrowed:
         return getattr(self._conn, k)
 
 
-def _new_conn(ref, autocommit):
+def _new_conn(dsn, autocommit):
     import pymysql
-    p = _parts(resolve_conn(ref))
+    p = _parts(resolve_conn(dsn))
     return pymysql.connect(
         host=p['host'], port=p['port'], user=p['user'],
         password=p['password'], database=p['database'],
         charset='utf8mb4', autocommit=autocommit, connect_timeout=5)
 
 
-def connect(ref=None, autocommit=False):
+def connect(dsn=None, autocommit=False):
     """DB-API 连接（纯连接，不建表不迁移）；pymysql 懒导入。
 
     平台库默认参数走**线程局部连接复用**（库在远端，一次连接约 250ms）：
@@ -104,15 +99,15 @@ def connect(ref=None, autocommit=False):
     每次取用归还后回滚 ⇒ 下一条语句开新事务，读数永远是新鲜快照
     （REPEATABLE READ 不会跨取用泄漏）。
     """
-    ref = ref or config.PLATFORM_DB_REF
-    if autocommit or ref != config.PLATFORM_DB_REF:
-        return _new_conn(ref, autocommit)
+    dsn = dsn or config.PLATFORM_DB
+    if autocommit or dsn != config.PLATFORM_DB:
+        return _new_conn(dsn, autocommit)
     st = getattr(_TL, 'st', None)
     if st is None:
         st = _TL.st = {'conn': None, 'depth': 0, 'at': 0.0}
     if st['depth']:                       # 嵌套取用：独立新连接，用完真关
         st['depth'] += 1
-        nc = _new_conn(ref, autocommit)
+        nc = _new_conn(dsn, autocommit)
 
         def _release_nested():
             st['depth'] -= 1
@@ -132,7 +127,7 @@ def connect(ref=None, autocommit=False):
                 pass
             st['conn'] = c = None
     if c is None:
-        c = st['conn'] = _new_conn(ref, autocommit)
+        c = st['conn'] = _new_conn(dsn, autocommit)
     st['depth'] += 1
 
     def _release():

@@ -69,7 +69,7 @@ def main():
     args = ap.parse_args()
     out_root = os.path.abspath(args.out)
     print('产物导出 ← {} → {}'.format(
-        db.safe_detail(config.PLATFORM_DB_REF), out_root))
+        db.safe_detail(config.PLATFORM_DB), out_root))
     tasks = ([catalog.get_task(args.task)] if args.task
              else catalog.list_tasks())
     tasks = [t for t in tasks if t]

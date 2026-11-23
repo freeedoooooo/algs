@@ -591,8 +591,9 @@ schema_version（映射 lt9 目标＝schema_version）；又在 DB 客户端把�
 - **临时服务**：从 `20-CV` 起 `python -m uvicorn c1_extract.app:app --host 127.0.0.1 --port 8799`
   （`C1_EXTRACT_WARMUP=0` 懒加载，启动≈0.5s）。**用户的 8765 全程不动**，验完停临时服务。
   端口约定：8799=真链路 / 8797=不可达 DSN（断库模拟）。
-- **平台库**：`data/secrets.json` 键 `C1_EXTRACT_DB`（10.0.6.161:3306/co_dev），**不用 Docker**，**只做 MySQL**。
-  凭据只经 conn_ref 解析，回显仅 host/库名（`db.safe_detail`）。断库模拟用假 DSN
+- **平台库**：DSN 直接写在 `config.PLATFORM_DB`（10.0.6.161:3306/co_dev；环境变量
+  `C1_EXTRACT_DB` 优先覆盖；2026-11-23 裁决退役 secrets.json 引用制），**不用 Docker**，**只做 MySQL**。
+  回显仅 host/库名（`db.safe_detail`）。断库模拟用假 DSN
   `mysql://nobody:unused@127.0.0.1:3399/co_dev`（本地无人监听），不触碰真实库可用性。
 - **验收脚本**：`D:/miniforge3/envs/paddle/python.exe -u c1_extract/accept_records_db.py`（从 20-CV，`-u` 实时进度）。
   破坏性操作只落合成 run，验完按 id 清理；真实 run/source 只读。

@@ -100,15 +100,15 @@ def check_platform_db():
     """平台库（MySQL）连通性：必选项（DB 唯一事实源，不通＝服务不可用）。
 
     只读探针（SELECT VERSION()，不写库）；只回显脱敏 host/库名，
-    凭据永不打印。未配引用 / 连不上 → FAIL。
+    DSN 永不打印。未配置 / 连不上 → FAIL。
     """
-    ref = config.PLATFORM_DB_REF
+    dsn = config.PLATFORM_DB
     db = importlib.import_module(PKG + '.store.db')
     try:
-        p = db._parts(db.resolve_conn(ref))
+        p = db._parts(db.resolve_conn(dsn))
     except Exception as e:
-        print('  FAIL    凭据引用 {} 未配置：{}'.format(ref, e))
-        print('           设环境变量 {} 或 data/secrets.json'.format(ref))
+        print('  FAIL    平台库 DSN 不可用：{}'.format(e))
+        print('           改 config.PLATFORM_DB 或设环境变量 C1_EXTRACT_DB')
         return False
     detail = '{}:{}/{}'.format(p['host'], p['port'], p['database'])
     try:

@@ -2,7 +2,7 @@
 c1_extract/accept_records_db.py — records 入库七项验收（任务化契约，
 design-task-schema.md：DB 唯一事实源，task_id / task_file_id 粒度，无外键）。
 
-前置：C1_EXTRACT_DB 已配置（env 或 data/secrets.json，用户配置的库）。
+前置：C1_EXTRACT_DB 已配置（环境变量或 config.PLATFORM_DB 默认值，用户配置的库）。
 用法（从 20-CV）：D:/miniforge3/envs/paddle/python.exe -u c1_extract/accept_records_db.py
 
 1 连接零副作用+真实 task 投影往返一致 · 2 重跑级联替换（应用层）· 3 patch/set_review ·
@@ -83,7 +83,7 @@ def wait_http(port, secs=30):
 
 
 def wait_db(secs=60):
-    p = db._parts(db.resolve_conn(config.PLATFORM_DB_REF))
+    p = db._parts(db.resolve_conn(config.PLATFORM_DB))
     for _ in range(secs):
         try:
             s = socket.create_connection((p['host'], p['port']), timeout=2)
@@ -333,10 +333,10 @@ def cleanup_tasks(task_ids, file_ids):
 
 def main():
     print('== records 入库验收（任务化）· {} =='.format(
-        db.safe_detail(config.PLATFORM_DB_REF)))
+        db.safe_detail(config.PLATFORM_DB)))
     try:
         if not wait_db():
-            print('配置库不可达，检查 C1_EXTRACT_DB（env / data/secrets.json）')
+            print('配置库不可达，检查 C1_EXTRACT_DB（环境变量 / config.PLATFORM_DB）')
             return 1
     except LookupError as e:
         print(str(e))
@@ -590,14 +590,14 @@ def _main(syn_tasks, syn_fids, up, p2):
 
     svc = start_service(8799)
     try:
-        p = db._parts(db.resolve_conn(config.PLATFORM_DB_REF))
+        p = db._parts(db.resolve_conn(config.PLATFORM_DB))
         stds, jds = http(8799, '/api/load/datasources')
         seed = [d for d in jds.get('items', []) if d['name'] == '产品库']
         check('默认数据源「产品库」种子存在（明文落行）',
               stds == 200 and len(seed) == 1
               and seed[0]['host'] == p['host']
               and seed[0]['db_name'] == p['database'],
-              db.safe_detail(config.PLATFORM_DB_REF))
+              db.safe_detail(config.PLATFORM_DB))
         st, j = http(8799, '/api/load/datasources',
                      {'name': '_accept_p2_ds', 'host': p['host'],
                       'port': p['port'], 'user': p['user'],
@@ -607,7 +607,7 @@ def _main(syn_tasks, syn_fids, up, p2):
         stt, jt = http(8799, '/api/load/datasources/{}/test'.format(ds_id), {})
         check('数据源 CRUD＋测试连接（仅 host:port/库名）',
               st == 200 and stt == 200 and jt.get('ok')
-              and jt.get('detail') == db.safe_detail(config.PLATFORM_DB_REF),
+              and jt.get('detail') == db.safe_detail(config.PLATFORM_DB),
               str(jt.get('detail')))
         stb, jb = http(8799, '/api/load/datasources/{}/tables'.format(ds_id))
         stc, jc = http(8799, '/api/load/datasources/{}/columns?table={}'.format(

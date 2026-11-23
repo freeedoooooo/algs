@@ -2,7 +2,7 @@
 c1_extract/accept_artifacts_db.py — 产物全量入库六项验收（任务化契约，
 design-task-schema.md：DB 唯一事实源，附件键＝task_file_id，无外键）。
 
-前置：C1_EXTRACT_DB 已配置（env 或 data/secrets.json，用户配置的库）。
+前置：C1_EXTRACT_DB 已配置（环境变量或 config.PLATFORM_DB 默认值，用户配置的库）。
 用法（从 20-CV）：D:/miniforge3/envs/paddle/python.exe -u c1_extract/accept_artifacts_db.py
 
 1 连接零副作用+读回 sha 自洽 · 2 真链路无持久磁盘+BLOB · 3 /files 路由/ETag/raw403 ·
@@ -84,7 +84,7 @@ def wait_http(port, secs=30):
 
 
 def wait_db(secs=60):
-    p = db._parts(db.resolve_conn(config.PLATFORM_DB_REF))
+    p = db._parts(db.resolve_conn(config.PLATFORM_DB))
     for _ in range(secs):
         try:
             s = socket.create_connection((p['host'], p['port']), timeout=2)
@@ -233,10 +233,10 @@ def cleanup_task(task_id):
 
 def main():
     print('== 产物入库验收（任务化）· {} =='.format(
-        db.safe_detail(config.PLATFORM_DB_REF)))
+        db.safe_detail(config.PLATFORM_DB)))
     try:
         if not wait_db():
-            print('配置库不可达，检查 C1_EXTRACT_DB（env / data/secrets.json）')
+            print('配置库不可达，检查 C1_EXTRACT_DB（环境变量 / config.PLATFORM_DB）')
             return 1
     except LookupError as e:
         print(str(e))

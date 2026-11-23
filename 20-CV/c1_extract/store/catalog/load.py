@@ -160,7 +160,7 @@ def ensure_default_datasource():
     """幂等种「产品库」默认行：解析 C1_EXTRACT_DB 明文落行（升级脚本与
     新库首启共用）。尽力而为：解析/连接/写入失败静默跳过，断库启动不炸。"""
     try:
-        p = db._parts(db.resolve_conn(config.PLATFORM_DB_REF))
+        p = db._parts(db.resolve_conn(config.PLATFORM_DB))
         conn = db.connect()
         try:
             with conn.cursor() as cur:
