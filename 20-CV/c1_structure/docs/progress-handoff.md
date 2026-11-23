@@ -11,6 +11,9 @@
   任务态＝文件态 min-rank 上卷（`catalog.rollup_task_state`，不动 error）；
   `to_load` 为派生态（该文件记录全部定论且>0，`service.derive_review_state`）；
   上传只解析，抽取在数据预览页右上角按钮执行（执行/重新抽取，重抽须 force 覆盖校验）；
+  **方案A·抽取时绑规则**：解析阶段 `c1_task.rule_version_id=NULL`（004 迁移改可空），
+  「执行/重新抽取」时选规则版本并回写绑定（默认＝已绑，未绑＝原始透传；换规则重抽即改绑）；
+  上传带 `rule_version_id` 为退役契约键（400）；
   八态八色徽标（待抽取橙 · 待入库黄 · 入库中青，`web/shell.js STATE_LABEL`）。
 - 对照报告 `/parse-report`（重定向到最新 task_file 报告）；产物信封 `parse.json`；
   模块 `parse_report/`（Jinja2）；前端资产 `web/parse|extract|review|rules.*`。
@@ -19,7 +22,9 @@
 - 安装脚本：新库跑 `store/migrations/001_baseline.sql`（全 IF NOT EXISTS＋INSERT IGNORE，
   可重跑；state 列注释含新枚举）；存量库升级人工执行编号脚本（002＝命名收敛；
   003＝状态机迁移，2026-11-23 已对 c1_structure_dev 执行，备份
-  `data/backup/c1_dev_pre003_20261123_135019.sql`）。
+  `data/backup/c1_dev_pre003_20261123_135019.sql`；
+  004＝`c1_task.rule_version_id` 改可空（方案A），同日已执行，备份
+  `data/backup/c1_dev_pre004_20261123_145958.sql`）。
   **无自动迁移器**（schema_version 门禁 2026-11-21 裁决删除）。
 
 ## 环境事实
