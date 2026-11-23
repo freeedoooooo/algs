@@ -1,5 +1,5 @@
 <details class="panel" open>
-    <summary class="panel-head"><span class="panel-title">文字内容</span><span class="cnt">{{ n }} 行</span>{% if n_low %}
+    <summary class="panel-head"><span class="panel-title">文本内容</span><span class="cnt">{{ n }} 行</span>{% if n_low %}
         <span class="warn">可疑 <b>{{ n_low }}</b></span>{% endif %}<span
             class="spacer"></span>{% if plain %}
         <button type="button" class="auxbtn" data-aux="{{ plain.aid }}" data-title="纯文本原文（{{ plain.n }} 字符）">
@@ -15,7 +15,7 @@
                 <thead>
                 <tr>
                     <th>#</th>
-                    <th>识别文字</th>
+                    <th>识别文本</th>
                     <th>置信度</th>
                 </tr>
                 </thead>
@@ -31,7 +31,7 @@
             </table>
         </div>
         {% else %}
-        <div class="empty">无 OCR 文字行</div>
+        <div class="empty">无 OCR 文本行</div>
         {% endif %}{% if plain %}
         <div class="aux-src" id="{{ plain.aid }}" hidden>
             <pre>{{ plain.text }}</pre>

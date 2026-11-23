@@ -421,7 +421,7 @@ def md_pane(rec, card_no, md_name):
     n_line = sum(len(_block_lines(rec, b)) for b in blocks
                  if b['kind'] in ('line', 'head', 'para'))
     order_tip = ('按版面阅读顺序组织（标题/段落/表格）'
-                 if rec.get('blocks') else '表格按 y 坐标穿插进文字流')
+                 if rec.get('blocks') else '表格按 y 坐标穿插进文本流')
     return render('md_pane.html', card=card_no, n_line=n_line,
                   n_tbl=len(tables),
                   dl_uri=file_url(md_name), md_name=md_name,
