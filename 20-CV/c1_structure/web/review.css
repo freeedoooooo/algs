@@ -19,6 +19,10 @@
 .stgmain tbody tr.sel{background:#e7f0ff}
 .stgmain tbody tr.sel:hover{background:#dbe8ff}
 .idx{color:#8a94a6;font-variant-numeric:tabular-nums;text-align:center}
+/* 表头映射小注：转换后的字段名下方标出源列（bug2 追溯不便） */
+#rechead th .srccol{display:block;font-weight:400;font-size:11px;color:#8a94a6;
+  white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis}
+#rechead th .srccol.none{color:#c26a2f}
 
 /* 右侧血缘侧栏容器（吸顶 + 限高），内部舞台用报告同款 .stage */
 .lineage{flex:none;width:560px;max-width:46vw;max-height:calc(100vh - 210px);

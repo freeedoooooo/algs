@@ -29,7 +29,7 @@ header .sub{color:#6b7688;font-size:12px;display:flex;align-items:center;gap:6px
 .panel-head .warn b{color:#a85a12;font-weight:600}
 .tag{display:inline-block;background:#eef2f8;color:#5a6a85;border-radius:5px;
   padding:1px 8px;font-size:12px;margin-right:6px}
-.grid{display:grid;grid-rule-columns:minmax(300px,44%) minmax(0,1fr);
+.grid{display:grid;grid-template-columns:minmax(300px,44%) minmax(0,1fr);
   align-items:start}
 /* 舞台基础规则在 stage.css；报告只覆盖定位（.grid 左栏吸顶） */
 .stage{position:sticky;top:12px}
@@ -130,7 +130,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:12px/1.6 Consolas,Monaco,mono
   max-height:420px;overflow:auto}
 .empty{color:#8a94a6;padding:20px;font-size:13px}
 a{color:#2563eb}
-@media(max-width:640px){.grid{grid-rule-columns:1fr}
+@media(max-width:640px){.grid{grid-template-columns:1fr}
   .stage{position:static;border-right:0;border-bottom:1px solid #e2e7f0}
   .ctabs{position:static}
   .card-head{flex-wrap:wrap}

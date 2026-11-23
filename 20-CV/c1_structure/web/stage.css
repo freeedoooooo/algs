@@ -106,5 +106,10 @@ td.cell.pin,th.cell.pin{background:#fff0d9!important;
 .lb-content img{display:block;max-width:none;height:auto;user-select:none}
 .lb-content svg{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
 .lb-content .cellbox,.lb-content .stitchbox,.lb-content .box{pointer-events:all;cursor:crosshair}
-.lb-noboxes .lb-content svg{display:none!important}
+/* 全屏关叠加框＝只关整表网格；钉住/悬停的血缘框保留（放大后不再丢定位框）。
+   linesvg 的坐标是百分比空间，与克隆内像素 viewBox 不同系，关框时必须整层隐藏。 */
+.lb-noboxes .lb-content .linesvg{display:none}
+.lb-noboxes .lb-content .cellbox.all:not(.hv):not(.pin),
+.lb-noboxes .lb-content .stitchbox.all:not(.hv):not(.pin){display:none!important}
+.lb-noboxes .lb-content .box:not(.pin):not(.hl){display:none!important}
 .lb-hint{padding:8px 14px;background:#1d2330;color:#9aa6bd;font-size:12px;text-align:center}

@@ -8,6 +8,7 @@
 var task=new URLSearchParams(location.search).get('task')||'';
 var curFile=new URLSearchParams(location.search).get('file')||'';
 var taskDoc=null, records=[], keys=[], selIdx=-1, selKey=null, stateFilter='';
+var srcMap={};
 var pageMap={}, allAnchors=[], pagesPresent=[], curPage=null, curView=null, allOn=false;
 
 function showErr(t){
@@ -55,7 +56,13 @@ function renderTable(){
   keys=collectKeys();
   var ro=readOnly();
   document.getElementById('rechead').innerHTML='<tr><th class="seq">序号</th>'+
-    keys.map(function(k){return '<th>'+escHtml(k)+'</th>';}).join('')+
+    keys.map(function(k){
+      var s=srcMap[k];
+      return '<th>'+escHtml(k)+
+        (s?'<span class="srccol" title="映射源列：'+escHtml(s)+'">← '+escHtml(s)+'</span>':
+           (s===''?'<span class="srccol none" title="抽取规则未选择源列">← 未选列</span>':''))+
+        '</th>';
+    }).join('')+
     '<th>状态</th>'+(ro?'':'<th>操作</th>')+'</tr>';
   var shown=0;
   document.getElementById('recrows').innerHTML=records.map(function(r,i){
@@ -532,6 +539,40 @@ document.addEventListener('keydown',function(e){
   goIndex(ni);
 });
 
+/* 行带兜底命中：hitCell 只认「已选字段」的坐标框——映射转换后往往仅少数列有框，
+   点本行其他列/格间空白会整体未命中。按当前页+视图的 viewBox y 落在哪个记录的
+   坐标带内（x 不限）定位整行，取带中心最近者；未命中返回 -1。 */
+function hitRow(view,e){
+  var svg=view&&view.querySelector('svg');
+  if(!svg||!svg.viewBox||!svg.viewBox.baseVal||!svg.viewBox.baseVal.width) return -1;
+  var img=view.querySelector('img'), vb=svg.viewBox.baseVal, r=img.getBoundingClientRect();
+  if(!r.width||!r.height) return -1;
+  var y=(e.clientY-r.top)/r.height*vb.height;
+  var sp=view.getAttribute('data-space'), p=+view.getAttribute('data-page');
+  var best=-1, bestD=Infinity;
+  allAnchors.forEach(function(x){
+    var b=x.a.cell_bbox;
+    if(x.a.page!==p||x.a.space!==sp||!b||b.length<4) return;
+    if(y>=b[1]&&y<=b[3]){
+      var d=Math.abs(y-(b[1]+b[3])/2);
+      if(d<bestD){bestD=d;best=x.i;}
+    }
+  });
+  return best;
+}
+
+/* 当前页某坐标空间是否存在可画的回溯框（行带/命中判定的前置检查） */
+function spaceWithAnchors(p,sp){
+  return allAnchors.some(function(x){
+    var a=x.a; return a.page===p&&a.space===sp&&a.cell_bbox&&a.cell_bbox.length>=4;});
+}
+/* 原图↔矫正图跨空间提示：本视图无框、对侧有框（坐标位于另一图像空间） */
+function crossView(v){
+  var sp=v&&v.getAttribute('data-space'); if(!sp) return false;
+  var oth=sp==='source'?'rectified':'source';
+  return spaceWithAnchors(curPage,oth)&&!spaceWithAnchors(curPage,sp);
+}
+
 /* ---- 全屏浮层（共享 lightbox 工厂 stage.js）：克隆当前 imgwrap，滚轮缩放/拖拽/框可点。
    差异走钩子：标题带页码+血缘语义；叠加框初始跟随整表开关 allOn，切换时同步克隆框 .all；
    点框关闭全屏后回左侧钉住对应记录行/格。 ---- */
@@ -550,11 +591,17 @@ closeLb=stagingLb.close;
 var views=document.getElementById('views');
 views.addEventListener('mousemove',function(e){
   var img=e.target.closest?e.target.closest('img'):null; if(!img) return;
+  var v=img.closest('.view');
   var hit=hitCell(img,e);
-  var zoom=e.altKey||!hit;
+  var row=!!(!hit&&hitRow(v,e)>=0);
+  var cross=!hit&&!row&&crossView(v);
+  var zoom=e.altKey||!(hit||row||cross);
   img.style.cursor=zoom?'zoom-in':'crosshair';
   var h=cursorHint();
-  h.textContent=e.altKey?'单击：放大（Alt）':(hit?'单击：定位\nAlt + 单击：放大':'单击：放大');
+  h.textContent=e.altKey?'单击：放大（Alt）':
+    (hit?'单击：定位\nAlt + 单击：放大':
+      (row?'单击：定位本行\nAlt + 单击：放大':
+        (cross?'单击：定位（自动切到有框视图）\nAlt + 单击：放大':'单击：放大')));
   h.style.left=Math.min(e.clientX+14,window.innerWidth-h.offsetWidth-8)+'px';
   h.style.top=Math.min(e.clientY+18,window.innerHeight-h.offsetHeight-8)+'px';
   h.classList.add('on');
@@ -567,8 +614,25 @@ views.addEventListener('click',function(e){
   var img=e.target.closest?e.target.closest('img'):null; if(!img) return;
   e.stopPropagation(); hideCursorHint();
   if(e.altKey){ stagingLb.open(img); return; }
+  var v=img.closest('.view');
   var hit=hitCell(img,e);
   if(hit){ pinField(hit.getAttribute('data-key'),+hit.getAttribute('data-i')); return; }
+  /* 映射转换后无框列/格间空白：行带兜底定位整行，回溯不再退化成纯放大 */
+  var ri=hitRow(v,e);
+  if(ri>=0){ selectRecord(ri); return; }
+  /* 本视图坐标在对侧图像空间（如矫正图）：切视图后按同一屏幕位置重试 */
+  if(crossView(v)){
+    var sp=v.getAttribute('data-space');
+    setView(wantViewOf(sp==='source'?'rectified':'source'));
+    var nv=visibleView(), nimg=nv&&nv.querySelector('img');
+    if(nimg){
+      hit=hitCell(nimg,e);
+      if(hit){ pinField(hit.getAttribute('data-key'),+hit.getAttribute('data-i')); return; }
+      ri=hitRow(nv,e);
+      if(ri>=0){ selectRecord(ri); return; }
+    }
+    return;
+  }
   stagingLb.open(img);
 });
 
@@ -607,6 +671,7 @@ function loadStaging(){
     ((ex&&ex.pages)||[]).forEach(function(p){ pageMap[p.index]=p; });
     var f=(doc.files||[])[0]||{};
     records=f.records||[];
+    srcMap=(doc.rule||{}).field_sources||{};
     renderTable(); buildAnchors(); initViewer();
     var links=document.getElementById('filelinks');
     if(curFile){
@@ -617,7 +682,7 @@ function loadStaging(){
     document.getElementById('tplbadge').innerHTML=
       '<span class="badge blue">'+escHtml((t.name||'原始透传')+' v'+(t.version||1))+'</span>';
   }).catch(function(e){
-    records=[]; renderTable(); buildAnchors(); initViewer();
+    records=[]; srcMap={}; renderTable(); buildAnchors(); initViewer();
     showErr('读取预览数据失败：'+e.message);
   });
 }

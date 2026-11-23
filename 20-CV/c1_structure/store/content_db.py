@@ -97,18 +97,42 @@ def get_records(task_id):
                     'records': out,
                 })
             cur.execute(
-                'SELECT t.name, tv.version FROM c1_task r'
+                'SELECT t.name, tv.version, tv.mapping_json FROM c1_task r'
                 ' JOIN c1_extract_rule_version tv'
                 ' ON tv.id=r.rule_version_id'
                 ' JOIN c1_extract_rule t ON t.id=tv.rule_id'
                 ' WHERE r.id=%s', (tfs[0]['task_id'],))
             trow = cur.fetchone()
-            rule = ({'name': trow[0], 'version': trow[1]} if trow
-                        else {'name': '原始透传', 'version': 1})
+            rule = ({'name': trow[0], 'version': trow[1],
+                     'field_sources': _field_sources(trow[2])} if trow
+                        else {'name': '原始透传', 'version': 1,
+                              'field_sources': {}})
             return {'schema': RECORDS_SCHEMA, 'task_id': tfs[0]['task_id'],
                     'rule': rule, 'files': files}
     finally:
         conn.close()
+
+
+def _field_sources(mapping_json):
+    """映射 JSON → {目标字段: 源列描述}，供校验台表头显示「目标 ← 源列」。
+    列选择器 name 直接用原文；index 用「第N列」；未配置列＝未映射（空描述）。"""
+    try:
+        mapping = json.loads(mapping_json or '{}')
+    except (TypeError, ValueError):
+        return {}
+    out = {}
+    for f in mapping.get('fields') or []:
+        target = f.get('target')
+        if not target:
+            continue
+        col = f.get('column') or {}
+        if col.get('name') is not None:
+            out[target] = str(col['name'])
+        elif isinstance(col.get('index'), int):
+            out[target] = '第 {} 列'.format(col['index'] + 1)
+        else:
+            out[target] = ''
+    return out
 
 
 def save_records(doc):
