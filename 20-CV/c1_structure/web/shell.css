@@ -83,6 +83,8 @@ table.list .namecell .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowr
 .badge.yellow{background:#fdf3d7;color:#92600a}
 .badge.gray{background:#eef2f8;color:#8a94a6}
 .badge.purple{background:#efe9fb;color:#6d3fc0}
+.badge.orange{background:#ffeede;color:#b54708}
+.badge.cyan{background:#dff3f5;color:#0e7490}
 
 /* ---- 提示横幅（降级/只读/错误） ---- */
 .banner{display:flex;align-items:center;gap:8px;font-size:12px;

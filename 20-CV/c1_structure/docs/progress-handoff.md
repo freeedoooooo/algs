@@ -6,12 +6,20 @@
 
 - 流水线四步：**解析 → 抽取 → 校验 → 入库**；页面＝工作台 `/` · 资料 `/sources` ·
   解析 `/parse` · 抽取规则 `/extract` · 校验 `/review` · 入库规则 `/rules` · 任务 `/tasks`。
+- 任务状态机（2026-11-23 落地，设计稿 `docs/design-task-states.md`）：
+  `pending→parsing→to_extract→to_review→to_load→loading→loaded`（＋failed）；
+  任务态＝文件态 min-rank 上卷（`catalog.rollup_task_state`，不动 error）；
+  `to_load` 为派生态（该文件记录全部定论且>0，`service.derive_review_state`）；
+  上传只解析，抽取在数据预览页右上角按钮执行（执行/重新抽取，重抽须 force 覆盖校验）；
+  八态八色徽标（待抽取橙 · 待入库黄 · 入库中青，`web/shell.js STATE_LABEL`）。
 - 对照报告 `/parse-report`（重定向到最新 task_file 报告）；产物信封 `parse.json`；
   模块 `parse_report/`（Jinja2）；前端资产 `web/parse|extract|review|rules.*`。
 - 平台库表 `c1_*` 前缀（`c1_extract_rule` / `c1_extract_rule_version` ＝抽取规则，`c1_task.rule_version_id`
   等）；无外键，级联归应用层；API JSON 键 `rule` / `rule_id` / `rule_version_id`。
 - 安装脚本：新库跑 `store/migrations/001_baseline.sql`（全 IF NOT EXISTS＋INSERT IGNORE，
-  可重跑）；存量库升级人工执行编号脚本（002＝命名收敛，已对 co_dev 执行）。
+  可重跑；state 列注释含新枚举）；存量库升级人工执行编号脚本（002＝命名收敛；
+  003＝状态机迁移，2026-11-23 已对 c1_structure_dev 执行，备份
+  `data/backup/c1_dev_pre003_20261123_135019.sql`）。
   **无自动迁移器**（schema_version 门禁 2026-11-21 裁决删除）。
 
 ## 环境事实

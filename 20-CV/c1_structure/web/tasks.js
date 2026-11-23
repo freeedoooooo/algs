@@ -59,9 +59,6 @@ function fileRow(f,taskId){
     links='<a class="linkbtn" target="_blank" href="/review?task='+taskId+
       '&file='+f.task_file_id+'">预览数据</a>'+
       '<a class="linkbtn" target="_blank" href="'+fileUrl(f.task_file_id,'对照报告.html')+'">对照报告</a>';
-    if(['to_review','to_load'].indexOf(f.state)>=0)
-      links+='<button type="button" class="linkbtn" data-reex="'+
-        f.task_file_id+'" data-task="'+taskId+'">重新抽取</button>';
   }
   return '<tr>'+
     '<td><span class="nm" title="'+escHtml(f.name)+'">'+escHtml(shortName(f.name))+'</span></td>'+
@@ -127,33 +124,6 @@ function renderDetail(j){
 }
 /* 门禁计数提示：仅全部 confirmed 可入库（后端 409 兜底，这里先给可见预期）。
    走 /gate 轻量计数端点——旧版为此全量拉 staging（~150KB×每次刷新轮询）。 */
-/* 重新抽取：按任务当前规则覆盖暂存记录，校验结论清零（force 显式确认） */
-document.getElementById('dbody').addEventListener('click',function(e){
-  var b=e.target.closest?e.target.closest('[data-reex]'):null;
-  if(!b) return;
-  if(!window.confirm('重新抽取将按任务当前规则覆盖该文件的暂存记录，'+
-    '已做的确认/修改全部清零。继续？')) return;
-  b.disabled=true;
-  fetch('/api/tasks/'+b.getAttribute('data-task')+'/extract',{method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({task_file_ids:[+b.getAttribute('data-reex')],
-                         force:true})})
-  .then(function(r){
-    return r.json().catch(function(){return {};}).then(function(j){
-      if(!r.ok) throw new Error(j.error||('HTTP '+r.status));
-      var n=(j.files||[]).reduce(function(s,f){return s+(f.records_n||0);},0);
-      return '已重新抽取 '+n+' 条记录';
-    });
-  })
-  .then(function(msg){
-    if(window.toast) toast(msg);
-    refreshDetail(+b.getAttribute('data-task'));
-  })
-  .catch(function(err){
-    b.disabled=false;
-    if(window.toast) toast('重新抽取失败：'+err.message);
-  });
-});
 function loadGateInfo(taskId){
   fetch('/api/tasks/'+taskId+'/gate').then(function(r){
     if(!r.ok) throw new Error();

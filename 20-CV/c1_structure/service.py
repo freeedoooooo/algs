@@ -289,8 +289,8 @@ def run_extract(task_id, task_file_ids=None, force=False):
     """执行抽取：逐文件回读 parse.json → collect.build → save_records
     （字段映射+逐格溯源），无 OCR、同步毫秒级。规则取任务当前绑定版本。
 
-    仅处理 to_extract（及迁移期旧态 previewed）文件；已有暂存记录的文件
-    （to_review/to_load）须 force=true——重抽按 task_file 先删后插，
+    仅处理 to_extract 文件；已有暂存记录的文件（to_review/to_load）
+    须 force=true——重抽按 task_file 先删后插，
     校验结论清零。任务 loading/loaded 拒绝；缺 parse.json 拒绝。"""
     catalog = _load('store.catalog')
     content = _load('store.content')
@@ -309,10 +309,9 @@ def run_extract(task_id, task_file_ids=None, force=False):
     for f in task['files']:
         if want and f['task_file_id'] not in want:
             continue
-        if f['state'] not in ('to_extract', 'previewed',
-                              'to_review', 'to_load'):
+        if f['state'] not in ('to_extract', 'to_review', 'to_load'):
             continue
-        if f['state'] in ('previewed', 'to_review', 'to_load') and not force:
+        if f['state'] != 'to_extract' and not force:
             raise errors.Conflict(
                 '文件「{}」已有 {} 条记录，重新抽取将覆盖校验结论'
                 '（须显式确认）'.format(f['name'], f['records_n']))
@@ -344,8 +343,7 @@ def derive_review_state(task_id):
     if task is None:
         return None
     for f in task['files']:
-        if f['state'] not in ('to_review', 'to_load', 'previewed',
-                              'reviewed'):
+        if f['state'] not in ('to_review', 'to_load'):
             continue
         c = content_db.gate_counts(task_id, f['task_file_id'])
         target = ('to_load'

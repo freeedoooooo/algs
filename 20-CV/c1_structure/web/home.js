@@ -170,7 +170,8 @@ function renderTodo(v){
   v.toExtract.forEach(function(t){
     rows.push({id:t.task_id,name:fileNames(t),
       what:'② 解析完成，待抽取',
-      act:'<a class="linkbtn" href="/extract">前往抽取</a>',t:t.created_at});
+      act:'<a class="linkbtn" href="/review?task='+t.task_id+
+        '">执行抽取</a>',t:t.created_at});
   });
   led.forEach(function(t){
     if(t.task_state!=='to_review') return;

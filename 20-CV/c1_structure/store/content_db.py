@@ -117,7 +117,7 @@ def _field_sources(mapping_json):
     """映射 JSON → {目标字段: 源列描述}，供校验台表头显示「目标 ← 源列」。
     列选择器 name 直接用原文；index 用「第N列」；未配置列＝未映射（空描述）。"""
     try:
-        mapping = json.loads(mapping_json or '{}')
+        mapping = json.loads(mapping_json or '{}') or {}
     except (TypeError, ValueError):
         return {}
     out = {}

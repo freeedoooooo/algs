@@ -453,41 +453,4 @@ delbtn.onclick=function(){
   if(cur!=null) delRule(cur,ename.value.trim());
 };
 
-/* ---- 执行抽取（解析/抽取解耦）：列出 to_extract 任务，一键生成暂存记录 ---- */
-function loadRun(){
-  fetch('/api/tasks').then(function(r){
-    if(!r.ok) throw new Error('HTTP '+r.status);
-    return r.json();
-  }).then(function(j){
-    var list=(j.items||[]).filter(function(t){return t.state==='to_extract';});
-    document.getElementById('runpanel').hidden=!list.length;
-    document.getElementById('runrows').innerHTML=list.map(function(t,i){
-      var names=(t.files||[]).map(function(f){return f.name;}).join('、');
-      var rl=t.rule||{};
-      return '<tr><td class="seq">'+(i+1)+'</td><td class="mono">#'+t.task_id+
-        '</td><td><span class="desc" title="'+escHtml(names)+'">'+
-        escHtml(names)+'</span></td><td>'+escHtml(rl.name||'原始透传')+
-        ' v'+escHtml(rl.version||1)+'</td><td class="mono">'+
-        fmtTime(t.created_at)+'</td><td style="white-space:nowrap">'+
-        '<button type="button" class="btn mini" data-ex="'+t.task_id+
-        '">执行抽取</button></td></tr>';
-    }).join('');
-  }).catch(function(){
-    document.getElementById('runpanel').hidden=true;
-  });
-}
-document.getElementById('runrows').addEventListener('click',function(e){
-  var b=e.target.closest?e.target.closest('[data-ex]'):null;
-  if(!b) return;
-  b.disabled=true;
-  api('POST','/api/tasks/'+b.getAttribute('data-ex')+'/extract',{})
-  .then(function(j){
-    var n=(j.files||[]).reduce(function(s,f){return s+(f.records_n||0);},0);
-    showOk('已抽取 '+n+' 条记录，进入「待校验」。');
-  })
-  .catch(function(err){ showErr('抽取失败：'+err.message); })
-  .then(loadRun);
-});
-
 load();
-loadRun();

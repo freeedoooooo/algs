@@ -44,8 +44,8 @@ var MODE_LABEL={
 function modeLabel(m){ return MODE_LABEL[m]||m||'—'; }
 var STATE_LABEL={
   pending:['待处理','gray'], parsing:['解析中','blue'],
-  to_extract:['待抽取','yellow'], to_review:['待校验','purple'],
-  to_load:['待入库','yellow'], loading:['入库中','blue'],
+  to_extract:['待抽取','orange'], to_review:['待校验','purple'],
+  to_load:['待入库','yellow'], loading:['入库中','cyan'],
   loaded:['已入库','green'], failed:['失败','red'],
   edited:['已修改','yellow'], confirmed:['已确认','green'],
   rejected:['已拒绝','red']
