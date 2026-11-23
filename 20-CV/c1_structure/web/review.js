@@ -59,10 +59,9 @@ function renderTable(){
   var ro=readOnly();
   document.getElementById('rechead').innerHTML='<tr><th class="seq">序号</th>'+
     keys.map(function(k){
-      var s=srcMap[k], cap;
-      if(s===''){cap='未映射源列';}
-      else if(s){cap='源：'+s;}
-      else return '<th>'+escHtml(k)+'</th>';
+      var s=srcMap[k];
+      if(s===undefined) return '<th>'+escHtml(k)+'</th>';
+      var cap='（'+(s||'未选源列')+'）';
       return '<th title="'+escHtml(s?srcNote(k,s):'抽取规则未选择源列')+'">'+
         escHtml(k)+'<span class="srccap'+(s?'':' none')+'">'+
         escHtml(cap)+'</span></th>';

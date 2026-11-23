@@ -19,10 +19,9 @@
 .stgmain tbody tr.sel{background:#e7f0ff}
 .stgmain tbody tr.sel:hover{background:#dbe8ff}
 .idx{color:#8a94a6;font-variant-numeric:tabular-nums;text-align:center}
-/* 表头映射小注：源列名收进字段名下方一行淡色小注（不用箭头符号），悬停看完整映射 */
-#rechead th .srccap{display:block;font-weight:400;font-size:11px;line-height:1.4;
-  color:#8a94a6;white-space:nowrap;max-width:190px;overflow:hidden;
-  text-overflow:ellipsis}
+/* 表头映射后缀：目标字段名同行淡色括号小注「account（余额）」，悬停看完整映射 */
+#rechead th .srccap{font-weight:400;font-size:11px;color:#8a94a6;
+  white-space:nowrap}
 #rechead th .srccap.none{color:#b45309}
 
 /* 右侧血缘侧栏容器（吸顶 + 限高），内部舞台用报告同款 .stage */
