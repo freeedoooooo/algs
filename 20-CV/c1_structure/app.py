@@ -9,7 +9,8 @@ c1_structure/app.py — Web 工具入口（FastAPI + uvicorn）。只负责 HTTP
 路由（页面地址＝产品名词，与 web/ 文件一一对应）：
     GET  /              工作台首页（web/home.html）
     GET  /parse         解析页（parse.html） · /sources 资料 · /extract 抽取规则
-    GET  /review        校验台（review.html） · /rules 入库规则（rules.html）
+    GET  /preview       任务数据预览（preview.html）
+    GET  /review        校验壳页（review_home.html，自动化校验待实现） · /rules 入库规则（rules.html）
     GET  /tasks         任务页 · GET /healthz 健康检查
     POST /api/upload    上传（base64 JSON，不依赖 python-multipart）
     GET  /api/status    处理进度
@@ -206,9 +207,15 @@ def tasks_page():
     return HTMLResponse(asset('tasks.html'))
 
 
+@app.get('/preview', response_class=HTMLResponse)
+def preview_page():
+    return HTMLResponse(asset('preview.html'))
+
+
 @app.get('/review', response_class=HTMLResponse)
 def review_page():
-    return HTMLResponse(asset('review.html'))
+    """校验壳页：自动化校验待实现；记录核对入口在任务的数据预览。"""
+    return HTMLResponse(asset('review_home.html'))
 
 
 @app.get('/extract', response_class=HTMLResponse)
@@ -621,6 +628,13 @@ async def api_task_run_extract(task_id: int, request: Request):
                                    task_file_ids=ids,
                                    force=bool(body.get('force')),
                                    rule_version_id=rv)
+
+
+@app.post('/api/tasks/{task_id}/reparse')
+def api_task_reparse(task_id: int):
+    """原地重放解析：同一批原件＋任务参数重跑；暂存记录/校验结论清空，
+    产物覆盖，回执日志保留。解析中/入库中/已入库回 409。"""
+    return service.reparse(task_id)
 
 
 @app.post('/api/tasks/{task_id}/load-preview')

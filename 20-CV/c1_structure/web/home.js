@@ -87,7 +87,7 @@ function pollStatus(){
     if(s.ready&&s.task_id){
       lastTaskId=s.task_id;
       sayHtml('解析完成，任务 #'+s.task_id+
-        '　<a class="linkbtn" href="/review?task='+s.task_id+'">前往校验</a>','ok');
+        '　<a class="linkbtn" href="/preview?task='+s.task_id+'">预览数据</a>','ok');
       hpicked=[]; renderPicked(); refresh();
     }
   }).catch(function(){ pollT=setTimeout(pollStatus,1500); });
@@ -157,7 +157,7 @@ function renderTodo(v){
   v.toExtract.forEach(function(t){
     rows.push({id:t.task_id,name:fileNames(t),
       what:'② 解析完成，待抽取',
-      act:'<a class="linkbtn" href="/review?task='+t.task_id+
+      act:'<a class="linkbtn" href="/preview?task='+t.task_id+
         '">执行抽取</a>',t:t.created_at});
   });
   led.forEach(function(t){
@@ -165,7 +165,7 @@ function renderTodo(v){
     var pend=0;
     (t.files||[]).forEach(function(f){ pend+=f.pending_n+f.edited_n; });
     if(pend>0) rows.push({id:t.task_id,name:fileNames(t),
-      what:'③ 尚有 '+pend+' 条记录待校验',act:'<a class="linkbtn" href="/review?task='+
+      what:'③ 尚有 '+pend+' 条记录待校验',act:'<a class="linkbtn" href="/preview?task='+
         t.task_id+'">前往校验</a>',t:t.created_at});
   });
   v.loadTasks.forEach(function(t){

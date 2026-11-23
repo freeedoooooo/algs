@@ -293,7 +293,7 @@ var reportFrame=document.getElementById('reportFrame'),
 /* 完成提示：跳数据预览（task id 键） */
 function showStgLink(taskId){
   if(!taskId) return;
-  stglink.href='/review?task='+taskId;
+  stglink.href='/preview?task='+taskId;
   stglink.hidden=false;
 }
 /* 右侧报告区三态：idle 占位 / 任务进度 / done 报告（+「查看日志」浮钮） */

@@ -362,6 +362,73 @@ def derive_review_state(task_id):
     return catalog.rollup_task_state(task_id)
 
 
+def reparse(task_id, params=None):
+    """原地重放解析（任务台账）：同一批原件字节从 c1_doc_file 回捞，
+    按任务生效参数重跑解析。任务/文件态重置 pending→parsing，旧产物、
+    暂存记录、校验结论、隔离行先行清空（回执日志保留作历史）；抽取规则
+    绑定不保留，重放后在数据预览页重新选择。解析中/入库中/已入库拒绝。"""
+    catalog = _load('store.catalog')
+    content_db = _load('store.content_db')
+    artifact = _load('store.artifact')
+    errors = _load('store.errors')
+    if STATE['running']:
+        raise errors.Conflict('有解析正在进行，暂不能重放')
+    task = catalog.get_task(task_id)
+    if task is None:
+        raise errors.NotFound('任务不存在')
+    if task['state'] in ('loading', 'loaded'):
+        raise errors.Conflict('任务入库中/已入库，不能原地重放（回执已对应旧记录）')
+    params = params if params is not None else (task.get('params') or {})
+    in_dir = tempfile.mkdtemp(prefix='in_', dir=config.TMP_INPUT)
+    paths, ctx = [], []
+    try:
+        for f in task['files']:
+            src = catalog.get_file_content(f['file_id'])
+            if src is None:
+                raise errors.NotFound('原件字节缺失（id={}），无法重放'
+                                      .format(f['file_id']))
+            name = os.path.basename(f['name'])
+            path = os.path.join(in_dir, name)
+            with open(path, 'wb') as fh:
+                fh.write(src['data'])
+            paths.append(path)
+            content_db.purge_records(f['task_file_id'])
+            artifact.delete_all(f['task_file_id'])
+            ctx.append({'file_id': f['file_id'],
+                        'task_file_id': f['task_file_id'],
+                        'name': name, 'path': path, 'state': 'pending'})
+        catalog.clear_quarantine(task_id)
+        for fc in ctx:
+            catalog.set_task_file_state(fc['task_file_id'], 'pending')
+        catalog.set_task_state(task_id, 'pending', None)
+        label = 'task_{}'.format(task_id)
+        tasklog = _load('tasklog')
+        log = tasklog.TaskLog(label,
+                              log_path=os.path.join(config.LOG_DIR,
+                                                      label + '.log'),
+                              on_emit=_on_log)
+        task_ctx = {'task_id': task_id, 'rule': None, 'files': ctx,
+                    'created_at': task.get('created_at') or _now(),
+                    'in_scratch': in_dir}
+        with LOCK:
+            STATE.update(running=True, ready=False, error=None, steps=[],
+                         cases=[], started=time.time(), elapsed=0,
+                         params={k: v for k, v in params.items()
+                                 if not k.startswith('_')}, warnings=[],
+                         logs=[], progress=0, stage='batch',
+                         log_file=label + '.log',
+                         rule=None, task_id=task_id)
+        log.stage('batch', '任务 {} · 重放解析 {} 个文件（原地）'.format(
+            task_id, len(paths)))
+        threading.Thread(target=task_batch,
+                         args=(paths, params, log, task_ctx),
+                         daemon=True).start()
+        return {'ok': True, 'task_id': task_id, 'count': len(paths)}
+    except Exception:
+        rmtree_retry(in_dir)
+        raise
+
+
 # ---- P2 入库引擎：手动闸门 → 后台逐条写入＋幂等回执 ----
 
 def launch_load(task_id, target=None):

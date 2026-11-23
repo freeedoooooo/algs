@@ -10,6 +10,21 @@ function tplLabel(t){
   if(!t) return '<span class="msg" title="执行抽取时绑定规则">—</span>';
   return escHtml(t.name+' v'+t.version);
 }
+function paramsCell(p){
+  var ks=Object.keys(p||{});
+  if(!ks.length) return '<span class="msg" title="未记录参数，全部默认值">默认</span>';
+  return '<span class="msg" title="'+escHtml(ks.map(function(k){
+    return k+'='+p[k];}).join('， '))+'">'+ks.length+' 项</span>';
+}
+function reviewRuleCell(){
+  return '<span class="msg" title="自动化校验待实现；记录核对在数据预览页">—</span>';
+}
+function loadRuleCell(l){
+  if(!l) return '<span class="msg" title="入库启动时绑定">—</span>';
+  var txt=(l.datasource_name||'—')+' · '+(l.target_table||'—');
+  return '<span class="msg" title="'+escHtml(txt+'（映射 #'+l.load_table_id+"）")+'">'+
+    escHtml(shortName(l.target_table||'—'))+'</span>';
+}
 function filtered(){
   var q=document.getElementById('q').value.trim().toLowerCase();
   var st=document.getElementById('fstate').value;
@@ -30,9 +45,10 @@ function render(){
       '<td class="seq">'+seqNo(info,i)+'</td>'+
       '<td class="mono">#'+r.task_id+'</td>'+
       '<td class="num">'+(r.files||[]).length+'</td>'+
+      '<td>'+paramsCell(r.params)+'</td>'+
       '<td>'+tplLabel(r.rule)+'</td>'+
-      '<td>'+(r.load?escHtml(r.load.target_table+' · '+
-        modeLabel(r.load.write_mode||'')):'—')+'</td>'+
+      '<td>'+reviewRuleCell()+'</td>'+
+      '<td>'+loadRuleCell(r.load)+'</td>'+
       '<td>'+stateBadge(r.state)+'</td>'+
       '<td class="num">'+fmtTime(r.created_at)+'</td>'+
       '<td><button type="button" class="linkbtn" data-task="'+r.task_id+'">详情</button></td>'+
@@ -56,7 +72,7 @@ rows.addEventListener('click',function(e){
 function fileRow(f,taskId){
   var links='';
   if(f.task_file_id){
-    links='<a class="linkbtn" target="_blank" href="/review?task='+taskId+
+    links='<a class="linkbtn" target="_blank" href="/preview?task='+taskId+
       '&file='+f.task_file_id+'">预览数据</a>'+
       '<a class="linkbtn" target="_blank" href="'+fileUrl(f.task_file_id,'对照报告.html')+'">对照报告</a>';
   }
@@ -101,12 +117,26 @@ function renderDetail(j){
   var n=(r.files||[]).reduce(function(s,f){return s+(f.records_n||0);},0);
   var foot='<span>共 '+(r.files||[]).length+' 个资料 · 暂存记录 '+n+' 条</span>'+
     '<span class="spacer" style="flex:1"></span>';
+  if(['to_extract','to_review','to_load','failed'].indexOf(r.state)>=0)
+    foot+='<button type="button" class="btn mini ghost" id="rpbtn">重放解析</button>';
   if(r.state==='to_load')
     foot+='<button type="button" class="btn mini" id="loadbtn">'+
       (r.error?'重新入库':'入库')+'</button>';
   if(hasLoad&&(r.state==='loaded'||r.state==='to_load'))
     foot+='<button type="button" class="btn mini ghost" id="rcbtn">回执 / 隔离</button>';
   document.getElementById('dfoot').innerHTML=foot;
+  var rp=document.getElementById('rpbtn');
+  if(rp) rp.onclick=function(){
+    if(!confirm('原地重放解析：重跑该任务全部文件；旧解析产物、暂存记录与校验结论会被清空（回执日志保留）。继续？'))return;
+    rp.disabled=true;
+    fetch('/api/tasks/'+r.task_id+'/reparse',{method:'POST'}).then(function(res){
+      return res.json().catch(function(){return {};}).then(function(j){
+        return {s:res.status,j:j};});
+    }).then(function(o){
+      if(!o.j.ok){ alert('无法重放：'+(o.j.error||('HTTP '+o.s))); rp.disabled=false; return; }
+      refreshDetail(r.task_id);
+    }).catch(function(){ alert('重放请求失败：平台库不可用'); rp.disabled=false; });
+  };
   var lb=document.getElementById('loadbtn');
   if(lb) lb.onclick=function(){
     if(!hasLoad){
@@ -122,7 +152,7 @@ function renderDetail(j){
   clearTimeout(pollTimer);
   if(live&&live.running) pollTimer=setTimeout(function(){refreshDetail(r.task_id);},1500);
 }
-/* 门禁计数提示：仅全部 confirmed 可入库（后端 409 兜底，这里先给可见预期）。
+/* 入库前预检计数：须全部 confirmed 才能入库（后端 409 兜底，这里先给可见预期）。
    走 /gate 轻量计数端点——旧版为此全量拉 staging（~150KB×每次刷新轮询）。 */
 function loadGateInfo(taskId){
   fetch('/api/tasks/'+taskId+'/gate').then(function(r){
@@ -134,9 +164,9 @@ function loadGateInfo(taskId){
     if(!el) return;
     var blocked=c.pending+c.edited+c.rejected;
     el.innerHTML=blocked?
-      ('门禁：待校验 '+c.pending+' · 已修改未确认 '+c.edited+' · 已拒绝 '+c.rejected+
-       ' · 已确认 '+c.confirmed+'（须全部确认）'):
-      ('门禁通过：全部 '+c.confirmed+' 条已确认，可入库');
+      ('入库前预检：待校验 '+c.pending+' · 已修改未确认 '+c.edited+
+       ' · 已拒绝 '+c.rejected+' · 已确认 '+c.confirmed+'——全部确认后才能入库'):
+      ('预检通过：全部 '+c.confirmed+' 条已确认，可入库');
   }).catch(function(){});
 }
 function doLoad(taskId,btn){

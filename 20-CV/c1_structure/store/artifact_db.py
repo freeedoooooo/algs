@@ -70,6 +70,30 @@ def list(task_file_id):
         conn.close()
 
 
+def delete_all(task_file_id):
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            n = cur.execute('DELETE FROM c1_parse_artifact'
+                          ' WHERE task_file_id=%s', (task_file_id,))
+            conn.commit()
+        return n
+    finally:
+        conn.close()
+
+
+def delete_all(task_file_id):
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            n = cur.execute('DELETE FROM c1_parse_artifact'
+                          ' WHERE task_file_id=%s', (task_file_id,))
+            conn.commit()
+        return n
+    finally:
+        conn.close()
+
+
 def latest_task_file_with(name):
     """最新一份含指定产物的 task_file_id（/parse-report 重定向用）。"""
     conn = db.connect()

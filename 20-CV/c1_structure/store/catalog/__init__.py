@@ -19,7 +19,7 @@ from .rules import (list_rules, get_rule_version, get_rule,
                         create_rule, create_version, update_rule,
                         delete_rule, list_versions)
 from .tasks import (create_task, set_task_state, set_task_rule,
-                    add_task_file,
+                    add_task_file, clear_quarantine,
                     set_task_file_state, rollup_task_state, get_task,
                     list_tasks, task_file_ids,
                     add_quarantine, list_quarantine)

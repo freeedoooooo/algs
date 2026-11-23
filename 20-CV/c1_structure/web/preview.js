@@ -1,4 +1,4 @@
-/* web/review.js — 校验台（P1）：DB 暂存记录表 + 编辑/确认/拒绝
+/* web/preview.js — 任务数据预览（P1）：DB 暂存记录表 + 编辑/确认/拒绝
    + 源图血缘回溯。右侧舞台忠实复刻对照报告（report.js 舞台逻辑移植）：默认零框，
    悬停/点击揭示单格，点图走 hitCell 命中测试可定位任意记录行/格（不限选中行），
    窗口式翻页（全页预渲染、切页只切显隐，与报告同架构）、原图/矫正图切换、
@@ -34,7 +34,7 @@ document.getElementById('filetabs').addEventListener('click',function(e){
   var b=e.target.closest?e.target.closest('[data-rf]'):null;
   if(!b) return;
   curFile=b.getAttribute('data-rf');
-  history.replaceState(null,'','/review?task='+encodeURIComponent(task)+
+  history.replaceState(null,'','/preview?task='+encodeURIComponent(task)+
     '&file='+encodeURIComponent(curFile));
   renderTabs(); loadStaging();
 });
@@ -730,7 +730,7 @@ function loadStaging(){
 }
 
 /* ---- P2c 手动入库闸门：to_load（派生态，全部记录已确认）可见；未绑定打开库向导（入库时
-   选业务库＋规则），已绑定直接提交。门禁计数由后端 409 兜底，点击后轮询
+   选业务库＋规则），已绑定直接提交。入库前预检由后端 409 兜底，点击后轮询
    任务态直至入库完成自动刷新。 ---- */
 var loadPoll=null;
 function updateLoadButtons(){
@@ -912,7 +912,7 @@ document.getElementById('tasklink').href=task?('/tasks?task='+encodeURIComponent
 setCollapsed(true);
 if(!task){
   /* 无任务参数＝台账入口：页头与资料/任务同构（标题＋右对齐工具栏，无返回），
-     面板内直接表格。任务行汇总校验进度，点任务行展开文件子行，点子行进校验台。 */
+     面板内直接表格。任务行汇总校验进度，点任务行展开文件子行，点子行进数据预览。 */
   document.getElementById('modebanner').hidden=true;
   document.querySelector('.stgwrap').hidden=true;
   document.getElementById('summary').hidden=true;
@@ -921,7 +921,7 @@ if(!task){
   document.getElementById('filelinks').hidden=true;
   document.getElementById('tplbadge').hidden=true;
   document.getElementById('ledgerbar').hidden=false;
-  document.querySelector('.pagehead h1').textContent='校验台账';
+  document.querySelector('.pagehead h1').textContent='任务台账';
   document.getElementById('lq').addEventListener('input',function(){
     lq=this.value.trim().toLowerCase(); ledPage=1; renderLedger();
   });
@@ -932,7 +932,7 @@ if(!task){
     return r.json();
   }).then(function(j){
     ledgerItems=j.items||[]; renderLedger();
-  }).catch(function(e){ showErr('读取校验台账失败：'+e.message); });
+  }).catch(function(e){ showErr('读取任务台账失败：'+e.message); });
 }else{
   fetch('/api/tasks/'+encodeURIComponent(task)).then(function(r){
     if(!r.ok) throw new Error('任务不存在');
@@ -947,12 +947,12 @@ if(!task){
   }).catch(function(e){ showErr(e.message); });
 }
 
-/* 台账：点任务行展开/收起其文件子行；点文件子行进入该文件的校验台 */
+/* 台账：点任务行展开/收起其文件子行；点文件子行进入该文件的数据预览 */
 document.getElementById('ledgerrows').addEventListener('click',function(e){
   var tr=e.target.closest?e.target.closest('tr[data-task]'):null;
   if(!tr) return;
   if(tr.classList.contains('led-file')){
-    location.href='/review?task='+tr.getAttribute('data-task')+
+    location.href='/preview?task='+tr.getAttribute('data-task')+
       '&file='+tr.getAttribute('data-file');
     return;
   }

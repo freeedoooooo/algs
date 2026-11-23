@@ -223,6 +223,19 @@ def add_quarantine(task_id, task_file_id, record_index, stage, reason, payload):
         conn.close()
 
 
+def clear_quarantine(task_id):
+    """重放解析前置：清该任务隔离行（回执日志保留作历史）。"""
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            n = cur.execute('DELETE FROM c1_load_quarantine'
+                              ' WHERE task_id=%s', (task_id,))
+            conn.commit()
+        return n
+    finally:
+        conn.close()
+
+
 def list_quarantine(task_id=None, state=None):
     conn = db.connect()
     try:

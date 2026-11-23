@@ -135,6 +135,32 @@ def _field_sources(mapping_json):
     return out
 
 
+def _purge(cur, tf_id):
+    # 应用层级联：无 FK，重跑覆盖须显式先清 field/lineage 子表
+    cur.execute(
+        'DELETE FROM c1_staging_field WHERE record_id IN'
+        ' (SELECT id FROM c1_staging_record'
+          '   WHERE task_file_id=%s)', (tf_id,))
+    cur.execute(
+        'DELETE FROM c1_staging_lineage WHERE record_id IN'
+        ' (SELECT id FROM c1_staging_record'
+          '   WHERE task_file_id=%s)', (tf_id,))
+    cur.execute(
+        'DELETE FROM c1_staging_record WHERE task_file_id=%s',
+        (tf_id,))
+
+
+def purge_records(task_file_id):
+    """独立清空某 task_file 暂存记录（重放解析用；抽取覆盖走 save_records）。"""
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            _purge(cur, task_file_id)
+            conn.commit()
+    finally:
+        conn.close()
+
+
 def save_records(doc):
     conn = db.connect()
     try:
@@ -144,18 +170,7 @@ def save_records(doc):
                 if not tf_id:
                     raise ValueError(
                         'task_file_id 缺失：须先目录登记成功')
-                # 应用层级联：无 FK，重跑覆盖须显式先清 field/lineage 子表
-                cur.execute(
-                    'DELETE FROM c1_staging_field WHERE record_id IN'
-                    ' (SELECT id FROM c1_staging_record'
-                    '   WHERE task_file_id=%s)', (tf_id,))
-                cur.execute(
-                    'DELETE FROM c1_staging_lineage WHERE record_id IN'
-                    ' (SELECT id FROM c1_staging_record'
-                    '   WHERE task_file_id=%s)', (tf_id,))
-                cur.execute(
-                    'DELETE FROM c1_staging_record WHERE task_file_id=%s',
-                    (tf_id,))
+                _purge(cur, tf_id)
                 for rec in f.get('records') or []:
                     values = rec.get('values') or {}
                     original = rec.get('original') or {}

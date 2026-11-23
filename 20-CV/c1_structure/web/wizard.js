@@ -2,7 +2,7 @@
    ① 选目标（已有规则直达③／新建＝业务库＋表）→ ② 字段对齐（自动匹配，仅新建）
    → ③ 过目（前 3 条样例＋load-preview dry-run 计数）→ ④ 执行。
    红线：④ 前不落库；新建规则在执行瞬间 POST /api/load/tables 落库，
-   /load 失败则补偿 DELETE，不留孤儿；绑定/门禁/预检语义仍由服务端把关。 */
+   /load 失败则补偿 DELETE，不留孤儿；绑定/预检语义仍由服务端把关。 */
 var wz=null;
 function wzApi(method,url,body){
   var opt={method:method,headers:{}};

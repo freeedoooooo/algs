@@ -59,3 +59,13 @@ def exists(task_file_id, name):
 
 def list(task_file_id):
     return artifact_db.list(task_file_id)
+
+
+def delete_all(task_file_id):
+    """清空该文件全部产物（原地重解析前置；重跑按 name 覆盖，先清防孤儿）。"""
+    return artifact_db.delete_all(task_file_id)
+
+
+def delete_all(task_file_id):
+    """清空该文件全部产物（原地重解析前置；重跑按 name 覆盖，先清防孤儿）。"""
+    return artifact_db.delete_all(task_file_id)
