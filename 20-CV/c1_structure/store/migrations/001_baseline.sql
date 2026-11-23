@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS `c1_extract_rule` (
 
 CREATE TABLE IF NOT EXISTS `c1_task` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '任务 ID',
-  `rule_version_id` bigint NOT NULL,
+  `rule_version_id` bigint NULL,
   `load_datasource_id` bigint DEFAULT NULL COMMENT '入库数据源 ID（preview 为空）',
   `load_table_id` bigint DEFAULT NULL COMMENT '入库映射 ID（preview 为空）',
   `params_json` json DEFAULT NULL COMMENT '生效解析参数快照',

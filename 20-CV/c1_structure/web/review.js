@@ -751,18 +751,45 @@ function fileState(){
 function updateExButton(){
   var b=document.getElementById('exbtn'), st=fileState();
   if(!curFile||['to_extract','to_review','to_load'].indexOf(st)<0||
-     readOnly()){ b.hidden=true; return; }
+     readOnly()){ b.hidden=true; renderExRule(true); return; }
   b.hidden=false;
   b.textContent=st==='to_extract'?'执行抽取':'重新抽取';
+  renderExRule();
+}
+/* 抽取规则版本下拉（方案A）：默认＝任务已绑规则（未绑=原始透传）；
+   选其他版本则本次抽取时后端改绑任务（set_task_rule）。 */
+var rulesList=null, rulesLoading=false;
+function renderExRule(hide){
+  var sel=document.getElementById('exrule');
+  if(hide){ sel.hidden=true; return; }
+  sel.hidden=false;
+  var bound=String((taskDoc&&taskDoc.rule||{}).version_id||'');
+  if(!rulesList){
+    if(!rulesLoading){ rulesLoading=true;
+      fetch('/api/extract-rules').then(function(r){return r.json();})
+        .then(function(j){ rulesList=j.items||[]; renderExRule(); })
+        .catch(function(){ rulesList=[]; renderExRule(); });
+    }
+    sel.innerHTML='<option value="">默认（已绑定规则）</option>';
+    return;
+  }
+  sel.innerHTML='<option value="">默认（已绑定规则）</option>'+
+    rulesList.map(function(t){
+      return '<option value="'+(t.current_version_id||'')+'">'+
+        escHtml((t.name||'原始透传')+' v'+(t.current_version||1))+'</option>';
+    }).join('');
+  sel.value=bound;
+  if(sel.selectedIndex<0) sel.selectedIndex=0;
 }
 document.getElementById('exbtn').onclick=function(){
-  var b=this, st=fileState();
-  if(st!=='to_extract'&&!confirm('重新抽取将按当前抽取规则覆盖该文件全部暂存记录，已做的校验确认会清零。继续？'))return;
+  var b=this, st=fileState(), rv=document.getElementById('exrule').value;
+  if(st!=='to_extract'&&!confirm('重新抽取将按所选抽取规则覆盖该文件全部暂存记录，已做的校验确认会清零。继续？'))return;
   b.disabled=true;
   fetch('/api/tasks/'+encodeURIComponent(task)+'/extract',{
     method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({task_file_ids:[Number(curFile)],
-                         force:st!=='to_extract'})
+                         force:st!=='to_extract',
+                         rule_version_id:rv?Number(rv):null})
   }).then(function(r){
     return r.json().then(function(j){
       if(!r.ok) throw new Error(j.error||('HTTP '+r.status)); return j;});

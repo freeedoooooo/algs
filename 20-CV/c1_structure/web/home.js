@@ -1,11 +1,10 @@
 /* web/home.js — 工作台首页：快速解析条 + 四张状态卡 + 待办列表。
    计数纯前端拼装
    （/api/tasks ＋ /api/staging/ledger），无新端点、无状态落库。 */
-var hpicked=[], tplId=null;
+var hpicked=[];
 var hdrop=document.getElementById('hdrop'), hpick=document.getElementById('hpick');
 var hlist=document.getElementById('hlist'), hgo=document.getElementById('hgo');
-var hmsg=document.getElementById('hmsg'), htpl=document.getElementById('htpl');
-var TKEY='c1.home_tpl';
+var hmsg=document.getElementById('hmsg');
 var items=[], led=[], tplCount=0;
 var pollT=null, loopT=null, lastTaskId=null;
 var todoPage=1, todoSize=getListPer();
@@ -16,21 +15,10 @@ var pgTodo=bindPager(document.getElementById('todopg'),
 function say(t,cls){ hmsg.textContent=t; hmsg.className='qmsg'+(cls?' '+cls:''); }
 function sayHtml(html,cls){ hmsg.innerHTML=html; hmsg.className='qmsg'+(cls?' '+cls:''); }
 
-/* ---- 抽取规则下拉：与解析页同源；记住上次选择（H3） ---- */
+/* ---- 抽取规则计数（卡片②副文案）；规则在数据预览页「执行抽取」时选 ---- */
 fetch('/api/extract-rules').then(function(r){return r.json();}).then(function(j){
-  var its=j.items||[]; tplCount=its.length; renderCards();
-  if(!its.length){ htpl.innerHTML='<option value="">原始透传 v1</option>'; return; }
-  htpl.innerHTML=its.map(function(t){
-    return '<option value="'+(t.current_version_id||'')+'" data-tid="'+t.id+'">'+
-      escHtml((t.name||'原始透传')+' v'+(t.current_version||1))+'</option>';
-  }).join('');
-  var saved=Number(localStorage.getItem(TKEY));
-  if(saved) for(var i=0;i<htpl.options.length;i++)
-    if(htpl.options[i].value===String(saved)){ htpl.selectedIndex=i; break; }
-}).catch(function(){ htpl.innerHTML='<option value="">原始透传 v1</option>'; });
-htpl.addEventListener('change',function(){
-  try{ localStorage.setItem(TKEY,htpl.value); }catch(e){}
-});
+  tplCount=(j.items||[]).length; renderCards();
+}).catch(function(){});
 
 /* ---- 快速解析：选文件 → 就地提交（复用 /api/upload 通道） ---- */
 var ALLOWED=['png','jpg','jpeg','bmp','webp','tif','tiff','pdf','csv','txt','md'];
@@ -79,8 +67,7 @@ hgo.onclick=function(){
   })).then(function(files){
     return fetch('/api/upload',{method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({files:files,
-        rule_version_id:htpl.value?Number(htpl.value):null})
+      body:JSON.stringify({files:files})
     }).then(function(r){return r.json();});
   }).then(function(j){
     if(!j.ok) throw new Error(j.error||'提交失败');

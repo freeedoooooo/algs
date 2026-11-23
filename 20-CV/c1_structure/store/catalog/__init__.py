@@ -18,7 +18,8 @@ from .files import (register_file, list_files, get_file, get_file_content,
 from .rules import (list_rules, get_rule_version, get_rule,
                         create_rule, create_version, update_rule,
                         delete_rule, list_versions)
-from .tasks import (create_task, set_task_state, add_task_file,
+from .tasks import (create_task, set_task_state, set_task_rule,
+                    add_task_file,
                     set_task_file_state, rollup_task_state, get_task,
                     list_tasks, task_file_ids,
                     add_quarantine, list_quarantine)

@@ -96,10 +96,11 @@ def resolve_rule(version_id=None):
 
 def launch(paths, params, warns, ctx, tpl=None):
     """登记任务（DB 必选，失败上抛 503）→ 建日志 → 重置 STATE → 起后台线程。
-    单一解析入口（P2c）：入库目标在入库启动时绑定，上传不携带。"""
-    tpl = tpl or resolve_rule()
+    单一解析入口（P2c）：入库目标在入库启动时绑定；抽取规则在「执行抽取」
+    时绑定（方案A），解析任务创建时 rule 为空。"""
     catalog = _load('store.catalog')
-    task_id = catalog.create_task(tpl['version_id'], params)
+    task_id = catalog.create_task(
+        tpl['version_id'] if tpl else None, params)
     for f in ctx:
         f['task_file_id'] = catalog.add_task_file(task_id, f['file_id'])
         f['state'] = 'pending'
@@ -120,8 +121,8 @@ def launch(paths, params, warns, ctx, tpl=None):
                      logs=[], progress=0, stage='batch',
                      log_file=label + '.log',
                      rule=tpl, task_id=task_id)
-    log.stage('batch', '任务 {} · 收到 {} 个文件 · 抽取规则 {} v{}'.format(
-        task_id, len(paths), tpl['name'], tpl['version']))
+    log.stage('batch', '任务 {} · 收到 {} 个文件'.format(
+        task_id, len(paths)))
     log.info('params', '生效参数：{}'.format(
         ', '.join('{}={}'.format(k, v) for k, v in params.items()
                   if not k.startswith('_'))))
@@ -285,9 +286,11 @@ def task_batch(paths, params=None, log=None, task_ctx=None):
 
 # ---- 抽取引擎（与解析解耦）：parse.json 纯投影 → staging 三表 ----
 
-def run_extract(task_id, task_file_ids=None, force=False):
+def run_extract(task_id, task_file_ids=None, force=False,
+                  rule_version_id=None):
     """执行抽取：逐文件回读 parse.json → collect.build → save_records
-    （字段映射+逐格溯源），无 OCR、同步毫秒级。规则取任务当前绑定版本。
+    （字段映射+逐格溯源），无 OCR、同步毫秒级。规则解析优先级：本次显式
+    选择 > 任务已绑定 > 默认「原始透传」；抽取成功即把版本回写任务头。
 
     仅处理 to_extract 文件；已有暂存记录的文件（to_review/to_load）
     须 force=true——重抽按 task_file 先删后插，
@@ -303,7 +306,11 @@ def run_extract(task_id, task_file_ids=None, force=False):
         raise errors.NotFound('任务不存在')
     if task['state'] in ('loading', 'loaded'):
         raise errors.Conflict('任务入库中/已入库，不能再抽取')
-    tpl = resolve_rule(task['rule']['version_id'])
+    bound = (task['rule'] or {}).get('version_id')
+    vid = rule_version_id or bound
+    tpl = resolve_rule(vid)
+    if tpl['version_id'] != bound:
+        catalog.set_task_rule(task_id, tpl['version_id'])
     want = set(task_file_ids or [])
     done = []
     for f in task['files']:

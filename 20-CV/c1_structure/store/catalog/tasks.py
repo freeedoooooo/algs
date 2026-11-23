@@ -78,6 +78,18 @@ def add_task_file(task_id, file_id):
         conn.close()
 
 
+def set_task_rule(task_id, version_id):
+    """执行抽取时绑定/换绑抽取规则版本（方案A：规则在抽取时刻生效）。"""
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('UPDATE c1_task SET rule_version_id=%s'
+                        ' WHERE id=%s', (version_id, task_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def set_task_file_state(task_file_id, state):
     conn = db.connect()
     try:
@@ -97,8 +109,8 @@ _HEAD_SQL = (
     ' d.name AS datasource_name, d.db_name,'
     ' lt.target_table, lt.write_mode'
     ' FROM c1_task r'
-    ' JOIN c1_extract_rule_version tv ON tv.id=r.rule_version_id'
-    ' JOIN c1_extract_rule t ON t.id=tv.rule_id'
+    ' LEFT JOIN c1_extract_rule_version tv ON tv.id=r.rule_version_id'
+    ' LEFT JOIN c1_extract_rule t ON t.id=tv.rule_id'
     ' LEFT JOIN c1_load_datasource d ON d.id=r.load_datasource_id'
     ' LEFT JOIN c1_load_table lt ON lt.id=r.load_table_id')
 
@@ -120,9 +132,10 @@ def _mk_doc(r, files):
     """task 头行＋文件行 → tasks API 投影（_task_doc/list_tasks 共用形状）。"""
     return {
         'task_id': r['id'],
-        'rule': {'name': r['tpl_name'], 'version': r['version'],
-                     'version_id': r['version_id'],
-                     'rule_id': r['rule_id']},
+        'rule': ({'name': r['tpl_name'], 'version': r['version'],
+                   'version_id': r['version_id'],
+                   'rule_id': r['rule_id']}
+                  if r['version_id'] else None),
         'params': _j(r['params_json']) or {},
         'state': r['state'], 'error': r['error'],
         'load': ({'datasource_id': r['load_datasource_id'],

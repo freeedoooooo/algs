@@ -258,6 +258,9 @@ def _reject_retired_load_keys(body):
     if any(k in body for k in ('mode', 'load_datasource_id', 'load_table_id')):
         raise store_errors.BadRequest(
             '上传不再携带入库目标，请在任务入库时选择')
+    if 'rule_version_id' in body:
+        raise store_errors.BadRequest(
+            '上传不再选择抽取规则，请在「执行抽取」时选择')
 
 
 @app.post('/api/upload')
@@ -272,7 +275,6 @@ async def upload(request: Request):
     if not files:
         return JSONResponse({'ok': False, 'error': '未收到文件'},
                             status_code=400)
-    tpl = service.resolve_rule(body.get('rule_version_id'))
     # 调试参数：校验一次，非法值回退默认并把警告带回页面（不让整批失败）
     params, warns = params_mod.normalize(body.get('params'))
 
@@ -308,7 +310,7 @@ async def upload(request: Request):
             paths.append(path)
             info = service.register_file(name, data)
             ctx.append(dict(info, name=name, path=path))
-        result = service.launch(paths, params, warns, ctx, tpl)
+        result = service.launch(paths, params, warns, ctx)
         launched = True
         return result
     finally:
@@ -601,7 +603,8 @@ async def api_task_load(task_id: int, request: Request):
 
 @app.post('/api/tasks/{task_id}/extract')
 async def api_task_run_extract(task_id: int, request: Request):
-    """执行抽取（与解析解耦）：{task_file_ids?, force?}；空体=全部待抽取文件。
+    """执行抽取（与解析解耦）：{task_file_ids?, force?, rule_version_id?}；
+    空体=全部待抽取文件＋任务已绑规则（未绑则默认原始透传）。
     parse.json 纯投影、同步毫秒级；重抽覆盖校验结论须 force=true。"""
     raw = await request.body()
     body = await _json_body(request) if raw else {}
@@ -609,11 +612,15 @@ async def api_task_run_extract(task_id: int, request: Request):
     if ids is not None and (not isinstance(ids, list)
                             or not all(isinstance(i, int) for i in ids)):
         raise store_errors.BadRequest('task_file_ids 须为整数数组')
+    rv = body.get('rule_version_id')
+    if rv is not None and not isinstance(rv, int):
+        raise store_errors.BadRequest('rule_version_id 须为整数')
     # collect+parse.json 解析是 CPU 密集（上传后 warmup 还在抢 GIL）：
     # 放线程池执行，事件循环保持可响应
     return await run_in_threadpool(service.run_extract, task_id,
                                    task_file_ids=ids,
-                                   force=bool(body.get('force')))
+                                   force=bool(body.get('force')),
+                                   rule_version_id=rv)
 
 
 @app.post('/api/tasks/{task_id}/load-preview')
@@ -786,7 +793,6 @@ async def api_tasks_create(request: Request):
         return JSONResponse({'ok': False, 'error': '存在未登记的文件 id'},
                             status_code=400)
     params, warns = params_mod.normalize(body.get('params'))
-    tpl = service.resolve_rule(body.get('rule_version_id'))
     in_dir = tempfile.mkdtemp(prefix='in_', dir=config.TMP_INPUT)
     launched = False
     try:
@@ -807,7 +813,7 @@ async def api_tasks_create(request: Request):
             ctx.append({'name': name, 'path': path,
                         'file_id': row['id'], 'sha256': row['sha256'],
                         'dedup': True})
-        result = service.launch(paths, params, warns, ctx, tpl)
+        result = service.launch(paths, params, warns, ctx)
         launched = True
         return result
     finally:

@@ -7,8 +7,8 @@ var pg=bindPager(document.getElementById('pager'),
   function(n){ size=n; page=1; render(); });
 
 function tplLabel(t){
-  t=t||{};
-  return escHtml((t.name||'原始透传')+' v'+(t.version||1));
+  if(!t) return '<span class="msg" title="执行抽取时绑定规则">—</span>';
+  return escHtml(t.name+' v'+t.version);
 }
 function filtered(){
   var q=document.getElementById('q').value.trim().toLowerCase();

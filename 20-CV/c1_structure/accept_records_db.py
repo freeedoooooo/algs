@@ -489,17 +489,21 @@ def _main(syn_tasks, syn_fids, up, p2):
         time.sleep(1)  # finally 清理 scratch 在 running=False 之后
         rtask = catalog.get_task(task_id)
         tf_id = rtask['files'][0]['task_file_id']
-        check('真链路仅解析=待抽取',
+        check('真链路仅解析=待抽取 · 未绑规则',
               st.get('error') is None and rtask['state'] == 'to_extract'
-              and rtask['files'][0]['state'] == 'to_extract',
-              'state={} tf_id={} err={}'.format(
-                  rtask['state'], tf_id, st.get('error')))
+              and rtask['files'][0]['state'] == 'to_extract'
+              and rtask['rule'] is None,
+              'state={} tf_id={} rule={}'.format(
+                  rtask['state'], tf_id, rtask.get('rule')))
         ste0, je0 = http(8799, '/api/tasks/{}/extract'.format(task_id), {},
                          method='POST', timeout=120)
         rtask = catalog.get_task(task_id)
-        check('执行抽取→待校验', ste0 == 200 and je0.get('ok')
-              and rtask['state'] == 'to_review',
-              'st={} state={}'.format(ste0, rtask['state']))
+        check('执行抽取→待校验 · 缺省绑原始透传',
+              ste0 == 200 and je0.get('ok')
+              and rtask['state'] == 'to_review'
+              and (rtask['rule'] or {}).get('name') == '原始透传',
+              'st={} state={} rule={}'.format(
+                  ste0, rtask['state'], rtask.get('rule')))
         check('tmp/input+tmp/work 无 scratch 残留', scratch_clean())
         stq, jq = http(8799, '/api/tasks/{}/staging'.format(task_id))
         n_rec = rtask['files'][0]['records_n']
@@ -680,27 +684,35 @@ def _main(syn_tasks, syn_fids, up, p2):
                        {'files': [{'name': 'p2.pdf', 'data': small}],
                         'mode': 'load'})
         check('退役契约键上传 400（不再收 mode/入库目标）', strk == 400)
+        srv, _rv = http(8799, '/api/upload',
+                        {'files': [{'name': 'p2.pdf', 'data': small}],
+                         'rule_version_id': vid1})
+        check('上传选抽取规则已退役 400', srv == 400)
 
         # ---- Leg A：解析→抽取→校验→入库（新状态机全程）；失败不留痕 ----
-        task_a, sta = upload(8799, src['data'], src['name'],
-                             {'rule_version_id': vid1})
+        task_a, sta = upload(8799, src['data'], src['name'])
         up.append(task_a)
         time.sleep(1)
         ra = catalog.get_task(task_a)
         tfa = ra['files'][0]['task_file_id']
-        check('普通上传仅解析=待抽取 · 无入库目标',
+        check('普通上传仅解析=待抽取 · 无入库目标 · 未绑规则',
               sta.get('error') is None and ra['state'] == 'to_extract'
               and ra['files'][0]['state'] == 'to_extract'
-              and ra.get('load') is None,
-              'state={} load={}'.format(ra['state'], ra.get('load')))
-        ste0, je0 = http(8799, '/api/tasks/{}/extract'.format(task_a), {},
+              and ra.get('load') is None and ra['rule'] is None,
+              'state={} load={} rule={}'.format(
+                  ra['state'], ra.get('load'), ra.get('rule')))
+        ste0, je0 = http(8799, '/api/tasks/{}/extract'.format(task_a),
+                         {'rule_version_id': vid1},
                          method='POST', timeout=120)
         ra = catalog.get_task(task_a)
         n_rec = ra['files'][0]['records_n']
-        check('执行抽取→待校验', ste0 == 200 and je0.get('ok')
+        check('执行抽取(选规则)→待校验 · 改绑 vid1',
+              ste0 == 200 and je0.get('ok')
               and ra['state'] == 'to_review'
-              and ra['files'][0]['state'] == 'to_review' and n_rec > 0,
-              'state={} recs={}'.format(ra['state'], n_rec))
+              and ra['files'][0]['state'] == 'to_review' and n_rec > 0
+              and (ra['rule'] or {}).get('version_id') == vid1,
+              'state={} recs={} rule={}'.format(
+                  ra['state'], n_rec, ra.get('rule')))
         stg, jg = http(8799, '/api/tasks/{}/staging'.format(task_a))
         names = [r['values'].get('名称', '')
                  for r in jg['files'][0]['records']]

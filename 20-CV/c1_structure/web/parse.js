@@ -82,19 +82,7 @@ fetch('/api/params').then(function(r){return r.json();}).then(function(j){
   if(j.schema) renderParams(j.schema);
 }).catch(function(){});
 
-/* 抽取规则下拉：/api/extract-rules（DB 降级时后端回内置「原始透传」）。
-   value = 规则版本 id；降级项无 id，提交时省略走后端默认。 */
-var tplsel=document.getElementById('tplsel');
-function tplFallback(){ tplsel.innerHTML='<option value="">原始透传 v1</option>'; }
-fetch('/api/extract-rules').then(function(r){return r.json();}).then(function(j){
-  var items=j.items||[];
-  if(!items.length){ tplFallback(); return; }
-  tplsel.innerHTML=items.map(function(t){
-    return '<option value="'+(t.current_version_id||'')+'" data-tpl="'+t.id+'">'+
-      escHtml((t.name||'原始透传')+' v'+(t.current_version||1))+'</option>';
-  }).join('');
-}).catch(tplFallback);
-function tplVersionId(){ return tplsel.value||null; }
+/* 抽取规则不在解析页选择（方案A）：在数据预览页「执行抽取」时绑定。 */
 
 document.getElementById('resetparams').onclick=function(e){
   e.preventDefault();
@@ -419,8 +407,7 @@ go.onclick=async function(){
     var res=await fetch('/api/upload',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({files:files,params:collectParams(),
-        rule_version_id:tplVersionId()})
+      body:JSON.stringify({files:files,params:collectParams()})
     });
     var j=await res.json();
     if(!j.ok) throw new Error(j.error||'上传失败');
@@ -514,8 +501,7 @@ srcgo.onclick=async function(){
     var res=await fetch('/api/tasks',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({file_ids:ids,params:collectParams(),
-        rule_version_id:tplVersionId()})
+      body:JSON.stringify({file_ids:ids,params:collectParams()})
     });
     var j=await res.json();
     if(!j.ok) throw new Error(j.error||'发起失败');
