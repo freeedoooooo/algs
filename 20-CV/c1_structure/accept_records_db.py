@@ -9,7 +9,7 @@ DB 唯一事实源，task_id / task_file_id 粒度，无外键）。
 4 跨 task 查询 · 5 真链路（临时服务 8799，含 P1 校验路由冒烟）· 6 断库显式 503（临时服务 8797）·
 7 P2c 入库（合成目标表 _accept_p2_load＋合成抽取规则/数据源/映射：上传不带模式、
 入库时绑定目标（预检/门禁失败不留绑定可换目标）、已绑定锁死 409、
-门禁 409、全部确认→loaded、回执幂等、transform/数据级隔离→partial、重试、upsert update、
+门禁 409、全部确认→loaded、回执幂等、transform/数据级隔离→to_load、重试、upsert update、
 数据源目标锁定/映射只读审计）。
 上传字节取自 c1_doc_file.content；断库用不可达 DSN 的临时服务模拟，
 全程不触碰真实库的可用性。破坏性操作只落合成 task/抽取规则/数据源/目标表（验完按 id 清理＋DROP，
@@ -489,11 +489,17 @@ def _main(syn_tasks, syn_fids, up, p2):
         time.sleep(1)  # finally 清理 scratch 在 running=False 之后
         rtask = catalog.get_task(task_id)
         tf_id = rtask['files'][0]['task_file_id']
-        check('真链路 previewed',
-              st.get('error') is None and rtask['state'] == 'previewed'
-              and rtask['files'][0]['state'] == 'previewed',
+        check('真链路仅解析=待抽取',
+              st.get('error') is None and rtask['state'] == 'to_extract'
+              and rtask['files'][0]['state'] == 'to_extract',
               'state={} tf_id={} err={}'.format(
                   rtask['state'], tf_id, st.get('error')))
+        ste0, je0 = http(8799, '/api/tasks/{}/extract'.format(task_id), {},
+                         method='POST', timeout=120)
+        rtask = catalog.get_task(task_id)
+        check('执行抽取→待校验', ste0 == 200 and je0.get('ok')
+              and rtask['state'] == 'to_review',
+              'st={} state={}'.format(ste0, rtask['state']))
         check('tmp/input+tmp/work 无 scratch 残留', scratch_clean())
         stq, jq = http(8799, '/api/tasks/{}/staging'.format(task_id))
         n_rec = rtask['files'][0]['records_n']
@@ -525,13 +531,14 @@ def _main(syn_tasks, syn_fids, up, p2):
         stv, jv = http(8799, '/api/tasks/{}/staging/{}/review'.format(
             task_id, tf_id),
             {'indexes': [r0['index']], 'state': 'confirmed'})
-        check('POST review confirmed', stv == 200 and jv.get('updated') == 1)
+        check('POST review confirmed', stv == 200 and jv.get('updated') == 1
+              and jv.get('task_state') == 'to_review')
         catalog.set_task_state(task_id, 'loaded')
         stl, _jl = http(8799, '/api/tasks/{}/staging/{}/review'.format(
             task_id, tf_id),
             {'indexes': [r0['index']], 'state': 'rejected'})
         check('loaded 写操作 409', stl == 409)
-        catalog.set_task_state(task_id, 'previewed')
+        catalog.set_task_state(task_id, 'to_load')
     finally:
         svc.kill()
 
@@ -674,18 +681,45 @@ def _main(syn_tasks, syn_fids, up, p2):
                         'mode': 'load'})
         check('退役契约键上传 400（不再收 mode/入库目标）', strk == 400)
 
-        # ---- Leg A：普通上传 → 入库时绑定（失败不留痕）→ 门禁 → 全确认 → loaded ----
+        # ---- Leg A：解析→抽取→校验→入库（新状态机全程）；失败不留痕 ----
         task_a, sta = upload(8799, src['data'], src['name'],
                              {'rule_version_id': vid1})
         up.append(task_a)
         time.sleep(1)
         ra = catalog.get_task(task_a)
-        n_rec = ra['files'][0]['records_n']
         tfa = ra['files'][0]['task_file_id']
-        check('普通上传 previewed · 无入库目标',
-              sta.get('error') is None and ra['state'] == 'previewed'
+        check('普通上传仅解析=待抽取 · 无入库目标',
+              sta.get('error') is None and ra['state'] == 'to_extract'
+              and ra['files'][0]['state'] == 'to_extract'
               and ra.get('load') is None,
               'state={} load={}'.format(ra['state'], ra.get('load')))
+        ste0, je0 = http(8799, '/api/tasks/{}/extract'.format(task_a), {},
+                         method='POST', timeout=120)
+        ra = catalog.get_task(task_a)
+        n_rec = ra['files'][0]['records_n']
+        check('执行抽取→待校验', ste0 == 200 and je0.get('ok')
+              and ra['state'] == 'to_review'
+              and ra['files'][0]['state'] == 'to_review' and n_rec > 0,
+              'state={} recs={}'.format(ra['state'], n_rec))
+        stg, jg = http(8799, '/api/tasks/{}/staging'.format(task_a))
+        names = [r['values'].get('名称', '')
+                 for r in jg['files'][0]['records']]
+        tgt = {'load_datasource_id': ds_id, 'load_table_id': lt1}
+        stg1, jg1 = http(8799, '/api/tasks/{}/load'.format(task_a), tgt)
+        ra = catalog.get_task(task_a)
+        check('门禁：全校验中 409 不留绑定', stg1 == 409
+              and '待入库' in jg1.get('error', '')
+              and ra.get('load') is None,
+              str(jg1.get('error')))
+        stc, jcs = http(8799, '/api/tasks/{}/staging/{}/review'.format(
+            task_a, tfa), {'indexes': list(range(n_rec)),
+                           'state': 'confirmed'})
+        ra = catalog.get_task(task_a)
+        check('全部确认派生→待入库', stc == 200
+              and jcs.get('task_state') == 'to_load'
+              and ra['state'] == 'to_load'
+              and ra['files'][0]['state'] == 'to_load',
+              'state={} ts={}'.format(ra['state'], jcs.get('task_state')))
         stx, _ = http(8799, '/api/tasks/{}/load'.format(task_a), {})
         sty, _ = http(8799, '/api/tasks/{}/load'.format(task_a),
                       {'load_datasource_id': ds_id, 'load_table_id': lt2})
@@ -705,22 +739,12 @@ def _main(syn_tasks, syn_fids, up, p2):
         check('无任务引用映射可编辑 200', ste == 200)
         stp, _ = http(8799, '/api/tasks/{}/load'.format(up[0]), {})
         check('未绑定任务未选目标入库 400', stp == 400)
-        stg, jg = http(8799, '/api/tasks/{}/staging'.format(task_a))
-        names = [r['values'].get('名称', '')
-                 for r in jg['files'][0]['records']]
-        tgt = {'load_datasource_id': ds_id, 'load_table_id': lt1}
-        stg1, jg1 = http(8799, '/api/tasks/{}/load'.format(task_a), tgt)
-        ra = catalog.get_task(task_a)
-        check('门禁：全待校验 409 不留绑定', stg1 == 409
-              and '待校验' in jg1.get('error', '') and ra.get('load') is None,
-              str(jg1.get('error')))
-        http(8799, '/api/tasks/{}/staging/{}/review'.format(task_a, tfa),
-             {'indexes': list(range(n_rec)), 'state': 'confirmed'})
         http(8799, '/api/tasks/{}/staging/{}/review'.format(task_a, tfa),
              {'indexes': [0], 'state': 'rejected'})
         stg2, jg2 = http(8799, '/api/tasks/{}/load'.format(task_a), tgt)
-        check('门禁：rejected 也阻止 409', stg2 == 409
-              and '已拒绝' in jg2.get('error', ''), str(jg2.get('error')))
+        ra = catalog.get_task(task_a)
+        check('门禁：rejected 回退待校验 409', stg2 == 409
+              and ra['state'] == 'to_review', str(jg2.get('error')))
         http(8799, '/api/tasks/{}/staging/{}/review'.format(task_a, tfa),
              {'indexes': [0], 'state': 'confirmed'})
         stl, jl = http(8799, '/api/tasks/{}/load'.format(task_a), tgt)
@@ -758,7 +782,7 @@ def _main(syn_tasks, syn_fids, up, p2):
         check('被任务引用的数据源/映射禁删禁改 409',
               stdd == 409 and stmd == 409 and stmp == 409)
 
-        # ---- Leg B：合成 task（number transform＋超长值）→ partial → 重试 ----
+        # ---- Leg B：合成 task（number transform＋超长值）→ 隔离（待入库）→ 重试 ----
         def syn_load_task(vid, lt, recs, tag, bind=True):
             tid = catalog.create_task(vid, {})
             syn_tasks.append(tid)
@@ -778,7 +802,8 @@ def _main(syn_tasks, syn_fids, up, p2):
                  'files': [{'task_file_id': tf, 'file_id': fid,
                             'name': 'accept-{}.pdf'.format(tag),
                             'records': recs}]})
-            catalog.set_task_state(tid, 'previewed')
+            catalog.set_task_state(tid, 'to_load')
+            catalog.set_task_file_state(tf, 'to_load')
             return tid, tf
 
         def rec(i, vals):
@@ -804,11 +829,13 @@ def _main(syn_tasks, syn_fids, up, p2):
                 row_a = cur.fetchone()
         finally:
             conn.close()
-        check('transform 消费＋数据级隔离→partial',
-              rb['state'] == 'partial' and len(jlog['items']) == 1
+        check('transform 消费＋数据级隔离→待入库（可重试）',
+              rb['state'] == 'to_load' and '隔离' in (rb.get('error') or '')
+              and len(jlog['items']) == 1
               and qidx == {1, 2} and row_a == ('合成甲', '1234.5'),
-              'state={} receipts={} q={} row={}'.format(
-                  rb['state'], len(jlog['items']), sorted(qidx), row_a))
+              'state={} err={} receipts={} q={} row={}'.format(
+                  rb['state'], rb.get('error'), len(jlog['items']),
+                  sorted(qidx), row_a))
         conn = db.connect()
         try:
             with conn.cursor() as cur:
@@ -828,19 +855,19 @@ def _main(syn_tasks, syn_fids, up, p2):
                 got_names = [r[0] for r in cur.fetchall()]
         finally:
             conn.close()
-        check('partial 重试：回执跳过＋隔离重试（幂等不重写）',
-              rb['state'] == 'partial' and len(jlog['items']) == 2
+        check('隔离重试：回执跳过＋隔离重试（幂等不重写）',
+              rb['state'] == 'to_load' and len(jlog['items']) == 2
               and got_names.count('合成甲') == 1
               and '合成乙' in got_names and '合成丙' not in got_names,
               'receipts={} names={}'.format(len(jlog['items']), got_names))
-        stpb, _ = http(8799, '/api/tasks/{}/staging/{}/{}'.format(
-            tid_b, tfb, 2), {'values': {'金额': '9'}}, method='PATCH')
-        check('partial 记录只读 409', stpb == 409)
         stbt, jbt = http(8799, '/api/tasks/{}/load'.format(tid_b),
                          {'load_datasource_id': ds_id, 'load_table_id': lt1})
         check('已绑定任务带新目标 409（重试沿用原目标）',
               stbt == 409 and '已绑定' in jbt.get('error', ''),
               str(jbt.get('error')))
+        stpb, _ = http(8799, '/api/tasks/{}/staging/{}/{}'.format(
+            tid_b, tfb, 2), {'values': {'金额': '9'}}, method='PATCH')
+        check('隔离后记录仍可修改（待入库非只读）', stpb == 200)
 
         # ---- Leg C：同映射跨 task upsert 命中已有行 → update ----
         name0 = str(names[0]).strip()

@@ -49,7 +49,7 @@ function collectKeys(){
   return out;
 }
 function readOnly(){
-  return !!(taskDoc&&['loading','partial','loaded'].indexOf(taskDoc.state)>=0);
+  return !!(taskDoc&&['loading','loaded'].indexOf(taskDoc.state)>=0);
 }
 function recState(r){ return (r.review||{}).state||'pending'; }
 /* 字段映射悬停说明：源列（名称或「第 N 列」）→ 目标字段 */
@@ -418,7 +418,12 @@ function patchCell(i,key,val){
   }).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j};});})
   .then(function(o){
     if(!o.ok||!o.j.ok) toast('保存失败：'+((o.j&&o.j.error)||''));
-    else{ records[i]=o.j.record; toast('已保存，记录转为「已修改」，请重新确认'); }
+    else{
+      records[i]=o.j.record;
+      toast('已保存，记录转为「已修改」，请重新确认');
+      if(o.j.task_state&&taskDoc) taskDoc.state=o.j.task_state;
+      updateLoadButtons();
+    }
     renderTable(); applySelection();
   }).catch(function(e){ toast('保存失败：'+e); renderTable(); applySelection(); });
 }
@@ -435,6 +440,8 @@ function reviewRows(idxs,state){
     idxs.forEach(function(i){
       records[i].review={state:state,at:(records[i].review||{}).at};
     });
+    if(o.j.task_state&&taskDoc) taskDoc.state=o.j.task_state;
+    updateLoadButtons();
     renderTable(); applySelection();
     toast((state==='confirmed'?'已确认 ':'已拒绝 ')+o.j.updated+' 条');
   }).catch(function(e){ toast('操作失败：'+e); });
@@ -666,9 +673,9 @@ function loadStaging(){
   if(st==='loading'){
     mb.className='banner info';
     mb.textContent='入库进行中 · 记录只读（完成后自动刷新）';
-  }else if(st==='partial'){
+  }else if(st==='to_load'&&taskDoc&&taskDoc.error){
     mb.className='banner warn';
-    mb.textContent='任务部分入库 · 记录只读 · 可点击「重新入库」重试未写入记录';
+    mb.textContent='上次入库未完成：'+taskDoc.error+' · 可点击「重新入库」重试';
   }else if(readOnly()){
     mb.className='banner warn';
     mb.textContent='任务已入库 · 记录只读，修改、确认、拒绝操作已锁定';
@@ -709,20 +716,20 @@ function loadStaging(){
   });
 }
 
-/* ---- P2c 手动入库闸门：previewed/partial 可见；未绑定打开库向导（入库时
+/* ---- P2c 手动入库闸门：to_load（派生态，全部记录已确认）可见；未绑定打开库向导（入库时
    选业务库＋规则），已绑定直接提交。门禁计数由后端 409 兜底，点击后轮询
    任务态直至入库完成自动刷新。 ---- */
 var loadPoll=null;
 function updateLoadButtons(){
   var lb=document.getElementById('loadbtn'), rb=document.getElementById('rcbtn');
   var t=taskDoc||{}, hasLoad=!!t.load;
-  lb.hidden=!(t.state==='previewed'||t.state==='partial');
-  lb.textContent=t.state==='partial'?'重新入库':'入库';
-  rb.hidden=!(hasLoad&&(t.state==='loaded'||t.state==='partial'));
+  lb.hidden=!(t.state==='to_load');
+  lb.textContent=t.error?'重新入库':'入库';
+  rb.hidden=!(hasLoad&&(t.state==='loaded'||t.state==='to_load'));
 }
 document.getElementById('loadbtn').onclick=function(){
   var t=taskDoc||{};
-  if(!t.load&&t.state==='previewed'){
+  if(!t.load){
     openLoadWizard({taskId:task, ruleId:(t.rule||{}).rule_id,
       getSample:function(){ return Promise.resolve(records.slice(0,3)); },
       onDone:function(){ loadStaging(); }});

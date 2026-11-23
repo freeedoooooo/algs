@@ -33,6 +33,18 @@
   </div>
   <div class="banner err" id="err" hidden></div>
   <div class="banner info" id="ok" hidden></div>
+  <div class="panel" id="runpanel" style="margin-bottom:12px" hidden>
+    <div class="msg" style="margin:2px 0 8px"><b>待抽取任务</b>
+      解析已完成，点「执行抽取」按任务绑定的规则生成暂存记录（无 OCR，秒级）
+    </div>
+    <table class="list">
+      <thead><tr>
+        <th class="seq">序号</th><th>任务ID</th><th>资料</th>
+        <th>抽取规则</th><th>发起时间</th><th>操作</th>
+      </tr></thead>
+      <tbody id="runrows"></tbody>
+    </table>
+  </div>
   <div class="panel">
     <table class="list">
       <thead><tr>
@@ -67,7 +79,7 @@
       </div>
       <div class="fsec">
         <label class="flab" for="refsel">参考文件
-          <span class="hint" tabindex="0" data-tip="选择一个已预览任务的文件，系统列出它的候选源表与源列，方便下方选表选列。不选择也可以，改为手动填写源表。">?</span>
+          <span class="hint" tabindex="0" data-tip="选择一个已抽取记录任务的文件，系统列出它的候选源表与源列，方便下方选表选列。不选择也可以，改为手动填写源表。">?</span>
         </label>
         <select class="tin" id="refsel">
           <option value="">不使用参考（手动填写源表）</option>

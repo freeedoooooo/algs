@@ -37,6 +37,34 @@ def set_task_state(task_id, state, error=None):
         conn.close()
 
 
+# 文件态进度序（任务态 = 最落后文件的态；failed 单独短路）。
+_STATE_RANK = {'pending': 0, 'parsing': 1, 'to_extract': 2,
+               'to_review': 3, 'to_load': 4, 'loading': 5, 'loaded': 6}
+
+
+def rollup_task_state(task_id):
+    """文件态上卷任务态：任一 failed 即 failed，否则取最落后文件态。
+    只改 state 不动 error（入库隔离说明由写入方管理）。返回新任务态。"""
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('SELECT state FROM c1_task_file WHERE task_id=%s',
+                        (task_id,))
+            states = [r[0] for r in cur.fetchall()]
+            if not states:
+                return None
+            if 'failed' in states:
+                target = 'failed'
+            else:
+                target = min(states, key=lambda x: _STATE_RANK.get(x, 0))
+            cur.execute('UPDATE c1_task SET state=%s WHERE id=%s',
+                        (target, task_id))
+            conn.commit()
+            return target
+    finally:
+        conn.close()
+
+
 def add_task_file(task_id, file_id):
     conn = db.connect()
     try:

@@ -29,6 +29,7 @@ import os
 import sys
 import tempfile
 from contextlib import asynccontextmanager
+from starlette.concurrency import run_in_threadpool
 from fnmatch import fnmatch
 from urllib.parse import unquote
 
@@ -598,6 +599,23 @@ async def api_task_load(task_id: int, request: Request):
     return service.launch_load(task_id, target)
 
 
+@app.post('/api/tasks/{task_id}/extract')
+async def api_task_run_extract(task_id: int, request: Request):
+    """执行抽取（与解析解耦）：{task_file_ids?, force?}；空体=全部待抽取文件。
+    parse.json 纯投影、同步毫秒级；重抽覆盖校验结论须 force=true。"""
+    raw = await request.body()
+    body = await _json_body(request) if raw else {}
+    ids = body.get('task_file_ids')
+    if ids is not None and (not isinstance(ids, list)
+                            or not all(isinstance(i, int) for i in ids)):
+        raise store_errors.BadRequest('task_file_ids 须为整数数组')
+    # collect+parse.json 解析是 CPU 密集（上传后 warmup 还在抢 GIL）：
+    # 放线程池执行，事件循环保持可响应
+    return await run_in_threadpool(service.run_extract, task_id,
+                                   task_file_ids=ids,
+                                   force=bool(body.get('force')))
+
+
 @app.post('/api/tasks/{task_id}/load-preview')
 async def api_task_load_preview(task_id: int, request: Request):
     """入库向导 dry-run（只读）：{load_table_id} 或 {draft:{datasource_id,
@@ -696,16 +714,15 @@ def api_staging_ledger():
 def _review_target(task_id, task_file_id):
     """校验台写操作公共守卫：返回 file_index。
 
-    task 不存在 / 文件不属于 task → NotFound；入库中/部分入库/已入库 → Conflict。
+    task 不存在 / 文件不属于 task → NotFound；入库中/已入库 → Conflict。
     files 序与 content_db._task_files 的 ORDER BY tf.id 一致。
     """
     t = _load('store.catalog').get_task(task_id)
     if t is None:
         raise store_errors.NotFound('任务不存在')
-    if t['state'] in ('loading', 'partial', 'loaded'):
+    if t['state'] in ('loading', 'loaded'):
         raise store_errors.Conflict(
             {'loading': '入库进行中，记录只读',
-             'partial': '任务部分入库，记录只读（可重新入库）',
              'loaded': '任务已入库，记录只读'}[t['state']])
     fi = next((i for i, f in enumerate(t['files'])
                if f['task_file_id'] == task_file_id), None)
@@ -725,7 +742,8 @@ async def api_staging_patch(task_id: int, task_file_id: int, index: int,
         return JSONResponse({'ok': False, 'error': 'values 须为非空对象'},
                             status_code=400)
     rec = _load('store.content').patch_record(task_id, fi, index, values)
-    return {'ok': True, 'record': rec}
+    return {'ok': True, 'record': rec,
+            'task_state': service.derive_review_state(task_id)}
 
 
 @app.post('/api/tasks/{task_id}/staging/{task_file_id}/review')
@@ -746,7 +764,8 @@ async def api_staging_review(task_id: int, task_file_id: int,
             {'ok': False, 'error': 'state 仅支持 confirmed/rejected'},
             status_code=400)
     n = _load('store.content').set_review(task_id, fi, indexes, state)
-    return {'ok': True, 'updated': n}
+    return {'ok': True, 'updated': n,
+            'task_state': service.derive_review_state(task_id)}
 
 
 @app.post('/api/tasks')

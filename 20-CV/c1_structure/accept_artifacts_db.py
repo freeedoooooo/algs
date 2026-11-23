@@ -308,9 +308,9 @@ def _main(up):
         time.sleep(1)  # finally 清理 scratch 在 running=False 之后
         rtask = catalog.get_task(task_id)
         tf_id = rtask['files'][0]['task_file_id']
-        check('真链路 previewed', st.get('error') is None
-              and rtask['state'] == 'previewed'
-              and rtask['files'][0]['state'] == 'previewed',
+        check('真链路仅解析=待抽取', st.get('error') is None
+              and rtask['state'] == 'to_extract'
+              and rtask['files'][0]['state'] == 'to_extract',
               'err={}'.format(st.get('error')))
         check('tmp/input+tmp/work 无 scratch 残留', scratch_clean())
         names = {m['name'] for m in artifact_db.list(tf_id)}
@@ -346,13 +346,19 @@ def _main(up):
         check('tasks 列表含新 task', st == 200
               and any(r.get('task_id') == task_id for r in j['items']))
         st, j = http_json(8799, '/api/tasks/{}'.format(task_id))
-        check('task 详情 previewed', st == 200
-              and j['task']['files'][0]['state'] == 'previewed')
+        check('task 详情待抽取', st == 200
+              and j['task']['files'][0]['state'] == 'to_extract')
         req = urllib.request.Request('http://127.0.0.1:8799/parse-report')
         with urllib.request.urlopen(req, timeout=30) as r:
             check('报告重定向落 /files/', r.status == 200
                   and '/files/' in r.url and r.url.endswith(
                       q(config.PARSE_REPORT_NAME)))
+        ste, je = http_json(8799, '/api/tasks/{}/extract'.format(task_id),
+                            {})
+        rtask = catalog.get_task(task_id)
+        check('执行抽取→待校验', ste == 200 and je.get('ok')
+              and rtask['state'] == 'to_review',
+              'st={} state={}'.format(ste, rtask['state']))
         st, j = http_json(8799, '/api/tasks/{}/staging'.format(task_id))
         n_rec = rtask['files'][0]['records_n']
         check('暂存 API 记录数一致', st == 200 and n_rec > 0

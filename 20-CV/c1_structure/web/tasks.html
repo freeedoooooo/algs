@@ -28,11 +28,12 @@
       <input type="search" id="q" placeholder="搜索任务 id / 文件名…">
       <select id="fstate">
         <option value="">全部状态</option>
-        <option value="extracting">解析中</option>
-        <option value="previewed">已预览</option>
+        <option value="parsing">解析中</option>
+        <option value="to_extract">待抽取</option>
+        <option value="to_review">待校验</option>
+        <option value="to_load">待入库</option>
         <option value="loading">入库中</option>
         <option value="loaded">已入库</option>
-        <option value="partial">部分入库</option>
         <option value="failed">失败</option>
       </select>
     </div>

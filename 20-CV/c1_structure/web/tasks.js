@@ -59,6 +59,9 @@ function fileRow(f,taskId){
     links='<a class="linkbtn" target="_blank" href="/review?task='+taskId+
       '&file='+f.task_file_id+'">预览数据</a>'+
       '<a class="linkbtn" target="_blank" href="'+fileUrl(f.task_file_id,'对照报告.html')+'">对照报告</a>';
+    if(['to_review','to_load'].indexOf(f.state)>=0)
+      links+='<button type="button" class="linkbtn" data-reex="'+
+        f.task_file_id+'" data-task="'+taskId+'">重新抽取</button>';
   }
   return '<tr>'+
     '<td><span class="nm" title="'+escHtml(f.name)+'">'+escHtml(shortName(f.name))+'</span></td>'+
@@ -95,21 +98,21 @@ function renderDetail(j){
       escHtml(r.load.target_table||'—')+'</code> · '+escHtml(modeLabel(r.load.write_mode||''))+
       '</div>';
   }
-  if(r.state==='previewed'||r.state==='partial')
+  if(r.state==='to_load')
     html+='<div class="msg" id="gateinfo" style="margin-top:4px"></div>';
   document.getElementById('dbody').innerHTML=html;
   var n=(r.files||[]).reduce(function(s,f){return s+(f.records_n||0);},0);
   var foot='<span>共 '+(r.files||[]).length+' 个资料 · 暂存记录 '+n+' 条</span>'+
     '<span class="spacer" style="flex:1"></span>';
-  if(r.state==='previewed'||r.state==='partial')
+  if(r.state==='to_load')
     foot+='<button type="button" class="btn mini" id="loadbtn">'+
-      (r.state==='partial'?'重新入库':'入库')+'</button>';
-  if(hasLoad&&(r.state==='loaded'||r.state==='partial'))
+      (r.error?'重新入库':'入库')+'</button>';
+  if(hasLoad&&(r.state==='loaded'||r.state==='to_load'))
     foot+='<button type="button" class="btn mini ghost" id="rcbtn">回执 / 隔离</button>';
   document.getElementById('dfoot').innerHTML=foot;
   var lb=document.getElementById('loadbtn');
   if(lb) lb.onclick=function(){
-    if(!hasLoad&&r.state==='previewed'){
+    if(!hasLoad){
       openLoadWizard({taskId:r.task_id, ruleId:(r.rule||{}).rule_id,
         onDone:function(){ refreshDetail(r.task_id); }});
       return;
@@ -118,12 +121,39 @@ function renderDetail(j){
   };
   var rb=document.getElementById('rcbtn');
   if(rb) rb.onclick=function(){ openReceiptDrawer(r.task_id); };
-  if(r.state==='previewed'||r.state==='partial') loadGateInfo(r.task_id);
+  if(r.state==='to_load') loadGateInfo(r.task_id);
   clearTimeout(pollTimer);
   if(live&&live.running) pollTimer=setTimeout(function(){refreshDetail(r.task_id);},1500);
 }
 /* 门禁计数提示：仅全部 confirmed 可入库（后端 409 兜底，这里先给可见预期）。
    走 /gate 轻量计数端点——旧版为此全量拉 staging（~150KB×每次刷新轮询）。 */
+/* 重新抽取：按任务当前规则覆盖暂存记录，校验结论清零（force 显式确认） */
+document.getElementById('dbody').addEventListener('click',function(e){
+  var b=e.target.closest?e.target.closest('[data-reex]'):null;
+  if(!b) return;
+  if(!window.confirm('重新抽取将按任务当前规则覆盖该文件的暂存记录，'+
+    '已做的确认/修改全部清零。继续？')) return;
+  b.disabled=true;
+  fetch('/api/tasks/'+b.getAttribute('data-task')+'/extract',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({task_file_ids:[+b.getAttribute('data-reex')],
+                         force:true})})
+  .then(function(r){
+    return r.json().catch(function(){return {};}).then(function(j){
+      if(!r.ok) throw new Error(j.error||('HTTP '+r.status));
+      var n=(j.files||[]).reduce(function(s,f){return s+(f.records_n||0);},0);
+      return '已重新抽取 '+n+' 条记录';
+    });
+  })
+  .then(function(msg){
+    if(window.toast) toast(msg);
+    refreshDetail(+b.getAttribute('data-task'));
+  })
+  .catch(function(err){
+    b.disabled=false;
+    if(window.toast) toast('重新抽取失败：'+err.message);
+  });
+});
 function loadGateInfo(taskId){
   fetch('/api/tasks/'+taskId+'/gate').then(function(r){
     if(!r.ok) throw new Error();

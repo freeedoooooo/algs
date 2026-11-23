@@ -376,8 +376,9 @@ function showTaskReport(t){
 function loadHistory(selectId,skipRender){
   fetch('/api/tasks').then(function(r){return r.ok?r.json():null;}).then(function(j){
     histItems=((j&&j.items)||[]).filter(function(t){
-      return (t.state==='previewed'||t.state==='loaded')&&
-        (t.files||[]).some(function(f){return f.task_file_id;});
+      return (t.files||[]).some(function(f){return f.task_file_id&&
+        ['to_extract','to_review','to_load','loading','loaded']
+          .indexOf(f.state)>=0;});
     });
     histsel.innerHTML=histItems.map(function(t){
       return '<option value="'+t.task_id+'">'+escHtml(histLabel(t))+'</option>';

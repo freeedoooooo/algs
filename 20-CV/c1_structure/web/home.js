@@ -109,22 +109,19 @@ function pollStatus(){
 /* ---- 状态卡数字口径 ---- */
 function nums(){
   var busy=items.filter(function(t){
-    return t.state==='extracting'||t.state==='pending';
+    return t.state==='parsing'||t.state==='pending';
   });
+  var toExtract=items.filter(function(t){return t.state==='to_extract';});
   var reviewFiles=0, reviewTasks={}, loadTasks=[];
   led.forEach(function(t){
-    if(t.task_state!=='previewed') return;
-    var pend=0;
+    if(t.task_state==='to_load'){ loadTasks.push(t); return; }
+    if(t.task_state!=='to_review') return;
     (t.files||[]).forEach(function(f){
       if(f.pending_n+f.edited_n>0){ reviewFiles++; reviewTasks[t.task_id]=1; }
-      pend+=f.pending_n+f.edited_n;
     });
-    if(pend===0&&t.records_n>0) loadTasks.push(t);
   });
-  var failed=items.filter(function(t){
-    return t.state==='failed'||t.state==='partial';
-  });
-  return {busy:busy, reviewFiles:reviewFiles,
+  var failed=items.filter(function(t){return t.state==='failed';});
+  return {busy:busy, toExtract:toExtract, reviewFiles:reviewFiles,
     reviewTasks:Object.keys(reviewTasks).length,
     loadTasks:loadTasks, failed:failed};
 }
@@ -138,9 +135,11 @@ function renderCards(){
   setCard(1, v.busy.length,
     v.busy.length?('任务 '+v.busy.map(function(t){return '#'+t.task_id;}).join('、')):'暂无进行中的解析任务',
     !v.busy.length);
-  setCard(2, tplCount,
-    tplCount? '已配置 '+tplCount+' 条抽取规则':'尚未配置规则，默认走原始透传',
-    !tplCount);
+  setCard(2, v.toExtract.length,
+    v.toExtract.length? '解析完成，等待执行抽取（规则 '+tplCount+' 条）'
+      : (tplCount? '暂无待抽取 · 已配置 '+tplCount+' 条抽取规则'
+                 : '暂无待抽取 · 未配置规则，默认原始透传'),
+    !v.toExtract.length);
   setCard(3, v.reviewTasks,
     v.reviewFiles? '共 '+v.reviewFiles+' 个资料待逐条核对':'暂无待校验记录', !v.reviewFiles);
   setCard(4, v.loadTasks.length,
@@ -168,8 +167,13 @@ function todoRow(seq,taskId,name,what,act,href,warn){
 }
 function renderTodo(v){
   var rows=[];
+  v.toExtract.forEach(function(t){
+    rows.push({id:t.task_id,name:fileNames(t),
+      what:'② 解析完成，待抽取',
+      act:'<a class="linkbtn" href="/extract">前往抽取</a>',t:t.created_at});
+  });
   led.forEach(function(t){
-    if(t.task_state!=='previewed') return;
+    if(t.task_state!=='to_review') return;
     var pend=0;
     (t.files||[]).forEach(function(f){ pend+=f.pending_n+f.edited_n; });
     if(pend>0) rows.push({id:t.task_id,name:fileNames(t),
@@ -188,7 +192,7 @@ function renderTodo(v){
   });
   v.failed.forEach(function(t){
     rows.push({id:t.task_id,name:fileNames(t),
-      what:t.state==='partial'?'④ 部分入库，存在隔离记录':'① 解析失败',
+      what:'① 解析失败',
       act:'<a class="linkbtn" href="/tasks">查看详情</a>',t:t.created_at});
   });
   rows.sort(function(a,b){ return (a.t<b.t?1:(a.t>b.t?-1:0)); });

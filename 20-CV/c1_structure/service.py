@@ -178,15 +178,14 @@ def rmtree_retry(path, tries=6, delay=0.3):
 
 
 def task_batch(paths, params=None, log=None, task_ctx=None):
-    """后台线程：逐个解析 → raw/ + parse.json → 对照报告 → collect 记录入库
-    → 产物 ingest 入 BLOB。DB 必选：写失败整任务 failed；scratch 跑完清尽。"""
+    """后台线程（仅解析）：逐个解析 → raw/ + parse.json → 对照报告
+    → 产物 ingest 入 BLOB → 文件置 to_extract，抽取由 run_extract 另行触发。
+    DB 必选：写失败整任务 failed；scratch 跑完清尽。"""
     task_ctx = task_ctx or {'task_id': None,
                             'rule': resolve_rule(),
                             'files': [{'name': os.path.basename(p), 'path': p}
                                       for p in paths],
                             'created_at': _now()}
-    content = _load('store.content')
-    collect = _load('collect')
     catalog = _load('store.catalog')
 
     def db(fn_name, *a):
@@ -228,7 +227,7 @@ def task_batch(paths, params=None, log=None, task_ctx=None):
                 log.emit(level, stage, msg, **kw)
 
             if fc.get('task_file_id'):
-                db('set_task_file_state', fc['task_file_id'], 'extracting')
+                db('set_task_file_state', fc['task_file_id'], 'parsing')
             rec = pipeline.parse_one(path, case_abs, params, emit=emit)
             pages = rec.get('pages') or []
             tot_lines = sum((p.get('stats') or {}).get('lines', 0)
@@ -239,44 +238,29 @@ def task_batch(paths, params=None, log=None, task_ctx=None):
                 tot_lines, tot_tables, routes, len(pages),
                 ' · 跨页合并 {} 张'.format(len(rec.get('stitched_tables') or []))
                 if rec.get('stitched_tables') else ''), case=name)
-            # 报告只依赖 extract 层，先于 records 写库生成：
-            # 断库时引擎产物（extract+报告）仍完整，任务显式 failed
             report_mod.build([rec],
                              os.path.join(case_abs, config.PARSE_REPORT_NAME),
                              params=params)
-            # L2 记录层：按抽取规则分发（空映射=passthrough）+ 逐格溯源 → DB 三表
-            tpl = task_ctx['rule']
-            recs = collect.build(rec, tpl)
-            rdoc = collect.build_records_doc(
-                rec, recs, task_id=task_ctx.get('task_id'),
-                task_file_id=fc.get('task_file_id'),
-                file_id=fc.get('file_id'),
-                rule={'name': tpl['name'], 'version': tpl['version']})
-            content.save_records(rdoc)
-            fc['records_n'] = len(recs)
-            fc['state'] = 'previewed'
-            nfields = len((tpl.get('mapping_json') or {}).get('fields') or [])
-            log.ok('collect', '暂存记录 {} 条（{} · 逐格溯源）'.format(
-                len(recs), '字段 {} 个'.format(nfields) if nfields
-                else 'passthrough'), case=name)
+            # 解析止步：产物先入 BLOB 再置 to_extract（状态不先于内容）
             if fc.get('task_file_id'):
-                db('set_task_file_state', fc['task_file_id'], 'previewed')
                 _ingest_case(fc['task_file_id'], case_abs)
+                db('set_task_file_state', fc['task_file_id'], 'to_extract')
+            fc['state'] = 'to_extract'
             rmtree_retry(case_abs)
             fc.pop('scratch', None)
             progress(int(i / total * 100))
-        db('set_task_state', task_ctx.get('task_id'), 'previewed')
+        db('set_task_state', task_ctx.get('task_id'), 'to_extract')
         # 完成态最后发布：status 变 running=False 时 DB 必已写完
         with LOCK:
             STATE.update(running=False, ready=True,
                          cases=[{'file': f['name'],
                                  'task_file_id': f.get('task_file_id'),
-                                 'records_n': f.get('records_n')}
+                                 'state': f.get('state')}
                                 for f in task_ctx['files']],
                          elapsed=round(time.time()
                                        - (STATE['started'] or time.time()), 1),
                          progress=100, stage='done')
-        log.ok('done', '完成，共 {} 个文件，耗时 {}s'.format(
+        log.ok('done', '解析完成 {} 个文件（待抽取），耗时 {}s'.format(
             total, STATE['elapsed']))
     except Exception as e:
         if log:
@@ -299,6 +283,80 @@ def task_batch(paths, params=None, log=None, task_ctx=None):
             rmtree_retry(task_ctx['in_scratch'])
 
 
+# ---- 抽取引擎（与解析解耦）：parse.json 纯投影 → staging 三表 ----
+
+def run_extract(task_id, task_file_ids=None, force=False):
+    """执行抽取：逐文件回读 parse.json → collect.build → save_records
+    （字段映射+逐格溯源），无 OCR、同步毫秒级。规则取任务当前绑定版本。
+
+    仅处理 to_extract（及迁移期旧态 previewed）文件；已有暂存记录的文件
+    （to_review/to_load）须 force=true——重抽按 task_file 先删后插，
+    校验结论清零。任务 loading/loaded 拒绝；缺 parse.json 拒绝。"""
+    catalog = _load('store.catalog')
+    content = _load('store.content')
+    collect = _load('collect')
+    errors = _load('store.errors')
+    if STATE['running']:
+        raise errors.Conflict('解析进行中，请等待其完成后再抽取')
+    task = catalog.get_task(task_id)
+    if task is None:
+        raise errors.NotFound('任务不存在')
+    if task['state'] in ('loading', 'loaded'):
+        raise errors.Conflict('任务入库中/已入库，不能再抽取')
+    tpl = resolve_rule(task['rule']['version_id'])
+    want = set(task_file_ids or [])
+    done = []
+    for f in task['files']:
+        if want and f['task_file_id'] not in want:
+            continue
+        if f['state'] not in ('to_extract', 'previewed',
+                              'to_review', 'to_load'):
+            continue
+        if f['state'] in ('previewed', 'to_review', 'to_load') and not force:
+            raise errors.Conflict(
+                '文件「{}」已有 {} 条记录，重新抽取将覆盖校验结论'
+                '（须显式确认）'.format(f['name'], f['records_n']))
+        doc = content.get_extract(f['task_file_id'])
+        if doc is None:
+            raise errors.Conflict(
+                '文件「{}」缺少解析产物，请重新解析'.format(f['name']))
+        recs = collect.build(doc, tpl)
+        content.save_records(collect.build_records_doc(
+            doc, recs, task_id=task_id,
+            task_file_id=f['task_file_id'], file_id=f['file_id'],
+            rule={'name': tpl['name'], 'version': tpl['version']}))
+        catalog.set_task_file_state(f['task_file_id'], 'to_review')
+        done.append({'task_file_id': f['task_file_id'],
+                     'name': f['name'], 'records_n': len(recs)})
+    if not done:
+        raise errors.BadRequest('没有可抽取的文件')
+    catalog.rollup_task_state(task_id)
+    return {'ok': True, 'task_id': task_id, 'files': done}
+
+
+def derive_review_state(task_id):
+    """校验动作（确认/改值/拒绝）提交后重算派生态：文件在 to_review/to_load
+    之间迁移——全部记录已定论（无 pending/edited/rejected 且有记录）→ to_load，
+    否则回 to_review；最后上卷任务态。只动文件态，不碰记录。"""
+    catalog = _load('store.catalog')
+    content_db = _load('store.content_db')
+    task = catalog.get_task(task_id)
+    if task is None:
+        return None
+    for f in task['files']:
+        if f['state'] not in ('to_review', 'to_load', 'previewed',
+                              'reviewed'):
+            continue
+        c = content_db.gate_counts(task_id, f['task_file_id'])
+        target = ('to_load'
+                  if c['records_n'] and not (c['pending'] + c['edited']
+                                             + c['rejected'])
+                  else 'to_review')
+        if target != f['state']:
+            catalog.set_task_file_state(f['task_file_id'], target)
+    return catalog.rollup_task_state(task_id)
+
+
 # ---- P2 入库引擎：手动闸门 → 后台逐条写入＋幂等回执 ----
 
 def launch_load(task_id, target=None):
@@ -319,8 +377,9 @@ def launch_load(task_id, target=None):
         raise errors.Conflict('任务已入库')
     if state == 'loading':
         raise errors.Conflict('入库进行中')
-    if state not in ('previewed', 'partial'):
-        raise errors.Conflict('任务状态为 {}，无法入库（须先完成解析与校验）'.format(state))
+    if state != 'to_load':
+        raise errors.Conflict(
+            '任务状态为 {}，未到「待入库」（须全部记录校验确认）'.format(state))
     bound = task.get('load')
     if bound:
         if target:
@@ -469,7 +528,7 @@ def preview_load(task_id, table_id=None, draft=None):
 
 def run_load(task_id, task, ds, lt, tpl, log):
     """后台线程：逐记录 回执跳过→transform→写目标库→回执/隔离。
-    单条数据级错误→隔离继续；连接级失败→中止（已写回执保留）→partial。
+    单条数据级错误→隔离继续；连接级失败→中止（已写回执保留）→to_load＋错误说明。
     平台库写失败→整任务 failed（DB 必选）。完成态最后发布。"""
     catalog = _load('store.catalog')
     content = _load('store.content')
@@ -561,14 +620,16 @@ def run_load(task_id, task, ds, lt, tpl, log):
             except Exception:
                 pass
         if aborted:
-            state, err = 'partial', '目标库连接中断：{}'.format(aborted)
+            state, err = 'to_load', '目标库连接中断：{}'.format(aborted)
         elif quarantined:
-            state, err = 'partial', '{} 条隔离（详见隔离区）'.format(quarantined)
+            state, err = 'to_load', '{} 条隔离（详见隔离区）'.format(quarantined)
         else:
             state, err = 'loaded', None
         catalog.set_task_state(task_id, state, err)
-        for f in task['files']:
-            catalog.set_task_file_state(f['task_file_id'], state)
+        # 未完成态文件停留 to_load（校验结论不变，可直接重试入库）
+        if state == 'loaded':
+            for f in task['files']:
+                catalog.set_task_file_state(f['task_file_id'], 'loaded')
         log.ok('done', '入库完成：写入 {} · 回执跳过 {} · 隔离 {}'.format(
             written, skipped, quarantined))
         with LOCK:

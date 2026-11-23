@@ -305,24 +305,29 @@ def query_fields(field=None, q=None, task=None, state=None, limit=200):
         conn.close()
 
 
-def gate_counts(task_id):
+def gate_counts(task_id, task_file_id=None):
     """门禁四态计数（性能轮）：1 条 GROUP BY，不拉记录内容。
 
     供任务详情/入库目标抽屉显示「还差几条没校验」——旧版为此全量拉
     /staging（~150KB）。不存在的任务返回全 0（只读端点，无副作用）。
+    task_file_id 指定时收敛到单文件（派生 to_load 用）。
     """
+    sql = ('SELECT COUNT(sr.id),'
+           " SUM(sr.review_state='pending'),"
+           " SUM(sr.review_state='edited'),"
+           " SUM(sr.review_state='confirmed'),"
+           " SUM(sr.review_state='rejected')"
+           ' FROM c1_staging_record sr'
+           ' JOIN c1_task_file tf ON tf.id=sr.task_file_id'
+           ' WHERE tf.task_id=%s')
+    args = [task_id]
+    if task_file_id is not None:
+        sql += ' AND sr.task_file_id=%s'
+        args.append(task_file_id)
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute(
-                'SELECT COUNT(sr.id),'
-                " SUM(sr.review_state='pending'),"
-                " SUM(sr.review_state='edited'),"
-                " SUM(sr.review_state='confirmed'),"
-                " SUM(sr.review_state='rejected')"
-                ' FROM c1_staging_record sr'
-                ' JOIN c1_task_file tf ON tf.id=sr.task_file_id'
-                ' WHERE tf.task_id=%s', (task_id,))
+            cur.execute(sql, args)
             r = cur.fetchone()
     finally:
         conn.close()
