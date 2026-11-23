@@ -5,7 +5,12 @@
 ## 产品结构（现状）
 
 - 流水线四步：**解析 → 抽取 → 校验 → 入库**；页面＝工作台 `/` · 资料 `/sources` ·
-  解析 `/parse` · 抽取规则 `/extract` · 校验 `/review` · 入库规则 `/rules` · 任务 `/tasks`。
+  解析 `/parse` · 抽取规则 `/extract` · 校验 `/review`（自动化校验·待实现壳页） ·
+  入库规则 `/rules` · 任务 `/tasks`。
+- **任务数据预览 `/preview?task=<id>&file=<task_file_id>`**（2026-11-23 七点反馈落地）：
+  原「校验台」review 页更名 preview，归属任务功能——nav 高亮「任务」，任务操作
+  （执行/重新抽取、逐条校验、重放、入库）都从任务台账或此页进入；`/review` 只留
+  待实现说明壳页（`web/review_home.html`）。
 - 任务状态机（2026-11-23 落地，设计稿 `docs/design-task-states.md`）：
   `pending→parsing→to_extract→to_review→to_load→loading→loaded`（＋failed）；
   任务态＝文件态 min-rank 上卷（`catalog.rollup_task_state`，不动 error）；
@@ -14,9 +19,16 @@
   **方案A·抽取时绑规则**：解析阶段 `c1_task.rule_version_id=NULL`（004 迁移改可空），
   「执行/重新抽取」时选规则版本并回写绑定（默认＝已绑，未绑＝原始透传；换规则重抽即改绑）；
   上传带 `rule_version_id` 为退役契约键（400）；
+  **原地重放** `POST /api/tasks/{id}/reparse`（`service.reparse`）：字节从 `c1_doc_file`
+  回捞重走解析，任务 ID 不变、状态退回 `pending`，旧 records/artifact/quarantine 清空，
+  `c1_load_log` 回执保留；守卫＝全局有解析在跑或任务 `loading/loaded` 时 409；
   八态八色徽标（待抽取橙 · 待入库黄 · 入库中青，`web/shell.js STATE_LABEL`）。
+- 任务台账十列（2026-11-23）：序号|任务ID|资料|解析参数|抽取规则|校验规则|入库规则|
+  状态|时间|操作（任务与各规则暂按 1 对 1 展示，缺＝「—」＋悬浮解释；已删「入库目标」列，
+  入库规则＝`load.load_table_id` 映射的明细行悬浮）；「门禁」文案改称**「入库前预检」**
+  （待校验/已修改未确认/已拒绝/已确认计数，全部确认才可入库）。
 - 对照报告 `/parse-report`（重定向到最新 task_file 报告）；产物信封 `parse.json`；
-  模块 `parse_report/`（Jinja2）；前端资产 `web/parse|extract|review|rules.*`。
+  模块 `parse_report/`（Jinja2）；前端资产 `web/parse|extract|preview|rules.*` ＋ `web/review_home.html`。
 - 平台库表 `c1_*` 前缀（`c1_extract_rule` / `c1_extract_rule_version` ＝抽取规则，`c1_task.rule_version_id`
   等）；无外键，级联归应用层；API JSON 键 `rule` / `rule_id` / `rule_version_id`。
 - 安装脚本：新库跑 `store/migrations/001_baseline.sql`（全 IF NOT EXISTS＋INSERT IGNORE，

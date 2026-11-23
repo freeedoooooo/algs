@@ -799,11 +799,7 @@ def _main(syn_tasks, syn_fids, up, p2):
                          {}, timeout=30, method='POST')
         check('loaded 任务重放解析拒绝 409', strr == 409,
               str(jtr.get('error')))
-        stp2, jp2 = http(8799, '/api/upload', {
-            'files': [{'name': 'replay.pdf',
-                      'data': base64.b64encode(src['data']).decode()}]},
-            timeout=120)
-        task_r = jp2['task_id']
+        task_r, _st_r = upload(8799, src['data'], 'replay.pdf')
         up.append(task_r)
         tfr = catalog.get_task(task_r)['files'][0]['task_file_id']
         http(8799, '/api/tasks/{}/extract'.format(task_r), {},
