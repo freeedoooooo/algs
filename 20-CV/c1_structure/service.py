@@ -618,6 +618,7 @@ def run_load(task_id, task, ds, lt, tpl, log):
         for f in task['files']:
             catalog.set_task_file_state(f['task_file_id'], 'loading')
         doc = content.get_records(task_id)
+        rid_map = content.record_id_map(task_id)
         receipts = {(r['task_file_id'], r['record_index'])
                     for r in catalog.list_load_logs(task_id)}
         total = sum(len(f['records']) for f in doc['files'])
@@ -647,7 +648,11 @@ def run_load(task_id, task, ds, lt, tpl, log):
                     try:
                         with conn.cursor() as cur:
                             action, pk = loader.write_record(
-                                cur, table, cm, vals, wm, bk)
+                                cur, table, cm, vals, wm, bk,
+                                extra_values={
+                                    'task_id': task_id,
+                                    'task_file_id': f['task_file_id'],
+                                    'record_id': rid_map.get(key)})
                         conn.commit()
                     except loader.LoadRecordError as e:
                         conn.rollback()

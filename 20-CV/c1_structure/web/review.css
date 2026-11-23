@@ -1,0 +1,37 @@
+/* web/review.css — 校验页（自动化校验规划中）：流程定位 + 操作引导空状态 */
+.flowbar{display:flex;align-items:center;gap:6px;padding:10px 14px;margin-bottom:12px;
+  flex-wrap:wrap}
+.flowbar .step{font-size:12px;padding:3px 12px;border-radius:999px;
+  background:#eef2f8;color:#8a94a6;white-space:nowrap}
+.flowbar .step.done{background:#e5f6ec;color:#177245}
+.flowbar .step.now{background:#2563eb;color:#fff;font-weight:500}
+.flowbar .arrow{color:#b9c6dd;font-size:13px;line-height:1}
+
+.hero{display:flex;gap:18px;padding:22px 24px;align-items:flex-start}
+.hero-icon{flex:none;width:52px;height:52px;border-radius:12px;background:#e7f0ff;
+  display:flex;align-items:center;justify-content:center}
+.hero-icon svg{width:28px;height:28px;stroke:#2563eb;fill:none;
+  stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.hero-body{flex:1;min-width:0}
+.hero h2{margin:0 0 6px;font-size:16px;font-weight:600;color:#25324a}
+.hero p{margin:0 0 16px;font-size:13px;color:#6b7688;line-height:1.7}
+
+.steps{list-style:none;margin:0 0 18px;padding:0;display:flex;
+  flex-direction:column;gap:9px}
+.steps li{display:flex;align-items:flex-start;gap:10px;font-size:13px;
+  color:#3b4a63;line-height:1.55}
+.steps .n{flex:none;width:20px;height:20px;border-radius:50%;background:#e7f0ff;
+  color:#2563eb;font-size:11px;font-weight:600;display:flex;
+  align-items:center;justify-content:center;margin-top:1px}
+.hero-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.hero-actions .dirhint{font-size:12px;color:#8a94a6}
+
+.roadmap{margin-top:12px;padding:14px 18px}
+.roadmap h3{margin:0 0 10px;font-size:13px;font-weight:600;color:#25324a}
+.roadmap ul{margin:0;padding:0;list-style:none;display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:9px 22px}
+.roadmap li{font-size:12px;color:#6b7688;line-height:1.6;padding-left:16px;
+  position:relative}
+.roadmap li::before{content:"";position:absolute;left:0;top:8px;width:6px;height:6px;
+  border-radius:50%;background:#b9c6dd}
+.roadmap li b{color:#5a6a85;font-weight:500}

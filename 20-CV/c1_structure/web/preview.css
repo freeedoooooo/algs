@@ -34,10 +34,10 @@
 .lsub{flex:1;font-size:11px;color:#8a94a6;font-weight:400}
 .ltoggle{flex:none}
 /* 收起＝右侧细竖条（不占表格宽度）：点竖条或点数据自动展开 */
-.lineage.collapsed{width:34px;max-width:34px;max-height:none;align-self:stretch;
+.lineage.collapsed{width:34px;max-width:34px;max-height:none;align-self:flex-start;
   cursor:pointer}
 .lineage.collapsed:hover{border-color:#9dc0f5}
-.lineage.collapsed .lhead{flex:1 1 auto;flex-direction:column;align-items:center;
+.lineage.collapsed .lhead{flex:0 0 auto;flex-direction:column;align-items:center;
   gap:12px;padding:12px 0;border-bottom:0}
 .lineage.collapsed .lsub,.lineage.collapsed .stage,
 .lineage.collapsed .lhint{display:none}
@@ -91,3 +91,32 @@ td.cell.edited{background:rgba(216,151,10,.35)}
 .rowbtn.ok:hover{border-color:#0f9d6e;color:#0f9d6e;background:#e5f6ec}
 .rowbtn.no:hover{border-color:#b42318;color:#b42318;background:#fdecea}
 #taskpick{margin-bottom:12px}
+
+/* embed=1：数据看板右侧 iframe 嵌入，只留血缘面板铺满容器 */
+body.embed-lineage{overflow:hidden}
+body.embed-lineage .topnav,
+body.embed-lineage .pagehead,
+body.embed-lineage .banner,
+body.embed-lineage .stgmain,
+body.embed-lineage .reviewbar,
+body.embed-lineage .filetabs,
+body.embed-lineage #taskpick,
+body.embed-lineage #lightbox,
+body.embed-lineage #receipt,
+body.embed-lineage #summary{display:none !important}
+body.embed-lineage .pagebody{padding:12px 0;max-width:none}
+body.embed-lineage .stgwrap{display:flex;justify-content:center;align-items:flex-start}
+/* 血缘面板保持预览页宽屏原生外观（560px 侧栏、内容高度、圆角边框、头部、舞台）。
+   关键：iframe 仅 600px 宽会触发上方 max-width:1000px 媒体查询把面板压成 100%，
+   故 embed 下用 !important 覆盖断点规则，还原宽屏展开态；折叠态还原为 34px 竖条。 */
+body.embed-lineage .lineage{width:560px !important;max-width:none !important;
+  position:static !important;max-height:none !important}
+body.embed-lineage .lineage .stage{max-height:none !important}
+body.embed-lineage .lineage.collapsed{width:34px !important;max-width:34px !important}
+body.embed-lineage .lineage.collapsed .lhead{flex-direction:column !important;
+  align-items:center !important;gap:12px !important;padding:12px 0 !important;
+  border-bottom:0 !important}
+body.embed-lineage .lineage.collapsed #ltitle{
+  writing-mode:vertical-rl !important;letter-spacing:3px !important}
+body.embed-lineage .lineage.collapsed .ltoggle{
+  writing-mode:horizontal-tb !important;letter-spacing:normal !important}

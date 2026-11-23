@@ -228,6 +228,12 @@ def rules_page():
     return HTMLResponse(asset('rules.html'))
 
 
+@app.get('/dashboard', response_class=HTMLResponse)
+def dashboard_page():
+    """数据看板：分页查看业务表数据，按 record_id 跳预览做血缘回溯。"""
+    return HTMLResponse(asset('dashboard.html'))
+
+
 @app.get('/healthz')
 def health():
     return {'ok': True, 'service': 'c1-structure',
@@ -537,6 +543,17 @@ def api_load_datasource_columns(ds_id: int, table: str = None):
     return {'items': _load('store.loader').list_columns(ds, table)}
 
 
+@app.get('/api/load/datasources/{ds_id}/rows')
+def api_load_datasource_rows(ds_id: int, table: str = None,
+                             page: int = 1, per_page: int = 100):
+    """数据看板：只读分页查询业务表（表名白名单＋列白名单＋参数化）。"""
+    ds = _ds_or_404(ds_id)
+    if not table:
+        raise store_errors.BadRequest('table 参数必填')
+    return {'ok': True, **_load('store.loader').query_rows(
+        ds, table, page=page, per_page=per_page)}
+
+
 @app.get('/api/load/tables')
 def api_load_tables(datasource_id: int = None):
     return {'items': _load('store.catalog').list_load_tables(datasource_id)}
@@ -730,6 +747,16 @@ def api_staging_query(field: str = None, q: str = None,
 def api_staging_ledger():
     """校验台账：按 task_file 聚合记录数与校验进度；DB down → 503。"""
     return {'ok': True, 'items': _load('store.content_db').ledger()}
+
+
+@app.get('/api/staging/locate/{record_id}')
+def api_staging_locate(record_id: int):
+    """按 record_id 反查 (task_id, task_file_id)，用于数据看板血缘跳转。"""
+    hit = _load('store.content_db').locate_record(record_id)
+    if hit is None:
+        return JSONResponse({'ok': False, 'error': '暂存记录不存在'},
+                            status_code=404)
+    return {'ok': True, **hit}
 
 
 def _review_target(task_id, task_file_id):

@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>校验 · 结构化平台</title>
 <link rel="stylesheet" href="/static/shell.css">
+<link rel="stylesheet" href="/static/review.css">
 </head>
 <body>
 <nav class="topnav">
@@ -23,15 +24,47 @@
 
   <div class="pagehead">
     <h1>校验</h1>
+    <span class="badge yellow">自动化校验规划中</span>
   </div>
 
-  <section class="panel">
-    <div class="thead"><b>自动化校验 · 待实现</b></div>
-    <p class="msg" style="padding:10px 0">本页未来承载校验规则的配置与自动化校验
-      （规则命中后自动确认或标记异常，人工只处理例外）。当前逐条记录的查看、
-      修改与确认在<b>任务的数据预览</b>页进行：从
-      <a class="linkbtn" href="/tasks">任务台账</a> 打开任务详情 →「预览数据」，
-      或直接访问 <code class="mono">/preview?task=任务ID</code>。</p>
+  <div class="panel flowbar">
+    <span class="step done">解析</span><span class="arrow">›</span>
+    <span class="step done">抽取</span><span class="arrow">›</span>
+    <span class="step now">校验</span><span class="arrow">›</span>
+    <span class="step">入库</span>
+  </div>
+
+  <section class="panel hero">
+    <div class="hero-icon">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M9 11l2 2 4-4"/>
+        <path d="M20 12a8 8 0 1 1-2.3-5.7"/>
+        <path d="M20 3v4h-4"/>
+      </svg>
+    </div>
+    <div class="hero-body">
+      <h2>逐条校验在「数据预览」页进行</h2>
+      <p>本页规划承载校验规则配置与自动化校验（规则命中自动确认、异常自动标记，人工只处理例外）。当前记录的查看、改值与确认，请在任务的数据预览页完成。</p>
+      <ol class="steps">
+        <li><span class="n">1</span><span>从<a href="/tasks">任务台账</a>找到已完成抽取的任务</span></li>
+        <li><span class="n">2</span><span>打开任务详情，点「预览数据」进入数据预览</span></li>
+        <li><span class="n">3</span><span>对照源图核对逐格血缘，确认或改值后即可入库</span></li>
+      </ol>
+      <div class="hero-actions">
+        <a class="btn" href="/tasks">打开任务台账</a>
+        <span class="dirhint">或直接访问 <code class="mono">/preview?task=任务ID</code></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel roadmap">
+    <h3>自动化校验 · 后续规划</h3>
+    <ul>
+      <li><b>规则配置</b>：按字段设置必填、取值域与格式约束</li>
+      <li><b>自动校验</b>：命中的记录自动确认，异常记录自动标记</li>
+      <li><b>例外处理</b>：人工只需关注规则未覆盖的少数记录</li>
+      <li><b>血缘核对</b>：异常值可直接定位到原始单据的对应单元格</li>
+    </ul>
   </section>
 
 </div>

@@ -36,6 +36,41 @@ def _task_files(cur, task_id):
     return _rows(cur)
 
 
+def record_id_map(task_id):
+    """按 (task_file_id, record_index) → staging_record.id 建映射。
+    仅供入库写溯源列使用；不进 records 信封（保持投影往返一致契约）。"""
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT r.id, r.task_file_id, r.record_index'
+                ' FROM c1_staging_record r'
+                ' JOIN c1_task_file tf ON tf.id=r.task_file_id'
+                ' WHERE tf.task_id=%s', (task_id,))
+            return {(r[1], r[2]): r[0] for r in cur.fetchall()}
+    finally:
+        conn.close()
+
+
+def locate_record(record_id):
+    """按暂存记录 id 反查 (task_id, task_file_id)，供业务表溯源跳转。不存在回 None。"""
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT r.id, r.record_index, tf.id, tf.task_id'
+                ' FROM c1_staging_record r'
+                ' JOIN c1_task_file tf ON tf.id=r.task_file_id'
+                ' WHERE r.id=%s', (record_id,))
+            row = cur.fetchone()
+        if not row:
+            return None
+        return {'record_id': row[0], 'record_index': row[1],
+                'task_file_id': row[2], 'task_id': row[3]}
+    finally:
+        conn.close()
+
+
 def get_records(task_id):
     conn = db.connect()
     try:

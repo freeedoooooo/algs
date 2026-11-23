@@ -570,7 +570,9 @@ def _main(syn_tasks, syn_fids, up, p2):
             cur.execute('DROP TABLE IF EXISTS ' + P2_TABLE)
             cur.execute('CREATE TABLE {} (id INT AUTO_INCREMENT PRIMARY KEY,'
                         ' c_name VARCHAR(255), c_amt VARCHAR(255),'
-                        ' c_note VARCHAR(255))'.format(P2_TABLE))
+                        ' c_note VARCHAR(255),'
+                        ' task_id BIGINT, task_file_id BIGINT,'
+                        ' record_id BIGINT)'.format(P2_TABLE))
         conn.commit()
     finally:
         conn.close()
@@ -952,7 +954,9 @@ def _main(syn_tasks, syn_fids, up, p2):
                 cur.execute('DROP TABLE IF EXISTS ' + ALT_TABLE)
                 cur.execute('CREATE TABLE {} (id INT AUTO_INCREMENT PRIMARY KEY,'
                             ' c_name VARCHAR(255), c_amt VARCHAR(255),'
-                            ' c_note VARCHAR(255))'.format(ALT_TABLE))
+                            ' c_note VARCHAR(255),'
+                            ' task_id BIGINT, task_file_id BIGINT,'
+                            ' record_id BIGINT)'.format(ALT_TABLE))
             conn.commit()
         finally:
             conn.close()

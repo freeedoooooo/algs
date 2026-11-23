@@ -77,7 +77,9 @@ function renderMaps(){
     return '<tr>'+
       '<td class="seq">'+seqNo(info,i)+'</td>'+
       '<td class="mono">'+m.id+'</td>'+
-      '<td><code class="mono">'+escHtml(m.target_table)+'</code></td>'+
+      '<td><a class="linkbtn" href="/dashboard?ds='+encodeURIComponent(m.datasource_id)+
+        '&table='+encodeURIComponent(m.target_table)+
+        '" title="查看该表业务数据">'+escHtml(m.target_table)+'</a></td>'+
       '<td>'+escHtml(m.tpl_name||'—')+'</td>'+
       '<td>'+escHtml(modeLabel(m.write_mode))+'</td>'+
       '<td class="num">'+m.field_count+'</td>'+

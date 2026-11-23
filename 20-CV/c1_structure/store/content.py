@@ -27,6 +27,16 @@ def save_records(doc):
     content_db.save_records(doc)
 
 
+def record_id_map(task_id):
+    """(task_file_id, record_index) → staging_record.id；入库写溯源列用。"""
+    return content_db.record_id_map(task_id)
+
+
+def locate_record(record_id):
+    """按 record_id 反查 (task_id, task_file_id)；数据看板血缘跳转用。"""
+    return content_db.locate_record(record_id)
+
+
 def get_task(task_id):
     return catalog.get_task(task_id)
 

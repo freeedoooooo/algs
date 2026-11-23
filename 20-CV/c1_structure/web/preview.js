@@ -7,6 +7,8 @@
    数据经 /api/tasks/<id>/staging|parse 读 DB；图片经 /files/<task_file_id>/…。 */
 var task=new URLSearchParams(location.search).get('task')||'';
 var curFile=new URLSearchParams(location.search).get('file')||'';
+var traceRecord=new URLSearchParams(location.search).get('index')||'';
+var embedMode=new URLSearchParams(location.search).get('embed')==='1';
 var taskDoc=null, records=[], keys=[], selIdx=-1, selKey=null, stateFilter='';
 var srcMap={};
 var pageMap={}, allAnchors=[], pagesPresent=[], curPage=null, curView=null, allOn=false;
@@ -364,6 +366,10 @@ function setCollapsed(on){
   b.title=on?'展开血缘回溯':'收起血缘回溯';
   b.setAttribute('aria-expanded',on?'false':'true');
   if(on){ clearSel(); closeLb(); }else alignPagers();
+  /* embed=1：把折叠态同步给父页面（数据看板右侧面板跟着收窄/展开） */
+  if(embedMode&&window.parent!==window){
+    try{ window.parent.postMessage({c1LineageCollapsed:on},'*'); }catch(e){}
+  }
 }
 function showLineage(){
   var panel=document.getElementById('lineage');
@@ -715,6 +721,15 @@ function loadStaging(){
     records=f.records||[];
     srcMap=(doc.rule||{}).field_sources||{};
     renderTable(); buildAnchors(); initViewer();
+    if(traceRecord){
+      var ti=records.findIndex(function(r){return String(r.index)===String(traceRecord);});
+      if(ti>=0) selectRecord(ti);
+      else toast('该 record_id 不在当前文件中（可能属于同一任务的其他文件）');
+      traceRecord='';
+      history.replaceState(null,'',location.pathname+
+        '?task='+encodeURIComponent(task)+
+        '&file='+encodeURIComponent(curFile));
+    }
     var links=document.getElementById('filelinks');
     if(curFile){
       links.innerHTML='<a class="btn mini" target="_blank" href="'+
@@ -908,9 +923,16 @@ var tasktag=document.getElementById('tasktag');
 tasktag.textContent=task?('任务 #'+task):'';
 tasktag.hidden=!task;
 document.getElementById('tasklink').href=task?('/tasks?task='+encodeURIComponent(task)):'/tasks';
-/* 默认收起成细竖条：表格撑满全宽，点数据自动弹出（用户裁决） */
-setCollapsed(true);
-if(!task){
+/* 默认收起成细竖条：表格撑满全宽，点数据自动弹出（用户裁决）。
+   embed=1（数据看板右侧血缘）：只留血缘面板、强制展开，不显示台账入口。 */
+if(embedMode){
+  document.body.classList.add('embed-lineage');
+  setCollapsed(false);
+}else setCollapsed(true);
+if(embedMode&&!task){
+  document.getElementById('err').hidden=false;
+  document.getElementById('err').textContent='缺少 task/file 参数';
+}else if(!task){
   /* 无任务参数＝台账入口：页头与资料/任务同构（标题＋右对齐工具栏，无返回），
      面板内直接表格。任务行汇总校验进度，点任务行展开文件子行，点子行进数据预览。 */
   document.getElementById('modebanner').hidden=true;

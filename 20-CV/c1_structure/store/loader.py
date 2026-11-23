@@ -108,12 +108,31 @@ def fields_to_map(field_rows):
     return cm, bk
 
 
+TRACE_COLS = ('task_id', 'task_file_id', 'record_id')
+
+
+def validate_trace_columns(cols, field_rows=None):
+    """溯源列预检：目标表须预建 task_id/task_file_id/record_id 三列
+    （平台禁止自动 DDL）；规则字段不得占用这些列名。"""
+    missing = [c for c in TRACE_COLS if c not in cols]
+    if missing:
+        raise BadRequest('目标表缺少溯源列：{}（须由业务系统预建，平台不自动建表/改表）'.format(
+            '、'.join(missing)))
+    if field_rows:
+        used = [f.get('target_column') for f in field_rows
+                if f.get('target_column') in TRACE_COLS]
+        if used:
+            raise BadRequest('规则字段不能映射到溯源列：{}'.format(
+                '、'.join(sorted(set(used)))))
+
+
 def preflight(ds, target_table, field_rows, write_mode, fields):
-    """预检：目标表/列存在＋映射覆盖（上传预登记与点入库各跑一次）。
+    """预检：目标表/列存在＋溯源列＋映射覆盖（上传预登记与点入库各跑一次）。
     连接级失败（pymysql/OSError）原样上抛→503；配置问题→400。"""
     cols = [c['name'] for c in list_columns(ds, target_table)]
     if not cols:
         raise BadRequest('目标表不存在或无列：{}'.format(target_table))
+    validate_trace_columns(cols, field_rows)
     validate_fields(fields, field_rows, write_mode, cols)
     return cols
 
@@ -166,11 +185,15 @@ def _insert(cur, table, mapped):
     return 'insert'
 
 
-def write_record(cur, table, column_map, values, write_mode, business_key):
+def write_record(cur, table, column_map, values, write_mode, business_key,
+                 extra_values=None):
     """单条写入→(action, target_pk)。应用层 upsert：SELECT 业务键→
     UPDATE/INSERT，不依赖目标表唯一索引（单任务串行无竞态）。
-    update 目标行不存在→LoadRecordError（调用方隔离）。"""
+    update 目标行不存在→LoadRecordError（调用方隔离）。
+    extra_values＝溯源列（task_id/task_file_id/record_id），非业务键，
+    upsert 时随其余非键列一起覆盖为最近写入者。"""
     mapped = {column_map[k]: v for k, v in values.items() if k in column_map}
+    mapped.update(extra_values or {})
     if write_mode == 'insert':
         _insert(cur, table, mapped)
         return 'insert', str(cur.lastrowid)
@@ -193,3 +216,45 @@ def write_record(cur, table, column_map, values, write_mode, business_key):
         raise LoadRecordError('目标行不存在（去重依据：{}）'.format(pk))
     _insert(cur, table, mapped)
     return 'insert', pk
+
+
+def query_rows(ds, table, page=1, per_page=100, trace_cols=None):
+    """只读分页查询目标业务表（数据看板）。
+
+    表名经 information_schema 白名单校验，列名经 list_columns 白名单＋
+    _ident 转义，值/分页参数一律参数化；绝不拼接用户输入进 SQL 标识符。
+    trace_cols＝溯源列白名单（默认 TRACE_COLS），查询时优先置顶。
+    返回 {'items':[dict], 'total':int, 'columns':[str], 'page', 'per_page'}。
+    """
+    if table not in list_tables(ds):
+        raise BadRequest('表不在白名单内：{}'.format(table))
+    cols = [c['name'] for c in list_columns(ds, table)]
+    if not cols:
+        raise BadRequest('目标表不存在或无列：{}'.format(table))
+    trace = [c for c in (trace_cols or TRACE_COLS) if c in cols]
+    ordered = trace + [c for c in cols if c not in trace]
+    per_page = max(1, min(200, int(per_page or 100)))
+    page = max(1, int(page or 1))
+    conn = connect_datasource(ds)
+    try:
+        with conn.cursor() as cur:
+            cur.execute('SELECT COUNT(*) FROM {}'.format(_ident(table)))
+            total = cur.fetchone()[0]
+            sel = ','.join(_ident(c) for c in ordered)
+            cur.execute(
+                'SELECT {} FROM {} LIMIT %s OFFSET %s'.format(
+                    sel, _ident(table)),
+                (per_page, (page - 1) * per_page))
+            rows = cur.fetchall()
+        items = [dict(zip(ordered, r)) for r in rows]
+        for it in items:
+            for k, v in list(it.items()):
+                if hasattr(v, 'isoformat'):
+                    it[k] = v.isoformat(sep=' ')
+                elif isinstance(v, bytes):
+                    it[k] = '<binary {} bytes>'.format(len(v))
+        return {'items': items, 'total': total, 'columns': ordered,
+                'page': page, 'per_page': per_page,
+                'has_trace': bool(trace)}
+    finally:
+        conn.close()
