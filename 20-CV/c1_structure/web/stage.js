@@ -228,14 +228,17 @@ function bindStageLightbox(opts){
     if(Math.abs(scale-1)<0.01) fitWindow();
     else{scale=1;tx=0;ty=0;apply();}
   });
-  /* 全屏里点叠加框反向定位：关闭全屏，交页面钩子钉住原格/行（拖动松手不算点击） */
+  /* 全屏里点叠加框反向定位：关闭全屏，交页面钩子钉住原格/行（拖动松手不算点击）；
+     点图空白＝继续缩放/平移，不做几何回溯（全屏内回溯风险大于收益，已裁决跳过） */
   stage.addEventListener('click',function(e){
     if(moved||!srcImg) return;
     var b=e.target.closest?e.target.closest('.cellbox,.stitchbox,.box'):null;
-    if(!b) return;
-    e.stopPropagation();
-    close();
-    if(opts.onBoxClick) opts.onBoxClick(b,srcImg);
+    if(b){
+      e.stopPropagation();
+      close();
+      if(opts.onBoxClick) opts.onBoxClick(b,srcImg);
+      return;
+    }
   });
   document.addEventListener('keydown',function(e){
     if(lb.hidden) return;

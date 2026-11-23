@@ -52,16 +52,20 @@ function readOnly(){
   return !!(taskDoc&&['loading','partial','loaded'].indexOf(taskDoc.state)>=0);
 }
 function recState(r){ return (r.review||{}).state||'pending'; }
+/* 字段映射悬停说明：源列（名称或「第 N 列」）→ 目标字段 */
+function srcNote(t,src){ return '映射：'+src+' → '+t; }
 function renderTable(){
   keys=collectKeys();
   var ro=readOnly();
   document.getElementById('rechead').innerHTML='<tr><th class="seq">序号</th>'+
     keys.map(function(k){
-      var s=srcMap[k];
-      return '<th>'+escHtml(k)+
-        (s?'<span class="srccol" title="映射源列：'+escHtml(s)+'">← '+escHtml(s)+'</span>':
-           (s===''?'<span class="srccol none" title="抽取规则未选择源列">← 未选列</span>':''))+
-        '</th>';
+      var s=srcMap[k], cap;
+      if(s===''){cap='未映射源列';}
+      else if(s){cap='源：'+s;}
+      else return '<th>'+escHtml(k)+'</th>';
+      return '<th title="'+escHtml(s?srcNote(k,s):'抽取规则未选择源列')+'">'+
+        escHtml(k)+'<span class="srccap'+(s?'':' none')+'">'+
+        escHtml(cap)+'</span></th>';
     }).join('')+
     '<th>状态</th>'+(ro?'':'<th>操作</th>')+'</tr>';
   var shown=0;
@@ -76,6 +80,7 @@ function renderTable(){
         var ed=orig[k]!==undefined&&
           String(v==null?'':v)!==String(orig[k]==null?'':orig[k]);
         var tip=ed?('原值：'+orig[k]+'\n现值：'+(v==null?'':v)):(v==null?'':v);
+        if(srcMap[k]) tip+='\n'+srcNote(k,srcMap[k]);
         return '<td class="cell'+(ed?' edited':'')+'" data-i="'+i+'" data-key="'+
           escHtml(k)+'" title="'+escHtml(tip)+'">'+escHtml(v==null?'':v)+'</td>';
       }).join('')+
@@ -166,7 +171,9 @@ function viewHtml(meta,view,space,here,page){
     rects+='<rect class="cellbox" data-i="'+x.i+'" data-key="'+escHtml(x.key)+
       '" x="'+b[0]+'" y="'+b[1]+'" width="'+Math.max(0,b[2]-b[0])+
       '" height="'+Math.max(0,b[3]-b[1])+'"><title>记录 #'+recordNo(x.i)+' · '+
-      escHtml(x.key)+'&#10;'+escHtml(a.raw_text||'')+'</title></rect>';
+      escHtml(x.key)+'&#10;'+escHtml(a.raw_text||'')+
+      (srcMap[x.key]?('&#10;'+escHtml(srcNote(x.key,srcMap[x.key]))):'')+
+      '</title></rect>';
   });
   return '<div class="view" data-page="'+page+'" data-view="'+view+'" data-space="'+space+'">'+
     '<div class="imgwrap" style="--ar:'+ar+'">'+
@@ -248,9 +255,16 @@ function updateHead(){
   /* 选中记录号只在 lsub 显示一次，标题不重复 */
   document.getElementById('ltitle').textContent='血缘回溯';
   var meta=metaOf(curPage);
-  document.getElementById('lsub').textContent=meta&&meta.size?
+  var mk=Object.keys(srcMap).filter(function(k){return srcMap[k];});
+  var lsub=document.getElementById('lsub');
+  lsub.textContent=(meta&&meta.size?
     ('页'+curPage+' · '+(curView==='rect'?'矫正图':'原图')+
-      (selIdx>=0?(' · 选中记录 #'+recordNo(selIdx)):' · 全表')):'';
+      (selIdx>=0?(' · 选中记录 #'+recordNo(selIdx)):' · 全表')):'')+
+    (mk.length?(' · 映射 '+mk.map(function(k){return srcMap[k]+'→'+k;})
+      .join('，')):'');
+  lsub.title=mk.length?('字段映射：'+String.fromCharCode(10)+
+    mk.map(function(k){return srcNote(k,srcMap[k]);})
+    .join(String.fromCharCode(10))):'';
 }
 function applySelection(){
   document.querySelectorAll('#recrows tr').forEach(function(tr){
@@ -539,26 +553,35 @@ document.addEventListener('keydown',function(e){
   goIndex(ni);
 });
 
-/* 行带兜底命中：hitCell 只认「已选字段」的坐标框——映射转换后往往仅少数列有框，
-   点本行其他列/格间空白会整体未命中。按当前页+视图的 viewBox y 落在哪个记录的
-   坐标带内（x 不限）定位整行，取带中心最近者；未命中返回 -1。 */
-function hitRow(view,e){
-  var svg=view&&view.querySelector('svg');
-  if(!svg||!svg.viewBox||!svg.viewBox.baseVal||!svg.viewBox.baseVal.width) return -1;
-  var img=view.querySelector('img'), vb=svg.viewBox.baseVal, r=img.getBoundingClientRect();
-  if(!r.width||!r.height) return -1;
-  var y=(e.clientY-r.top)/r.height*vb.height;
-  var sp=view.getAttribute('data-space'), p=+view.getAttribute('data-page');
-  var best=-1, bestD=Infinity;
-  allAnchors.forEach(function(x){
-    var b=x.a.cell_bbox;
-    if(x.a.page!==p||x.a.space!==sp||!b||b.length<4) return;
+/* 几何命中核心（页面 .view 用）：两级判定——
+   ① 包含点的最小格框 rect；② 行带兜底（点击 y 落在哪条记录的坐标带内，x 不限）。 */
+function stageHit(svg,img,e,space,p){
+  if(!svg||!svg.viewBox||!svg.viewBox.baseVal||!svg.viewBox.baseVal.width||!img) return null;
+  var vb=svg.viewBox.baseVal,r=img.getBoundingClientRect();
+  if(!r.width||!r.height) return null;
+  var x=(e.clientX-r.left)/r.width*vb.width,y=(e.clientY-r.top)/r.height*vb.height;
+  var bestR=null,bestA=Infinity;
+  Array.prototype.forEach.call(svg.querySelectorAll('.cellbox'),function(b){
+    var bx=+b.getAttribute('x'),by=+b.getAttribute('y'),
+        bw=+b.getAttribute('width'),bh=+b.getAttribute('height');
+    if(x>=bx&&x<=bx+bw&&y>=by&&y<=by+bh&&bw*bh<bestA){bestA=bw*bh;bestR=b;}
+  });
+  var best=-1,bestD=Infinity;
+  allAnchors.forEach(function(xa){
+    var b=xa.a.cell_bbox;
+    if(xa.a.page!==p||xa.a.space!==space||!b||b.length<4) return;
     if(y>=b[1]&&y<=b[3]){
       var d=Math.abs(y-(b[1]+b[3])/2);
-      if(d<bestD){bestD=d;best=x.i;}
+      if(d<bestD){bestD=d;best=xa.i;}
     }
   });
-  return best;
+  return {rect:bestR,row:best};
+}
+function hitRow(view,e){
+  if(!view) return -1;
+  var h=stageHit(view.querySelector('svg'),view.querySelector('img'),e,
+    view.getAttribute('data-space'),+view.getAttribute('data-page'));
+  return h?h.row:-1;
 }
 
 /* 当前页某坐标空间是否存在可画的回溯框（行带/命中判定的前置检查） */
@@ -652,7 +675,7 @@ function loadStaging(){
     mb.textContent='任务已入库 · 记录只读，修改、确认、拒绝操作已锁定';
   }else{
     mb.className='banner info';
-    mb.textContent='双击单元格修改取值，记录自动转为「已修改」；✓ 确认 · ✗ 拒绝；单击或悬停可查看血缘回溯';
+    mb.textContent='双击单元格修改取值，记录自动转为「已修改」；✓ 确认 · ✗ 拒绝；单击或悬停可查看血缘回溯；悬停列名/数据格/回溯框看字段映射';
   }
   updateLoadButtons();
   var u='/api/tasks/'+encodeURIComponent(task)+'/staging'+

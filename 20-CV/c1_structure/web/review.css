@@ -19,10 +19,11 @@
 .stgmain tbody tr.sel{background:#e7f0ff}
 .stgmain tbody tr.sel:hover{background:#dbe8ff}
 .idx{color:#8a94a6;font-variant-numeric:tabular-nums;text-align:center}
-/* 表头映射小注：转换后的字段名下方标出源列（bug2 追溯不便） */
-#rechead th .srccol{display:block;font-weight:400;font-size:11px;color:#8a94a6;
-  white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis}
-#rechead th .srccol.none{color:#c26a2f}
+/* 表头映射小注：源列名收进字段名下方一行淡色小注（不用箭头符号），悬停看完整映射 */
+#rechead th .srccap{display:block;font-weight:400;font-size:11px;line-height:1.4;
+  color:#8a94a6;white-space:nowrap;max-width:190px;overflow:hidden;
+  text-overflow:ellipsis}
+#rechead th .srccap.none{color:#b45309}
 
 /* 右侧血缘侧栏容器（吸顶 + 限高），内部舞台用报告同款 .stage */
 .lineage{flex:none;width:560px;max-width:46vw;max-height:calc(100vh - 210px);
@@ -79,7 +80,10 @@ tr.led-task.open .led-caret{transform:rotate(90deg)}
   border:1px solid #d8e0ed;background:#fff;color:#5a6a85;transition:.15s}
 .chip:hover{border-color:#2563eb;color:#2563eb}
 .chip.on{background:#2563eb;border-color:#2563eb;color:#fff}
-td.cell.edited{box-shadow:inset 0 -2px 0 #d8970a}
+td.cell.edited{background:rgba(216,151,10,.35)}
+/* 悬停/联动高亮不把已修改格的黄底顶掉，改为加深；钉住态保留描边 */
+#recrows td.cell.edited:hover,#recrows td.cell.edited.hv{
+  background:rgba(216,151,10,.55)!important}
 .celledit{width:100%;min-width:90px;font:inherit;font-size:12px;padding:2px 5px;
   border:1px solid #2563eb;border-radius:4px;outline:none;background:#fff;color:#1f2738}
 .acts{white-space:nowrap}
