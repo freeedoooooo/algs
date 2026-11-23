@@ -62,14 +62,14 @@ RAW_DIR = 'raw'
 PARSE_JSON = 'parse.json'
 RECORDS_JSON = 'records.json'
 # 对照报告：每 task_file 一份独立自包含 HTML，与 parse.json / 图片 / CSV 同入
-# c1_artifact BLOB；页面与报告共用资产在 web/，生成时内联。
+# c1_parse_artifact BLOB；页面与报告共用资产在 web/，生成时内联。
 PARSE_REPORT_NAME = '对照报告.html'
 
 # ---- 平台库 DSN（配置直接入库管理；环境变量 C1_STRUCTURE_DB 优先，方便部署覆盖）----
-PLATFORM_DB = os.getenv('C1_STRUCTURE_DB', 'mysql://root:Dib12345*@10.0.6.161:3306/co_dev')
+PLATFORM_DB = os.getenv('C1_STRUCTURE_DB', 'mysql://root:Dib12345*@10.0.6.161:3306/c1_structure_dev')
 
 # 存储契约：DB 是唯一事实源——目录/记录/血缘在关系表，
-# 原件字节在 c1_file.content，产物字节在 c1_artifact BLOB（task_file 粒度）；
+# 原件字节在 c1_doc_file.content，产物字节在 c1_parse_artifact BLOB（task_file 粒度）；
 # 磁盘仅 tmp/ 运行期 scratch。审计/file:// 用 export_artifacts.py 按需导出。
 # DB 不可用＝服务显式失败（503），不降级。
 

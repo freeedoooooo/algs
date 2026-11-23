@@ -118,16 +118,16 @@ c1_structure/
 │   │                          （无自动迁移器，部署/改表时手动对库跑）
 │   ├── catalog/               目录元数据 repo，按业务域拆分（__init__ 全量重导出，
 │   │   │                      调用方 catalog.xxx() 不感知边界）
-│   │   ├── files.py           源文件域（c1_file ＋ content 原件字节）
-│   │   ├── rules.py           抽取规则域（c1_rule / c1_rule_version）
-│   │   ├── tasks.py           任务域（c1_task / c1_task_file / c1_quarantine）
+│   │   ├── files.py           源文件域（c1_doc_file ＋ content 原件字节）
+│   │   ├── rules.py           抽取规则域（c1_extract_rule / c1_extract_rule_version）
+│   │   ├── tasks.py           任务域（c1_task / c1_task_file / c1_load_quarantine）
 │   │   └── load.py            入库域（c1_load_datasource / c1_load_table(+field) / c1_load_log）
 │   ├── content.py             内容门面（parse 经 artifact，records 直委托 content_db）
 │   ├── content_db.py          staging 三表：get/save/patch/set_review/query_fields
 │   ├── loader.py              入库引擎接缝：数据源直连 / introspection / 字段契约
 │   │                          / transform（trim·number）/ write_record（应用层 upsert）
 │   ├── artifact.py            附件门面（kind/mime 推断）
-│   └── artifact_db.py         c1_artifact BLOB（键＝task_file_id，应用层级联删）
+│   └── artifact_db.py         c1_parse_artifact BLOB（键＝task_file_id，应用层级联删）
 ├── adapter/                   解析信封 → 抽取记录（字段集）的适配层（base.py hydrate 派生视图）
 ├── pipeline/                  解析层
 │   ├── engines.py             模型单例（懒加载；表格模型按 doc_unwarp 分槽缓存）
@@ -160,8 +160,8 @@ c1_structure/
 一次上传 = 一个 **task**（`c1_task` 行），批内每个文件 = 一个 **task_file**。
 没有批次时间戳、没有持久 input/output 目录：
 
-- 原件字节进 `c1_file.content`（sha256 去重，重复上传不重复入库）。
-- 产物附件进 `c1_artifact`（键＝task_file_id + 相对名，LONGBLOB，应用层级联删）。
+- 原件字节进 `c1_doc_file.content`（sha256 去重，重复上传不重复入库）。
+- 产物附件进 `c1_parse_artifact`（键＝task_file_id + 相对名，LONGBLOB，应用层级联删）。
 - 暂存记录进 staging 三表（record / field / lineage，field 是查询投影）。
 - **校验台**（`/review`）：双击格改值→edited，✓ 确认 / ✗ 拒绝（review_state），
   状态筛选＋批量确认待审；改值格琥珀标记（title 显原值），original 永不覆盖；
@@ -190,7 +190,7 @@ c1_structure/
   → 校验（门禁：全部 confirmed 才可入库，否则 409 带计数）→ 任务详情/校验台「入库…」
   抽屉选数据源＋映射（按 数据源×任务抽取规则 双过滤）→ **校验/门禁/预检全过才绑定目标并写入**
   （失败不留绑定，可另选；已绑定任务重试沿用原目标，带新目标 409）→ 逐条回执
-  （`c1_load_log`，唯一键幂等，重跑跳过）＋数据级隔离（`c1_quarantine` stage=load，
+  （`c1_load_log`，唯一键幂等，重跑跳过）＋数据级隔离（`c1_load_quarantine` stage=load，
   重试无回执记录）。transform（trim/number）只在入库时消费，暂存原值永不改。
   loaded/partial 任务记录只读。
 - **/rules 入库规则页**：左数据源列表（试连/编辑/删除）右入库规则列表（字段行抽屉编辑）；

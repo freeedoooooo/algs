@@ -1,4 +1,4 @@
-"""目录库 · 抽取规则域（c1_rule / c1_rule_version）。
+"""目录库 · 抽取规则域（c1_extract_rule / c1_extract_rule_version）。
 
 版本＝三段 JSON 不可变快照；编辑＝新版本＋current 前移，
 旧任务引用旧版本不受影响。被任务引用的抽取规则禁删。
@@ -17,13 +17,13 @@ def list_rules():
             # current_version_id：前端下拉直接提交版本 id，不用再查一次
             cur.execute(
                 'SELECT t.id, t.name, t.description, t.current_version,'
-                ' (SELECT tv.id FROM c1_rule_version tv'
+                ' (SELECT tv.id FROM c1_extract_rule_version tv'
                 '   WHERE tv.rule_id=t.id'
                 '     AND tv.version=t.current_version) AS current_version_id,'
-                ' (SELECT COUNT(*) FROM c1_rule_version tv'
+                ' (SELECT COUNT(*) FROM c1_extract_rule_version tv'
                 '   WHERE tv.rule_id=t.id) AS version_count,'
                 ' t.updated_at'
-                ' FROM c1_rule t ORDER BY t.id')
+                ' FROM c1_extract_rule t ORDER BY t.id')
             return _rows(cur)
     finally:
         conn.close()
@@ -38,13 +38,13 @@ def get_rule_version(version_id=None, name=None):
                 cur.execute(
                     'SELECT tv.id, tv.rule_id, tv.version, tv.schema_json,'
                     ' tv.mapping_json, tv.transform_json, t.name'
-                    ' FROM c1_rule_version tv JOIN c1_rule t'
+                    ' FROM c1_extract_rule_version tv JOIN c1_extract_rule t'
                     ' ON t.id = tv.rule_id WHERE tv.id=%s', (version_id,))
             elif name:
                 cur.execute(
                     'SELECT tv.id, tv.rule_id, tv.version, tv.schema_json,'
                     ' tv.mapping_json, tv.transform_json, t.name'
-                    ' FROM c1_rule_version tv JOIN c1_rule t'
+                    ' FROM c1_extract_rule_version tv JOIN c1_extract_rule t'
                     ' ON t.id = tv.rule_id'
                     ' WHERE t.name=%s AND tv.version=t.current_version',
                     (name,))
@@ -52,7 +52,7 @@ def get_rule_version(version_id=None, name=None):
                 cur.execute(
                     'SELECT tv.id, tv.rule_id, tv.version, tv.schema_json,'
                     ' tv.mapping_json, tv.transform_json, t.name'
-                    ' FROM c1_rule_version tv JOIN c1_rule t'
+                    ' FROM c1_extract_rule_version tv JOIN c1_extract_rule t'
                     ' ON t.id = tv.rule_id'
                     ' WHERE tv.version=t.current_version'
                     ' ORDER BY t.id LIMIT 1')
@@ -68,7 +68,7 @@ def get_rule_version(version_id=None, name=None):
 
 
 def _tpl_exists(cur, rule_id):
-    cur.execute('SELECT id FROM c1_rule WHERE id=%s', (rule_id,))
+    cur.execute('SELECT id FROM c1_extract_rule WHERE id=%s', (rule_id,))
     if not cur.fetchone():
         raise NotFound('抽取规则不存在')
 
@@ -90,7 +90,7 @@ def get_rule(rule_id):
                 'SELECT t.id, t.name, t.description, t.current_version,'
                 ' tv.id AS current_version_id, tv.schema_json,'
                 ' tv.mapping_json, tv.transform_json'
-                ' FROM c1_rule t LEFT JOIN c1_rule_version tv'
+                ' FROM c1_extract_rule t LEFT JOIN c1_extract_rule_version tv'
                 ' ON tv.rule_id=t.id AND tv.version=t.current_version'
                 ' WHERE t.id=%s', (rule_id,))
             r = _rows(cur)[0]
@@ -111,14 +111,14 @@ def create_rule(name, description=None, schema=None, mapping=None,
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT id FROM c1_rule WHERE name=%s', (name,))
+            cur.execute('SELECT id FROM c1_extract_rule WHERE name=%s', (name,))
             if cur.fetchone():
                 raise Conflict('规则名已存在')
-            cur.execute('INSERT INTO c1_rule (name, description,'
+            cur.execute('INSERT INTO c1_extract_rule (name, description,'
                         ' current_version) VALUES (%s,%s,1)',
                         (name, description))
             tid = cur.lastrowid
-            cur.execute('INSERT INTO c1_rule_version'
+            cur.execute('INSERT INTO c1_extract_rule_version'
                         ' (rule_id, version, schema_json, mapping_json,'
                         ' transform_json) VALUES (%s,1,%s,%s,%s)',
                         (tid, sj, mj, tj))
@@ -137,15 +137,15 @@ def create_version(rule_id, schema=None, mapping=None, transform=None):
         with conn.cursor() as cur:
             _tpl_exists(cur, rule_id)
             cur.execute('SELECT COALESCE(MAX(version),0) FROM'
-                        ' c1_rule_version WHERE rule_id=%s',
+                        ' c1_extract_rule_version WHERE rule_id=%s',
                         (rule_id,))
             v = cur.fetchone()[0] + 1
-            cur.execute('INSERT INTO c1_rule_version'
+            cur.execute('INSERT INTO c1_extract_rule_version'
                         ' (rule_id, version, schema_json, mapping_json,'
                         ' transform_json) VALUES (%s,%s,%s,%s,%s)',
                         (rule_id, v, sj, mj, tj))
             vid = cur.lastrowid
-            cur.execute('UPDATE c1_rule SET current_version=%s'
+            cur.execute('UPDATE c1_extract_rule SET current_version=%s'
                         ' WHERE id=%s', (v, rule_id))
             conn.commit()
             return vid
@@ -164,22 +164,22 @@ def update_rule(rule_id, name=None, description=None,
                 name = str(name).strip()
                 if not name:
                     raise BadRequest('规则名不能为空')
-                cur.execute('SELECT id FROM c1_rule'
+                cur.execute('SELECT id FROM c1_extract_rule'
                             ' WHERE name=%s AND id<>%s', (name, rule_id))
                 if cur.fetchone():
                     raise Conflict('规则名已存在')
-                cur.execute('UPDATE c1_rule SET name=%s WHERE id=%s',
+                cur.execute('UPDATE c1_extract_rule SET name=%s WHERE id=%s',
                             (name, rule_id))
             if description is not None:
-                cur.execute('UPDATE c1_rule SET description=%s'
+                cur.execute('UPDATE c1_extract_rule SET description=%s'
                             ' WHERE id=%s', (description, rule_id))
             if current_version is not None:
-                cur.execute('SELECT id FROM c1_rule_version'
+                cur.execute('SELECT id FROM c1_extract_rule_version'
                             ' WHERE rule_id=%s AND version=%s',
                             (rule_id, current_version))
                 if not cur.fetchone():
                     raise BadRequest('指定版本不存在')
-                cur.execute('UPDATE c1_rule SET current_version=%s'
+                cur.execute('UPDATE c1_extract_rule SET current_version=%s'
                             ' WHERE id=%s', (current_version, rule_id))
             conn.commit()
     finally:
@@ -194,13 +194,13 @@ def delete_rule(rule_id):
             _tpl_exists(cur, rule_id)
             cur.execute('SELECT COUNT(*) FROM c1_task WHERE'
                         ' rule_version_id IN (SELECT id FROM'
-                        ' c1_rule_version WHERE rule_id=%s)',
+                        ' c1_extract_rule_version WHERE rule_id=%s)',
                         (rule_id,))
             if cur.fetchone()[0]:
                 raise Conflict('该抽取规则已被任务引用，禁止删除')
-            cur.execute('DELETE FROM c1_rule_version'
+            cur.execute('DELETE FROM c1_extract_rule_version'
                         ' WHERE rule_id=%s', (rule_id,))
-            cur.execute('DELETE FROM c1_rule WHERE id=%s',
+            cur.execute('DELETE FROM c1_extract_rule WHERE id=%s',
                         (rule_id,))
             conn.commit()
     finally:
@@ -215,8 +215,8 @@ def list_versions(rule_id):
             _tpl_exists(cur, rule_id)
             cur.execute('SELECT tv.id, tv.version, tv.created_at,'
                         ' (tv.version=t.current_version) AS is_current'
-                        ' FROM c1_rule_version tv'
-                        ' JOIN c1_rule t ON t.id=tv.rule_id'
+                        ' FROM c1_extract_rule_version tv'
+                        ' JOIN c1_extract_rule t ON t.id=tv.rule_id'
                         ' WHERE tv.rule_id=%s ORDER BY tv.version DESC',
                         (rule_id,))
             return _rows(cur)

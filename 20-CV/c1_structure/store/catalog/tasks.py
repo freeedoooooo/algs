@@ -1,4 +1,4 @@
-"""目录库 · 任务域（c1_task / c1_task_file / c1_quarantine）。
+"""目录库 · 任务域（c1_task / c1_task_file / c1_load_quarantine）。
 
 task 表投影是 tasks API 的唯一数据源（无 task.json 附件）；
 隔离区按 task 粒度登记校验/入库失败记录。
@@ -69,8 +69,8 @@ _HEAD_SQL = (
     ' d.name AS datasource_name, d.db_name,'
     ' lt.target_table, lt.write_mode'
     ' FROM c1_task r'
-    ' JOIN c1_rule_version tv ON tv.id=r.rule_version_id'
-    ' JOIN c1_rule t ON t.id=tv.rule_id'
+    ' JOIN c1_extract_rule_version tv ON tv.id=r.rule_version_id'
+    ' JOIN c1_extract_rule t ON t.id=tv.rule_id'
     ' LEFT JOIN c1_load_datasource d ON d.id=r.load_datasource_id'
     ' LEFT JOIN c1_load_table lt ON lt.id=r.load_table_id')
 
@@ -79,7 +79,7 @@ _FILES_SQL_TAIL = (
     ' (SELECT COUNT(*) FROM c1_staging_record sr'
     '   WHERE sr.task_file_id=tf.id) AS records_n'
     ' FROM c1_task_file tf'
-    ' JOIN c1_file s ON s.id=tf.file_id')
+    ' JOIN c1_doc_file s ON s.id=tf.file_id')
 
 
 def _file_row(f):
@@ -164,14 +164,14 @@ def task_file_ids(task_id):
         conn.close()
 
 
-# ---- c1_quarantine ----
+# ---- c1_load_quarantine ----
 
 def add_quarantine(task_id, task_file_id, record_index, stage, reason, payload):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
             cur.execute(
-                'INSERT INTO c1_quarantine (task_id, task_file_id,'
+                'INSERT INTO c1_load_quarantine (task_id, task_file_id,'
                 ' record_index, stage, reason, payload_json)'
                 ' VALUES (%s,%s,%s,%s,%s,%s)',
                 (task_id, task_file_id, record_index, stage, reason,
@@ -194,7 +194,7 @@ def list_quarantine(task_id=None, state=None):
             args.append(state)
         w = ('WHERE ' + ' AND '.join(where)) if where else ''
         with conn.cursor() as cur:
-            cur.execute('SELECT * FROM c1_quarantine {} ORDER BY id DESC'
+            cur.execute('SELECT * FROM c1_load_quarantine {} ORDER BY id DESC'
                         .format(w), args)
             rows = _rows(cur)
         for r in rows:

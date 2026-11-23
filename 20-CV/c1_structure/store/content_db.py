@@ -30,7 +30,7 @@ def _task_files(cur, task_id):
         'SELECT tf.id, tf.task_id, tf.file_id,'
         ' s.name AS source_name'
         ' FROM c1_task_file tf'
-        ' JOIN c1_file s ON s.id=tf.file_id'
+        ' JOIN c1_doc_file s ON s.id=tf.file_id'
         ' WHERE tf.task_id=%s ORDER BY tf.id',
         (task_id,))
     return _rows(cur)
@@ -98,9 +98,9 @@ def get_records(task_id):
                 })
             cur.execute(
                 'SELECT t.name, tv.version FROM c1_task r'
-                ' JOIN c1_rule_version tv'
+                ' JOIN c1_extract_rule_version tv'
                 ' ON tv.id=r.rule_version_id'
-                ' JOIN c1_rule t ON t.id=tv.rule_id'
+                ' JOIN c1_extract_rule t ON t.id=tv.rule_id'
                 ' WHERE r.id=%s', (tfs[0]['task_id'],))
             trow = cur.fetchone()
             rule = ({'name': trow[0], 'version': trow[1]} if trow
@@ -273,7 +273,7 @@ def query_fields(field=None, q=None, task=None, state=None, limit=200):
                 ' JOIN c1_staging_record rec ON rec.id=f.record_id'
                 ' JOIN c1_task_file tf ON tf.id=rec.task_file_id'
                 ' JOIN c1_task r ON r.id=tf.task_id'
-                ' JOIN c1_file s ON s.id=tf.file_id {}'
+                ' JOIN c1_doc_file s ON s.id=tf.file_id {}'
                 ' ORDER BY r.id DESC, rec.record_index LIMIT %s'
                 .format(w), args + [limit])
             return _rows(cur)
@@ -327,10 +327,10 @@ def ledger():
                 " SUM(sr.review_state='rejected') AS rejected_n"
                 ' FROM c1_task_file tf'
                 ' JOIN c1_task t ON t.id=tf.task_id'
-                ' JOIN c1_file s ON s.id=tf.file_id'
-                ' JOIN c1_rule_version tv'
+                ' JOIN c1_doc_file s ON s.id=tf.file_id'
+                ' JOIN c1_extract_rule_version tv'
                 ' ON tv.id=t.rule_version_id'
-                ' JOIN c1_rule tpl ON tpl.id=tv.rule_id'
+                ' JOIN c1_extract_rule tpl ON tpl.id=tv.rule_id'
                 ' JOIN c1_staging_record sr ON sr.task_file_id=tf.id'
                 ' GROUP BY tf.id, tf.task_id, s.name, t.state, t.created_at,'
                 ' tpl.name, tv.version'

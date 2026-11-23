@@ -1,11 +1,12 @@
 -- 001_baseline.sql — 结构化平台（c1-structure）全量建库脚本。
--- 当前基线：002 全局命名收敛后重生成（2026-11-23）。
+-- 当前基线：新库 c1_structure_dev，表名按流水线分段（doc/parse/extract/staging/load，2026-11-23 D 批）。
+-- 旧库 co_dev 已退役存档（002 脚本仅对其有效）；种子含内置规则「原始透传」与 2 个测试入库数据源。
 -- 人工执行：mysql -uroot -p 目标库 < 001_baseline.sql
 -- 幂等：全 IF NOT EXISTS + INSERT IGNORE，可重复执行。
 
 -- 平台库表：c1_* 前缀，无外键，关系由应用层维护（store/db.py）。
 
-CREATE TABLE IF NOT EXISTS `c1_file` (
+CREATE TABLE IF NOT EXISTS `c1_doc_file` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '文件 ID',
   `name` varchar(255) NOT NULL COMMENT '原始文件名',
   `sha256` char(64) NOT NULL COMMENT '内容 SHA-256（去重键）',
@@ -19,7 +20,7 @@ CREATE TABLE IF NOT EXISTS `c1_file` (
   UNIQUE KEY `uk_file_sha` (`sha256`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='源文件登记：sha256 去重，原件字节存 content，无磁盘副本';
 
-CREATE TABLE IF NOT EXISTS `c1_rule` (
+CREATE TABLE IF NOT EXISTS `c1_extract_rule` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '抽取规则 ID',
   `name` varchar(128) NOT NULL COMMENT '抽取规则名（唯一）',
   `description` varchar(512) DEFAULT NULL COMMENT '抽取规则说明',
@@ -35,16 +36,16 @@ CREATE TABLE IF NOT EXISTS `c1_task` (
   `rule_version_id` bigint NOT NULL,
   `load_datasource_id` bigint DEFAULT NULL COMMENT '入库数据源 ID（preview 为空）',
   `load_table_id` bigint DEFAULT NULL COMMENT '入库映射 ID（preview 为空）',
-  `params_json` json DEFAULT NULL COMMENT '生效提取参数快照',
+  `params_json` json DEFAULT NULL COMMENT '生效解析参数快照',
   `state` varchar(24) NOT NULL DEFAULT 'pending' COMMENT '任务状态：pending/extracting/previewed/loaded/failed/partial',
   `error` text COMMENT '错误信息（失败时）',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '发起时间（UTC）',
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间（UTC）',
   PRIMARY KEY (`id`),
   KEY `idx_task_state` (`state`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='提取任务：一次上传/提取的登记，状态与参数快照在此，产物按 task_file 粒度';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='任务：一次上传/解析的登记，状态与参数快照在此，产物按 task_file 粒度';
 
-CREATE TABLE IF NOT EXISTS `c1_artifact` (
+CREATE TABLE IF NOT EXISTS `c1_parse_artifact` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '附件 ID',
   `task_file_id` bigint NOT NULL COMMENT '所属任务文件 ID（引用 c1_task_file.id，删除须应用层先清本表）',
   `name` varchar(200) NOT NULL COMMENT '任务文件内相对路径（正斜杠，如 pages/p1.png、对照报告.html）',
@@ -57,7 +58,7 @@ CREATE TABLE IF NOT EXISTS `c1_artifact` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_artifact` (`task_file_id`,`name`),
   KEY `idx_artifact_sha` (`sha256`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='产物附件：报告/图片/CSV/extract.json 全量 BLOB，键＝任务文件粒度';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='产物附件：报告/图片/CSV/parse.json 全量 BLOB，键＝任务文件粒度';
 
 CREATE TABLE IF NOT EXISTS `c1_load_log` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '入库回执 ID',
@@ -76,7 +77,7 @@ CREATE TABLE IF NOT EXISTS `c1_load_log` (
 CREATE TABLE IF NOT EXISTS `c1_task_file` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '任务文件 ID',
   `task_id` bigint NOT NULL COMMENT '所属任务 ID（引用 c1_task.id，应用层维护）',
-  `file_id` bigint NOT NULL COMMENT '源文件 ID（引用 c1_file.id，应用层维护）',
+  `file_id` bigint NOT NULL COMMENT '源文件 ID（引用 c1_doc_file.id，应用层维护）',
   `state` varchar(24) NOT NULL DEFAULT 'pending' COMMENT '文件状态：pending/extracting/previewed/loaded/failed',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '登记时间（UTC）',
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间（UTC）',
@@ -95,7 +96,7 @@ CREATE TABLE IF NOT EXISTS `c1_load_table` (
   UNIQUE KEY `uk_ds_rule_table` (`datasource_id`,`rule_id`,`target_table`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='入库映射绑定：数据源×表×抽取规则，同物理表可被不同抽取规则各建一行';
 
-CREATE TABLE IF NOT EXISTS `c1_quarantine` (
+CREATE TABLE IF NOT EXISTS `c1_load_quarantine` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '隔离记录 ID',
   `task_id` bigint NOT NULL COMMENT '所属任务 ID（引用 c1_task.id，应用层维护）',
   `task_file_id` bigint DEFAULT NULL COMMENT '所属任务文件 ID（引用 c1_task_file.id）',
@@ -110,7 +111,7 @@ CREATE TABLE IF NOT EXISTS `c1_quarantine` (
   KEY `idx_q_task` (`task_id`,`state`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='隔离区：校验/入库失败记录，按 (task_file_id,record_index) 引用暂存记录';
 
-CREATE TABLE IF NOT EXISTS `c1_rule_version` (
+CREATE TABLE IF NOT EXISTS `c1_extract_rule_version` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '抽取规则版本 ID',
   `rule_id` bigint NOT NULL,
   `version` int NOT NULL COMMENT '版本号（抽取规则内递增）',
@@ -127,7 +128,7 @@ CREATE TABLE IF NOT EXISTS `c1_staging_field` (
   `record_id` bigint NOT NULL COMMENT '所属暂存记录 ID（引用 c1_staging_record.id，删除须应用层先清本表）',
   `field_name` varchar(128) NOT NULL COMMENT '抽取规则字段名（动态）',
   `value_text` text NOT NULL COMMENT '当前值（含 edited）',
-  `original_text` text NOT NULL COMMENT '提取原值',
+  `original_text` text NOT NULL COMMENT '抽取原值',
   PRIMARY KEY (`id`),
   KEY `idx_field_value` (`field_name`,`value_text`(191)),
   KEY `idx_record` (`record_id`)
@@ -140,7 +141,7 @@ CREATE TABLE IF NOT EXISTS `c1_staging_record` (
   `review_state` varchar(16) NOT NULL DEFAULT 'pending' COMMENT '校验状态：pending/edited/confirmed',
   `review_at` datetime DEFAULT NULL COMMENT '校验时间（UTC）',
   `values_json` mediumtext NOT NULL COMMENT '当前值全保真 body（API 重建用）',
-  `original_json` mediumtext NOT NULL COMMENT '提取原值，永不覆盖',
+  `original_json` mediumtext NOT NULL COMMENT '抽取原值，永不覆盖',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '入库时间（UTC）',
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间（UTC，patch 可追溯）',
   PRIMARY KEY (`id`),
@@ -160,7 +161,7 @@ CREATE TABLE IF NOT EXISTS `c1_load_datasource` (
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间（UTC）',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_ds_name` (`name`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='入库数据源：一行＝一个库，连接参数页面明文配置（平台库自身凭据仍走 conn_ref）';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='入库数据源：一行＝一个库，连接参数页面明文配置（平台库自身凭据在 config.py）';
 
 CREATE TABLE IF NOT EXISTS `c1_staging_lineage` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '血缘 ID',
@@ -172,7 +173,7 @@ CREATE TABLE IF NOT EXISTS `c1_staging_lineage` (
   `table_scope` varchar(16) DEFAULT NULL COMMENT '表口径：page 本页 / stitched 跨页合并',
   `space` varchar(16) NOT NULL COMMENT '坐标空间：source/rectified',
   `cell_bbox` varchar(128) DEFAULT NULL COMMENT '单元格框 [x0,y0,x1,y1] json 字符串',
-  `raw_text` text COMMENT '该格提取原文',
+  `raw_text` text COMMENT '该格原文',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_rec_field_seq` (`record_id`,`field_name`,`region_seq`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='暂存血缘：逐格回溯锚点（页/表/框/原文），可由 record 全量重建';
@@ -190,13 +191,21 @@ CREATE TABLE IF NOT EXISTS `c1_load_table_field` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='入库字段映射行：抽取规则字段→目标列＋业务键标记';
 
 -- 种子数据：内置兜底抽取规则「原始透传」v1（解析页未选规则时使用）。
-INSERT IGNORE INTO c1_rule (name, description, current_version)
+INSERT IGNORE INTO c1_extract_rule (name, description, current_version)
 SELECT '原始透传', '内置兜底规则：整页文本原样透传，不做字段抽取。', 1
-WHERE NOT EXISTS (SELECT 1 FROM c1_rule WHERE name = '原始透传');
+WHERE NOT EXISTS (SELECT 1 FROM c1_extract_rule WHERE name = '原始透传');
 
-INSERT IGNORE INTO c1_rule_version (rule_id, version, fields, mapping, transforms, note, creator)
-SELECT r.id, 1, '[]', '{}', '{}', '初始化默认规则', 'system'
-FROM c1_rule r
+INSERT IGNORE INTO c1_extract_rule_version (rule_id, version, schema_json, mapping_json, transform_json)
+SELECT r.id, 1, '[]', '{}', '{}'
+FROM c1_extract_rule r
 WHERE r.name = '原始透传'
-  AND NOT EXISTS (SELECT 1 FROM c1_rule_version v
+  AND NOT EXISTS (SELECT 1 FROM c1_extract_rule_version v
                   WHERE v.rule_id = r.id AND v.version = 1);
+
+-- 种子数据：业务入库数据源（自 co_dev 迁入测试库 2 个，id 重编 1/2；密码明文为
+-- 2026-11-21 裁决）。「产品库」默认行不在此预置——由应用首启按 config DSN 自动补种
+-- （catalog/load.ensure_default_datasource）。
+INSERT IGNORE INTO c1_load_datasource (id, name, db_type, host, port, user, password, db_name)
+VALUES
+  (1, '测试库161-co_dev', 'mysql', '10.0.6.161', 3306, 'root', 'Dib12345*', 'co_dev'),
+  (2, '测试库161-c1_dev', 'mysql', '10.0.6.161', 3306, 'root', 'Dib12345*', 'c1_dev');

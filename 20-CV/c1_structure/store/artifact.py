@@ -1,7 +1,7 @@
 """
 store/artifact.py — 产物附件接缝（，DB-only）。
 
-字节事实源＝c1_artifact BLOB（MySQL 驱动在 artifact_db.py，
+字节事实源＝c1_parse_artifact BLOB（MySQL 驱动在 artifact_db.py，
 将来换 MinIO/对象存储只换驱动实现，本接缝 API 不变）。
 键＝task_file_id；name＝task_file 内相对路径（正斜杠）。
 kind/mime 由 name 推断；raw/ 前缀 kind=raw（服务路由 403）。

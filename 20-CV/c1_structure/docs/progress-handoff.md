@@ -8,7 +8,7 @@
   解析 `/parse` · 抽取规则 `/extract` · 校验 `/review` · 入库规则 `/rules` · 任务 `/tasks`。
 - 对照报告 `/parse-report`（重定向到最新 task_file 报告）；产物信封 `parse.json`；
   模块 `parse_report/`（Jinja2）；前端资产 `web/parse|extract|review|rules.*`。
-- 平台库表 `c1_*` 前缀（`c1_rule` / `c1_rule_version` ＝抽取规则，`c1_task.rule_version_id`
+- 平台库表 `c1_*` 前缀（`c1_extract_rule` / `c1_extract_rule_version` ＝抽取规则，`c1_task.rule_version_id`
   等）；无外键，级联归应用层；API JSON 键 `rule` / `rule_id` / `rule_version_id`。
 - 安装脚本：新库跑 `store/migrations/001_baseline.sql`（全 IF NOT EXISTS＋INSERT IGNORE，
   可重跑）；存量库升级人工执行编号脚本（002＝命名收敛，已对 co_dev 执行）。
@@ -19,11 +19,11 @@
 - Python：`D:/miniforge3/envs/paddle/python.exe`；FastAPI＋uvicorn；`c1_structure` 是包，
   脚本从 `20-CV/` 跑（入口自举 `PKG=os.path.basename(ROOT)`，改目录名也能跑）。
 - 平台库 DSN：环境变量 `C1_STRUCTURE_DB` 优先，默认值内置
-  `config.PLATFORM_DB`（10.0.6.161:3306/co_dev；secrets.json 引用制已退役）。
+  `config.PLATFORM_DB`（10.0.6.161:3306/c1_structure_dev；secrets.json 引用制已退役）。
   回显仅 host:port/库名（`db.safe_detail`），日志永不打印凭据。
 - 端口约定：8765＝用户自起常服（**agent 不启停不动**，重启由用户执行）；
   8799＝临时服务（真 DSN）；8797＝不可达 DSN 断库模拟
-  （`mysql://nobody:unused@127.0.0.1:3399/co_dev`）。
+  （`mysql://nobody:unused@127.0.0.1:3399/c1_structure_dev`）。
 - 临时产物：`tmp/input`、`tmp/work` 跑完即清；Windows 杀软句柄锁用
   `app._rmtree_retry`；计数须每次新连接（REPEATABLE READ 旧快照坑）。
 - 控制台中文：`PYTHONUTF8=1` / `python -X utf8`；grep 加 `-a`；curl 中文 URL 要 percent-encode。

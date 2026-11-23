@@ -4,9 +4,9 @@
 `from . import catalog` 后 `catalog.xxx()`，不感知子模块边界：
 
     _common.py   行投影 / JSON 反序列化共享小工具
-    files.py     源文件域（c1_file ＋ content 原件字节）
-    rules.py 抽取规则域（c1_rule / c1_rule_version）
-    tasks.py     任务域（c1_task / c1_task_file / c1_quarantine）
+    files.py     源文件域（c1_doc_file ＋ content 原件字节）
+    rules.py     抽取规则域（c1_extract_rule / c1_extract_rule_version）
+    tasks.py     任务域（c1_task / c1_task_file / c1_load_quarantine）
     load.py      入库域（c1_load_datasource / load_table(_field) / load_log）
 
 只经 db.connect 拿 DB-API 连接，SQL 全部收敛在本包；DB 必选，错误上抛。

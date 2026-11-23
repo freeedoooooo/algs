@@ -7,7 +7,7 @@ DB 唯一事实源，附件键＝task_file_id，无外键）。
 
 1 连接零副作用+读回 sha 自洽 · 2 真链路无持久磁盘+BLOB · 3 /files 路由/ETag/raw403 ·
 4 tasks/报告/暂存全查库 · 5 导出字节一致 · 6 断库显式 503。
-上传字节取自 c1_file.content；断库用不可达 DSN 的临时服务模拟，
+上传字节取自 c1_doc_file.content；断库用不可达 DSN 的临时服务模拟，
 不触碰真实库可用性。破坏性操作只落临时 task 与临时导出目录，验完按 id 清理
 （无外键：artifact/record 等子表须显式先删）；真实 task / file 只读。
 用户的 8765 全程不动。临时服务 8799(真库)/8797(不可达 DSN)。
@@ -40,7 +40,7 @@ catalog = importlib.import_module(PKG + '.store.catalog')
 content_db = importlib.import_module(PKG + '.store.content_db')
 artifact_db = importlib.import_module(PKG + '.store.artifact_db')
 
-BAD_DSN = 'mysql://nobody:unused@127.0.0.1:3399/co_dev'
+BAD_DSN = 'mysql://nobody:unused@127.0.0.1:3399/c1_structure_dev'
 FAILS = []
 
 
@@ -101,7 +101,7 @@ def art_counts():
     try:
         with conn.cursor() as cur:
             cur.execute('SELECT COUNT(*), COALESCE(SUM(size_bytes),0)'
-                        ' FROM c1_artifact')
+                        ' FROM c1_parse_artifact')
             return tuple(cur.fetchone())
     finally:
         conn.close()
@@ -217,9 +217,9 @@ def cleanup_task(task_id):
                     'DELETE FROM c1_staging_record WHERE task_file_id=%s',
                     (tf,))
                 cur.execute(
-                    'DELETE FROM c1_artifact WHERE task_file_id=%s',
+                    'DELETE FROM c1_parse_artifact WHERE task_file_id=%s',
                     (tf,))
-            cur.execute('DELETE FROM c1_quarantine WHERE task_id=%s',
+            cur.execute('DELETE FROM c1_load_quarantine WHERE task_id=%s',
                         (task_id,))
             cur.execute('DELETE FROM c1_load_log WHERE task_id=%s',
                         (task_id,))
@@ -265,13 +265,13 @@ def _main(up):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT DISTINCT task_file_id FROM c1_artifact')
+            cur.execute('SELECT DISTINCT task_file_id FROM c1_parse_artifact')
             tfs = [r[0] for r in cur.fetchall()]
             cur.execute('SELECT id, sha256, size_bytes, content'
-                        ' FROM c1_file')
+                        ' FROM c1_doc_file')
             files = cur.fetchall()
             cur.execute(
-                'SELECT COUNT(*) FROM c1_artifact a'
+                'SELECT COUNT(*) FROM c1_parse_artifact a'
                 ' LEFT JOIN c1_task_file tf ON tf.id=a.task_file_id'
                 ' WHERE tf.id IS NULL')
             orphan_art = cur.fetchone()[0]
@@ -292,14 +292,14 @@ def _main(up):
           '{} 个文件'.format(n) if not bad else '不一致：{}'.format(bad[:5]))
     bad_src = [r[0] for r in files
                if sha(r[3]) != r[1] or len(r[3]) != r[2]]
-    check('c1_file.content sha/size 自洽', not bad_src,
+    check('c1_doc_file.content sha/size 自洽', not bad_src,
           '{} 个原件'.format(len(files)) if not bad_src
           else '不一致 id：{}'.format(bad_src))
 
     print('[2/6] 真链路：无持久磁盘 + BLOB（临时服务 8799）')
     src = find_pdf_file()
     if src is None:
-        print('  FAIL  c1_file 无 PDF 原件，无法真链路验收')
+        print('  FAIL  c1_doc_file 无 PDF 原件，无法真链路验收')
         return 1
     svc = start_service(8799)
     try:

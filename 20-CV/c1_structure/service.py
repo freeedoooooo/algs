@@ -72,7 +72,7 @@ def _kind_of(name):
 
 
 def register_file(name, data):
-    """sha256 去重登记，原件字节直接进 c1_file.content。
+    """sha256 去重登记，原件字节直接进 c1_doc_file.content。
     DB 必选：失败上抛（调用方回 503）。"""
     sha = hashlib.sha256(data).hexdigest()
     fid, dedup = _load('store.catalog').register_file(
@@ -149,7 +149,7 @@ _STAGE_FRAC = {
 
 
 def _ingest_case(task_file_id, case_abs):
-    """scratch 目录全量产物入 c1_artifact（管线/报告生成零改动，
+    """scratch 目录全量产物入 c1_parse_artifact（管线/报告生成零改动，
     它们照旧写文件，这里统一收编入库）。"""
     artifact = _load('store.artifact')
     for root, _, files in os.walk(case_abs):

@@ -2,6 +2,7 @@
 --   extract_* 表前缀 → c1_*；extract_template* → c1_rule*；
 --   template_* 列 → rule_*；索引/注释同步；产物名 extract.json → parse.json。
 -- 已对 co_dev 执行（2026-11-23 10:07）。备份：data/backup/co_dev_pre002_*.sql。新装直接跑 001。
+-- 2026-11-23 D 批后 co_dev 退役存档，平台库改为新建的 c1_structure_dev（本脚本仅对 co_dev 有效）。
 
 RENAME TABLE `extract_template_version` TO `c1_rule_version`, `extract_template` TO `c1_rule`, `extract_staging_lineage` TO `c1_staging_lineage`, `extract_staging_record` TO `c1_staging_record`, `extract_staging_field` TO `c1_staging_field`, `extract_task_file` TO `c1_task_file`, `extract_task` TO `c1_task`, `extract_load_datasource` TO `c1_load_datasource`, `extract_load_table_field` TO `c1_load_table_field`, `extract_load_table` TO `c1_load_table`, `extract_load_log` TO `c1_load_log`, `extract_quarantine` TO `c1_quarantine`, `extract_artifact` TO `c1_artifact`, `extract_file` TO `c1_file`;
 ALTER TABLE `c1_task` CHANGE COLUMN `template_version_id` `rule_version_id` bigint NOT NULL;

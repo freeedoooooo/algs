@@ -16,7 +16,7 @@ def save(task_file_id, name, data, mime, kind):
     try:
         with conn.cursor() as cur:
             cur.execute(
-                'INSERT INTO c1_artifact (task_file_id, name, kind, mime,'
+                'INSERT INTO c1_parse_artifact (task_file_id, name, kind, mime,'
                 ' size_bytes, sha256, content) VALUES (%s,%s,%s,%s,%s,%s,%s)'
                 ' ON DUPLICATE KEY UPDATE kind=VALUES(kind), mime=VALUES(mime),'
                 ' size_bytes=VALUES(size_bytes), sha256=VALUES(sha256),'
@@ -34,7 +34,7 @@ def get(task_file_id, name):
         with conn.cursor() as cur:
             cur.execute(
                 'SELECT kind, mime, size_bytes, sha256, content'
-                ' FROM c1_artifact WHERE task_file_id=%s AND name=%s',
+                ' FROM c1_parse_artifact WHERE task_file_id=%s AND name=%s',
                 (task_file_id, name))
             row = cur.fetchone()
         if not row:
@@ -49,7 +49,7 @@ def exists(task_file_id, name):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT 1 FROM c1_artifact'
+            cur.execute('SELECT 1 FROM c1_parse_artifact'
                         ' WHERE task_file_id=%s AND name=%s',
                         (task_file_id, name))
             return cur.fetchone() is not None
@@ -62,7 +62,7 @@ def list(task_file_id):
     try:
         with conn.cursor() as cur:
             cur.execute('SELECT name, kind, mime, size_bytes, sha256'
-                        ' FROM c1_artifact WHERE task_file_id=%s'
+                        ' FROM c1_parse_artifact WHERE task_file_id=%s'
                         ' ORDER BY name', (task_file_id,))
             return [{'name': r[0], 'kind': r[1], 'mime': r[2],
                      'size': r[3], 'sha': r[4]} for r in cur.fetchall()]
@@ -75,7 +75,7 @@ def latest_task_file_with(name):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT task_file_id FROM c1_artifact'
+            cur.execute('SELECT task_file_id FROM c1_parse_artifact'
                         ' WHERE name=%s ORDER BY id DESC LIMIT 1', (name,))
             row = cur.fetchone()
             return row[0] if row else None

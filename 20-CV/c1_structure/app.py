@@ -15,11 +15,11 @@ c1_structure/app.py — Web 工具入口（FastAPI + uvicorn）。只负责 HTTP
     GET  /api/status    处理进度
     GET  /parse-report   对照报告（重定向到最新 task_file 的报告真实地址）
     /files/<task_file_id>/<path>   产物（DB BLOB，白名单，raw 403）
-    /srcfiles/<file_id>            原件（c1_file.content BLOB）
+    /srcfiles/<file_id>            原件（c1_doc_file.content BLOB）
     /static/<path>      页面 css / js
 
 存储契约：DB 唯一事实源——目录/记录/血缘关系表，
-原件字节 c1_file.content，产物字节 c1_artifact（task_file 粒度）；
+原件字节 c1_doc_file.content，产物字节 c1_parse_artifact（task_file 粒度）；
 磁盘仅 tmp/ 运行期 scratch。DB 不可用显式 503/failed，不降级。
 审计/file:// 用 export_artifacts.py。解析逻辑在 pipeline/，报告在 parse_report/。
 """
@@ -157,7 +157,7 @@ def files_db(path: str, request: Request):
 
 @app.get('/srcfiles/{file_id:int}')
 def srcfiles_db(file_id: int, request: Request):
-    """/srcfiles/<file_id>：原件字节（c1_file.content）。
+    """/srcfiles/<file_id>：原件字节（c1_doc_file.content）。
     用 id 不用名字——同名不同字节是两行，名字会撞。"""
     s = _load('store.catalog').get_file_content(file_id)
     if s is None:
@@ -275,7 +275,7 @@ async def upload(request: Request):
     # 调试参数：校验一次，非法值回退默认并把警告带回页面（不让整批失败）
     params, warns = params_mod.normalize(body.get('params'))
 
-    # 输入副本只落 tmp/input scratch（字节事实源在 c1_file.content），跑完即清；
+    # 输入副本只落 tmp/input scratch（字节事实源在 c1_doc_file.content），跑完即清；
     # 任何失败路径（校验 400 / DB 503）都由 finally 回收，不留孤儿
     in_dir = tempfile.mkdtemp(prefix='in_', dir=config.TMP_INPUT)
     launched = False
@@ -751,7 +751,7 @@ async def api_staging_review(task_id: int, task_file_id: int,
 
 @app.post('/api/tasks')
 async def api_tasks_create(request: Request):
-    """从资料库选文件发起任务（复用上传编排；字节直读 c1_file.content）。"""
+    """从资料库选文件发起任务（复用上传编排；字节直读 c1_doc_file.content）。"""
     if service.STATE['running']:
         return JSONResponse({'ok': False, 'error': '已有任务正在处理'},
                             status_code=409)

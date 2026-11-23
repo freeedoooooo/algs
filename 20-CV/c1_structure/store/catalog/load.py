@@ -190,7 +190,7 @@ _LT_COLS = (
 _LT_JOIN = (
     ' FROM c1_load_table lt'
     ' JOIN c1_load_datasource d ON d.id=lt.datasource_id'
-    ' JOIN c1_rule t ON t.id=lt.rule_id')
+    ' JOIN c1_extract_rule t ON t.id=lt.rule_id')
 
 
 def list_load_tables(datasource_id=None):
@@ -245,8 +245,8 @@ def get_load_table(lt_id):
 
 def _tpl_schema_fields(cur, rule_id):
     cur.execute(
-        'SELECT tv.schema_json FROM c1_rule_version tv'
-        ' JOIN c1_rule t ON t.id=tv.rule_id'
+        'SELECT tv.schema_json FROM c1_extract_rule_version tv'
+        ' JOIN c1_extract_rule t ON t.id=tv.rule_id'
         ' WHERE tv.rule_id=%s AND tv.version=t.current_version',
         (rule_id,))
     row = cur.fetchone()

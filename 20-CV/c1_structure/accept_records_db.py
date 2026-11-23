@@ -11,7 +11,7 @@ DB 唯一事实源，task_id / task_file_id 粒度，无外键）。
 入库时绑定目标（预检/门禁失败不留绑定可换目标）、已绑定锁死 409、
 门禁 409、全部确认→loaded、回执幂等、transform/数据级隔离→partial、重试、upsert update、
 数据源目标锁定/映射只读审计）。
-上传字节取自 c1_file.content；断库用不可达 DSN 的临时服务模拟，
+上传字节取自 c1_doc_file.content；断库用不可达 DSN 的临时服务模拟，
 全程不触碰真实库的可用性。破坏性操作只落合成 task/抽取规则/数据源/目标表（验完按 id 清理＋DROP，
 无外键：field/lineage/artifact 等子表须显式先删）；真实 task / file / 抽取规则只读。
 用户的 8765 全程不动。两套验收脚本严禁并行（共用 8799/8797 端口）。
@@ -44,7 +44,7 @@ content_db = importlib.import_module(PKG + '.store.content_db')
 errors = importlib.import_module(PKG + '.store.errors')
 
 # 本地无人监听的端口：模拟库不可达，凭据为假值，永不落日志
-BAD_DSN = 'mysql://nobody:unused@127.0.0.1:3399/co_dev'
+BAD_DSN = 'mysql://nobody:unused@127.0.0.1:3399/c1_structure_dev'
 P2_TABLE = '_accept_p2_load'
 FAILS = []
 
@@ -139,18 +139,18 @@ def baseline():
     try:
         with conn.cursor() as cur:
             cur.execute('SELECT COUNT(*), COALESCE(SUM(size_bytes),0)'
-                        ' FROM c1_artifact')
+                        ' FROM c1_parse_artifact')
             art = tuple(cur.fetchone())
             out = [counts(), art]
-            for sql in ('SELECT COUNT(*) FROM c1_file',
+            for sql in ('SELECT COUNT(*) FROM c1_doc_file',
                         'SELECT id FROM c1_task ORDER BY id',
-                        'SELECT COUNT(*) FROM c1_rule',
-                        'SELECT COUNT(*) FROM c1_rule_version',
+                        'SELECT COUNT(*) FROM c1_extract_rule',
+                        'SELECT COUNT(*) FROM c1_extract_rule_version',
                         'SELECT COUNT(*) FROM c1_load_datasource',
                         'SELECT COUNT(*) FROM c1_load_table',
                         'SELECT COUNT(*) FROM c1_load_table_field',
                         'SELECT COUNT(*) FROM c1_load_log',
-                        'SELECT COUNT(*) FROM c1_quarantine'):
+                        'SELECT COUNT(*) FROM c1_load_quarantine'):
                 cur.execute(sql)
                 rows = cur.fetchall()
                 out.append(tuple(r[0] for r in rows))
@@ -176,9 +176,9 @@ def p2_cleanup(p2):
                 cur.execute('DELETE FROM c1_load_datasource'
                             ' WHERE id=%s', (did,))
             for tid in p2.get('tpls', []):
-                cur.execute('DELETE FROM c1_rule_version'
+                cur.execute('DELETE FROM c1_extract_rule_version'
                             ' WHERE rule_id=%s', (tid,))
-                cur.execute('DELETE FROM c1_rule WHERE id=%s', (tid,))
+                cur.execute('DELETE FROM c1_extract_rule WHERE id=%s', (tid,))
             for tname in p2.get('tables', []):
                 cur.execute('DROP TABLE IF EXISTS ' + tname)
         conn.commit()
@@ -240,7 +240,7 @@ def upload(port, src_bytes, name, extra=None):
 
 
 def find_pdf_file():
-    """真实原件（c1_file.content）里第一个 PDF，真链路上传字节来源。
+    """真实原件（c1_doc_file.content）里第一个 PDF，真链路上传字节来源。
     size>1KB 过滤：排除验收合成的假 PDF 行。"""
     page = 1
     while True:
@@ -304,9 +304,9 @@ def cleanup_tasks(task_ids, file_ids):
                         'DELETE FROM c1_staging_record'
                         ' WHERE task_file_id=%s', (tf,))
                     cur.execute(
-                        'DELETE FROM c1_artifact WHERE task_file_id=%s',
+                        'DELETE FROM c1_parse_artifact WHERE task_file_id=%s',
                         (tf,))
-                cur.execute('DELETE FROM c1_quarantine WHERE task_id=%s',
+                cur.execute('DELETE FROM c1_load_quarantine WHERE task_id=%s',
                             (tid,))
                 cur.execute('DELETE FROM c1_load_log WHERE task_id=%s',
                             (tid,))
@@ -316,14 +316,14 @@ def cleanup_tasks(task_ids, file_ids):
             if file_ids:
                 ph = ','.join(['%s'] * len(file_ids))
                 cur.execute(
-                    'DELETE FROM c1_file WHERE id IN ({})'
+                    'DELETE FROM c1_doc_file WHERE id IN ({})'
                     .format(ph), file_ids)
             # 真链路若误传合成字节会按真实 sha 新建 file 行（去重不命中
             # 假 sha）：按合成内容 sha 兜底清理，只删未被引用的
             syn_shas = [hashlib.sha256(b'%PDF-1.4 accept').hexdigest(),
                         hashlib.sha256(b'%PDF-1.4 accept-two').hexdigest()]
             cur.execute(
-                'DELETE FROM c1_file WHERE sha256 IN (%s,%s)'
+                'DELETE FROM c1_doc_file WHERE sha256 IN (%s,%s)'
                 ' AND id NOT IN (SELECT file_id FROM c1_task_file)',
                 syn_shas)
         conn.commit()
@@ -477,10 +477,10 @@ def _main(syn_tasks, syn_fids, up, p2):
     check('field 投影命中', any(h['task_id'] == task2 for h in hit)
           and len(hit2) > 0, 'syn={} real={}'.format(len(hit), len(hit2)))
 
-    print('[5/7] 真链路（临时服务 8799，上传字节取自 c1_file.content）')
+    print('[5/7] 真链路（临时服务 8799，上传字节取自 c1_doc_file.content）')
     src = find_pdf_file()
     if src is None:
-        print('  FAIL  c1_file 无 PDF 原件，无法真链路验收')
+        print('  FAIL  c1_doc_file 无 PDF 原件，无法真链路验收')
         return 1
     svc = start_service(8799)
     try:
