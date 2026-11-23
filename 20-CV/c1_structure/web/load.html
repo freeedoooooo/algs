@@ -25,7 +25,7 @@
   <div class="pagehead">
     <h1>入库规则</h1>
     <span class="spacer"></span>
-    <span class="msg">左侧选择业务库（一个业务库对应一个数据库），右侧配置入库规则；记录须先完成提取与校验，全部确认后手动入库</span>
+    <span class="msg">左侧选择业务库（一个业务库对应一个数据库），右侧配置入库规则；记录须先完成解析与校验，全部确认后手动入库</span>
   </div>
   <div class="banner err" id="err" hidden></div>
   <div class="banner info" id="ok" hidden></div>
@@ -55,14 +55,14 @@
       </div>
       <table class="list" id="maptable" hidden>
         <thead><tr>
-          <th class="seq">序号</th><th>规则ID</th><th>目标表</th><th>模板</th><th>写入方式</th>
+          <th class="seq">序号</th><th>规则ID</th><th>目标表</th><th>抽取规则</th><th>写入方式</th>
           <th>字段数</th><th>去重依据</th><th>操作</th>
         </tr></thead>
         <tbody id="maprows"></tbody>
       </table>
       <div class="empty" id="mapempty" hidden>
         <b>该业务库还没有入库规则</b>
-        选择模板与目标表，将模板字段逐一对应到目标列。系统仅写入已有表，不会自动建表。
+        选择抽取规则与目标表，将规则字段逐一对应到目标列。系统仅写入已有表，不会自动建表。
       </div>
       <div class="empty" id="mapnone">
         <b>请先在左侧选择一个业务库</b>
@@ -136,7 +136,7 @@
         <input type="text" class="tin" id="mpds" disabled>
       </div>
       <div class="fsec">
-        <label class="flab" for="mptpl">模板（须为固定字段模板，原始透传不支持入库）</label>
+        <label class="flab" for="mptpl">抽取规则（须为固定字段规则；原始透传不支持入库）</label>
         <select class="tin" id="mptpl"></select>
       </div>
       <div class="fsec">
@@ -153,7 +153,7 @@
         </select>
       </div>
       <div class="fsec">
-        <label class="flab">字段对齐（模板字段 → 目标列）</label>
+        <label class="flab">字段对齐（规则字段 → 目标列）</label>
         <div class="hint" id="mpmatch"></div>
         <div id="mprows"></div>
         <div class="hint">勾选「去重依据」的列用于判断记录是否已存在（如发票号）。系统按字段名自动对齐，无法匹配的需要手动选择。</div>

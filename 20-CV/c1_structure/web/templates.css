@@ -1,4 +1,4 @@
-/* web/templates.css — 模板管理页私有样式（壳 token 在 shell.css） */
+/* web/templates.css — 抽取规则管理页私有样式（壳 token 在 shell.css） */
 .drawer.wide .dpanel{width:min(720px,96vw)}
 .fsec{margin-bottom:12px}
 .flab{display:block;font-size:12px;font-weight:600;color:#475569;margin-bottom:5px}

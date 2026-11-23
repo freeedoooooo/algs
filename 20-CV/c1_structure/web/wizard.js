@@ -127,7 +127,7 @@ function wzStep1(b){
       dsWithRules.map(wzDsOpt).join('')+'</select></div>'+
       '<div class="wzrow"><label>入库规则</label><select id="wzrule1"></select></div>';
   }else{
-    html+='<div class="hint">该模板还没有已配置的入库规则，请使用下方「新建入库规则」。</div>';
+    html+='<div class="hint">该抽取规则还没有已配置的入库规则，请使用下方「新建入库规则」。</div>';
   }
   html+='<div class="wzsec">新建入库规则</div>'+
     '<div class="wzrow"><label>业务库</label><select id="wzds2">'+
@@ -215,7 +215,7 @@ function wzAdvance(){
 /* ---- step2 字段对齐（新建规则草稿，复用 §1.3 自动匹配口径） ---- */
 function wzStep2(b){
   if(!wz.tfields){
-    b.innerHTML='<div class="empty">加载模板字段与目标列…</div>';
+    b.innerHTML='<div class="empty">加载规则字段与目标列…</div>';
     Promise.all([
       wzApi('GET','/api/templates/'+wz.templateId).then(function(j){
         var sj=j.schema_json;
@@ -235,8 +235,8 @@ function wzStep2(b){
     return;
   }
   if(!wz.tfields.length){
-    b.innerHTML='<div class="empty">该模板无固定字段（原始透传），不支持入库。'+
-      '请关闭向导，改用固定字段模板重新提取。</div>';
+    b.innerHTML='<div class="empty">该规则无固定字段（原始透传），不支持入库。'+
+      '请关闭向导，改用固定字段抽取规则重新解析。</div>';
     return;
   }
   var html='<div class="wzrow"><label>写入方式</label><select id="wzwm">'+
@@ -295,7 +295,7 @@ function wzMatchBar(){
 }
 function wzCollect(){
   if(!wz.tfields||!wz.tfields.length){
-    wzMsg('该模板无固定字段，不支持入库',true); return false;
+    wzMsg('该规则无固定字段，不支持入库',true); return false;
   }
   var rows=document.querySelectorAll('#wzrows .wzfr');
   var fields=[], seen={}, err=null;

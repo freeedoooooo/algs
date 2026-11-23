@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>提取模板 · 结构化平台</title>
+<title>抽取规则 · 结构化平台</title>
 <link rel="stylesheet" href="/static/shell.css">
 <link rel="stylesheet" href="/static/templates.css">
 <link rel="stylesheet" href="/static/hint.css">
@@ -19,16 +19,16 @@
   <a href="/rules">入库</a>
   <a href="/tasks">任务</a>
   <span class="spacer"></span>
-  <span class="navnote">定义文件的字段提取方式</span>
+  <span class="navnote">配置从文件抽取字段的规则</span>
 </nav>
 <div class="pagebody">
   <div class="pagehead">
-    <h1>提取模板</h1>
-    <span class="sub">模板定义文件的读取方式，产出一组规范字段；字段写入哪个库表在「入库」页配置</span>
+    <h1>抽取规则</h1>
+    <span class="sub">抽取规则定义文件的读取方式，产出一组规范字段；字段写入哪个库表在「入库」页配置</span>
     <span class="spacer"></span>
     <div class="toolbar">
-      <input type="search" id="q" placeholder="搜索模板名 / 说明…">
-      <button type="button" class="btn" id="newbtn">新建模板</button>
+      <input type="search" id="q" placeholder="搜索规则名 / 说明…">
+      <button type="button" class="btn" id="newbtn">新建规则</button>
     </div>
   </div>
   <div class="banner err" id="err" hidden></div>
@@ -36,7 +36,7 @@
   <div class="panel">
     <table class="list">
       <thead><tr>
-        <th class="seq">序号</th><th>模板ID</th><th>模板名</th><th>说明</th><th>当前版本</th><th>版本数</th>
+        <th class="seq">序号</th><th>规则ID</th><th>规则名</th><th>说明</th><th>当前版本</th><th>版本数</th>
         <th>更新时间</th><th>操作</th>
       </tr></thead>
       <tbody id="rows"></tbody>
@@ -51,14 +51,14 @@
 <div class="drawer wide" id="edit" hidden>
   <div class="dpanel">
     <div class="dhead">
-      <h2 id="etitle">新建模板</h2>
+      <h2 id="etitle">新建规则</h2>
       <span id="everbadge"></span>
       <span class="spacer"></span>
       <button type="button" class="dclose" id="eclose">关闭 (Esc)</button>
     </div>
     <div class="dbody">
       <div class="fsec">
-        <label class="flab" for="ename">模板名</label>
+        <label class="flab" for="ename">规则名</label>
         <input type="text" class="tin" id="ename" placeholder="如：银行流水 · 明细字段">
       </div>
       <div class="fsec">
@@ -76,7 +76,7 @@
       </div>
       <div class="fsec">
         <label class="flab" for="tblsel">源表
-          <span class="hint" tabindex="0" data-tip="每个模板版本对应一张源表。&#10;序号即候选表顺序：各页非合并表在前，跨页合并表在后。&#10;未选参考文件时，可手动填表序号或表头关键词（取第一张匹配表）。">?</span>
+          <span class="hint" tabindex="0" data-tip="每个规则版本对应一张源表。&#10;序号即候选表顺序：各页非合并表在前，跨页合并表在后。&#10;未选参考文件时，可手动填表序号或表头关键词（取第一张匹配表）。">?</span>
         </label>
         <select class="tin" id="tblsel" disabled>
           <option value="">—</option>
@@ -109,7 +109,7 @@
     <div class="dfoot">
       <span class="msg" id="emsg"></span>
       <span class="spacer"></span>
-      <button type="button" class="btn danger" id="delbtn" hidden>删除模板</button>
+      <button type="button" class="btn danger" id="delbtn" hidden>删除规则</button>
       <button type="button" class="btn" id="savebtn">保存为新版本</button>
     </div>
   </div>

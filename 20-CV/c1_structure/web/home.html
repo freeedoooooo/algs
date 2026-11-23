@@ -29,13 +29,13 @@
 
   <section class="panel quick">
     <div class="qhead">
-      <b>快速提取</b>
-      <label class="qt">模板
+      <b>快速开始</b>
+      <label class="qt">抽取规则
         <select id="htpl"></select>
       </label>
       <span class="spacer"></span>
       <span class="qmsg" id="hmsg">未选择文件</span>
-      <button type="button" class="btn mini" id="hgo" disabled>开始提取</button>
+      <button type="button" class="btn mini" id="hgo" disabled>开始解析</button>
     </div>
     <div id="hdrop">
       <b>点击或拖拽文件到此处</b>
@@ -48,22 +48,28 @@
 
   <section class="cards">
     <div class="card" id="card1">
-      <div class="ctitle">① 提取<span>将文件解析为表格记录</span></div>
+      <div class="ctitle">① 解析<span>将文件解析为结构化数据</span></div>
       <div class="cnum" id="n1">—</div>
       <div class="csub" id="s1"></div>
-      <a class="clink" href="/extract">前往提取 →</a>
+      <a class="clink" href="/extract">前往解析 →</a>
     </div>
     <div class="card" id="card2">
-      <div class="ctitle">② 校验<span>逐条核对并确认</span></div>
+      <div class="ctitle">② 抽取<span>配置字段抽取规则</span></div>
       <div class="cnum" id="n2">—</div>
       <div class="csub" id="s2"></div>
-      <a class="clink" href="/review?prog=todo">前往校验 →</a>
+      <a class="clink" href="/templates">前往抽取 →</a>
     </div>
     <div class="card" id="card3">
-      <div class="ctitle">③ 入库<span>写入业务库</span></div>
+      <div class="ctitle">③ 校验<span>逐条核对并确认</span></div>
       <div class="cnum" id="n3">—</div>
       <div class="csub" id="s3"></div>
-      <a class="clink" href="/tasks?state=previewed" id="l3">前往入库 →</a>
+      <a class="clink" href="/review?prog=todo">前往校验 →</a>
+    </div>
+    <div class="card" id="card4">
+      <div class="ctitle">④ 入库<span>写入业务库</span></div>
+      <div class="cnum" id="n4">—</div>
+      <div class="csub" id="s4"></div>
+      <a class="clink" href="/tasks?state=previewed" id="l4">前往入库 →</a>
     </div>
   </section>
 
@@ -81,7 +87,7 @@
       <button type="button" class="pgnext">下一页</button>
     </div>
     <div class="empty" id="todoempty" hidden>
-      <b>暂无待办事项</b>可在上方快速提取，或到 <a href="/sources">资料</a> 页查看原件。
+      <b>暂无待办事项</b>可在上方快速解析，或到 <a href="/sources">资料</a> 页查看原件。
     </div>
   </section>
 

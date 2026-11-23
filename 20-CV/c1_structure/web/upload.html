@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>提取 · 结构化平台</title>
+<title>解析 · 结构化平台</title>
 <link rel="stylesheet" href="/static/shell.css">
 <link rel="stylesheet" href="/static/upload.css">
 <link rel="stylesheet" href="/static/hint.css">
@@ -31,7 +31,7 @@
       accept=".png,.jpg,.jpeg,.bmp,.webp,.tif,.tiff,.pdf,.csv,.txt,.md">
     <div class="srcrow">
       <button type="button" class="ghost mini" id="fromsrc">从资料库选择 ▸</button>
-      <span class="hint" tabindex="0" data-tip="从资料库已登记的文件中直接选择并发起提取，&#10;无需重复上传。">?</span>
+      <span class="hint" tabindex="0" data-tip="从资料库已登记的文件中直接选择并发起解析，&#10;无需重复上传。">?</span>
     </div>
     <ul class="files" id="filelist"></ul>
     <div class="filebar" id="filebar" hidden>
@@ -39,12 +39,12 @@
       <button type="button" class="mini" id="clearfiles">清空列表</button>
     </div>
     <div class="tplrow">
-      <label for="tplsel">模板</label>
+      <label for="tplsel">抽取规则</label>
       <select id="tplsel"></select>
-      <span class="hint" tabindex="0" data-tip="模板定义文件的读取方式。&#10;固定字段模板：按预设字段提取，产出规范记录，支持入库。&#10;原始透传：按原表逐行输出，表头作为字段名，&#10;仅支持预览，不支持入库。">?</span>
+      <span class="hint" tabindex="0" data-tip="抽取规则定义文件的读取方式。&#10;固定字段规则：按预设字段抽取，产出规范记录，支持入库。&#10;原始透传：按原表逐行输出，表头作为字段名，&#10;仅支持预览，不支持入库。">?</span>
     </div>
     <div class="row">
-      <button id="go" disabled>开始提取</button>
+      <button id="go" disabled>开始解析</button>
       <span class="hint" tabindex="0" data-tip="首次加载模型约需 20~40 秒，后续任务复用模型，速度更快。">?</span>
       <span id="msg"></span>
     </div>
@@ -65,7 +65,7 @@
     <div class="reportempty" id="reportempty">
       <div class="re-inner">
         <b>对照报告将显示在这里</b>
-        <span>选择文件后点击「开始提取」，生成对照报告。</span>
+        <span>选择文件后点击「开始解析」，生成对照报告。</span>
       </div>
     </div>
     <div class="runpanel" id="runpanel" hidden>
@@ -74,7 +74,7 @@
           <span id="runstage">准备中…</span>
           <span class="spacer"></span>
           <span id="runpct">0%</span>
-          <a class="mini-link" id="stglink" hidden>预览提取数据</a>
+          <a class="mini-link" id="stglink" hidden>预览解析结果</a>
           <a class="mini-link" id="dlLog" href="/api/logs" target="_blank">下载日志</a>
           <button type="button" class="mini-link" id="logclose" hidden>关闭</button>
         </div>
@@ -111,7 +111,7 @@
     <div class="dfoot">
       <span id="srccount">已选 0 个</span>
       <span class="spacer" style="flex:1"></span>
-      <button type="button" class="btn" id="srcgo" disabled>提取所选文件</button>
+      <button type="button" class="btn" id="srcgo" disabled>解析所选文件</button>
     </div>
   </div>
 </div>

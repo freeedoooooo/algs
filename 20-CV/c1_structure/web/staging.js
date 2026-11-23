@@ -708,7 +708,7 @@ function renderLedger(){
   if(!list.length){
     empty.innerHTML=ledgerItems.length?
       '<b>无匹配任务</b>请调整搜索关键词或筛选条件。':
-      '<b>暂无可校验的记录</b>请先到「提取」页上传文件。';
+      '<b>暂无可校验的记录</b>请先到「解析」页上传文件。';
   }
   document.getElementById('ledgerrows').innerHTML=info.rows.map(function(r,i){
     var tpl=r.template||{};

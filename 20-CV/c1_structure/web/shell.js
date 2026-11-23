@@ -43,7 +43,7 @@ var MODE_LABEL={
 };
 function modeLabel(m){ return MODE_LABEL[m]||m||'—'; }
 var STATE_LABEL={
-  pending:['待处理','gray'], extracting:['提取中','blue'],
+  pending:['待处理','gray'], extracting:['解析中','blue'],
   previewed:['已预览','green'], reviewed:['已校验','purple'],
   loading:['入库中','blue'], loaded:['已入库','green'],
   failed:['失败','red'], partial:['部分入库','yellow'],
@@ -136,7 +136,7 @@ function openReceiptDrawer(taskId){
       '<div class="empty">读取失败：平台库不可用</div>';
   });
 }
-/* ---- 列表分页共用组件（资料/任务/模板/校验台账/入库）。
+/* ---- 列表分页共用组件（资料/任务/抽取规则/校验台账/入库）。
    每页条数用户可选（10/20/50/100，默认 20，localStorage 记忆，全站点统一）；
    列表为空时隐藏分页条；翻页后滚回列表顶部；筛选变化由各页自行回第 1 页。
    markup 约定：

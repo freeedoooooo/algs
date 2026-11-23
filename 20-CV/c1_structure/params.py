@@ -24,8 +24,8 @@ LIMIT_TYPE_DEFAULT = 'min'
 SCHEMA = [
     dict(key='page', label='PDF 页码', type='str', default='',
          order=1, group='① 页面范围',
-         help='留空（默认）：提取全部页，多页 PDF 自动启用分页与跨页合并。\n'
-              '填写页码（从 1 开始）：仅提取该页。\n'
+         help='留空（默认）：解析全部页，多页 PDF 自动启用分页与跨页合并。\n'
+              '填写页码（从 1 开始）：仅解析该页。\n'
               '填写 all / 全部 / * 等同留空。图片与纯文本始终为单页。'),
     dict(key='table_strategy', label='表格识别策略', type='select',
          default='auto', options=['auto', 'lines', 'text'],
@@ -162,7 +162,7 @@ def normalize(raw):
     page_raw = out.get('page', '')
     page = parse_page(page_raw)
     if page is None:
-        warns.append('PDF 页码「{}」无法解析（需正整数或留空/all），已提取全部页'
+        warns.append('PDF 页码「{}」无法解析（需正整数或留空/all），已解析全部页'
                      .format(str(page_raw)[:40]))
         page = 'all'
     out['page'] = page

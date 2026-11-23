@@ -1,4 +1,4 @@
-/* web/home.css — 工作台首页私有样式（快速提取条/状态卡/待办列表；
+/* web/home.css — 工作台首页私有样式（快速解析条/状态卡/待办列表；
    通用 token 全在 shell.css，这里只补工作台特有的版式） */
 .quick{padding:12px 14px;margin-bottom:12px}
 .qhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}

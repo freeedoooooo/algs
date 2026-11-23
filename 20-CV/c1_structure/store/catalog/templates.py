@@ -70,13 +70,13 @@ def get_template_version(version_id=None, name=None):
 def _tpl_exists(cur, template_id):
     cur.execute('SELECT id FROM extract_template WHERE id=%s', (template_id,))
     if not cur.fetchone():
-        raise NotFound('模板不存在')
+        raise NotFound('抽取规则不存在')
 
 
 def _tpl_payload(schema, mapping, transform):
     for v in (schema, mapping, transform):
         if v is not None and not isinstance(v, dict):
-            raise BadRequest('模板定义须为 JSON 对象')
+            raise BadRequest('规则定义须为 JSON 对象')
     return (json.dumps(schema), json.dumps(mapping), json.dumps(transform))
 
 
@@ -106,14 +106,14 @@ def create_template(name, description=None, schema=None, mapping=None,
     """建模板＋v1 不可变快照＋current=1；重名 Conflict。返回版本 id。"""
     name = str(name or '').strip()
     if not name:
-        raise BadRequest('模板名不能为空')
+        raise BadRequest('规则名不能为空')
     sj, mj, tj = _tpl_payload(schema, mapping, transform)
     conn = db.connect()
     try:
         with conn.cursor() as cur:
             cur.execute('SELECT id FROM extract_template WHERE name=%s', (name,))
             if cur.fetchone():
-                raise Conflict('模板名已存在')
+                raise Conflict('规则名已存在')
             cur.execute('INSERT INTO extract_template (name, description,'
                         ' current_version) VALUES (%s,%s,1)',
                         (name, description))
@@ -163,11 +163,11 @@ def update_template(template_id, name=None, description=None,
             if name is not None:
                 name = str(name).strip()
                 if not name:
-                    raise BadRequest('模板名不能为空')
+                    raise BadRequest('规则名不能为空')
                 cur.execute('SELECT id FROM extract_template'
                             ' WHERE name=%s AND id<>%s', (name, template_id))
                 if cur.fetchone():
-                    raise Conflict('模板名已存在')
+                    raise Conflict('规则名已存在')
                 cur.execute('UPDATE extract_template SET name=%s WHERE id=%s',
                             (name, template_id))
             if description is not None:
@@ -197,7 +197,7 @@ def delete_template(template_id):
                         ' extract_template_version WHERE template_id=%s)',
                         (template_id,))
             if cur.fetchone()[0]:
-                raise Conflict('该模板已被任务引用，禁止删除')
+                raise Conflict('该抽取规则已被任务引用，禁止删除')
             cur.execute('DELETE FROM extract_template_version'
                         ' WHERE template_id=%s', (template_id,))
             cur.execute('DELETE FROM extract_template WHERE id=%s',

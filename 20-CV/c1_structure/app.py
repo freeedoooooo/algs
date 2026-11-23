@@ -8,7 +8,7 @@ c1_structure/app.py — Web 工具入口（FastAPI + uvicorn）。只负责 HTTP
 
 路由（页面地址＝产品名词，模板文件名是历史内部名，对应关系见 docs/功能映射表）：
     GET  /              工作台首页（web/home.html）
-    GET  /extract       提取页（upload.html） · /sources 资料 · /templates 模板
+    GET  /extract       解析页（upload.html） · /sources 资料 · /templates 抽取规则
     GET  /review        校验台（staging.html） · /rules 入库规则（load.html）
     GET  /tasks         任务页 · GET /healthz 健康检查
     POST /api/upload    上传（base64 JSON，不依赖 python-multipart）
@@ -21,7 +21,7 @@ c1_structure/app.py — Web 工具入口（FastAPI + uvicorn）。只负责 HTTP
 存储契约（design-task-schema.md）：DB 唯一事实源——目录/记录/血缘关系表，
 原件字节 extract_file.content，产物字节 extract_artifact（task_file 粒度）；
 磁盘仅 tmp/ 运行期 scratch。DB 不可用显式 503/failed，不降级。
-审计/file:// 用 export_artifacts.py。提取逻辑在 pipeline/，报告在 extract_report/。
+审计/file:// 用 export_artifacts.py。解析逻辑在 pipeline/，报告在 extract_report/。
 """
 import base64
 import importlib
@@ -345,7 +345,7 @@ def extract_report():
         return RedirectResponse('/files/{}/{}'.format(
             tf, quote(config.EXTRACT_REPORT_NAME, safe='')))
     return HTMLResponse(
-        '<h3>还没有对照报告</h3><p><a href="/">返回上传页</a>先上传一个文件。</p>')
+        '<h3>还没有对照报告</h3><p><a href="/">返回工作台</a>先上传文件发起解析。</p>')
 
 
 # ---- 数据链路 API（P0：资料库 / 模板 / 任务 / 预生成内容读取）----
@@ -363,7 +363,7 @@ def api_sources(q: str = None, kind: str = None, tag: str = None,
 
 @app.post('/api/sources')
 async def api_sources_add(request: Request):
-    """只登记不提取（资料页上传）。哈希命中回已有 id。"""
+    """只登记不解析（资料页上传）。哈希命中回已有 id。"""
     body = await _json_body(request)
     name = service.safe_name(body.get('name', ''))
     ext = os.path.splitext(name)[1].lower()
@@ -433,7 +433,7 @@ def api_template_versions(template_id: int):
 def api_template_version_get(template_id: int, version_id: int):
     tv = _load('store.catalog').get_template_version(version_id=version_id)
     if not tv or tv['template_id'] != template_id:
-        raise _load('store.errors').NotFound('模板版本不存在')
+        raise _load('store.errors').NotFound('抽取规则版本不存在')
     return tv
 
 
@@ -539,7 +539,7 @@ async def api_load_table_add(request: Request):
         ds_id = int(body.get('datasource_id'))
         tpl_id = int(body.get('template_id'))
     except (TypeError, ValueError):
-        raise store_errors.BadRequest('须选择业务库与模板')
+        raise store_errors.BadRequest('须选择业务库与抽取规则')
     lt_id = _load('store.catalog').create_load_table(
         ds_id, tpl_id, body.get('target_table'),
         body.get('write_mode') or 'upsert', body.get('fields'))

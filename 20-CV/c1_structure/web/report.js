@@ -456,7 +456,7 @@ document.querySelectorAll('.filecard').forEach(function(fc){
       var ps=pages(),v=parseInt(jump.value,10);
       if(isNaN(v)){jump.value=ps[curIndex()];return;}
       var i=ps.indexOf(v);
-      if(i<0){ /* 输入的页码不在本次提取范围：就近落到存在的页 */
+      if(i<0){ /* 输入的页码不在本次解析范围：就近落到存在的页 */
         i=0;ps.forEach(function(p,k){if(Math.abs(p-v)<Math.abs(ps[i]-v))i=k;});
       }
       go(i);jump.value=ps[curIndex()];
@@ -573,7 +573,7 @@ document.querySelectorAll('.filecard').forEach(function(fc){
   });
 });
 
-/* 辅助内容弹窗：文本原文 / 提取诊断点按钮弹出，不占版面 */
+/* 辅助内容弹窗：文本原文 / 解析诊断点按钮弹出，不占版面 */
 (function(){
   var m=document.createElement('div');
   m.id='auxmodal'; m.hidden=true;

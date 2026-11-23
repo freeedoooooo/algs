@@ -28,7 +28,7 @@
       <input type="search" id="q" placeholder="搜索任务 id / 文件名…">
       <select id="fstate">
         <option value="">全部状态</option>
-        <option value="extracting">提取中</option>
+        <option value="extracting">解析中</option>
         <option value="previewed">已预览</option>
         <option value="loading">入库中</option>
         <option value="loaded">已入库</option>
@@ -40,7 +40,7 @@
   <div class="panel">
     <table class="list">
       <thead><tr>
-        <th class="seq">序号</th><th>任务ID</th><th>资料</th><th>模板</th><th>入库目标</th>
+        <th class="seq">序号</th><th>任务ID</th><th>资料</th><th>抽取规则</th><th>入库目标</th>
         <th>状态</th><th>时间</th><th>操作</th>
       </tr></thead>
       <tbody id="rows"></tbody>

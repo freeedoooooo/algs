@@ -88,7 +88,7 @@ function hitCell(img,e){
 }
 
 /* 窗口式页码：首末页 + 当前页±1 常显，其余收进 …，页数再多也只占一小条。
-   页码列表取自 data-pages（指定页提取时页码可能不连续）。 */
+   页码列表取自 data-pages（指定页解析时页码可能不连续）。 */
 function pagerPages(pg){
   return (pg.getAttribute('data-pages')||'').split(',').filter(Boolean).map(Number);
 }

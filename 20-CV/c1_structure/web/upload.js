@@ -82,8 +82,8 @@ fetch('/api/params').then(function(r){return r.json();}).then(function(j){
   if(j.schema) renderParams(j.schema);
 }).catch(function(){});
 
-/* 模板下拉：/api/templates（DB 降级时后端回内置「原始透传」）。
-   value = 模板版本 id；降级项无 id，提交时省略走后端默认。 */
+/* 抽取规则下拉：/api/templates（DB 降级时后端回内置「原始透传」）。
+   value = 规则版本 id；降级项无 id，提交时省略走后端默认。 */
 var tplsel=document.getElementById('tplsel');
 function tplFallback(){ tplsel.innerHTML='<option value="">原始透传 v1</option>'; }
 fetch('/api/templates').then(function(r){return r.json();}).then(function(j){
@@ -160,8 +160,8 @@ document.getElementById('clearfiles').onclick=function(){
   picked=[]; render();
   urls.forEach(function(u){ if(u) URL.revokeObjectURL(u); });
 };
-/* ---- 上传页取 x 坐标：提取前在原图预览上量列边界，直接填进 column_lines ----
-   坐标=原图像素，与 doc_unwarp=off 的重切空间一致；on 的矫正图坐标需提取后在报告页取。 */
+/* ---- 上传页取 x 坐标：解析前在原图预览上量列边界，直接填进 column_lines ----
+   坐标=原图像素，与 doc_unwarp=off 的重切空间一致；on 的矫正图坐标需解析后在报告页取。 */
 var SVGNS='http://www.w3.org/2000/svg';
 var pickMode=false, pickVals=[];
 var lbStage=document.getElementById('lbStage'),lbsvg=document.getElementById('lbsvg');
@@ -284,7 +284,7 @@ function poll(){
     }
     if(s.running){timer=setTimeout(poll,800);return;}
     if(s.ready){
-      msg.textContent='提取完成。可调整参数后，用同一批文件重新提取。';
+      msg.textContent='解析完成。可调整参数后，用同一批文件重新解析。';
       go.disabled=false;
       showStgLink(s.task_id);
       showResult(s.cases);
@@ -532,7 +532,7 @@ srcgo.onclick=async function(){
     srcgo.disabled=false;
   }
 };
-/* 资料页「提取」跳转：/extract?from_source=<id> → 打开抽屉并预选 */
+/* 资料页「解析」跳转：/extract?from_source=<id> → 打开抽屉并预选 */
 var fromSrc=new URLSearchParams(location.search).get('from_source');
 if(fromSrc) openSrcDrawer(+fromSrc);
 

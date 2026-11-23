@@ -74,11 +74,11 @@ def validate_fields(fields, field_rows, write_mode='upsert', columns=None):
             raise BadRequest('字段对齐配置格式不正确')
         tf, tc = f.get('template_field'), f.get('target_column')
         if not isinstance(tf, str) or not tf.strip():
-            raise BadRequest('模板字段名不能为空')
+            raise BadRequest('抽取规则字段名不能为空')
         if not isinstance(tc, str) or not tc.strip():
             raise BadRequest('字段「{}」的目标列名为空'.format(tf))
         if tf in seen_f:
-            raise BadRequest('模板字段重复：{}'.format(tf))
+            raise BadRequest('抽取规则字段重复：{}'.format(tf))
         if tc in seen_c:
             raise BadRequest('多个字段指向同一目标列')
         seen_f.add(tf)

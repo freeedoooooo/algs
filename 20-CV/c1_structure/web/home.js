@@ -1,4 +1,4 @@
-/* web/home.js — 工作台首页：快速提取条 + 三张状态卡 + 待办列表。
+/* web/home.js — 工作台首页：快速解析条 + 四张状态卡 + 待办列表。
    数字口径见 design-home-workbench.md §2.1；计数纯前端拼装
    （/api/tasks ＋ /api/staging/ledger），无新端点、无状态落库。 */
 var hpicked=[], tplId=null;
@@ -6,7 +6,7 @@ var hdrop=document.getElementById('hdrop'), hpick=document.getElementById('hpick
 var hlist=document.getElementById('hlist'), hgo=document.getElementById('hgo');
 var hmsg=document.getElementById('hmsg'), htpl=document.getElementById('htpl');
 var TKEY='c1.home_tpl';
-var items=[], led=[];
+var items=[], led=[], tplCount=0;
 var pollT=null, loopT=null, lastTaskId=null;
 var todoPage=1, todoSize=getListPer();
 var pgTodo=bindPager(document.getElementById('todopg'),
@@ -16,9 +16,9 @@ var pgTodo=bindPager(document.getElementById('todopg'),
 function say(t,cls){ hmsg.textContent=t; hmsg.className='qmsg'+(cls?' '+cls:''); }
 function sayHtml(html,cls){ hmsg.innerHTML=html; hmsg.className='qmsg'+(cls?' '+cls:''); }
 
-/* ---- 模板下拉：与提取页同源；记住上次选择（H3） ---- */
+/* ---- 抽取规则下拉：与解析页同源；记住上次选择（H3） ---- */
 fetch('/api/templates').then(function(r){return r.json();}).then(function(j){
-  var its=j.items||[];
+  var its=j.items||[]; tplCount=its.length; renderCards();
   if(!its.length){ htpl.innerHTML='<option value="">原始透传 v1</option>'; return; }
   htpl.innerHTML=its.map(function(t){
     return '<option value="'+(t.current_version_id||'')+'" data-tid="'+t.id+'">'+
@@ -32,7 +32,7 @@ htpl.addEventListener('change',function(){
   try{ localStorage.setItem(TKEY,htpl.value); }catch(e){}
 });
 
-/* ---- 快速提取：选文件 → 就地提交（复用 /api/upload 通道） ---- */
+/* ---- 快速解析：选文件 → 就地提交（复用 /api/upload 通道） ---- */
 var ALLOWED=['png','jpg','jpeg','bmp','webp','tif','tiff','pdf','csv','txt','md'];
 hdrop.onclick=function(){ hpick.click(); };
 hdrop.ondragover=function(e){e.preventDefault();hdrop.classList.add('on');};
@@ -52,7 +52,7 @@ function addFiles(fs){
     hpicked.push(f);
   }
   if(rejected.length) say('以下文件不支持或超过 20MB，已忽略：'+rejected.join('、'),'err');
-  else if(hpicked.length) say('已选 '+hpicked.length+' 个文件，点击「开始提取」');
+  else if(hpicked.length) say('已选 '+hpicked.length+' 个文件，点击「开始解析」');
   renderPicked();
 }
 function renderPicked(){
@@ -84,7 +84,7 @@ hgo.onclick=function(){
     }).then(function(r){return r.json();});
   }).then(function(j){
     if(!j.ok) throw new Error(j.error||'提交失败');
-    sayHtml('已提交，正在提取…　<a class="linkbtn" href="/extract">查看进度</a>','run');
+    sayHtml('已提交，正在解析…　<a class="linkbtn" href="/extract">查看进度</a>','run');
     pollStatus();
   }).catch(function(e){
     say('提交失败：'+e.message,'err'); hgo.disabled=hpicked.length===0;
@@ -95,11 +95,11 @@ function pollStatus(){
     if(s.running){ pollT=setTimeout(pollStatus,800); return; }
     clearTimeout(pollT); pollT=null;
     if(s.error){
-      sayHtml('提取失败，未生成暂存：'+escHtml(s.error)+
+      sayHtml('解析失败，未生成暂存：'+escHtml(s.error)+
         '　<a class="linkbtn" href="/tasks">查看详情</a>','err'); refresh(); return; }
     if(s.ready&&s.task_id){
       lastTaskId=s.task_id;
-      sayHtml('提取完成，任务 #'+s.task_id+
+      sayHtml('解析完成，任务 #'+s.task_id+
         '　<a class="linkbtn" href="/review?task='+s.task_id+'">前往校验</a>','ok');
       hpicked=[]; renderPicked(); refresh();
     }
@@ -136,19 +136,22 @@ function setCard(id,n,sub,zero){
 function renderCards(){
   var v=nums();
   setCard(1, v.busy.length,
-    v.busy.length?('任务 '+v.busy.map(function(t){return '#'+t.task_id;}).join('、')):'暂无进行中的提取任务',
+    v.busy.length?('任务 '+v.busy.map(function(t){return '#'+t.task_id;}).join('、')):'暂无进行中的解析任务',
     !v.busy.length);
-  setCard(2, v.reviewTasks,
+  setCard(2, tplCount,
+    tplCount? '已配置 '+tplCount+' 条抽取规则':'尚未配置规则，默认走原始透传',
+    !tplCount);
+  setCard(3, v.reviewTasks,
     v.reviewFiles? '共 '+v.reviewFiles+' 个资料待逐条核对':'暂无待校验记录', !v.reviewFiles);
-  setCard(3, v.loadTasks.length,
+  setCard(4, v.loadTasks.length,
     v.loadTasks.length? '校验完成，等待入库':'暂无待入库任务',
     !v.loadTasks.length);
   /* H1：只有 1 个待入库 → 点卡直接弹向导 */
-  var l3=document.getElementById('l3');
+  var l4=document.getElementById('l4');
   if(v.loadTasks.length===1){
-    l3.textContent='立即入库 #'+v.loadTasks[0].task_id+' →';
-    l3.onclick=function(e){ e.preventDefault(); startLoad(v.loadTasks[0].task_id); };
-  }else{ l3.textContent='前往入库 →'; l3.onclick=null; }
+    l4.textContent='立即入库 #'+v.loadTasks[0].task_id+' →';
+    l4.onclick=function(e){ e.preventDefault(); startLoad(v.loadTasks[0].task_id); };
+  }else{ l4.textContent='前往入库 →'; l4.onclick=null; }
   return v;
 }
 
@@ -170,22 +173,22 @@ function renderTodo(v){
     var pend=0;
     (t.files||[]).forEach(function(f){ pend+=f.pending_n+f.edited_n; });
     if(pend>0) rows.push({id:t.task_id,name:fileNames(t),
-      what:'② 尚有 '+pend+' 条记录待校验',act:'<a class="linkbtn" href="/review?task='+
+      what:'③ 尚有 '+pend+' 条记录待校验',act:'<a class="linkbtn" href="/review?task='+
         t.task_id+'">前往校验</a>',t:t.created_at});
   });
   v.loadTasks.forEach(function(t){
     rows.push({id:t.task_id,name:fileNames(t),
-      what:'③ 校验完成，待入库',
+      what:'④ 校验完成，待入库',
       act:'<button type="button" class="linkbtn" data-load="'+t.task_id+'">前往入库</button>',
       t:t.created_at});
   });
   v.busy.forEach(function(t){
-    rows.push({id:t.task_id,name:fileNames(t),what:'① 提取中…',
+    rows.push({id:t.task_id,name:fileNames(t),what:'① 解析中…',
       act:'<a class="linkbtn" href="/extract">查看进度</a>',t:t.created_at});
   });
   v.failed.forEach(function(t){
     rows.push({id:t.task_id,name:fileNames(t),
-      what:t.state==='partial'?'③ 部分入库，存在隔离记录':'① 提取失败',
+      what:t.state==='partial'?'④ 部分入库，存在隔离记录':'① 解析失败',
       act:'<a class="linkbtn" href="/tasks">查看详情</a>',t:t.created_at});
   });
   rows.sort(function(a,b){ return (a.t<b.t?1:(a.t>b.t?-1:0)); });

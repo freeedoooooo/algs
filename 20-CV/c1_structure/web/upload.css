@@ -17,7 +17,7 @@ h1{font-size:18px;font-weight:500;margin:0 0 4px}
 #drop.on{border-color:#2563eb;background:#f0f6ff;color:#2563eb}
 #drop b{display:block;color:#25324a;font-size:15px;font-weight:500;margin-bottom:6px}
 input[type=file]{display:none}
-/* 模板下拉 + 从资料库选择入口 */
+/* 抽取规则下拉 + 从资料库选择入口 */
 .srcrow{display:flex;align-items:center;gap:6px;margin-top:8px}
 .tplrow{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12px}
 .tplrow label{color:#25324a;flex:none}

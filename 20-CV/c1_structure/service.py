@@ -2,7 +2,7 @@
 c1_structure/service.py — 运行引擎与共享运行状态（编排层，自 app.py 抽出）。
 
 app.py 只留 HTTP 路由与请求校验；上传校验通过后调 launch() 登记任务并起后台
-线程跑 task_batch（提取 → 报告 → collect 记录入库 → 产物 ingest 入 BLOB）。
+线程跑 task_batch（解析 → 报告 → collect 记录入库 → 产物 ingest 入 BLOB）。
 STATE/LOCK 是单任务串行的运行状态（模型单例非线程安全），/api/status、
 /api/logs、/healthz 经 app 读取这里。DB 必选：写失败整任务显式 failed，不降级。
 """
@@ -81,12 +81,12 @@ def register_file(name, data):
 
 
 def resolve_template(version_id=None):
-    """模板版本解析；DB 必选，失败上抛（调用方回 503）。"""
+    """抽取规则版本解析；DB 必选，失败上抛（调用方回 503）。"""
     catalog = _load('store.catalog')
     tv = (catalog.get_template_version(version_id=version_id)
           if version_id else catalog.get_template_version())
     if not tv:
-        raise RuntimeError('平台库无可用模板版本')
+        raise RuntimeError('平台库无可用抽取规则版本')
     return {'name': tv['name'], 'version': tv['version'],
             'version_id': tv['id'], 'template_id': tv['template_id'],
             'schema_json': tv['schema_json'],
@@ -96,7 +96,7 @@ def resolve_template(version_id=None):
 
 def launch(paths, params, warns, ctx, tpl=None):
     """登记任务（DB 必选，失败上抛 503）→ 建日志 → 重置 STATE → 起后台线程。
-    单一提取入口（P2c）：入库目标在入库启动时绑定，上传不携带。"""
+    单一解析入口（P2c）：入库目标在入库启动时绑定，上传不携带。"""
     tpl = tpl or resolve_template()
     catalog = _load('store.catalog')
     task_id = catalog.create_task(tpl['version_id'], params)
@@ -120,7 +120,7 @@ def launch(paths, params, warns, ctx, tpl=None):
                      logs=[], progress=0, stage='batch',
                      log_file=label + '.log',
                      template=tpl, task_id=task_id)
-    log.stage('batch', '任务 {} · 收到 {} 个文件 · 模板 {} v{}'.format(
+    log.stage('batch', '任务 {} · 收到 {} 个文件 · 抽取规则 {} v{}'.format(
         task_id, len(paths), tpl['name'], tpl['version']))
     log.info('params', '生效参数：{}'.format(
         ', '.join('{}={}'.format(k, v) for k, v in params.items()
@@ -178,7 +178,7 @@ def rmtree_retry(path, tries=6, delay=0.3):
 
 
 def task_batch(paths, params=None, log=None, task_ctx=None):
-    """后台线程：逐个提取 → raw/ + extract.json → 对照报告 → collect 记录入库
+    """后台线程：逐个解析 → raw/ + extract.json → 对照报告 → collect 记录入库
     → 产物 ingest 入 BLOB。DB 必选：写失败整任务 failed；scratch 跑完清尽。"""
     task_ctx = task_ctx or {'task_id': None,
                             'template': resolve_template(),
@@ -200,7 +200,7 @@ def task_batch(paths, params=None, log=None, task_ctx=None):
             with LOCK:
                 STATE['progress'] = v
 
-        log.stage('load', '加载提取流水线（首次会导入 cv2 / pdfplumber）…')
+        log.stage('load', '加载解析流水线（首次会导入 cv2 / pdfplumber）…')
         progress(1)
         pipeline = _load('pipeline')
         report_mod = _load('extract_report.builder')
@@ -303,7 +303,7 @@ def task_batch(paths, params=None, log=None, task_ctx=None):
 
 def launch_load(task_id, target=None):
     """POST /api/tasks/{id}/load 的编排（P2c：入库时绑定目标）。
-    未绑定任务须带 target={'datasource_id','load_table_id'}：归属/模板/
+    未绑定任务须带 target={'datasource_id','load_table_id'}：归属/规则/
     预检/门禁全过才登记绑定＋起线程，任何一步失败都不落绑定（下次可另选）。
     已绑定任务沿用原绑定（带 target→409，回执语义）。
     校验失败抛 StoreError（app 处理器映射 HTTP）；目标库连不上→503。"""
@@ -320,7 +320,7 @@ def launch_load(task_id, target=None):
     if state == 'loading':
         raise errors.Conflict('入库进行中')
     if state not in ('previewed', 'partial'):
-        raise errors.Conflict('任务状态为 {}，无法入库（须先完成提取）'.format(state))
+        raise errors.Conflict('任务状态为 {}，无法入库（须先完成解析与校验）'.format(state))
     bound = task.get('load')
     if bound:
         if target:
@@ -339,14 +339,14 @@ def launch_load(task_id, target=None):
     if lt['datasource_id'] != ds_id:
         raise errors.BadRequest('入库规则不属于所选业务库')
     if lt['template_id'] != task['template']['template_id']:
-        raise errors.BadRequest('入库规则与任务模板不匹配')
+        raise errors.BadRequest('入库规则与任务的抽取规则不匹配')
     tpl = resolve_template(task['template']['version_id'])
     sj = tpl.get('schema_json')
     fields = ([f.get('name') for f in sj.get('fields') or []]
               if isinstance(sj, dict) else [])
     fields = [f for f in fields if f]
     if not fields:
-        raise errors.BadRequest('原始透传模板无固定字段，不支持入库')
+        raise errors.BadRequest('「原始透传」规则无固定字段，不支持入库')
     loader = _load('store.loader')
     loader.preflight(ds, lt['target_table'], lt['fields'],
                      lt['write_mode'], fields)
@@ -407,7 +407,7 @@ def preview_load(task_id, table_id=None, draft=None):
         if lt is None:
             raise errors.NotFound('入库规则不存在')
         if lt['template_id'] != task['template']['template_id']:
-            raise errors.BadRequest('入库规则与任务模板不匹配')
+            raise errors.BadRequest('入库规则与任务的抽取规则不匹配')
         ds = catalog.get_datasource(lt['datasource_id'])
         field_rows, table, wm = lt['fields'], lt['target_table'], lt['write_mode']
     else:
@@ -423,7 +423,7 @@ def preview_load(task_id, table_id=None, draft=None):
               if isinstance(sj, dict) else [])
     fields = [f for f in fields if f]
     if not fields:
-        raise errors.BadRequest('透传模板无固定字段，不可入库')
+        raise errors.BadRequest('「原始透传」规则无固定字段，不可入库')
     loader.preflight(ds, table, field_rows, wm, fields)
     doc = _load('store.content').get_records(task_id)
     recs = [(f['task_file_id'], r)

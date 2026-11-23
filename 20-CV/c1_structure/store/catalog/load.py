@@ -255,7 +255,7 @@ def _tpl_schema_fields(cur, template_id):
               if isinstance(sj, dict) else [])
     fields = [f for f in fields if f]
     if not fields:
-        raise BadRequest('原始透传模板无固定字段，不支持配置入库规则')
+        raise BadRequest('「原始透传」规则无固定字段，不支持配置入库规则')
     return fields
 
 
@@ -294,7 +294,7 @@ def create_load_table(datasource_id, template_id, target_table, write_mode,
                         ' AND target_table=%s',
                         (datasource_id, template_id, target_table))
             if cur.fetchone():
-                raise Conflict('相同业务库、模板与目标表的入库规则已存在')
+                raise Conflict('相同业务库、抽取规则与目标表的入库规则已存在')
             cur.execute(
                 'INSERT INTO extract_load_table (datasource_id, template_id,'
                 ' target_table, write_mode) VALUES (%s,%s,%s,%s)',

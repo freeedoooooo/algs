@@ -29,7 +29,7 @@
     <span id="tplbadge"></span>
     <span class="spacer"></span>
     <div class="toolbar" id="ledgerbar" hidden>
-      <input type="search" id="lq" placeholder="搜索任务 id / 文件名 / 模板…">
+      <input type="search" id="lq" placeholder="搜索任务 id / 文件名 / 抽取规则…">
       <select id="lprog">
         <option value="">全部进度</option>
         <option value="todo">有待校验</option>
@@ -48,7 +48,7 @@
     <div class="listwrap ledgerwrap">
       <table class="list" id="ledger" hidden>
         <thead><tr>
-          <th class="seq">序号</th><th>任务ID</th><th>资料</th><th>模板</th><th class="num">记录</th>
+          <th class="seq">序号</th><th>任务ID</th><th>资料</th><th>抽取规则</th><th class="num">记录</th>
           <th class="num">待校验</th><th class="num">已修改</th>
           <th class="num">已确认</th><th class="num">已拒绝</th>
           <th>状态</th><th>时间</th>
@@ -56,7 +56,7 @@
         <tbody id="ledgerrows"></tbody>
       </table>
     </div>
-    <div class="empty" id="ledgerempty" hidden><b>暂无可校验的记录</b>请先到「提取」页上传文件。</div>
+    <div class="empty" id="ledgerempty" hidden><b>暂无可校验的记录</b>请先到「解析」页上传文件。</div>
     <div class="pager" id="ledpager" hidden>
       <span class="pginfo"></span>
       <button type="button" class="pgprev">上一页</button>
@@ -75,7 +75,7 @@
         <thead id="rechead"></thead>
         <tbody id="recrows"></tbody>
       </table>
-      <div class="empty" id="empty" hidden><b>暂无提取记录</b>该文件未解析出表格数据。</div>
+      <div class="empty" id="empty" hidden><b>暂无解析记录</b>该文件未解析出表格数据。</div>
     </div>
     <aside class="panel lineage" id="lineage" hidden>
       <div class="lhead">

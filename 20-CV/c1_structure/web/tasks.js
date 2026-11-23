@@ -76,7 +76,7 @@ function renderDetail(j){
       ' · '+(live.progress||0)+'%（自动刷新）</div>';
   }
   if(r.error) html+='<div class="banner err">任务出错：'+escHtml(r.error)+'</div>';
-  html+='<div class="msg" style="margin-bottom:10px">模板 '+tplLabel(r.template)+
+  html+='<div class="msg" style="margin-bottom:10px">抽取规则 '+tplLabel(r.template)+
     ' · 发起 '+fmtTime(r.created_at)+'</div>';
   html+='<table class="list"><thead><tr><th>资料</th><th>状态</th><th>暂存记录</th><th>产物</th></tr></thead><tbody>'+
     (r.files||[]).map(function(f){return fileRow(f,r.task_id);}).join('')+'</tbody></table>';

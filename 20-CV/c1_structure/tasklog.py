@@ -7,7 +7,7 @@ c1_structure/tasklog.py — 结构化运行日志（唯一真相源）。
       - logs/task_<id>.log：落盘纯文本，一次任务一份，可单独清理 / 归档
       - 控制台：同格式实时打印，终端启动时也能直接看进度
   · pipeline 只认一个 emit(level, stage, msg) 回调，不 import app / tasklog，
-    避免提取层反向依赖 Web 层，也方便以后换成别的日志后端。
+    避免解析层反向依赖 Web 层，也方便以后换成别的日志后端。
   · level: info / ok / warn / error / stage；stage 是短阶段名（ocr/table/…）。
   · t 是相对运行开始的秒数，ms 是本条相对上一条的耗时，页面直接显示。
 """
@@ -85,5 +85,5 @@ class TaskLog:
             return list(self._rows)
 
     def make_emit(self):
-        """返回给 pipeline 用的回调（只暴露 emit，避免提取层拿到整个对象）。"""
+        """返回给 pipeline 用的回调（只暴露 emit，避免解析层拿到整个对象）。"""
         return self.emit

@@ -1,4 +1,4 @@
-/* web/templates.js — 模板管理：列表＋编辑抽屉（结构化字段行
+/* web/templates.js — 抽取规则管理：列表＋编辑抽屉（结构化字段行
    表单＋参考文件预览辅助选表选列）＋版本历史。契约见 design-p1b-templates.md §二。 */
 var items=[], cur=null, origName='', origDesc='', cands=null, pendingTable=null,
     page=1, size=getListPer();
@@ -70,7 +70,7 @@ function load(){
     document.getElementById('err').hidden=true;
   }).catch(function(e){
     items=[]; render();
-    showErr('平台库未连接：模板目录暂不可用（'+e.message+'）');
+    showErr('平台库未连接：抽取规则目录暂不可用（'+e.message+'）');
   });
 }
 document.getElementById('q').addEventListener('input',function(){ page=1; render(); });
@@ -170,9 +170,9 @@ function addRow(target,col,fx){
   updateDestHints();
 }
 /* ---- 「这些字段去了哪」（design-ux-load-wizard §1.4）：编辑抽屉字段行尾部
-   显示该字段在入库规则里的目标列。本模板没有任何入库规则时**不显示**
+   显示该字段在入库规则里的目标列。本规则没有任何入库规则时**不显示**
    （避免逐行刷「未配置」噪音）；有规则时按字段显示 去向/未配去向。 ---- */
-var destMap=null;   // null=本模板未查/新建；{field:[{表.列}…]}=已加载
+var destMap=null;   // null=本规则未查/新建；{field:[{表.列}…]}=已加载
 var destHasRules=false;
 function loadDestHints(id){
   destMap=null; destHasRules=false;
@@ -204,7 +204,7 @@ function updateDestHints(){
     if(!f){ h.textContent=''; h.title=''; return; }
     if(!destHasRules){
       h.textContent='—';
-      h.title='本模板尚未配置入库规则；在「入库」页配置后，这里会显示每个字段写入哪张表哪一列';
+      h.title='本规则尚未配置入库规则；在「入库」页配置后，这里会显示每个字段写入哪张表哪一列';
       h.className='fdest'; return;
     }
     var d=destMap[f]||[];
@@ -334,7 +334,7 @@ function openEditor(id){
   manualMode();
   document.getElementById('ok').hidden=true;
   if(id==null){
-    document.getElementById('etitle').textContent='新建模板';
+    document.getElementById('etitle').textContent='新建规则';
     document.getElementById('everbadge').innerHTML='';
     ename.value=''; edesc.value=''; origName=''; origDesc='';
     delbtn.hidden=true;
@@ -345,7 +345,7 @@ function openEditor(id){
     return;
   }
   api('GET','/api/templates/'+id).then(function(j){
-    document.getElementById('etitle').textContent='编辑模板 #'+id;
+    document.getElementById('etitle').textContent='编辑规则 #'+id;
     document.getElementById('everbadge').innerHTML=
       '<span class="badge green">v'+j.current_version+'</span>';
     ename.value=j.name||''; edesc.value=j.description||'';
@@ -375,7 +375,7 @@ function openEditor(id){
 savebtn.onclick=function(){
   emsg.textContent='';
   var name=ename.value.trim();
-  if(!name){emsg.textContent='模板名不能为空';return;}
+  if(!name){emsg.textContent='规则名不能为空';return;}
   var fields=[], seen={}, err=null, xf=[];
   Array.prototype.forEach.call(frows.children,function(div){
     if(err) return;
@@ -391,7 +391,7 @@ savebtn.onclick=function(){
   });
   if(err){emsg.textContent=err;return;}
   if(!fields.length){
-    emsg.textContent='至少需要一个字段；如需逐行原样输出，请使用内置「原始透传」模板';return;
+    emsg.textContent='至少需要一个字段；如需逐行原样输出，请使用内置「原始透传」规则';return;
   }
   var table;
   if(cands&&!tblsel.disabled) table={index:Number(tblsel.value)};
@@ -438,10 +438,10 @@ savebtn.onclick=function(){
 };
 
 function delTemplate(id,name){
-  if(!window.confirm('删除模板「'+name+'」及其全部版本？')) return;
+  if(!window.confirm('删除规则「'+name+'」及其全部版本？')) return;
   api('DELETE','/api/templates/'+id).then(function(){
     if(cur===id) closeEditor();
-    showOk('已删除模板「'+name+'」。');
+    showOk('已删除规则「'+name+'」。');
     load();
   }).catch(function(e){
     if(cur===id&&!edit.hidden) emsg.textContent=e.message;

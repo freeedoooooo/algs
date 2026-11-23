@@ -1,5 +1,5 @@
 /* web/load.js — 入库规则：左业务库列表 · 右入库规则列表。
-   一个业务库＝一个库（明文配置）；规则＝业务库×表×模板绑定，字段行编辑。
+   一个业务库＝一个库（明文配置）；规则＝业务库×表×抽取规则绑定，字段行编辑。
    契约见 design-p2b-datasource.md＋design-ux-load-wizard.md（用词改齐）。 */
 var dss=[], maps=[], tpls=[], cols=[];
 var curDs=null, editDs=null, editLt=null, ltLocked=false;
@@ -282,12 +282,12 @@ function loadTplFields(){
     var fs=(sj&&typeof sj==='object'&&!Array.isArray(sj)&&sj.fields)||[];
     var names=fs.map(function(f){return f.name;}).filter(Boolean);
     if(!names.length){
-      mprows.innerHTML='<div class="hint">该模板无固定目标字段（原始透传），不支持入库。请选择固定字段模板。</div>';
+      mprows.innerHTML='<div class="hint">该规则无固定目标字段（原始透传），不支持入库。请选择固定字段抽取规则。</div>';
       return;
     }
     buildRows(names,null);
   }).catch(function(e){
-    mprows.innerHTML='<div class="hint">模板字段加载失败：'+escHtml(e.message)+'</div>';
+    mprows.innerHTML='<div class="hint">规则字段加载失败：'+escHtml(e.message)+'</div>';
   });
 }
 function openMap(lt){
@@ -296,7 +296,7 @@ function openMap(lt){
   var d=dsById(curDs);
   document.getElementById('mptitle').textContent=lt?'编辑入库规则':'新建入库规则';
   document.getElementById('mpds').value=d?(d.name+' · '+d.host+':'+d.port+'/'+d.db_name):'';
-  mptpl.innerHTML='<option value="">选择模板</option>'+
+  mptpl.innerHTML='<option value="">选择抽取规则</option>'+
     tpls.map(function(t){
       return '<option value="'+t.id+'">'+escHtml(t.name)+' v'+t.current_version+'</option>';
     }).join('');
@@ -346,10 +346,10 @@ mprows.addEventListener('change',function(e){
 
 document.getElementById('mpsave').onclick=function(){
   mpmsg.textContent='';
-  if(!editLt&&!mptpl.value){ mpmsg.textContent='请选择模板'; return; }
+  if(!editLt&&!mptpl.value){ mpmsg.textContent='请选择抽取规则'; return; }
   if(!editLt&&!mptable.value){ mpmsg.textContent='请选择目标表'; return; }
   var rows=mprows.querySelectorAll('.frow');
-  if(!rows.length){ mpmsg.textContent='该模板无固定目标字段，不可入库'; return; }
+  if(!rows.length){ mpmsg.textContent='该规则无固定目标字段，不可入库'; return; }
   var fields=[], seen={}, err=null;
   Array.prototype.forEach.call(rows,function(div){
     if(err) return;
