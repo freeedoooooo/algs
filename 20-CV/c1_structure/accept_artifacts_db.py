@@ -348,6 +348,13 @@ def _main(up):
         st, j = http_json(8799, '/api/tasks/{}'.format(task_id))
         check('task 详情待抽取', st == 200
               and j['task']['files'][0]['state'] == 'to_extract')
+        codes = []
+        for u in ('/preview', '/review'):
+            with urllib.request.urlopen(
+                    urllib.request.Request('http://127.0.0.1:8799' + u),
+                    timeout=30) as rp:
+                codes.append(rp.status)
+        check('页面路由 /preview ＋ /review 壳页 200', codes == [200, 200])
         req = urllib.request.Request('http://127.0.0.1:8799/parse-report')
         with urllib.request.urlopen(req, timeout=30) as r:
             check('报告重定向落 /files/', r.status == 200

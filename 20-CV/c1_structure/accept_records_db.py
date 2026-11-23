@@ -794,6 +794,46 @@ def _main(syn_tasks, syn_fids, up, p2):
         check('被任务引用的数据源/映射禁删禁改 409',
               stdd == 409 and stmd == 409 and stmp == 409)
 
+        # ---- 重放解析（任务台账·原地重跑）：loaded 拒绝；完成文件清空重跑 ----
+        strr, jtr = http(8799, '/api/tasks/{}/reparse'.format(task_a),
+                         {}, timeout=30, method='POST')
+        check('loaded 任务重放解析拒绝 409', strr == 409,
+              str(jtr.get('error')))
+        stp2, jp2 = http(8799, '/api/upload', {
+            'files': [{'name': 'replay.pdf',
+                      'data': base64.b64encode(src['data']).decode()}]},
+            timeout=120)
+        task_r = jp2['task_id']
+        up.append(task_r)
+        tfr = catalog.get_task(task_r)['files'][0]['task_file_id']
+        http(8799, '/api/tasks/{}/extract'.format(task_r), {},
+             timeout=120, method='POST')
+        recs0 = catalog.get_task(task_r)['files'][0]['records_n']
+        strp, jtp = http(8799, '/api/tasks/{}/reparse'.format(task_r),
+                         {}, timeout=30, method='POST')
+        check('重放解析受理 200', strp == 200 and jtp.get('ok'),
+              str(jtp.get('error')))
+        for _k in range(300):
+            _, s2 = http(8799, '/api/status')
+            if not s2.get('running'):
+                break
+            time.sleep(0.5)
+        rr = catalog.get_task(task_r)
+        conn = db.connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute('SELECT COUNT(*) FROM c1_parse_artifact'
+                            ' WHERE task_file_id=%s', (tfr,))
+                n_art = cur.fetchone()[0]
+        finally:
+            conn.close()
+        check('原地重放：记录清空回落待抽取 · 产物已重灌',
+              rr['state'] == 'to_extract' and rr['error'] is None
+              and rr['files'][0]['records_n'] == 0 and recs0 > 0
+              and n_art > 0,
+              'state={} recs0={} artifacts={}'.format(
+                  rr['state'], recs0, n_art))
+
         # ---- Leg B：合成 task（number transform＋超长值）→ 隔离（待入库）→ 重试 ----
         def syn_load_task(vid, lt, recs, tag, bind=True):
             tid = catalog.create_task(vid, {})
