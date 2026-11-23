@@ -1,0 +1,197 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="链路总览" id="pipeline-flow">
+    <mxGraphModel dx="1200" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1000" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="n1" value="源文件库 Sources&#10;临时上传 / 从库选择 / 上次重跑&#10;sha256 去重" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="320" y="40" width="260" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="n2" value="资料提取 Extract&#10;现 mvp pipeline，零改动" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="320" y="170" width="260" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="a1" value="L0 raw/*.json 引擎原样返回&#10;永不服务前端（403）" style="shape=mxgraph.flowchart.document;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="660" y="160" width="240" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="tpl" value="模板 Template（版本化）&#10;&#10;Schema 字段定义&#10;Mapping 字段映射&#10;Transform 转换规则&#10;&#10;不含任何入库信息" style="rounded=1;whiteSpace=wrap;align=left;spacingLeft=10;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="20" y="270" width="220" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="n4" value="adapter 适配层 → extract.json（c1-structure 自有标准）&#10;字段映射 Mapping + 数据转换 Transform（只消费 c1-structure）&#10;无配置 = passthrough 整表透传" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="320" y="290" width="260" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="n5" value="L2 records.json 暂存数据（事实源）&#10;values + original + lineage + review&#10;PATCH 原子重写，页面只读预生成文件" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="320" y="430" width="260" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="n6" value="数据校验 Review&#10;确认 / 修改 / 拒绝&#10;对照原图，单格坐标回溯（复用现成能力）" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="320" y="560" width="260" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="pv" value="已预览 previewed&#10;Preview 模式终点&#10;只看数据，不碰业务库" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="20" y="560" width="220" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="n8" value="数据入库 Load&#10;只放行已确认 / 已修改记录&#10;upsert + LoadLog 幂等回执" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="320" y="700" width="260" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="dest" value="入库目的地 Destination&#10;（可选绑定，独立实体）&#10;&#10;连接 conn_ref（不存明文密码）&#10;表字段映射 / 写入方式 / 业务主键" style="rounded=1;whiteSpace=wrap;align=left;spacingLeft=10;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="660" y="690" width="250" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="db" value="目标业务库&#10;业务表（+staging_record_id 列）&#10;cv_lineage 血缘表" style="shape=cylinder3;whiteSpace=wrap;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="360" y="840" width="180" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="q" value="异常隔离区 Quarantine&#10;转换 / 校验 / 入库失败&#10;不丢弃不阻塞，修复后从失败阶段重放" style="rounded=1;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="660" y="430" width="250" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;" edge="1" parent="1" source="n1" target="n2">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;" edge="1" parent="1" source="n2" target="n4">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e2b" style="edgeStyle=orthogonalEdgeStyle;rounded=1;dashed=1;" edge="1" parent="1" source="n2" target="a1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e3" value="套用（Run 锁定版本）" style="edgeStyle=orthogonalEdgeStyle;rounded=1;" edge="1" parent="1" source="tpl" target="n4">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;" edge="1" parent="1" source="n4" target="n5">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;" edge="1" parent="1" source="n5" target="n6">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e6" value="preview 模式" style="edgeStyle=orthogonalEdgeStyle;rounded=1;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="n6" target="pv">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e7" value="load 模式（校验通过后）" style="edgeStyle=orthogonalEdgeStyle;rounded=1;" edge="1" parent="1" source="n6" target="n8">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e8" value="原地发起入库，不重跑提取" style="edgeStyle=orthogonalEdgeStyle;rounded=1;dashed=1;exitX=0.5;exitY=1;entryX=0;entryY=0.5;" edge="1" parent="1" source="pv" target="n8">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="130" y="735"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e9" value="绑定" style="edgeStyle=orthogonalEdgeStyle;rounded=1;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="dest" target="n8">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e10" value="写业务行 + 逐字段血缘" style="edgeStyle=orthogonalEdgeStyle;rounded=1;" edge="1" parent="1" source="n8" target="db">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e11" value="失败" style="edgeStyle=orthogonalEdgeStyle;rounded=1;dashed=1;strokeColor=#b85450;exitX=1;exitY=0.5;entryX=0;entryY=0.25;" edge="1" parent="1" source="n4" target="q">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="620" y="330"/>
+              <mxPoint x="620" y="450"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e12" value="拒绝" style="edgeStyle=orthogonalEdgeStyle;rounded=1;dashed=1;strokeColor=#b85450;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="n6" target="q">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="620" y="595"/>
+              <mxPoint x="620" y="470"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e13" value="失败" style="edgeStyle=orthogonalEdgeStyle;rounded=1;dashed=1;strokeColor=#b85450;exitX=1;exitY=0.25;entryX=0.5;entryY=1;" edge="1" parent="1" source="n8" target="q">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="785" y="718"/>
+              <mxPoint x="785" y="540"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lg" value="血缘链：业务表行 → cv_lineage → StagingRecord → Run(+模板版本) → 源文件 + 页 + 格" style="text;align=center;fontStyle=2;fontColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="220" y="970" width="560" height="30" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram name="对象关系" id="object-model">
+    <mxGraphModel dx="1200" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="o_tpl" value="template 模板&#10;&#10;id / name UNIQUE&#10;current_version&#10;description" style="rounded=0;whiteSpace=wrap;align=left;spacingLeft=10;verticalAlign=top;spacingTop=6;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="220" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="o_tv" value="template_version 模板版本&#10;&#10;id / template_id / version&#10;schema_json / mapping_json&#10;transform_json&#10;UNIQUE(template_id, version)" style="rounded=0;whiteSpace=wrap;align=left;spacingLeft=10;verticalAlign=top;spacingTop=6;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="360" y="40" width="240" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="o_dest" value="destination 入库目的地&#10;&#10;id / name UNIQUE&#10;db_type / conn_ref&#10;（凭据只存引用名）" style="rounded=0;whiteSpace=wrap;align=left;spacingLeft=10;verticalAlign=top;spacingTop=6;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="720" y="40" width="230" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="o_lm" value="load_mapping 入库映射&#10;&#10;id / destination_id / template_id&#10;target_table / column_map_json&#10;write_mode / business_key_json&#10;UNIQUE(dest, template, table)" style="rounded=0;whiteSpace=wrap;align=left;spacingLeft=10;verticalAlign=top;spacingTop=6;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="720" y="230" width="230" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="o_src" value="source_file 源文件&#10;&#10;id / name&#10;sha256 UNIQUE（去重键）&#10;kind / size_bytes&#10;rel_path（相对 DATA_ROOT）" style="rounded=0;whiteSpace=wrap;align=left;spacingLeft=10;verticalAlign=top;spacingTop=6;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="40" y="230" width="220" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="o_run" value="run 运行记录&#10;&#10;id / batch_tag / mode(preview|load)&#10;template_version_id&#10;destination_id / load_mapping_id 可空&#10;params_json / state / error" style="rounded=0;whiteSpace=wrap;align=left;spacingLeft=10;verticalAlign=top;spacingTop=6;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="360" y="250" width="240" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="o_rf" value="run_file 运行文件&#10;&#10;id / run_id / source_file_id&#10;state / output_rel_dir&#10;UNIQUE(run_id, source_file_id)" style="rounded=0;whiteSpace=wrap;align=left;spacingLeft=10;verticalAlign=top;spacingTop=6;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="360" y="460" width="240" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="o_stg" value="records.json（文件 · 事实源）&#10;&#10;run_file_id / index 引用键&#10;values / original（审计）&#10;lineage（字段级 1:N 锚点）&#10;review.state / at · 不在 DB" style="rounded=0;whiteSpace=wrap;align=left;spacingLeft=10;verticalAlign=top;spacingTop=6;dashed=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="360" y="650" width="240" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="o_q" value="quarantine 隔离区&#10;&#10;id / run_id&#10;staging_record_id 可空&#10;stage / reason / payload_json&#10;state(open|replayed|ignored)" style="rounded=0;whiteSpace=wrap;align=left;spacingLeft=10;verticalAlign=top;spacingTop=6;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="720" y="460" width="230" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="o_ll" value="load_log 入库回执&#10;&#10;id / run_id / staging_record_id&#10;destination_id / target_table&#10;target_pk / action / loaded_at&#10;UNIQUE(record, dest, table) 幂等" style="rounded=0;whiteSpace=wrap;align=left;spacingLeft=10;verticalAlign=top;spacingTop=6;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="720" y="650" width="230" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="f1" value="1:N 版本" style="edgeStyle=orthogonalEdgeStyle;rounded=1;" edge="1" parent="1" source="o_tpl" target="o_tv">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="f2" value="template_id" style="edgeStyle=orthogonalEdgeStyle;rounded=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="o_dest" target="o_lm">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="f3" value="template_id" style="edgeStyle=orthogonalEdgeStyle;rounded=1;dashed=1;exitX=1;exitY=0.5;entryX=0;entryY=0.25;" edge="1" parent="1" source="o_tpl" target="o_lm">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="300" y="95"/>
+              <mxPoint x="300" y="200"/>
+              <mxPoint x="680" y="200"/>
+              <mxPoint x="680" y="263"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f4" value="锁定版本" style="edgeStyle=orthogonalEdgeStyle;rounded=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="o_tv" target="o_run">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="f5" value="可选绑定" style="edgeStyle=orthogonalEdgeStyle;rounded=1;dashed=1;exitX=0;exitY=0.5;entryX=1;entryY=0.25;" edge="1" parent="1" source="o_lm" target="o_run">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="f6" value="1:N" style="edgeStyle=orthogonalEdgeStyle;rounded=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="o_run" target="o_rf">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="f7" value="source_file_id" style="edgeStyle=orthogonalEdgeStyle;rounded=1;exitX=0.5;exitY=1;entryX=0;entryY=0.5;" edge="1" parent="1" source="o_src" target="o_rf">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="150" y="515"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f8" value="1:N" style="edgeStyle=orthogonalEdgeStyle;rounded=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="o_rf" target="o_stg">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="f9" value="失败/拒绝" style="edgeStyle=orthogonalEdgeStyle;rounded=1;dashed=1;strokeColor=#b85450;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="o_stg" target="o_q">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="660" y="715"/>
+              <mxPoint x="660" y="525"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f10" value="已校验记录入库" style="edgeStyle=orthogonalEdgeStyle;rounded=1;exitX=1;exitY=0.75;entryX=0;entryY=0.75;" edge="1" parent="1" source="o_stg" target="o_ll">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="note1" value="MySQL 只管目录元数据 · 记录内容在 records.json（保存方式接缝 store/content.py）· 引擎结构不出 adapter · raw 前端 403 · 相对路径以 DATA_ROOT 为基准" style="text;align=center;fontStyle=2;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="140" y="830" width="820" height="30" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
