@@ -1,6 +1,6 @@
 """store/ — 数据访问层（DB 唯一事实源）。
 
-catalog/       目录元数据 repo，按域拆分：files / templates / tasks / load
+catalog/       目录元数据 repo，按域拆分：files / rules / tasks / load
                （__init__ 全量重导出，调用方 catalog.xxx() 不感知边界）
 content.py     内容门面（extract 经 artifact BLOB；records 经 content_db 三表）
 content_db.py  暂存三表（record/field/lineage）读写与跨任务查询

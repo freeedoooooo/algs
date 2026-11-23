@@ -1,5 +1,5 @@
 """
-store/content_db.py — 内容 repo 的 DB 实现（design-task-schema.md）。
+store/content_db.py — 内容 repo 的 DB 实现。
 
 records 唯一事实源＝staging 三表（自动快照已退役，export_artifacts.py 按需导出）。
 键＝task_id（get/patch）与 task_file_id（save 按 doc 内登记）；DB 必选，错误上抛。
@@ -29,8 +29,8 @@ def _task_files(cur, task_id):
     cur.execute(
         'SELECT tf.id, tf.task_id, tf.file_id,'
         ' s.name AS source_name'
-        ' FROM extract_task_file tf'
-        ' JOIN extract_file s ON s.id=tf.file_id'
+        ' FROM c1_task_file tf'
+        ' JOIN c1_file s ON s.id=tf.file_id'
         ' WHERE tf.task_id=%s ORDER BY tf.id',
         (task_id,))
     return _rows(cur)
@@ -48,7 +48,7 @@ def get_records(task_id):
                 cur.execute(
                     'SELECT id, record_index, review_state, review_at,'
                     ' values_json, original_json'
-                    ' FROM extract_staging_record WHERE task_file_id=%s'
+                    ' FROM c1_staging_record WHERE task_file_id=%s'
                     ' ORDER BY record_index', (tf['id'],))
                 recs = _rows(cur)
                 fmap, lmap = {}, {}
@@ -57,7 +57,7 @@ def get_records(task_id):
                     ids = [r['id'] for r in recs]
                     cur.execute(
                         'SELECT record_id, field_name, value_text'
-                        ' FROM extract_staging_field WHERE record_id IN ({})'
+                        ' FROM c1_staging_field WHERE record_id IN ({})'
                         .format(ph), ids)
                     for row in _rows(cur):
                         fmap.setdefault(row['record_id'], {})[
@@ -65,7 +65,7 @@ def get_records(task_id):
                     cur.execute(
                         'SELECT record_id, field_name, page, table_index,'
                         ' table_scope, space, cell_bbox, raw_text'
-                        ' FROM extract_staging_lineage WHERE record_id IN ({})'
+                        ' FROM c1_staging_lineage WHERE record_id IN ({})'
                         ' ORDER BY region_seq'.format(ph), ids)
                     for row in _rows(cur):
                         lmap.setdefault(
@@ -97,16 +97,16 @@ def get_records(task_id):
                     'records': out,
                 })
             cur.execute(
-                'SELECT t.name, tv.version FROM extract_task r'
-                ' JOIN extract_template_version tv'
-                ' ON tv.id=r.template_version_id'
-                ' JOIN extract_template t ON t.id=tv.template_id'
+                'SELECT t.name, tv.version FROM c1_task r'
+                ' JOIN c1_rule_version tv'
+                ' ON tv.id=r.rule_version_id'
+                ' JOIN c1_rule t ON t.id=tv.rule_id'
                 ' WHERE r.id=%s', (tfs[0]['task_id'],))
             trow = cur.fetchone()
-            template = ({'name': trow[0], 'version': trow[1]} if trow
+            rule = ({'name': trow[0], 'version': trow[1]} if trow
                         else {'name': '原始透传', 'version': 1})
             return {'schema': RECORDS_SCHEMA, 'task_id': tfs[0]['task_id'],
-                    'template': template, 'files': files}
+                    'rule': rule, 'files': files}
     finally:
         conn.close()
 
@@ -122,15 +122,15 @@ def save_records(doc):
                         'task_file_id 缺失：须先目录登记成功')
                 # 应用层级联：无 FK，重跑覆盖须显式先清 field/lineage 子表
                 cur.execute(
-                    'DELETE FROM extract_staging_field WHERE record_id IN'
-                    ' (SELECT id FROM extract_staging_record'
+                    'DELETE FROM c1_staging_field WHERE record_id IN'
+                    ' (SELECT id FROM c1_staging_record'
                     '   WHERE task_file_id=%s)', (tf_id,))
                 cur.execute(
-                    'DELETE FROM extract_staging_lineage WHERE record_id IN'
-                    ' (SELECT id FROM extract_staging_record'
+                    'DELETE FROM c1_staging_lineage WHERE record_id IN'
+                    ' (SELECT id FROM c1_staging_record'
                     '   WHERE task_file_id=%s)', (tf_id,))
                 cur.execute(
-                    'DELETE FROM extract_staging_record WHERE task_file_id=%s',
+                    'DELETE FROM c1_staging_record WHERE task_file_id=%s',
                     (tf_id,))
                 for rec in f.get('records') or []:
                     values = rec.get('values') or {}
@@ -138,7 +138,7 @@ def save_records(doc):
                     review = rec.get('review') or {}
                     at = review.get('at')
                     cur.execute(
-                        'INSERT INTO extract_staging_record (task_file_id,'
+                        'INSERT INTO c1_staging_record (task_file_id,'
                         ' record_index, review_state, review_at, values_json,'
                         ' original_json) VALUES (%s,%s,%s,%s,%s,%s)',
                         (tf_id, rec['index'], review.get('state') or 'pending',
@@ -148,14 +148,14 @@ def save_records(doc):
                     rid = cur.lastrowid
                     for k, v in values.items():
                         cur.execute(
-                            'INSERT INTO extract_staging_field (record_id,'
+                            'INSERT INTO c1_staging_field (record_id,'
                             ' field_name, value_text, original_text)'
                             ' VALUES (%s,%s,%s,%s)',
                             (rid, k, v, original.get(k, '')))
                     for k, regs in (rec.get('lineage') or {}).items():
                         for seq, g in enumerate(regs):
                             cur.execute(
-                                'INSERT INTO extract_staging_lineage'
+                                'INSERT INTO c1_staging_lineage'
                                 ' (record_id, field_name, region_seq, page,'
                                 ' table_index, table_scope, space, cell_bbox,'
                                 ' raw_text) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)',
@@ -183,7 +183,7 @@ def patch_record(task_id, file_index, index, values):
             if file_index >= len(tfs):
                 raise NotFound('文件序号超出范围')
             cur.execute(
-                'SELECT id, values_json FROM extract_staging_record'
+                'SELECT id, values_json FROM c1_staging_record'
                 ' WHERE task_file_id=%s AND record_index=%s FOR UPDATE',
                 (tfs[file_index]['id'], index))
             row = cur.fetchone()
@@ -196,13 +196,13 @@ def patch_record(task_id, file_index, index, values):
                 raise BadRequest('未知字段：{}'.format('、'.join(sorted(unknown))))
             vals.update(values)
             cur.execute(
-                'UPDATE extract_staging_record SET values_json=%s,'
+                'UPDATE c1_staging_record SET values_json=%s,'
                 ' review_state=%s, review_at=%s WHERE id=%s',
                 (json.dumps(vals, ensure_ascii=False), 'edited',
                  datetime.strptime(_now(), _TS), rid))
             for k, v in values.items():
                 cur.execute(
-                    'UPDATE extract_staging_field SET value_text=%s'
+                    'UPDATE c1_staging_field SET value_text=%s'
                     ' WHERE record_id=%s AND field_name=%s', (v, rid, k))
         conn.commit()
     except Exception:
@@ -231,7 +231,7 @@ def set_review(task_id, file_index, indexes, state):
                 raise NotFound('文件序号超出范围')
             ph = ','.join(['%s'] * len(indexes))
             cur.execute(
-                'UPDATE extract_staging_record SET review_state=%s,'
+                'UPDATE c1_staging_record SET review_state=%s,'
                 ' review_at=%s WHERE task_file_id=%s'
                 ' AND record_index IN ({})'.format(ph),
                 [state, datetime.strptime(_now(), _TS),
@@ -269,11 +269,11 @@ def query_fields(field=None, q=None, task=None, state=None, limit=200):
                 'SELECT r.id AS task_id, tf.id AS task_file_id,'
                 ' s.name AS source_name, rec.record_index,'
                 ' rec.review_state, f.field_name, f.value_text'
-                ' FROM extract_staging_field f'
-                ' JOIN extract_staging_record rec ON rec.id=f.record_id'
-                ' JOIN extract_task_file tf ON tf.id=rec.task_file_id'
-                ' JOIN extract_task r ON r.id=tf.task_id'
-                ' JOIN extract_file s ON s.id=tf.file_id {}'
+                ' FROM c1_staging_field f'
+                ' JOIN c1_staging_record rec ON rec.id=f.record_id'
+                ' JOIN c1_task_file tf ON tf.id=rec.task_file_id'
+                ' JOIN c1_task r ON r.id=tf.task_id'
+                ' JOIN c1_file s ON s.id=tf.file_id {}'
                 ' ORDER BY r.id DESC, rec.record_index LIMIT %s'
                 .format(w), args + [limit])
             return _rows(cur)
@@ -296,8 +296,8 @@ def gate_counts(task_id):
                 " SUM(sr.review_state='edited'),"
                 " SUM(sr.review_state='confirmed'),"
                 " SUM(sr.review_state='rejected')"
-                ' FROM extract_staging_record sr'
-                ' JOIN extract_task_file tf ON tf.id=sr.task_file_id'
+                ' FROM c1_staging_record sr'
+                ' JOIN c1_task_file tf ON tf.id=sr.task_file_id'
                 ' WHERE tf.task_id=%s', (task_id,))
             r = cur.fetchone()
     finally:
@@ -325,13 +325,13 @@ def ledger():
                 " SUM(sr.review_state='edited') AS edited_n,"
                 " SUM(sr.review_state='confirmed') AS confirmed_n,"
                 " SUM(sr.review_state='rejected') AS rejected_n"
-                ' FROM extract_task_file tf'
-                ' JOIN extract_task t ON t.id=tf.task_id'
-                ' JOIN extract_file s ON s.id=tf.file_id'
-                ' JOIN extract_template_version tv'
-                ' ON tv.id=t.template_version_id'
-                ' JOIN extract_template tpl ON tpl.id=tv.template_id'
-                ' JOIN extract_staging_record sr ON sr.task_file_id=tf.id'
+                ' FROM c1_task_file tf'
+                ' JOIN c1_task t ON t.id=tf.task_id'
+                ' JOIN c1_file s ON s.id=tf.file_id'
+                ' JOIN c1_rule_version tv'
+                ' ON tv.id=t.rule_version_id'
+                ' JOIN c1_rule tpl ON tpl.id=tv.rule_id'
+                ' JOIN c1_staging_record sr ON sr.task_file_id=tf.id'
                 ' GROUP BY tf.id, tf.task_id, s.name, t.state, t.created_at,'
                 ' tpl.name, tv.version'
                 ' ORDER BY tf.id DESC')
@@ -351,7 +351,7 @@ def ledger():
                     t = tasks[r['task_id']] = {
                         'task_id': r['task_id'],
                         'task_state': r['task_state'],
-                        'template': {'name': r['tpl_name'],
+                        'rule': {'name': r['tpl_name'],
                                      'version': r['version']},
                         'records_n': 0, 'pending_n': 0, 'edited_n': 0,
                         'confirmed_n': 0, 'rejected_n': 0,

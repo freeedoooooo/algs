@@ -1,6 +1,6 @@
 """
 c1_structure/export_artifacts.py — 从 DB 按需导出完整磁盘树
-（design-task-schema.md：file:// 直开 / 审计 / 迁移出口）。
+（file:// 直开 / 审计 / 迁移出口）。
 
 用法（从 20-CV 目录）：
     D:/miniforge3/envs/paddle/python.exe c1_structure/export_artifacts.py --out D:/tmp/c1_export

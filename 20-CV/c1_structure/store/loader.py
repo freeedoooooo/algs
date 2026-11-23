@@ -1,5 +1,5 @@
 """
-store/loader.py — 目标业务库写入（design-p2-load.md ＋ design-p2b-datasource.md）。
+store/loader.py — 目标业务库写入（）。
 
 平台表 SQL 归 catalog；本模块只管目标库：introspection（information_schema
 只读）、预检、应用层 upsert 写入。目标库连接来自数据源行显式参数
@@ -63,7 +63,7 @@ def list_columns(ds, table):
 
 def validate_fields(fields, field_rows, write_mode='upsert', columns=None):
     """映射契约校验（建映射/编辑/预检共用）。columns=None 跳过存在性检查。
-    field_rows=[{template_field,target_column,is_business_key}]。"""
+    field_rows=[{rule_field,target_column,is_business_key}]。"""
     if write_mode not in ('insert', 'upsert', 'update'):
         raise BadRequest('非法写入方式：{}'.format(write_mode))
     if not isinstance(field_rows, list) or not field_rows:
@@ -72,7 +72,7 @@ def validate_fields(fields, field_rows, write_mode='upsert', columns=None):
     for f in field_rows:
         if not isinstance(f, dict):
             raise BadRequest('字段对齐配置格式不正确')
-        tf, tc = f.get('template_field'), f.get('target_column')
+        tf, tc = f.get('rule_field'), f.get('target_column')
         if not isinstance(tf, str) or not tf.strip():
             raise BadRequest('抽取规则字段名不能为空')
         if not isinstance(tc, str) or not tc.strip():
@@ -103,7 +103,7 @@ def validate_fields(fields, field_rows, write_mode='upsert', columns=None):
 
 def fields_to_map(field_rows):
     """字段行 → (column_map, business_key)，供 write_record 消费。"""
-    cm = {f['template_field']: f['target_column'] for f in field_rows}
+    cm = {f['rule_field']: f['target_column'] for f in field_rows}
     bk = [f['target_column'] for f in field_rows if f.get('is_business_key')]
     return cm, bk
 

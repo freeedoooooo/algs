@@ -1,13 +1,13 @@
 """
 c1_structure/accept_artifacts_db.py — 产物全量入库六项验收（任务化契约，
-design-task-schema.md：DB 唯一事实源，附件键＝task_file_id，无外键）。
+DB 唯一事实源，附件键＝task_file_id，无外键）。
 
 前置：C1_STRUCTURE_DB 已配置（环境变量或 config.PLATFORM_DB 默认值，用户配置的库）。
 用法（从 20-CV）：D:/miniforge3/envs/paddle/python.exe -u c1_structure/accept_artifacts_db.py
 
 1 连接零副作用+读回 sha 自洽 · 2 真链路无持久磁盘+BLOB · 3 /files 路由/ETag/raw403 ·
 4 tasks/报告/暂存全查库 · 5 导出字节一致 · 6 断库显式 503。
-上传字节取自 extract_file.content；断库用不可达 DSN 的临时服务模拟，
+上传字节取自 c1_file.content；断库用不可达 DSN 的临时服务模拟，
 不触碰真实库可用性。破坏性操作只落临时 task 与临时导出目录，验完按 id 清理
 （无外键：artifact/record 等子表须显式先删）；真实 task / file 只读。
 用户的 8765 全程不动。临时服务 8799(真库)/8797(不可达 DSN)。
@@ -101,7 +101,7 @@ def art_counts():
     try:
         with conn.cursor() as cur:
             cur.execute('SELECT COUNT(*), COALESCE(SUM(size_bytes),0)'
-                        ' FROM extract_artifact')
+                        ' FROM c1_artifact')
             return tuple(cur.fetchone())
     finally:
         conn.close()
@@ -201,31 +201,31 @@ def cleanup_task(task_id):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT id FROM extract_task_file WHERE task_id=%s',
+            cur.execute('SELECT id FROM c1_task_file WHERE task_id=%s',
                         (task_id,))
             tfs = [r[0] for r in cur.fetchall()]
             for tf in tfs:
                 cur.execute(
-                    'DELETE FROM extract_staging_field WHERE record_id IN'
-                    ' (SELECT id FROM extract_staging_record'
+                    'DELETE FROM c1_staging_field WHERE record_id IN'
+                    ' (SELECT id FROM c1_staging_record'
                     '  WHERE task_file_id=%s)', (tf,))
                 cur.execute(
-                    'DELETE FROM extract_staging_lineage WHERE record_id IN'
-                    ' (SELECT id FROM extract_staging_record'
+                    'DELETE FROM c1_staging_lineage WHERE record_id IN'
+                    ' (SELECT id FROM c1_staging_record'
                     '  WHERE task_file_id=%s)', (tf,))
                 cur.execute(
-                    'DELETE FROM extract_staging_record WHERE task_file_id=%s',
+                    'DELETE FROM c1_staging_record WHERE task_file_id=%s',
                     (tf,))
                 cur.execute(
-                    'DELETE FROM extract_artifact WHERE task_file_id=%s',
+                    'DELETE FROM c1_artifact WHERE task_file_id=%s',
                     (tf,))
-            cur.execute('DELETE FROM extract_quarantine WHERE task_id=%s',
+            cur.execute('DELETE FROM c1_quarantine WHERE task_id=%s',
                         (task_id,))
-            cur.execute('DELETE FROM extract_load_log WHERE task_id=%s',
+            cur.execute('DELETE FROM c1_load_log WHERE task_id=%s',
                         (task_id,))
-            cur.execute('DELETE FROM extract_task_file WHERE task_id=%s',
+            cur.execute('DELETE FROM c1_task_file WHERE task_id=%s',
                         (task_id,))
-            cur.execute('DELETE FROM extract_task WHERE id=%s', (task_id,))
+            cur.execute('DELETE FROM c1_task WHERE id=%s', (task_id,))
         conn.commit()
     finally:
         conn.close()
@@ -265,14 +265,14 @@ def _main(up):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT DISTINCT task_file_id FROM extract_artifact')
+            cur.execute('SELECT DISTINCT task_file_id FROM c1_artifact')
             tfs = [r[0] for r in cur.fetchall()]
             cur.execute('SELECT id, sha256, size_bytes, content'
-                        ' FROM extract_file')
+                        ' FROM c1_file')
             files = cur.fetchall()
             cur.execute(
-                'SELECT COUNT(*) FROM extract_artifact a'
-                ' LEFT JOIN extract_task_file tf ON tf.id=a.task_file_id'
+                'SELECT COUNT(*) FROM c1_artifact a'
+                ' LEFT JOIN c1_task_file tf ON tf.id=a.task_file_id'
                 ' WHERE tf.id IS NULL')
             orphan_art = cur.fetchone()[0]
     finally:
@@ -292,14 +292,14 @@ def _main(up):
           '{} 个文件'.format(n) if not bad else '不一致：{}'.format(bad[:5]))
     bad_src = [r[0] for r in files
                if sha(r[3]) != r[1] or len(r[3]) != r[2]]
-    check('extract_file.content sha/size 自洽', not bad_src,
+    check('c1_file.content sha/size 自洽', not bad_src,
           '{} 个原件'.format(len(files)) if not bad_src
           else '不一致 id：{}'.format(bad_src))
 
     print('[2/6] 真链路：无持久磁盘 + BLOB（临时服务 8799）')
     src = find_pdf_file()
     if src is None:
-        print('  FAIL  extract_file 无 PDF 原件，无法真链路验收')
+        print('  FAIL  c1_file 无 PDF 原件，无法真链路验收')
         return 1
     svc = start_service(8799)
     try:
@@ -314,24 +314,24 @@ def _main(up):
               'err={}'.format(st.get('error')))
         check('tmp/input+tmp/work 无 scratch 残留', scratch_clean())
         names = {m['name'] for m in artifact_db.list(tf_id)}
-        check('产物入 BLOB', {config.EXTRACT_JSON,
-                             config.EXTRACT_REPORT_NAME} <= names,
+        check('产物入 BLOB', {config.PARSE_JSON,
+                             config.PARSE_REPORT_NAME} <= names,
               '{} 个文件'.format(len(names)))
 
         print('[3/6] /files 路由：mime / ETag 304 / raw 403 / records 404')
         q = urllib.request.quote
         st1, h1, b1 = http(8799, '/files/{}/{}'.format(tf_id,
-                           q(config.EXTRACT_JSON)))
+                           q(config.PARSE_JSON)))
         check('/files extract 200+mime', st1 == 200
               and h1.get('content-type', '').startswith('application/json')
               and json.loads(b1.decode()).get('schema'))
         st2, h2, _b2 = http(8799, '/files/{}/{}'.format(tf_id,
-                            q(config.EXTRACT_REPORT_NAME)))
+                            q(config.PARSE_REPORT_NAME)))
         check('/files 报告 200+html', st2 == 200
               and h2.get('content-type', '').startswith('text/html'))
         etag = h1.get('etag')
         st3, _h3, _b3 = http(8799, '/files/{}/{}'.format(tf_id,
-                             q(config.EXTRACT_JSON)),
+                             q(config.PARSE_JSON)),
                              headers={'If-None-Match': etag} if etag else None)
         check('ETag 304', bool(etag) and st3 == 304, 'etag={}'.format(etag))
         st4, _h4, _b4 = http(8799, '/files/{}/raw/pdfplumber.json'.format(tf_id))
@@ -348,11 +348,11 @@ def _main(up):
         st, j = http_json(8799, '/api/tasks/{}'.format(task_id))
         check('task 详情 previewed', st == 200
               and j['task']['files'][0]['state'] == 'previewed')
-        req = urllib.request.Request('http://127.0.0.1:8799/extract-report')
+        req = urllib.request.Request('http://127.0.0.1:8799/parse-report')
         with urllib.request.urlopen(req, timeout=30) as r:
             check('报告重定向落 /files/', r.status == 200
                   and '/files/' in r.url and r.url.endswith(
-                      q(config.EXTRACT_REPORT_NAME)))
+                      q(config.PARSE_REPORT_NAME)))
         st, j = http_json(8799, '/api/tasks/{}/staging'.format(task_id))
         n_rec = rtask['files'][0]['records_n']
         check('暂存 API 记录数一致', st == 200 and n_rec > 0
@@ -429,7 +429,7 @@ def _main(up):
               '{} 个原件'.format(len(used)) if not bad
               else '问题：{}'.format(bad[:5]))
         rep = os.path.join(base, task['files'][0]['name'],
-                           config.EXTRACT_REPORT_NAME)
+                           config.PARSE_REPORT_NAME)
         check('导出报告可 file:// 直开（文件在树内）', os.path.isfile(rep))
     finally:
         shutil.rmtree(out_dir, ignore_errors=True)
@@ -446,9 +446,9 @@ def _main(up):
         st, _j = http_json(8797, '/api/tasks')
         check('断库 tasks 503', st == 503)
         st, _h, _b = http(8797, '/files/{}/{}'.format(
-            tf_id, urllib.request.quote(config.EXTRACT_JSON)))
+            tf_id, urllib.request.quote(config.PARSE_JSON)))
         check('断库 /files 503', st == 503)
-        st, _h, _b = http(8797, '/extract-report')
+        st, _h, _b = http(8797, '/parse-report')
         check('断库报告入口 503', st == 503)
         st, _j = http_json(8797, '/api/tasks/{}/staging'.format(up[0]))
         check('断库暂存 503', st == 503)

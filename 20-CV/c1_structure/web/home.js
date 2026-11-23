@@ -1,5 +1,5 @@
 /* web/home.js — 工作台首页：快速解析条 + 四张状态卡 + 待办列表。
-   数字口径见 design-home-workbench.md §2.1；计数纯前端拼装
+   计数纯前端拼装
    （/api/tasks ＋ /api/staging/ledger），无新端点、无状态落库。 */
 var hpicked=[], tplId=null;
 var hdrop=document.getElementById('hdrop'), hpick=document.getElementById('hpick');
@@ -17,7 +17,7 @@ function say(t,cls){ hmsg.textContent=t; hmsg.className='qmsg'+(cls?' '+cls:'');
 function sayHtml(html,cls){ hmsg.innerHTML=html; hmsg.className='qmsg'+(cls?' '+cls:''); }
 
 /* ---- 抽取规则下拉：与解析页同源；记住上次选择（H3） ---- */
-fetch('/api/templates').then(function(r){return r.json();}).then(function(j){
+fetch('/api/extract-rules').then(function(r){return r.json();}).then(function(j){
   var its=j.items||[]; tplCount=its.length; renderCards();
   if(!its.length){ htpl.innerHTML='<option value="">原始透传 v1</option>'; return; }
   htpl.innerHTML=its.map(function(t){
@@ -80,11 +80,11 @@ hgo.onclick=function(){
     return fetch('/api/upload',{method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({files:files,
-        template_version_id:htpl.value?Number(htpl.value):null})
+        rule_version_id:htpl.value?Number(htpl.value):null})
     }).then(function(r){return r.json();});
   }).then(function(j){
     if(!j.ok) throw new Error(j.error||'提交失败');
-    sayHtml('已提交，正在解析…　<a class="linkbtn" href="/extract">查看进度</a>','run');
+    sayHtml('已提交，正在解析…　<a class="linkbtn" href="/parse">查看进度</a>','run');
     pollStatus();
   }).catch(function(e){
     say('提交失败：'+e.message,'err'); hgo.disabled=hpicked.length===0;
@@ -106,7 +106,7 @@ function pollStatus(){
   }).catch(function(){ pollT=setTimeout(pollStatus,1500); });
 }
 
-/* ---- 状态卡数字（design-home-workbench §2.1 口径） ---- */
+/* ---- 状态卡数字口径 ---- */
 function nums(){
   var busy=items.filter(function(t){
     return t.state==='extracting'||t.state==='pending';
@@ -184,7 +184,7 @@ function renderTodo(v){
   });
   v.busy.forEach(function(t){
     rows.push({id:t.task_id,name:fileNames(t),what:'① 解析中…',
-      act:'<a class="linkbtn" href="/extract">查看进度</a>',t:t.created_at});
+      act:'<a class="linkbtn" href="/parse">查看进度</a>',t:t.created_at});
   });
   v.failed.forEach(function(t){
     rows.push({id:t.task_id,name:fileNames(t),
@@ -210,7 +210,7 @@ document.getElementById('todorows').addEventListener('click',function(e){
 function startLoad(taskId){
   var t=items.filter(function(x){return x.task_id===taskId;})[0];
   openLoadWizard({taskId:taskId,
-    templateId:(t&&t.template)?t.template.template_id:null,
+    ruleId:(t&&t.rule)?t.rule.rule_id:null,
     onDone:function(){ refresh(); }});
 }
 

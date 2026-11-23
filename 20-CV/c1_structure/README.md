@@ -1,14 +1,14 @@
-# C1 提取（c1_structure）
+# 结构化平台（c1-structure）
 
-把 week-02 验证过的提取能力封装成一个**本地 Web 工具**：浏览器上传文件 → 后端提取 → 生成对照报告。
+面向审计场景的**本地文档结构化工作台**：浏览器上传文件 → **解析**（结构化数据）→
+**抽取**（按抽取规则生成记录）→ **校验** → **入库**（业务库）。
 **DB 是唯一事实源**（MySQL）：原件字节、产物附件、暂存记录全部入库，磁盘只有跑完即清的
 临时 scratch。每个 task_file 一份独立自包含的 `对照报告.html`（BLOB，经 `/files/<task_file_id>/`
 白名单路由访问），每次上传各自独立、互不覆盖；页面与报告资产（`web/`）只有一份。
-支持**多页 PDF 逐页提取 + 报告翻页切换 + 跨页表格拼接**（页码留空 = 全部页）。
+支持**多页 PDF 逐页解析 + 报告翻页切换 + 跨页表格拼接**（页码留空 = 全部页）。
 `weekly/week-02/` 的代码与产物**完全不改动**，本目录自包含。
-存储设计见 [docs/design-task-schema.md](./docs/design-task-schema.md)（任务化命名 + 去外键，
-取代 [design-c1-storage.md](./docs/design-c1-storage.md) 的表名/列名表述）。
-**找代码**：[docs/feature-map.md](./docs/feature-map.md)——页面↔路由↔引擎↔存储↔表↔前端文件对照。
+存储为任务化命名、无外键（表 `c1_*` 前缀）；**复用事实与验证方法**见
+[docs/progress-handoff.md](./docs/progress-handoff.md)，找代码顺着本文件目录树即可。
 
 ## 启动
 
@@ -63,7 +63,7 @@ uvicorn c1_structure.app:app --host 0.0.0.0 --port 8765 --workers 1    # 生产�
 - `paddlex[ocr]`（不是 `[ocr-core]`）：图片/扫描件路线的 PP-StructureV3 依赖门禁要完整 ocr extra；ocr-core 只够 PDF 文本层路线的 OCR 文字识别。
 - 上传走 base64 JSON，所以不需要 `python-multipart`；Starlette 1.x 的静态文件也不需要 `aiofiles`。
 - `pdfplumber` / `PyMuPDF` 是本项目自己用的，paddle 不带，别漏。
-- `jinja2` 渲染报告 HTML 模板（`extract_report/templates/`），纯 Python 无二进制依赖。
+- `jinja2` 渲染对照报告的 HTML 模板（`parse_report/templates/`），纯 Python 无二进制依赖。
 
 **离线 / 内网部署**：PaddleX 官方模型在首次推理时联网下载到 `${PADDLE_PDX_CACHE_HOME:-~/.paddlex}/official_models`（数百 MB）。先在联网机器跑一次把模型下全，再把该目录一起拷贝，并设置 `PADDLE_PDX_CACHE_HOME` 指向其**上级**目录。`check_env.py` 会检查缓存是否就绪。
 
@@ -75,7 +75,7 @@ uvicorn c1_structure.app:app --host 0.0.0.0 --port 8765 --workers 1    # 生产�
 | `C1_STRUCTURE_DATA_ROOT` | 包内 `data/` | secrets / 备份等数据根目录 |
 | `C1_STRUCTURE_HOST` | `127.0.0.1` | 监听地址，服务器设 `0.0.0.0` |
 | `C1_STRUCTURE_PORT` | `8765` | 端口 |
-| `C1_STRUCTURE_MAX_FILE_MB` | `20` | 单文件上限（改它时同步改 `upload.js` 的前端 20MB 校验） |
+| `C1_STRUCTURE_MAX_FILE_MB` | `20` | 单文件上限（改它时同步改 `parse.js` 的前端 20MB 校验） |
 | `C1_STRUCTURE_WARMUP` | `0` | 设 `1` 则启动时预加载模型 |
 | `PADDLE_PDX_CACHE_HOME` | `~/.paddlex` | 模型缓存根目录，离线部署必设 |
 
@@ -91,7 +91,7 @@ uvicorn c1_structure.app:app --host 0.0.0.0 --port 8765 --workers 1    # 生产�
 | 首次表格 `engines.structure()` | 构造 PPStructureV3 **单次推理**：parsing / layout / 整页投影 / 表格 / 矫正图一次产出 | 20~40s |
 | 后续文件 | `_OCR` / `_STRUCT` 模块级单例复用 | 每张几秒 |
 
-- 两级懒加载：包级 import 在后台线程，权重只在第一次真正用到时实例化。上传页、`/healthz`、`/extract-report` 都不会触发模型。
+- 两级懒加载：包级 import 在后台线程，权重只在第一次真正用到时实例化。解析页、`/healthz`、`/parse-report` 都不会触发模型。
 - **CSV / 有文本层 PDF 完全不加载表格结构模型**（直读 / pdfplumber）；图片 / 扫描件一律单次 PPStructureV3 推理（无网格预筛门槛）。
 - 单例按**进程**缓存，重启会重新加载；`--workers 1` 保证只有一份。
 - 想改成「启动即加载、首个请求不等」：设 `C1_STRUCTURE_WARMUP=1`，在 FastAPI lifespan 里同步预热，`python app.py` 与 `uvicorn c1_structure.app:app` 都生效。默认关闭。
@@ -114,21 +114,22 @@ c1_structure/
 ├── store/                     存储层（DB 唯一事实源）
 │   ├── db.py                  驱动接缝 + conn_ref 解析（纯连接，不建表）
 │   ├── errors.py              类型化业务异常（StoreError/BadRequest/NotFound/Conflict→HTTP 码）
-│   ├── migrations/            001_baseline.sql 人工安装脚本（部署/改表时手动对库跑）
+│   ├── migrations/            001_baseline.sql 人工安装脚本（新库）＋ 002 存量库升级脚本
+│   │                          （无自动迁移器，部署/改表时手动对库跑）
 │   ├── catalog/               目录元数据 repo，按业务域拆分（__init__ 全量重导出，
 │   │   │                      调用方 catalog.xxx() 不感知边界）
-│   │   ├── files.py           源文件域（extract_file ＋ content 原件字节）
-│   │   ├── templates.py       模板域（template / template_version）
-│   │   ├── tasks.py           任务域（task / task_file / quarantine）
-│   │   └── load.py            入库域（load_datasource / load_table(+field) / load_log）
-│   ├── content.py             内容门面（extract 经 artifact，records 直委托 content_db）
+│   │   ├── files.py           源文件域（c1_file ＋ content 原件字节）
+│   │   ├── rules.py           抽取规则域（c1_rule / c1_rule_version）
+│   │   ├── tasks.py           任务域（c1_task / c1_task_file / c1_quarantine）
+│   │   └── load.py            入库域（c1_load_datasource / c1_load_table(+field) / c1_load_log）
+│   ├── content.py             内容门面（parse 经 artifact，records 直委托 content_db）
 │   ├── content_db.py          staging 三表：get/save/patch/set_review/query_fields
 │   ├── loader.py              入库引擎接缝：数据源直连 / introspection / 字段契约
 │   │                          / transform（trim·number）/ write_record（应用层 upsert）
 │   ├── artifact.py            附件门面（kind/mime 推断）
-│   └── artifact_db.py         extract_artifact BLOB（键＝task_file_id，应用层级联删）
-├── adapter/                   提取信封 → 模板记录的适配层（base.py hydrate 派生视图）
-├── pipeline/                  提取层
+│   └── artifact_db.py         c1_artifact BLOB（键＝task_file_id，应用层级联删）
+├── adapter/                   解析信封 → 抽取记录（字段集）的适配层（base.py hydrate 派生视图）
+├── pipeline/                  解析层
 │   ├── engines.py             模型单例（懒加载；表格模型按 doc_unwarp 分槽缓存）
 │   ├── ocr.py                 逐行文字 / 置信度 / 四点框 + 带框 PNG
 │   ├── pdf.py                 页数 / 逐页渲染 / 文本层 / pdfplumber 表格 + bbox
@@ -136,62 +137,64 @@ c1_structure/
 │   ├── ppstruct.py            PPStructureV3 单次推理：官方 parsing / 表格 / 矫正图
 │   ├── resplit.py             图片人工列边界：切黏连格 + 子格重 OCR 归位
 │   ├── structure.py           表头分离 / cells 网格 / CSV 导出 / 跨页续表拼接
-│   └── runner.py              extract_one() 统一入口：逐页提取 + pages 信封编排
-├── extract_report/            对照报告生成器（纯 Python＋Jinja2，不含页面资产）
-│   ├── cards.py               数据准备 + 选模板（坐标 rect / 行 / 文档块 / data URI）
+│   └── runner.py              parse_one() 统一入口：逐页解析 + pages 信封编排
+├── parse_report/              对照报告生成器（纯 Python＋Jinja2，不含页面资产）
+│   ├── cards.py               数据准备 + 选 Jinja 模板（坐标 rect / 行 / 文档块 / data URI）
 │   ├── builder.py             组装对照报告（内联 web/ 资产，每 task_file 一份）
 │   └── templates/             Jinja2 HTML 模板（autoescape，结构与逻辑分离）
 ├── web/                       全部前端资产（/static 挂载于此）
-│   ├── <page>.html/js/css     六页：upload / sources / templates / staging / load / tasks
+│   ├── <page>.html/js/css     七页：home / parse(解析) / sources / extract(抽取规则) /
+│   │                          review(校验) / rules(入库规则) / tasks
 │   ├── shell.css/js           全局壳＋列表页共用小件＋回执抽屉
 │   ├── stage.css/js           舞台共用件（校验台＋报告）
-│   ├── hint.css/js            「?」悬浮说明（上传页＋报告）
+│   ├── wizard.css/js          四步入库向导
+│   ├── hint.css/js            「?」悬浮说明（解析页＋报告）
 │   └── report.css/js · lightbox.html   报告专用（生成时内联进 BLOB）
 ├── data/                      backup/（迁移前整库备份；DSN 已入 config.py，无 secrets.json）
 ├── logs/                      任务日志（运行时生成，每任务一个 task_<id>.log）
-└── docs/                      设计稿与交接文档
+└── docs/                      progress-handoff.md（环境事实与验证方法）
 ```
 
 ### 存储模型：task / task_file id，无批次戳、无外键
 
-一次上传 = 一个 **task**（`extract_task` 行），批内每个文件 = 一个 **task_file**。
+一次上传 = 一个 **task**（`c1_task` 行），批内每个文件 = 一个 **task_file**。
 没有批次时间戳、没有持久 input/output 目录：
 
-- 原件字节进 `extract_file.content`（sha256 去重，重复上传不重复入库）。
-- 产物附件进 `extract_artifact`（键＝task_file_id + 相对名，LONGBLOB，应用层级联删）。
+- 原件字节进 `c1_file.content`（sha256 去重，重复上传不重复入库）。
+- 产物附件进 `c1_artifact`（键＝task_file_id + 相对名，LONGBLOB，应用层级联删）。
 - 暂存记录进 staging 三表（record / field / lineage，field 是查询投影）。
-- **校验台**（`/staging`，P1a）：双击格改值→edited，✓ 确认 / ✗ 拒绝（review_state），
+- **校验台**（`/review`）：双击格改值→edited，✓ 确认 / ✗ 拒绝（review_state），
   状态筛选＋批量确认待审；改值格琥珀标记（title 显原值），original 永不覆盖；
   loaded 任务只读（前端横幅＋后端 409）。无 task 参数时渲染**任务级校验台账**
   （`/api/staging/ledger`：每任务汇总记录数＋待校验/已修改/已确认/已拒绝计数，
   点任务行展开其文件子行，点文件行进入）。
-- 提取期间的工作目录与输入副本都是 tempfile scratch（`tmp/input/in_*` / `tmp/work/case_*`），跑完即清。
-- URL 全用 id：`/staging?task=<task_id>&file=<task_file_id>`、`/files/<task_file_id>/<产物>`、
-  `/srcfiles/<file_id>`。`GET /extract-report` 重定向到最新 task_file 的报告真实地址。
+- 解析期间的工作目录与输入副本都是 tempfile scratch（`tmp/input/in_*` / `tmp/work/case_*`），跑完即清。
+- URL 全用 id：`/review?task=<task_id>&file=<task_file_id>`、`/files/<task_file_id>/<产物>`、
+  `/srcfiles/<file_id>`。`GET /parse-report` 重定向到最新 task_file 的报告真实地址。
 - 重复上传同一文件不覆盖历史：新 task 新 task_file 新附件，旧 task 完整可回溯。
   批内重名文件加 `-2` 区分。task id 在上传响应与 `/api/status` 的 `task_id` 字段可见。
 - **无外键约束**：引用完整性归应用层（delete_file 引用守卫；重跑覆盖显式先删子表）。
 
-### 入库链路（P2b/P2c，design-p2b-datasource.md＋design-p2c-load-entry.md）
+### 入库链路（数据源 × 入库规则）
 
-- **数据源**（`extract_load_datasource`）：一个数据源＝一个 MySQL 库，
+- **数据源**（`c1_load_datasource`）：一个数据源＝一个 MySQL 库，
   host/port/账号/密码/库名**明文存库、页面可见可编辑**（2026-11-21 裁决，暂不加密）；
   首启幂等种「产品库」默认行（解析 `C1_STRUCTURE_DB`）。日志与测试连接回显永不打印凭据
   （仅 host:port/库名）。平台库自身凭据仍走 conn_ref。
-- **映射**（`extract_load_table` ＋ `extract_load_table_field`）：一行＝数据源×目标表×模板
-  ＋write_mode（upsert/insert/update），字段行＝模板字段→目标列＋业务键勾选。
-  只写已有表（不自动建表）；同物理表可被不同模板各建一行（UNIQUE 三元组）。
+- **映射**（`c1_load_table` ＋ `c1_load_table_field`）：一行＝数据源×目标表×抽取规则
+  ＋write_mode（upsert/insert/update），字段行＝抽取规则字段→目标列＋业务键勾选。
+  只写已有表（不自动建表）；同物理表可被不同抽取规则各建一行（UNIQUE 三元组）。
 - **审计守卫**：数据源被映射引用后 host/port/库名锁定（409，账号密码可改，换目标＝新建）；
   映射被任务引用后只读（PATCH/DELETE 409，回执语义）。
-- **流程（P2c 单一提取入口）**：上传只选文件＋模板（不再携带 mode/入库目标，旧契约键 400）
-  → 提取校验（门禁：全部 confirmed 才可入库，否则 409 带计数）→ 任务详情/校验台「入库…」
-  抽屉选数据源＋映射（按 数据源×任务模板 双过滤）→ **校验/门禁/预检全过才绑定目标并写入**
+- **流程（单一解析入口，入库时绑定）**：上传只选文件＋抽取规则（不携带入库目标，旧契约键 400）
+  → 校验（门禁：全部 confirmed 才可入库，否则 409 带计数）→ 任务详情/校验台「入库…」
+  抽屉选数据源＋映射（按 数据源×任务抽取规则 双过滤）→ **校验/门禁/预检全过才绑定目标并写入**
   （失败不留绑定，可另选；已绑定任务重试沿用原目标，带新目标 409）→ 逐条回执
-  （`extract_load_log`，唯一键幂等，重跑跳过）＋数据级隔离（`extract_quarantine` stage=load，
+  （`c1_load_log`，唯一键幂等，重跑跳过）＋数据级隔离（`c1_quarantine` stage=load，
   重试无回执记录）。transform（trim/number）只在入库时消费，暂存原值永不改。
   loaded/partial 任务记录只读。
-- **/load 页**：左数据源列表（试连/编辑/删除）右映射列表（字段行抽屉编辑）；
-  入库目标在任务入库时选择（tasks/staging 共用抽屉，shell.js）。
+- **/rules 入库规则页**：左数据源列表（试连/编辑/删除）右入库规则列表（字段行抽屉编辑）；
+  入库在任务侧发起：四步入库向导（wizard.js，选目标→字段对齐→dry-run 过目→执行）。
 
 **按需导出**（file:// 直开 / 审计 / 迁移出口）：
 
@@ -208,15 +211,15 @@ D:\miniforge3\envs\paddle\python.exe c1_structure/export_artifacts.py --out D:/t
 
 **源码模块化，产物自包含**：`builder.py` 生成报告时会把 `hint.css` / `stage.css` / `report.css` /
 `hint.js` / `stage.js` / `report.js` / `lightbox.html` 内联进 HTML（stage 件与校验台共享，先于页面件），
-图片 / extract.json / CSV 链接一律**相对路径**，
+图片 / parse.json / CSV 链接一律**相对路径**，
 所以报告经 `/files/<task_file_id>/` 访问时资源全部成立；导出后**双击用 `file://` 直接打开也能正常显示图片与全部交互**；
 整份信封 JSON 以紧凑 `<script type="application/json">` 嵌在报告里（全报告仅一份，首次打开 tab 才美化），
-不依赖在线 fetch。上传页是线上页面，走 `/static/` 外链资源。
-**多文件批次**：上传页报告区顶部出现**文件页签**（单文件不显示），点击在下方 iframe 切换各文件自己的报告；
-`GET /extract-report` 重定向到最新 task_file 报告的 `/files/` 真实地址（相对路径资源需在该 task_file URL 下解析）。
+不依赖在线 fetch。解析页是线上页面，走 `/static/` 外链资源。
+**多文件批次**：解析页报告区顶部出现**文件页签**（单文件不显示），点击在下方 iframe 切换各文件自己的报告；
+`GET /parse-report` 重定向到最新 task_file 报告的 `/files/` 真实地址（相对路径资源需在该 task_file URL 下解析）。
 
-HTML 结构全部在 `extract_report/templates/*.html`（Jinja2，**autoescape 默认开启**，
-不再手写转义），CSS / JS 在 web/ 独立文件，Python 只做数据准备与模板选择——
+HTML 结构全部在 `parse_report/templates/*.html`（Jinja2，**autoescape 默认开启**，
+不再手写转义），CSS / JS 在 web/ 独立文件，Python 只做数据准备与抽取规则选择——
 IDE 高亮、改结构 / 样式不必碰 Python 逻辑。迁移经「重构前后 DOM 逐节点对比」
 验证（15 个真实 case + 3 个合成边界 case 全部等价），交互零回归。
 
@@ -229,12 +232,12 @@ IDE 高亮、改结构 / 样式不必碰 Python 逻辑。迁移经「重构前�
 | PDF 无文本层 | 同图片路线（逐页单次推理） | 同上 |
 | CSV / TXT / MD | 纯文本直读，不跑 OCR | `source.<ext>`、`table_N.csv`（CSV） |
 
-每个 task_file 固定有一份 `extract.json` 附件（**紧凑 JSON**），统一为**文件信封**：
+每个 task_file 固定有一份 `parse.json` 附件（**紧凑 JSON**），统一为**文件信封**：
 `file/kind/encoding/params_snapshot/page_count` + `pages:[pageRec…]` + `stitched_tables`。
 单页文件也是 `pages:[1]`（无双形态、无兼容 shim）。每页 `pageRec` 只存三样：官方 `parsing`（裁掉代码不读的死字段）+ `structured_tables`（加工后的表 + 单元格坐标）+ 该页元信息/诊断。
 文字投影 `texts/scores/boxes`、版面 `layout`、行数/均值**不落盘**，由 `adapter.base.hydrate()` 在渲染期**逐页**从 `parsing` 现算（官方 JSON 为唯一事实源，派生视图不重复存储）；raw 表中间态已删。
 文本层 PDF / CSV 路线无 `parsing`，其 OCR 投影是唯一文字记录，直接存储。
-跨页续表合并进 `stitched_tables`（每格带 `page/space`，供报告页感知回溯）。详见 [docs/result-json-anatomy.md](./docs/result-json-anatomy.md)。
+跨页续表合并进 `stitched_tables`（每格带 `page/space`，供报告页感知回溯）。
 `rectified.png` 只在真正抽到表的图片 / 扫描件里生成（多页为 `p{n}_rectified.png`）。
 
 ## 「横线端点自动还原」是怎么做到的（有文本层 PDF）
@@ -260,7 +263,7 @@ IDE 高亮、改结构 / 样式不必碰 Python 逻辑。迁移经「重构前�
    └─ 得到 9 条竖边界 = 8 列 → 喂给 pdfplumber 的 explicit_vertical_lines
 ```
 
-实测这条边界序列还原出的表，与当初人工抄的模板**逐字一致**（25×8，含换行）。
+实测这条边界序列还原出的表，与当初人工抄的抽取规则**逐字一致**（25×8，含换行）。
 **为什么不处处都用端点法**：一页里有多张表时，各表的横线端点会混在一起
 （21/23/26 端点法给出 11 条边界，实际每表只有 5~6 列）。所以用判据区分：
 
@@ -272,18 +275,18 @@ IDE 高亮、改结构 / 样式不必碰 Python 逻辑。迁移经「重构前�
 
 一句话：**端点法负责补「文字看不出的隐藏列」，文字法负责「多表时各管各的」，
 判据就是两者边界数是否只差 1。** 这整套逻辑在 `pipeline/pdf.py`，没有任何文件名 / 数字
-被写死；真遇到判据都不适用的特殊版式，才在上传页用 `column_lines` 临时给一组 x 坐标。
+被写死；真遇到判据都不适用的特殊版式，才在解析页用 `column_lines` 临时给一组 x 坐标。
 
 ## 报告包含什么
 
-- **多页文件翻页切换 + 单行整合页头**：页码留空（默认）的多页 PDF 渲染成 `.filecard` 容器 + 逐页子卡片（只显示激活页），左图吸顶、右栏 tab 与单页一致。翻页组件为**窗口式页码胶囊**（« ‹ 页码窗口 › » + 跳页输入框）：常显首末页与当前页±1，其余收进 …，页数再多也只占一小条；支持点页码、首/末/上/下页、输入页码回车跳转（不在提取范围的页码就近落位）、焦点在卡片内时左右方向键翻页。**悬浮叠在源图底缘之上**（绝对定位、不占布局、**不压缩图宽**；`report.js alignPagers` 按当前激活 imgwrap 的实测底缘/水平中心锚定，窗口伸缩、切页、切视图、图片加载后仍贴在源图上；窄屏回退为横向静态条）。页头**只保留一个文件级整合头、单行**（实测约 42px），做成**色带 + 左侧 accent 竖条 + 2px 下边线**，**上边线由所在卡片/文件外框提供（上下都有线）**；多页 `.filecard` 自带**外框 + 圆角 + 投影**（内部逐页卡去自身边框避免双线），文件区域边界一眼可分（文件间距 34px、单页卡 26px，外框色 `#c9d4e4`）：**左**=标题(15px/600)+类型/页数标签+跨页合并标签；**右**（`.fh-right`，多页为 `.pagehead-slot`）=路线/行数/表格/可疑行(仅>0 琥珀警示)/图链接/extract.json，切页时由 JS 从该页 inert `<template>` 注入更新。**诊断类（平均置信度/耗时）不进页头**（在文字行/JSON/日志里查），可疑行为 0 时不显示——页头只留 actionable 信息且全部右置，不再两行堆高。整份信封 JSON 独立成**「整份 JSON」tab**（与本页 JSON/文字/表格/文档同款面板），不再塞在跨页 tab 底部。切页**保留当前激活 tab 与合并表子页签**，并**同步合并表滚动位置**（页交接行悬停不再高频来回抖动），翻页不丢上下文。
-- **跨页表格拼接**：相邻页「同列数 + 同坐标空间 + 列 x 边界对齐 + 表头相同（空白归一化）」的续表合并成一张逻辑表（去重复表头、行连续），每格保留来源 `page/space`；悬停/点击合并表单元格**自动切到对应页**并高亮该格（页感知回溯）。回溯走 **filecard 级 mousemove 委托 + 格键去重**（切页会换掉光标底下的 DOM 副本，逐副本 enter/leave 会被 stale mouseleave 清掉高亮而「卡住」）；切页**同步合并表滚动位置**，页交接行悬停不再高频来回抖动。判据保守，宁可不拼不误拼。另支持**无重复表头续页**（2026-11-20）：列位置子集对齐 + 续页贴顶 + 首行像数据 → 回收被误标成表头的首行数据、被裁空列（含中间列）按主表布局补齐，报告以琥珀徽标提示「无表头续页首行已回收」；判据与落地细节见 [docs/design-headerless-stitch.md](./docs/design-headerless-stitch.md)。**一个文件可有多条独立跨页链**，各链以子页签区分。合并表不再单列底部面板，而是收进**每个页卡片的「跨页合并」tab**（与文字行/表格/文档/JSON 并列），消除割裂感。
-- **CSV 下载/预览按 tab 分口径**（2026-11-20）：**表格 tab** 的下载/预览只给**当前页这张表**（`table_N.csv`，自包含 data URI）；被并入合并表的页表保留「跨页合并 N」徽标与分段说明，但下载/预览仍是本页片段。**跨页合并 tab** 的下载/预览给**完整合并表**（`stitched_N.csv`）。提取层**逐页碎片 CSV 全部入 BLOB**（与表格 tab 口径一致），合并表另存 `stitched_N.csv`。「打开 CSV」改为**弹窗直接预览**（复用辅助弹窗，渲染成表格可滚动），不再是变相下载。
+- **多页文件翻页切换 + 单行整合页头**：页码留空（默认）的多页 PDF 渲染成 `.filecard` 容器 + 逐页子卡片（只显示激活页），左图吸顶、右栏 tab 与单页一致。翻页组件为**窗口式页码胶囊**（« ‹ 页码窗口 › » + 跳页输入框）：常显首末页与当前页±1，其余收进 …，页数再多也只占一小条；支持点页码、首/末/上/下页、输入页码回车跳转（不在解析范围的页码就近落位）、焦点在卡片内时左右方向键翻页。**悬浮叠在源图底缘之上**（绝对定位、不占布局、**不压缩图宽**；`report.js alignPagers` 按当前激活 imgwrap 的实测底缘/水平中心锚定，窗口伸缩、切页、切视图、图片加载后仍贴在源图上；窄屏回退为横向静态条）。页头**只保留一个文件级整合头、单行**（实测约 42px），做成**色带 + 左侧 accent 竖条 + 2px 下边线**，**上边线由所在卡片/文件外框提供（上下都有线）**；多页 `.filecard` 自带**外框 + 圆角 + 投影**（内部逐页卡去自身边框避免双线），文件区域边界一眼可分（文件间距 34px、单页卡 26px，外框色 `#c9d4e4`）：**左**=标题(15px/600)+类型/页数标签+跨页合并标签；**右**（`.fh-right`，多页为 `.pagehead-slot`）=路线/行数/表格/可疑行(仅>0 琥珀警示)/图链接/parse.json，切页时由 JS 从该页 inert `<template>` 注入更新。**诊断类（平均置信度/耗时）不进页头**（在文字行/JSON/日志里查），可疑行为 0 时不显示——页头只留 actionable 信息且全部右置，不再两行堆高。整份信封 JSON 独立成**「整份 JSON」tab**（与本页 JSON/文字/表格/文档同款面板），不再塞在跨页 tab 底部。切页**保留当前激活 tab 与合并表子页签**，并**同步合并表滚动位置**（页交接行悬停不再高频来回抖动），翻页不丢上下文。
+- **跨页表格拼接**：相邻页「同列数 + 同坐标空间 + 列 x 边界对齐 + 表头相同（空白归一化）」的续表合并成一张逻辑表（去重复表头、行连续），每格保留来源 `page/space`；悬停/点击合并表单元格**自动切到对应页**并高亮该格（页感知回溯）。回溯走 **filecard 级 mousemove 委托 + 格键去重**（切页会换掉光标底下的 DOM 副本，逐副本 enter/leave 会被 stale mouseleave 清掉高亮而「卡住」）；切页**同步合并表滚动位置**，页交接行悬停不再高频来回抖动。判据保守，宁可不拼不误拼。另支持**无重复表头续页**（2026-11-20）：列位置子集对齐 + 续页贴顶 + 首行像数据 → 回收被误标成表头的首行数据、被裁空列（含中间列）按主表布局补齐，报告以琥珀徽标提示「无表头续页首行已回收」；判据保守实现于 `pipeline/structure.py`。**一个文件可有多条独立跨页链**，各链以子页签区分。合并表不再单列底部面板，而是收进**每个页卡片的「跨页合并」tab**（与文字行/表格/文档/JSON 并列），消除割裂感。
+- **CSV 下载/预览按 tab 分口径**（2026-11-20）：**表格 tab** 的下载/预览只给**当前页这张表**（`table_N.csv`，自包含 data URI）；被并入合并表的页表保留「跨页合并 N」徽标与分段说明，但下载/预览仍是本页片段。**跨页合并 tab** 的下载/预览给**完整合并表**（`stitched_N.csv`）。解析层**逐页碎片 CSV 全部入 BLOB**（与表格 tab 口径一致），合并表另存 `stitched_N.csv`。「打开 CSV」改为**弹窗直接预览**（复用辅助弹窗，渲染成表格可滚动），不再是变相下载。
 - **原图 / 矫正图**切换（有矫正图时才出现切换条），点击图片全屏放大：滚轮以光标为中心缩放、拖拽平移、1:1 原像素、双击切换、Esc 关闭、叠加框开关、新窗口打开原图。
-- **提取内容**：逐行 OCR 文字 + 置信度条，与左图识别框双向高亮；有文本层 / 纯文本另给全文折叠区。**文字叠加框默认隐藏**（报告初始干净不画常显框，点图右上角「显示叠加框」开启）；悬停文字行仍即时高亮对应框、点击钉住，全屏放大默认跟随内联的隐藏状态。
+- **文字内容**：逐行 OCR 文字 + 置信度条，与左图识别框双向高亮；有文本层 / 纯文本另给全文折叠区。**文字叠加框默认隐藏**（报告初始干净不画常显框，点图右上角「显示叠加框」开启）；悬停文字行仍即时高亮对应框、点击钉住，全屏放大默认跟随内联的隐藏状态。
 - **表格内容**：带表头的 HTML 表格、多表 tab 切换；下载 CSV 仅本页这张表（自包含 data URI），「预览 CSV」弹窗直接看表（不下载）。
 - **单元格坐标回溯**：默认一个框都不画，悬停只高亮那一格、点击钉住（再点取消），并自动切到该表的坐标宿主视图；「显示整表网格」是默认关闭的调试开关。
-- **完整 JSON**：折叠查看、下载 `extract.json`、一键复制。单页卡片 JSON tab 展示**文件信封存储形态**（含 pages/stitched_tables，ppstruct 页含 parsing、不含派生投影）；多页给「本页 JSON」tab 展示该页 `pageRec`、另给独立「整份 JSON」tab 展示文件信封（不再塞跨页 tab 底部）；**整份信封以紧凑 JSON 嵌在 filecard 的 `<script type="application/json">` 里（全报告仅一份），首次打开 tab 时才解析美化**——不逐页卡片内联（避免多页大文件报告平方级膨胀），也不 fetch（`file://` 直开时浏览器禁止 fetch 本地文件）；美化结果按 filecard 缓存、多页卡片共享；复制按钮按所在面板取 `jsonpre`，多份不串。BLOB 紧凑存储，tab 渲染时再 `indent=2` 美化。
+- **完整 JSON**：折叠查看、下载 `parse.json`、一键复制。单页卡片 JSON tab 展示**文件信封存储形态**（含 pages/stitched_tables，ppstruct 页含 parsing、不含派生投影）；多页给「本页 JSON」tab 展示该页 `pageRec`、另给独立「整份 JSON」tab 展示文件信封（不再塞跨页 tab 底部）；**整份信封以紧凑 JSON 嵌在 filecard 的 `<script type="application/json">` 里（全报告仅一份），首次打开 tab 时才解析美化**——不逐页卡片内联（避免多页大文件报告平方级膨胀），也不 fetch（`file://` 直开时浏览器禁止 fetch 本地文件）；美化结果按 filecard 缓存、多页卡片共享；复制按钮按所在面板取 `jsonpre`，多份不串。BLOB 紧凑存储，tab 渲染时再 `indent=2` 美化。
 
 三套坐标来源严格互斥，用 `coord.space` 区分：文本层 bbox 与 OCR 框基于 `source.<ext>`；
 表格模型**开矫正**时单元格框基于 `pages/rectified.png`（转正 + 去扭曲，1:1 无需逆变换）；
@@ -292,7 +295,7 @@ IDE 高亮、改结构 / 样式不必碰 Python 逻辑。迁移经「重构前�
 
 ## 运行日志与进度
 
-上传页自带**运行日志面板**，处理过程中实时显示，不用另开终端：
+解析页自带**运行日志面板**，处理过程中实时显示，不用另开终端：
 
 - 顶部进度条 + 当前阶段（load / case / ocr / table / report / done），完成后 100%。
 - 结构化日志按级别配色：`INFO` 灰、`OK` 绿、`STEP` 蓝、`WARN` 黄、`ERROR` 红。
@@ -305,25 +308,25 @@ IDE 高亮、改结构 / 样式不必碰 Python 逻辑。迁移经「重构前�
 
 实现在 `tasklog.py`：一个 `TaskLog` 实例对应一次任务，同时写 `service.STATE['logs']`
 （页面轮询 `/api/status` 拿结构化数组）、`logs/task_<id>.log` 和控制台（同格式实时打印）。**pipeline 只认一个
-`emit(level, stage, msg)` 回调**，由 service 注入，提取层不 import Web 层，保持分层干净。
+`emit(level, stage, msg)` 回调**，由 service 注入，解析层不 import Web 层，保持分层干净。
 
 ## 调试参数面板（badcase 用，按优先级排）
 
-上传页的「调试参数」面板可直接调参，**只对本次上传生效**，改完即可对比效果。
+解析页的「调试参数」面板可直接调参，**只对本次上传生效**，改完即可对比效果。
 参数定义（默认值 / 范围 / 说明 / 顺序）全在 `params.py::SCHEMA` 一处，前端从
 `GET /api/params` 动态渲染，后端用同一份 schema 校验 —— 不存在前后端默认值漂移。
 按重要 / 优先级自上而下：
 
 | 优先级 | 参数 | 默认 | 调它能救什么 |
 |---|---|---|---|
-| ① 页面范围 | `page` | 留空 | **留空（默认）= 逐页全量提取整份 PDF** + 报告翻页切换 + 跨页续表拼接；填页码（1 起）= 只提取该页（超页数自动夹到末页）。`all` / 「全部」/ `*` 等同留空。多页即可能跨页，故默认全量并尝试拼接 |
+| ① 页面范围 | `page` | 留空 | **留空（默认）= 逐页全量解析整份 PDF** + 报告翻页切换 + 跨页续表拼接；填页码（1 起）= 只解析该页（超页数自动夹到末页）。`all` / 「全部」/ `*` 等同留空。多页即可能跨页，故默认全量并尝试拼接 |
 | ② 表格识别 | `table_strategy` | auto | 强制 `text` 救无线框表；`lines` 按矢量线；避免纯文字页被伪抽 |
 | ② | `column_lines` | 空 | 人工列边界，填 `x1,x2,x3,…`（≥1 个递增数字）。**文本层 PDF** 用 PDF 点（像素×72/DPI，单条不成列自动回退）覆盖自动推断；**图片/扫描件** 用原图像素，单条即可沿竖线切开模型黏连格并重 OCR 归位（仅 `doc_unwarp=off`）。常规无需填 |
 | ③ 文字识别 | `det_thresh` / `box_thresh` | 0.3 / 0.6 | 漏检调低（0.2/0.4）、误检调高；predict 按次覆盖，不重建模型 |
 | ④ 渲染精度 | `dpi` | 110 | 小字 / 密集表提到 150~200 更清晰；坐标同步缩放 |
 | ⑤ 坐标回溯 | `doc_unwarp` | on | **电子版平整截图（如 108）设 off**：关闭方向分类 + UVDoc，单元格框直接叠原图、1:1 精确；旋转/弯曲扫描件保持 on（框叠矫正图）|
 
-**参数快照**：每次上传的生效参数写进 `extract.json` 文件信封的 `params_snapshot`，
+**参数快照**：每次上传的生效参数写进 `parse.json` 文件信封的 `params_snapshot`，
 页码写进每页 `pageRec.page`；报告页头统计行内的「参数快照 · N 项」小胶囊点开悬浮下拉，
 按优先级列出全部参数（不独立占行，点外部收起；`page=all` 显示「全部页」），运行状态 `/api/status` 也能看到。填错的参数会回退默认并在日志里给出警告，不会中断整批。
 
@@ -361,9 +364,9 @@ x=0.1~910（贴满整页），而真实表格只到 x≈882；`<td>` 还多出 2
 
 ## 与 week-02 的关系（重要）
 
-- **算法自包含复制**，没有 import week-02，满足「week 目录不动」。代价是存在**逻辑漂移风险**：以后改了 week-02 的提取逻辑，c1_structure 不会自动同步。稳定后建议把公共部分抽成单一真相源供两边复用（那一步需要动 week 目录，需另行确认）。
+- **算法自包含复制**，没有 import week-02，满足「week 目录不动」。代价是存在**逻辑漂移风险**：以后改了 week-02 的解析逻辑，c1_structure 不会自动同步。稳定后建议把公共部分抽成单一真相源供两边复用（那一步需要动 week 目录，需另行确认）。
 - **定位不同**：week-02 是 25 个 case 的批量回归 + 汇总指标 + 标准答案对照 + bad case 库；c1_structure 是单文件即时预览。新来一张图先看效果用 c1_structure，改完算法验证没跑偏仍要跑 `weekly/week-02/a_batch_ocr.py`。
-- 有文本层 PDF 的列边界**不再写死任何 case**：`pipeline/pdf.py::_lines_from_edges()` 从 PDF 横线端点聚类还原（实测 103 与原先人工模板逐字一致），`auto_column_lines()` 用「端点数 == 文字数+1」判据决定用端点法还是文字法，避免一页多表时端点混叠。特殊版式才在上传页用 `column_lines` 参数临时覆盖。改名 / 换编号的 PDF 都不需要登记。
+- 有文本层 PDF 的列边界**不再写死任何 case**：`pipeline/pdf.py::_lines_from_edges()` 从 PDF 横线端点聚类还原（实测 103 与原先人工抽取规则逐字一致），`auto_column_lines()` 用「端点数 == 文字数+1」判据决定用端点法还是文字法，避免一页多表时端点混叠。特殊版式才在解析页用 `column_lines` 参数临时覆盖。改名 / 换编号的 PDF 都不需要登记。
 
 ## FAQ：IDE 报 `No module named 'config'`（已解决，零 IDE 配置）
 
@@ -375,7 +378,7 @@ x=0.1~910（贴满整页），而真实表格只到 x≈882；`<td>` 还多出 2
 
 | 位置 | 写法 | 作用 |
 |---|---|---|
-| `pipeline/*.py`、`extract_report/*.py` | `from .. import config` | 包内相对导入，静态分析器按目录层级就能解析 |
+| `pipeline/*.py`、`parse_report/*.py` | `from .. import config` | 包内相对导入，静态分析器按目录层级就能解析 |
 | `app.py`、`check_env.py` | `importlib.import_module(PKG + '.config')` 等动态加载 | 入口文件不再有静态的顶层绝对导入；`PKG` 取 `os.path.basename(ROOT)` |
 
 关键是让所有内部模块**始终以「包」方式加载**：相对导入才成立，静态分析器也无需把 `c1_structure/`
@@ -411,6 +414,6 @@ D:\miniforge3\envs\paddle\python.exe -u c1_structure/accept_artifacts_db.py
 
 - 单任务串行、无鉴权、默认仅监听 `127.0.0.1`（可用 `C1_STRUCTURE_HOST=0.0.0.0` 放开）；上传用 base64 JSON，单文件上限 20MB。**平台库必选**（`C1_STRUCTURE_DB`），断库显式 503 不降级。
 - 首次运行需联网下载 PaddleX 官方模型（数百 MB）；离线部署要预置缓存，见「独立部署」。
-- 多页 PDF 默认（页码留空）**逐页全量提取 + 报告翻页切换 + 跨页续表拼接**（2026-11-19）；填页码只提取该页。拼接两条通路：重复表头（相邻页 + 同列 + 列对齐 + 表头相同）与无表头续页（列位置子集对齐 + 续页贴顶 + 首行像数据，2026-11-20）；判据保守，宁可不拼不误拼，版式差异大的续表保持各页独立。
+- 多页 PDF 默认（页码留空）**逐页全量解析 + 报告翻页切换 + 跨页续表拼接**（2026-11-19）；填页码只解析该页。拼接两条通路：重复表头（相邻页 + 同列 + 列对齐 + 表头相同）与无表头续页（列位置子集对齐 + 续页贴顶 + 首行像数据，2026-11-20）；判据保守，宁可不拼不误拼，版式差异大的续表保持各页独立。
 - 参数面板现覆盖 9 项（第一梯队 8 项 + `doc_unwarp`）+ 参数快照 + 运行日志；识别模型 mobile/server 仍未放（换模型要改 `config.py`，属实验模式）。
-- 自动列边界对「一页多表且各表端点混叠」的复杂版式仍是尽力而为；遇到新固定版式，直接在上传页填 `column_lines` 即可，不必改代码。
+- 自动列边界对「一页多表且各表端点混叠」的复杂版式仍是尽力而为；遇到新固定版式，直接在解析页填 `column_lines` 即可，不必改代码。

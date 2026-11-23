@@ -1,4 +1,4 @@
-"""目录库 · 任务域（extract_task / extract_task_file / extract_quarantine）。
+"""目录库 · 任务域（c1_task / c1_task_file / c1_quarantine）。
 
 task 表投影是 tasks API 的唯一数据源（无 task.json 附件）；
 隔离区按 task 粒度登记校验/入库失败记录。
@@ -8,17 +8,17 @@ import json
 from .. import db
 from ._common import _j, _rows
 
-# ---- extract_task / extract_task_file ----
+# ---- c1_task / c1_task_file ----
 
 
-def create_task(template_version_id, params):
+def create_task(rule_version_id, params):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
             cur.execute(
-                'INSERT INTO extract_task (template_version_id,'
+                'INSERT INTO c1_task (rule_version_id,'
                 ' params_json, state) VALUES (%s,%s,%s)',
-                (template_version_id,
+                (rule_version_id,
                  json.dumps(params or {}, ensure_ascii=False), 'pending'))
             conn.commit()
             return cur.lastrowid
@@ -30,7 +30,7 @@ def set_task_state(task_id, state, error=None):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('UPDATE extract_task SET state=%s, error=%s WHERE id=%s',
+            cur.execute('UPDATE c1_task SET state=%s, error=%s WHERE id=%s',
                         (state, error, task_id))
             conn.commit()
     finally:
@@ -42,7 +42,7 @@ def add_task_file(task_id, file_id):
     try:
         with conn.cursor() as cur:
             cur.execute(
-                'INSERT INTO extract_task_file (task_id, file_id)'
+                'INSERT INTO c1_task_file (task_id, file_id)'
                 ' VALUES (%s,%s)', (task_id, file_id))
             conn.commit()
             return cur.lastrowid
@@ -54,7 +54,7 @@ def set_task_file_state(task_file_id, state):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('UPDATE extract_task_file SET state=%s WHERE id=%s',
+            cur.execute('UPDATE c1_task_file SET state=%s WHERE id=%s',
                         (state, task_file_id))
             conn.commit()
     finally:
@@ -64,22 +64,22 @@ def set_task_file_state(task_file_id, state):
 _HEAD_SQL = (
     'SELECT r.id, r.state, r.error, r.params_json,'
     ' r.created_at, r.updated_at, t.name AS tpl_name, tv.version,'
-    ' tv.id AS version_id, tv.template_id,'
+    ' tv.id AS version_id, tv.rule_id,'
     ' r.load_datasource_id, r.load_table_id,'
     ' d.name AS datasource_name, d.db_name,'
     ' lt.target_table, lt.write_mode'
-    ' FROM extract_task r'
-    ' JOIN extract_template_version tv ON tv.id=r.template_version_id'
-    ' JOIN extract_template t ON t.id=tv.template_id'
-    ' LEFT JOIN extract_load_datasource d ON d.id=r.load_datasource_id'
-    ' LEFT JOIN extract_load_table lt ON lt.id=r.load_table_id')
+    ' FROM c1_task r'
+    ' JOIN c1_rule_version tv ON tv.id=r.rule_version_id'
+    ' JOIN c1_rule t ON t.id=tv.rule_id'
+    ' LEFT JOIN c1_load_datasource d ON d.id=r.load_datasource_id'
+    ' LEFT JOIN c1_load_table lt ON lt.id=r.load_table_id')
 
 _FILES_SQL_TAIL = (
     ' SELECT tf.task_id, tf.id, tf.file_id, tf.state, s.name,'
-    ' (SELECT COUNT(*) FROM extract_staging_record sr'
+    ' (SELECT COUNT(*) FROM c1_staging_record sr'
     '   WHERE sr.task_file_id=tf.id) AS records_n'
-    ' FROM extract_task_file tf'
-    ' JOIN extract_file s ON s.id=tf.file_id')
+    ' FROM c1_task_file tf'
+    ' JOIN c1_file s ON s.id=tf.file_id')
 
 
 def _file_row(f):
@@ -92,9 +92,9 @@ def _mk_doc(r, files):
     """task 头行＋文件行 → tasks API 投影（_task_doc/list_tasks 共用形状）。"""
     return {
         'task_id': r['id'],
-        'template': {'name': r['tpl_name'], 'version': r['version'],
+        'rule': {'name': r['tpl_name'], 'version': r['version'],
                      'version_id': r['version_id'],
-                     'template_id': r['template_id']},
+                     'rule_id': r['rule_id']},
         'params': _j(r['params_json']) or {},
         'state': r['state'], 'error': r['error'],
         'load': ({'datasource_id': r['load_datasource_id'],
@@ -157,21 +157,21 @@ def task_file_ids(task_id):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT id FROM extract_task_file'
+            cur.execute('SELECT id FROM c1_task_file'
                         ' WHERE task_id=%s ORDER BY id', (task_id,))
             return [r[0] for r in cur.fetchall()]
     finally:
         conn.close()
 
 
-# ---- extract_quarantine ----
+# ---- c1_quarantine ----
 
 def add_quarantine(task_id, task_file_id, record_index, stage, reason, payload):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
             cur.execute(
-                'INSERT INTO extract_quarantine (task_id, task_file_id,'
+                'INSERT INTO c1_quarantine (task_id, task_file_id,'
                 ' record_index, stage, reason, payload_json)'
                 ' VALUES (%s,%s,%s,%s,%s,%s)',
                 (task_id, task_file_id, record_index, stage, reason,
@@ -194,7 +194,7 @@ def list_quarantine(task_id=None, state=None):
             args.append(state)
         w = ('WHERE ' + ' AND '.join(where)) if where else ''
         with conn.cursor() as cur:
-            cur.execute('SELECT * FROM extract_quarantine {} ORDER BY id DESC'
+            cur.execute('SELECT * FROM c1_quarantine {} ORDER BY id DESC'
                         .format(w), args)
             rows = _rows(cur)
         for r in rows:

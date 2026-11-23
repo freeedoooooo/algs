@@ -22,7 +22,7 @@ function render(items){
       '<td>'+escHtml(r.tags||'—')+'</td>'+
       '<td class="num">'+fmtTime(r.created_at)+'</td>'+
       '<td style="white-space:nowrap">'+
-        '<a class="linkbtn" href="/extract?from_source='+r.id+'" title="在解析页使用此文件">解析</a>'+
+        '<a class="linkbtn" href="/parse?from_source='+r.id+'" title="在解析页使用此文件">解析</a>'+
         '<button type="button" class="linkbtn danger" data-del="'+r.id+
         '" data-name="'+escHtml(r.name)+'">删除</button>'+
       '</td></tr>';

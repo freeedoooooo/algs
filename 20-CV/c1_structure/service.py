@@ -31,7 +31,7 @@ STATE = {
     'params': {}, 'warnings': [],
     'logs': [], 'progress': 0, 'stage': '',
     'log_file': None,
-    'template': None, 'task_id': None,
+    'rule': None, 'task_id': None,
 }
 LOCK = threading.Lock()
 
@@ -72,7 +72,7 @@ def _kind_of(name):
 
 
 def register_file(name, data):
-    """sha256 去重登记，原件字节直接进 extract_file.content。
+    """sha256 去重登记，原件字节直接进 c1_file.content。
     DB 必选：失败上抛（调用方回 503）。"""
     sha = hashlib.sha256(data).hexdigest()
     fid, dedup = _load('store.catalog').register_file(
@@ -80,15 +80,15 @@ def register_file(name, data):
     return {'file_id': fid, 'sha256': sha, 'dedup': dedup}
 
 
-def resolve_template(version_id=None):
+def resolve_rule(version_id=None):
     """抽取规则版本解析；DB 必选，失败上抛（调用方回 503）。"""
     catalog = _load('store.catalog')
-    tv = (catalog.get_template_version(version_id=version_id)
-          if version_id else catalog.get_template_version())
+    tv = (catalog.get_rule_version(version_id=version_id)
+          if version_id else catalog.get_rule_version())
     if not tv:
         raise RuntimeError('平台库无可用抽取规则版本')
     return {'name': tv['name'], 'version': tv['version'],
-            'version_id': tv['id'], 'template_id': tv['template_id'],
+            'version_id': tv['id'], 'rule_id': tv['rule_id'],
             'schema_json': tv['schema_json'],
             'mapping_json': tv['mapping_json'],
             'transform_json': tv['transform_json']}
@@ -97,7 +97,7 @@ def resolve_template(version_id=None):
 def launch(paths, params, warns, ctx, tpl=None):
     """登记任务（DB 必选，失败上抛 503）→ 建日志 → 重置 STATE → 起后台线程。
     单一解析入口（P2c）：入库目标在入库启动时绑定，上传不携带。"""
-    tpl = tpl or resolve_template()
+    tpl = tpl or resolve_rule()
     catalog = _load('store.catalog')
     task_id = catalog.create_task(tpl['version_id'], params)
     for f in ctx:
@@ -108,7 +108,7 @@ def launch(paths, params, warns, ctx, tpl=None):
     log = tasklog.TaskLog(label, log_path=os.path.join(config.LOG_DIR,
                                                        label + '.log'),
                           on_emit=_on_log)
-    task_ctx = {'task_id': task_id, 'template': tpl,
+    task_ctx = {'task_id': task_id, 'rule': tpl,
                 'files': ctx, 'created_at': _now()}
     if paths:
         task_ctx['in_scratch'] = os.path.dirname(paths[0])
@@ -119,7 +119,7 @@ def launch(paths, params, warns, ctx, tpl=None):
                              if not k.startswith('_')}, warnings=warns,
                      logs=[], progress=0, stage='batch',
                      log_file=label + '.log',
-                     template=tpl, task_id=task_id)
+                     rule=tpl, task_id=task_id)
     log.stage('batch', '任务 {} · 收到 {} 个文件 · 抽取规则 {} v{}'.format(
         task_id, len(paths), tpl['name'], tpl['version']))
     log.info('params', '生效参数：{}'.format(
@@ -149,7 +149,7 @@ _STAGE_FRAC = {
 
 
 def _ingest_case(task_file_id, case_abs):
-    """scratch 目录全量产物入 extract_artifact（管线/报告生成零改动，
+    """scratch 目录全量产物入 c1_artifact（管线/报告生成零改动，
     它们照旧写文件，这里统一收编入库）。"""
     artifact = _load('store.artifact')
     for root, _, files in os.walk(case_abs):
@@ -178,10 +178,10 @@ def rmtree_retry(path, tries=6, delay=0.3):
 
 
 def task_batch(paths, params=None, log=None, task_ctx=None):
-    """后台线程：逐个解析 → raw/ + extract.json → 对照报告 → collect 记录入库
+    """后台线程：逐个解析 → raw/ + parse.json → 对照报告 → collect 记录入库
     → 产物 ingest 入 BLOB。DB 必选：写失败整任务 failed；scratch 跑完清尽。"""
     task_ctx = task_ctx or {'task_id': None,
-                            'template': resolve_template(),
+                            'rule': resolve_rule(),
                             'files': [{'name': os.path.basename(p), 'path': p}
                                       for p in paths],
                             'created_at': _now()}
@@ -203,7 +203,7 @@ def task_batch(paths, params=None, log=None, task_ctx=None):
         log.stage('load', '加载解析流水线（首次会导入 cv2 / pdfplumber）…')
         progress(1)
         pipeline = _load('pipeline')
-        report_mod = _load('extract_report.builder')
+        report_mod = _load('parse_report.builder')
         total = len(paths)
         for i, path in enumerate(paths, 1):
             name = os.path.basename(path)
@@ -229,7 +229,7 @@ def task_batch(paths, params=None, log=None, task_ctx=None):
 
             if fc.get('task_file_id'):
                 db('set_task_file_state', fc['task_file_id'], 'extracting')
-            rec = pipeline.extract_one(path, case_abs, params, emit=emit)
+            rec = pipeline.parse_one(path, case_abs, params, emit=emit)
             pages = rec.get('pages') or []
             tot_lines = sum((p.get('stats') or {}).get('lines', 0)
                             for p in pages)
@@ -242,16 +242,16 @@ def task_batch(paths, params=None, log=None, task_ctx=None):
             # 报告只依赖 extract 层，先于 records 写库生成：
             # 断库时引擎产物（extract+报告）仍完整，任务显式 failed
             report_mod.build([rec],
-                             os.path.join(case_abs, config.EXTRACT_REPORT_NAME),
+                             os.path.join(case_abs, config.PARSE_REPORT_NAME),
                              params=params)
-            # L2 记录层：按模板分发（空映射=passthrough）+ 逐格溯源 → DB 三表
-            tpl = task_ctx['template']
+            # L2 记录层：按抽取规则分发（空映射=passthrough）+ 逐格溯源 → DB 三表
+            tpl = task_ctx['rule']
             recs = collect.build(rec, tpl)
             rdoc = collect.build_records_doc(
                 rec, recs, task_id=task_ctx.get('task_id'),
                 task_file_id=fc.get('task_file_id'),
                 file_id=fc.get('file_id'),
-                template={'name': tpl['name'], 'version': tpl['version']})
+                rule={'name': tpl['name'], 'version': tpl['version']})
             content.save_records(rdoc)
             fc['records_n'] = len(recs)
             fc['state'] = 'previewed'
@@ -299,7 +299,7 @@ def task_batch(paths, params=None, log=None, task_ctx=None):
             rmtree_retry(task_ctx['in_scratch'])
 
 
-# ---- P2 入库引擎（design-p2-load.md）：手动闸门 → 后台逐条写入＋幂等回执 ----
+# ---- P2 入库引擎：手动闸门 → 后台逐条写入＋幂等回执 ----
 
 def launch_load(task_id, target=None):
     """POST /api/tasks/{id}/load 的编排（P2c：入库时绑定目标）。
@@ -338,9 +338,9 @@ def launch_load(task_id, target=None):
         raise errors.NotFound('业务库不存在')
     if lt['datasource_id'] != ds_id:
         raise errors.BadRequest('入库规则不属于所选业务库')
-    if lt['template_id'] != task['template']['template_id']:
+    if lt['rule_id'] != task['rule']['rule_id']:
         raise errors.BadRequest('入库规则与任务的抽取规则不匹配')
-    tpl = resolve_template(task['template']['version_id'])
+    tpl = resolve_rule(task['rule']['version_id'])
     sj = tpl.get('schema_json')
     fields = ([f.get('name') for f in sj.get('fields') or []]
               if isinstance(sj, dict) else [])
@@ -373,7 +373,7 @@ def launch_load(task_id, target=None):
                      cases=[], started=time.time(), elapsed=0,
                      params={}, warnings=[], logs=[], progress=0,
                      stage='load', log_file=label + '.log',
-                     template=tpl, task_id=task_id)
+                     rule=tpl, task_id=task_id)
     log.stage('load', '任务 {} 入库 → {}.{}（{} · 共 {} 条）'.format(
         task_id, ds['db_name'], lt['target_table'], lt['write_mode'],
         len(recs)))
@@ -406,7 +406,7 @@ def preview_load(task_id, table_id=None, draft=None):
         lt = catalog.get_load_table(int(table_id))
         if lt is None:
             raise errors.NotFound('入库规则不存在')
-        if lt['template_id'] != task['template']['template_id']:
+        if lt['rule_id'] != task['rule']['rule_id']:
             raise errors.BadRequest('入库规则与任务的抽取规则不匹配')
         ds = catalog.get_datasource(lt['datasource_id'])
         field_rows, table, wm = lt['fields'], lt['target_table'], lt['write_mode']
@@ -417,7 +417,7 @@ def preview_load(task_id, table_id=None, draft=None):
         wm = str(draft.get('write_mode') or 'upsert')
     if ds is None:
         raise errors.NotFound('业务库不存在')
-    tpl = resolve_template(task['template']['version_id'])
+    tpl = resolve_rule(task['rule']['version_id'])
     sj = tpl.get('schema_json')
     fields = ([f.get('name') for f in sj.get('fields') or []]
               if isinstance(sj, dict) else [])

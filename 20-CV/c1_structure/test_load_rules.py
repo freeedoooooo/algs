@@ -22,9 +22,9 @@ class FakeCur:
 
 CM = {'账号': 'account_no', '金额': 'amount'}
 VALS = {'账号': '6227001', '金额': '1,200.50'}
-ROWS = [{'template_field': '账号', 'target_column': 'account_no',
+ROWS = [{'rule_field': '账号', 'target_column': 'account_no',
          'is_business_key': 1},
-        {'template_field': '金额', 'target_column': 'amount',
+        {'rule_field': '金额', 'target_column': 'amount',
          'is_business_key': 0}]
 
 
@@ -109,30 +109,30 @@ class TestValidateFields(unittest.TestCase):
     def test_empty_column_name(self):
         with self.assertRaises(BadRequest):
             loader.validate_fields(
-                ['账号'], [{'template_field': '账号', 'target_column': ' '}])
+                ['账号'], [{'rule_field': '账号', 'target_column': ' '}])
 
     def test_duplicate_target_column(self):
         with self.assertRaises(BadRequest):
             loader.validate_fields(
                 ['a', 'b'],
-                [{'template_field': 'a', 'target_column': 'x'},
-                 {'template_field': 'b', 'target_column': 'x'}], 'insert')
+                [{'rule_field': 'a', 'target_column': 'x'},
+                 {'rule_field': 'b', 'target_column': 'x'}], 'insert')
 
-    def test_duplicate_template_field(self):
+    def test_duplicate_rule_field(self):
         with self.assertRaises(BadRequest):
             loader.validate_fields(
                 ['a'],
-                [{'template_field': 'a', 'target_column': 'x'},
-                 {'template_field': 'a', 'target_column': 'y'}], 'insert')
+                [{'rule_field': 'a', 'target_column': 'x'},
+                 {'rule_field': 'a', 'target_column': 'y'}], 'insert')
 
     def test_bad_write_mode(self):
         with self.assertRaises(BadRequest):
             loader.validate_fields(
-                ['账号'], [{'template_field': '账号', 'target_column': 'x'}],
+                ['账号'], [{'rule_field': '账号', 'target_column': 'x'}],
                 'merge')
 
     def test_upsert_requires_business_key(self):
-        no_bk = [{'template_field': '账号', 'target_column': 'x',
+        no_bk = [{'rule_field': '账号', 'target_column': 'x',
                   'is_business_key': 0}]
         with self.assertRaises(BadRequest):
             loader.validate_fields(['账号'], no_bk, 'upsert')
@@ -141,7 +141,7 @@ class TestValidateFields(unittest.TestCase):
 
     def test_insert_no_business_key_ok(self):
         self.assertTrue(loader.validate_fields(
-            ['账号'], [{'template_field': '账号', 'target_column': 'x'}],
+            ['账号'], [{'rule_field': '账号', 'target_column': 'x'}],
             'insert'))
 
     def test_empty_rows_rejected(self):
@@ -153,11 +153,11 @@ class TestValidateFields(unittest.TestCase):
     def test_column_existence(self):
         with self.assertRaises(BadRequest):
             loader.validate_fields(
-                ['账号'], [{'template_field': '账号', 'target_column': 'nope'}],
+                ['账号'], [{'rule_field': '账号', 'target_column': 'nope'}],
                 'insert', ['x'])
         self.assertTrue(loader.validate_fields(
             ['账号'],
-            [{'template_field': '账号', 'target_column': 'x',
+            [{'rule_field': '账号', 'target_column': 'x',
               'is_business_key': 1}], 'upsert', ['x']))
 
 

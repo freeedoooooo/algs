@@ -1,4 +1,4 @@
-"""目录库 · 源文件域（extract_file ＋ content 原件字节）。
+"""目录库 · 源文件域（c1_file ＋ content 原件字节）。
 
 哈希去重登记；content LONGBLOB 只在 get_file_content 里取，
 列表/元数据查询一律排除该列，避免把字节拖进列表接口。
@@ -15,13 +15,13 @@ def register_file(name, kind, size_bytes, sha256, content):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT id FROM extract_file WHERE sha256=%s',
+            cur.execute('SELECT id FROM c1_file WHERE sha256=%s',
                         (sha256,))
             row = cur.fetchone()
             if row:
                 return row[0], True
             cur.execute(
-                'INSERT INTO extract_file (name, sha256, kind,'
+                'INSERT INTO c1_file (name, sha256, kind,'
                 ' size_bytes, content) VALUES (%s,%s,%s,%s,%s)',
                 (name, sha256, kind, size_bytes, content))
             conn.commit()
@@ -45,10 +45,10 @@ def list_files(q=None, kind=None, tag=None, page=1, per_page=20):
             args.append('%{}%'.format(tag))
         w = ('WHERE ' + ' AND '.join(where)) if where else ''
         with conn.cursor() as cur:
-            cur.execute('SELECT COUNT(*) FROM extract_file ' + w, args)
+            cur.execute('SELECT COUNT(*) FROM c1_file ' + w, args)
             total = cur.fetchone()[0]
             cur.execute(
-                'SELECT {} FROM extract_file {} ORDER BY id DESC'
+                'SELECT {} FROM c1_file {} ORDER BY id DESC'
                 ' LIMIT %s OFFSET %s'.format(_FILE_COLS, w),
                 args + [per_page, (max(1, page) - 1) * per_page])
             items = _rows(cur)
@@ -63,7 +63,7 @@ def get_file(file_id):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT {} FROM extract_file WHERE id=%s'
+            cur.execute('SELECT {} FROM c1_file WHERE id=%s'
                         .format(_FILE_COLS), (file_id,))
             rows = _rows(cur)
         return rows[0] if rows else None
@@ -77,7 +77,7 @@ def get_file_content(file_id):
     try:
         with conn.cursor() as cur:
             cur.execute('SELECT name, kind, sha256, content'
-                        ' FROM extract_file WHERE id=%s', (file_id,))
+                        ' FROM c1_file WHERE id=%s', (file_id,))
             row = cur.fetchone()
         if not row:
             return None
@@ -91,11 +91,11 @@ def delete_file(file_id):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT COUNT(*) FROM extract_task_file'
+            cur.execute('SELECT COUNT(*) FROM c1_task_file'
                         ' WHERE file_id=%s', (file_id,))
             if cur.fetchone()[0]:
                 raise Conflict('该文件已被任务引用，为保证血缘可追溯，不可删除')
-            cur.execute('DELETE FROM extract_file WHERE id=%s', (file_id,))
+            cur.execute('DELETE FROM c1_file WHERE id=%s', (file_id,))
             conn.commit()
     finally:
         conn.close()
@@ -105,7 +105,7 @@ def update_file_meta(file_id, tags=None, note=None):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('UPDATE extract_file SET tags=%s, note=%s'
+            cur.execute('UPDATE c1_file SET tags=%s, note=%s'
                         ' WHERE id=%s', (tags, note, file_id))
             conn.commit()
     finally:

@@ -1,5 +1,5 @@
 """
-extract_report/cards.py — 卡片渲染的薄层：准备数据 + 选模板。
+parse_report/cards.py — 卡片渲染的薄层：准备数据 + 选模板。
 
 HTML 结构全部在 templates/*.html（Jinja2，autoescape 默认开启），
 样式在 web/report.css，交互在 web/report.js。本文件只做：
@@ -7,7 +7,7 @@ HTML 结构全部在 templates/*.html（Jinja2，autoescape 默认开启），
   · 生成自包含 data URI（CSV / Markdown 下载）
   · 调 render() 产出 HTML 片段（Markup，供上层模板安全内嵌）
 
-消费契约 = adapter 产出的 c1-structure（extract.json）：页面与报告只见自有标准，
+消费契约 = adapter 产出的 c1-structure（parse.json）：页面与报告只见自有标准，
 引擎结构不出适配层（raw/ 前端 403）。
 """
 import io
@@ -429,7 +429,7 @@ def md_pane(rec, card_no, md_name):
                   tspace=rec.get('space') or 'source', items=items)
 
 
-def json_section(rec, href=None, label='extract.json', title='完整 JSON',
+def json_section(rec, href=None, label='parse.json', title='完整 JSON',
                  opened=True):
     # 展示 c1-structure 落盘形态（自有标准），渲染时美化。
     # href 给出时带下载链接（单页=完整信封，与下载一致）；多页页卡片只展示本页切片。
@@ -450,7 +450,7 @@ def _render_card(pg, card_no, file_rec, single=True, page_no=None,
     # tab 时才美化（report.js loadFileJson）——不逐页内联（平方级膨胀），
     # 也不 fetch（file:// 直开时浏览器禁止 fetch 本地文件）。
     if single:
-        json_html = json_section(file_rec, href=file_url(config.EXTRACT_JSON))
+        json_html = json_section(file_rec, href=file_url(config.PARSE_JSON))
     else:
         json_html = json_section(
             pg, label='pages[{}]'.format((page_no or 1) - 1), title='本页 JSON')
@@ -470,7 +470,7 @@ def _render_card(pg, card_no, file_rec, single=True, page_no=None,
         md_html=md_pane(pg, card_no, md_filename(fname, page_no, single)),
         stitch_html=stitch_content(file_rec, card_no) if has_stitch else '',
         json_html=json_html,
-        result_href=quote(config.EXTRACT_JSON, safe=''))
+        result_href=quote(config.PARSE_JSON, safe=''))
 
 
 def stitch_content(file_rec, card_no):

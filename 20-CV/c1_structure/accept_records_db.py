@@ -1,19 +1,19 @@
 """
 c1_structure/accept_records_db.py — records 入库七项验收（任务化契约，
-design-task-schema.md：DB 唯一事实源，task_id / task_file_id 粒度，无外键）。
+DB 唯一事实源，task_id / task_file_id 粒度，无外键）。
 
 前置：C1_STRUCTURE_DB 已配置（环境变量或 config.PLATFORM_DB 默认值，用户配置的库）。
 用法（从 20-CV）：D:/miniforge3/envs/paddle/python.exe -u c1_structure/accept_records_db.py
 
 1 连接零副作用+真实 task 投影往返一致 · 2 重跑级联替换（应用层）· 3 patch/set_review ·
 4 跨 task 查询 · 5 真链路（临时服务 8799，含 P1 校验路由冒烟）· 6 断库显式 503（临时服务 8797）·
-7 P2c 入库（合成目标表 _accept_p2_load＋合成模板/数据源/映射：上传不带模式、
+7 P2c 入库（合成目标表 _accept_p2_load＋合成抽取规则/数据源/映射：上传不带模式、
 入库时绑定目标（预检/门禁失败不留绑定可换目标）、已绑定锁死 409、
 门禁 409、全部确认→loaded、回执幂等、transform/数据级隔离→partial、重试、upsert update、
 数据源目标锁定/映射只读审计）。
-上传字节取自 extract_file.content；断库用不可达 DSN 的临时服务模拟，
-全程不触碰真实库的可用性。破坏性操作只落合成 task/模板/数据源/目标表（验完按 id 清理＋DROP，
-无外键：field/lineage/artifact 等子表须显式先删）；真实 task / file / 模板只读。
+上传字节取自 c1_file.content；断库用不可达 DSN 的临时服务模拟，
+全程不触碰真实库的可用性。破坏性操作只落合成 task/抽取规则/数据源/目标表（验完按 id 清理＋DROP，
+无外键：field/lineage/artifact 等子表须显式先删）；真实 task / file / 抽取规则只读。
 用户的 8765 全程不动。两套验收脚本严禁并行（共用 8799/8797 端口）。
 """
 import os
@@ -101,8 +101,8 @@ def counts():
     try:
         with conn.cursor() as cur:
             out = []
-            for t in ('extract_staging_record', 'extract_staging_field',
-                      'extract_staging_lineage'):
+            for t in ('c1_staging_record', 'c1_staging_field',
+                      'c1_staging_lineage'):
                 cur.execute('SELECT COUNT(*) FROM ' + t)
                 out.append(cur.fetchone()[0])
             return tuple(out)
@@ -117,14 +117,14 @@ def orphan_counts():
         with conn.cursor() as cur:
             out = []
             for sql in (
-                    'SELECT COUNT(*) FROM extract_staging_field f'
-                    ' LEFT JOIN extract_staging_record r ON r.id=f.record_id'
+                    'SELECT COUNT(*) FROM c1_staging_field f'
+                    ' LEFT JOIN c1_staging_record r ON r.id=f.record_id'
                     ' WHERE r.id IS NULL',
-                    'SELECT COUNT(*) FROM extract_staging_lineage l'
-                    ' LEFT JOIN extract_staging_record r ON r.id=l.record_id'
+                    'SELECT COUNT(*) FROM c1_staging_lineage l'
+                    ' LEFT JOIN c1_staging_record r ON r.id=l.record_id'
                     ' WHERE r.id IS NULL',
-                    'SELECT COUNT(*) FROM extract_staging_record sr'
-                    ' LEFT JOIN extract_task_file tf ON tf.id=sr.task_file_id'
+                    'SELECT COUNT(*) FROM c1_staging_record sr'
+                    ' LEFT JOIN c1_task_file tf ON tf.id=sr.task_file_id'
                     ' WHERE tf.id IS NULL'):
                 cur.execute(sql)
                 out.append(cur.fetchone()[0])
@@ -139,18 +139,18 @@ def baseline():
     try:
         with conn.cursor() as cur:
             cur.execute('SELECT COUNT(*), COALESCE(SUM(size_bytes),0)'
-                        ' FROM extract_artifact')
+                        ' FROM c1_artifact')
             art = tuple(cur.fetchone())
             out = [counts(), art]
-            for sql in ('SELECT COUNT(*) FROM extract_file',
-                        'SELECT id FROM extract_task ORDER BY id',
-                        'SELECT COUNT(*) FROM extract_template',
-                        'SELECT COUNT(*) FROM extract_template_version',
-                        'SELECT COUNT(*) FROM extract_load_datasource',
-                        'SELECT COUNT(*) FROM extract_load_table',
-                        'SELECT COUNT(*) FROM extract_load_table_field',
-                        'SELECT COUNT(*) FROM extract_load_log',
-                        'SELECT COUNT(*) FROM extract_quarantine'):
+            for sql in ('SELECT COUNT(*) FROM c1_file',
+                        'SELECT id FROM c1_task ORDER BY id',
+                        'SELECT COUNT(*) FROM c1_rule',
+                        'SELECT COUNT(*) FROM c1_rule_version',
+                        'SELECT COUNT(*) FROM c1_load_datasource',
+                        'SELECT COUNT(*) FROM c1_load_table',
+                        'SELECT COUNT(*) FROM c1_load_table_field',
+                        'SELECT COUNT(*) FROM c1_load_log',
+                        'SELECT COUNT(*) FROM c1_quarantine'):
                 cur.execute(sql)
                 rows = cur.fetchall()
                 out.append(tuple(r[0] for r in rows))
@@ -161,24 +161,24 @@ def baseline():
 
 def p2_cleanup(p2):
     """P2c 合成对象清理（在 cleanup_tasks 之后跑，引用已空）：
-    字段行/映射/数据源/模板＋DROP 表。"""
+    字段行/映射/数据源/抽取规则＋DROP 表。"""
     if not p2:
         return
     conn = db.connect()
     try:
         with conn.cursor() as cur:
             for lid in p2.get('lts', []):
-                cur.execute('DELETE FROM extract_load_table_field'
+                cur.execute('DELETE FROM c1_load_table_field'
                             ' WHERE load_table_id=%s', (lid,))
-                cur.execute('DELETE FROM extract_load_table WHERE id=%s',
+                cur.execute('DELETE FROM c1_load_table WHERE id=%s',
                             (lid,))
             for did in p2.get('dss', []):
-                cur.execute('DELETE FROM extract_load_datasource'
+                cur.execute('DELETE FROM c1_load_datasource'
                             ' WHERE id=%s', (did,))
             for tid in p2.get('tpls', []):
-                cur.execute('DELETE FROM extract_template_version'
-                            ' WHERE template_id=%s', (tid,))
-                cur.execute('DELETE FROM extract_template WHERE id=%s', (tid,))
+                cur.execute('DELETE FROM c1_rule_version'
+                            ' WHERE rule_id=%s', (tid,))
+                cur.execute('DELETE FROM c1_rule WHERE id=%s', (tid,))
             for tname in p2.get('tables', []):
                 cur.execute('DROP TABLE IF EXISTS ' + tname)
         conn.commit()
@@ -240,7 +240,7 @@ def upload(port, src_bytes, name, extra=None):
 
 
 def find_pdf_file():
-    """真实原件（extract_file.content）里第一个 PDF，真链路上传字节来源。
+    """真实原件（c1_file.content）里第一个 PDF，真链路上传字节来源。
     size>1KB 过滤：排除验收合成的假 PDF 行。"""
     page = 1
     while True:
@@ -288,43 +288,43 @@ def cleanup_tasks(task_ids, file_ids):
         with conn.cursor() as cur:
             for tid in task_ids:
                 cur.execute(
-                    'SELECT id FROM extract_task_file WHERE task_id=%s',
+                    'SELECT id FROM c1_task_file WHERE task_id=%s',
                     (tid,))
                 tfs = [r[0] for r in cur.fetchall()]
                 for tf in tfs:
                     cur.execute(
-                        'DELETE FROM extract_staging_field WHERE record_id IN'
-                        ' (SELECT id FROM extract_staging_record'
+                        'DELETE FROM c1_staging_field WHERE record_id IN'
+                        ' (SELECT id FROM c1_staging_record'
                         '  WHERE task_file_id=%s)', (tf,))
                     cur.execute(
-                        'DELETE FROM extract_staging_lineage WHERE record_id IN'
-                        ' (SELECT id FROM extract_staging_record'
+                        'DELETE FROM c1_staging_lineage WHERE record_id IN'
+                        ' (SELECT id FROM c1_staging_record'
                         '  WHERE task_file_id=%s)', (tf,))
                     cur.execute(
-                        'DELETE FROM extract_staging_record'
+                        'DELETE FROM c1_staging_record'
                         ' WHERE task_file_id=%s', (tf,))
                     cur.execute(
-                        'DELETE FROM extract_artifact WHERE task_file_id=%s',
+                        'DELETE FROM c1_artifact WHERE task_file_id=%s',
                         (tf,))
-                cur.execute('DELETE FROM extract_quarantine WHERE task_id=%s',
+                cur.execute('DELETE FROM c1_quarantine WHERE task_id=%s',
                             (tid,))
-                cur.execute('DELETE FROM extract_load_log WHERE task_id=%s',
+                cur.execute('DELETE FROM c1_load_log WHERE task_id=%s',
                             (tid,))
-                cur.execute('DELETE FROM extract_task_file WHERE task_id=%s',
+                cur.execute('DELETE FROM c1_task_file WHERE task_id=%s',
                             (tid,))
-                cur.execute('DELETE FROM extract_task WHERE id=%s', (tid,))
+                cur.execute('DELETE FROM c1_task WHERE id=%s', (tid,))
             if file_ids:
                 ph = ','.join(['%s'] * len(file_ids))
                 cur.execute(
-                    'DELETE FROM extract_file WHERE id IN ({})'
+                    'DELETE FROM c1_file WHERE id IN ({})'
                     .format(ph), file_ids)
             # 真链路若误传合成字节会按真实 sha 新建 file 行（去重不命中
             # 假 sha）：按合成内容 sha 兜底清理，只删未被引用的
             syn_shas = [hashlib.sha256(b'%PDF-1.4 accept').hexdigest(),
                         hashlib.sha256(b'%PDF-1.4 accept-two').hexdigest()]
             cur.execute(
-                'DELETE FROM extract_file WHERE sha256 IN (%s,%s)'
-                ' AND id NOT IN (SELECT file_id FROM extract_task_file)',
+                'DELETE FROM c1_file WHERE sha256 IN (%s,%s)'
+                ' AND id NOT IN (SELECT file_id FROM c1_task_file)',
                 syn_shas)
         conn.commit()
     finally:
@@ -367,7 +367,7 @@ def _main(syn_tasks, syn_fids, up, p2):
     db.connect().close()
     check('连接重开零变更', counts() == c0,
           '{} vs {}'.format(c0, counts()))
-    tv = catalog.get_template_version()
+    tv = catalog.get_rule_version()
     real = []
     for task in catalog.list_tasks():
         doc = content_db.get_records(task['task_id'])
@@ -421,7 +421,7 @@ def _main(syn_tasks, syn_fids, up, p2):
         syn_fids.append(fid)
     tf = catalog.add_task_file(task2, fid)
     syn_doc = {'schema': 'c1-structure-records/1', 'task_id': task2,
-               'template': {'name': tv['name'], 'version': tv['version']},
+               'rule': {'name': tv['name'], 'version': tv['version']},
                'files': [{'task_file_id': tf, 'file_id': fid,
                           'name': 'accept.pdf',
                           'records': json.loads(json.dumps(src_real))}]}
@@ -477,10 +477,10 @@ def _main(syn_tasks, syn_fids, up, p2):
     check('field 投影命中', any(h['task_id'] == task2 for h in hit)
           and len(hit2) > 0, 'syn={} real={}'.format(len(hit), len(hit2)))
 
-    print('[5/7] 真链路（临时服务 8799，上传字节取自 extract_file.content）')
+    print('[5/7] 真链路（临时服务 8799，上传字节取自 c1_file.content）')
     src = find_pdf_file()
     if src is None:
-        print('  FAIL  extract_file 无 PDF 原件，无法真链路验收')
+        print('  FAIL  c1_file 无 PDF 原件，无法真链路验收')
         return 1
     svc = start_service(8799)
     try:
@@ -547,12 +547,12 @@ def _main(syn_tasks, syn_fids, up, p2):
         check('断库 tasks 503', st == 503)
         st, _j = http(8797, '/api/tasks/{}/staging'.format(up[0]))
         check('断库暂存读 503（无快照回落）', st == 503)
-        st, _j = http(8797, '/api/templates')
-        check('断库模板 503（不降级）', st == 503)
+        st, _j = http(8797, '/api/extract-rules')
+        check('断库抽取规则 503（不降级）', st == 503)
     finally:
         svc_down.kill()
 
-    print('[7/7] P2c 入库（合成目标表＋模板/数据源/映射，入库时绑定目标）')
+    print('[7/7] P2c 入库（合成目标表＋抽取规则/数据源/映射，入库时绑定目标）')
     conn = db.connect()
     try:
         with conn.cursor() as cur:
@@ -565,28 +565,28 @@ def _main(syn_tasks, syn_fids, up, p2):
         conn.close()
     p2['tables'].append(P2_TABLE)
     fields3 = [{'name': '名称'}, {'name': '金额'}, {'name': '备注'}]
-    FROWS = [{'template_field': '名称', 'target_column': 'c_name',
+    FROWS = [{'rule_field': '名称', 'target_column': 'c_name',
               'is_business_key': 1},
-             {'template_field': '金额', 'target_column': 'c_amt',
+             {'rule_field': '金额', 'target_column': 'c_amt',
               'is_business_key': 0},
-             {'template_field': '备注', 'target_column': 'c_note',
+             {'rule_field': '备注', 'target_column': 'c_note',
               'is_business_key': 0}]
-    vid1 = catalog.create_template(
+    vid1 = catalog.create_rule(
         '_accept_p2_tpl', schema={'fields': fields3},
         mapping={'table': {'index': 0},
                  'fields': [{'target': '名称', 'column': {'index': 0}},
                             {'target': '金额', 'column': {'index': 1}},
                             {'target': '备注', 'column': {'index': 2}}]},
         transform={'fields': [{'target': '名称', 'apply': ['trim']}]})
-    tpl1 = catalog.get_template_version(vid1)
-    p2['tpls'].append(tpl1['template_id'])
-    vid2 = catalog.create_template(
+    tpl1 = catalog.get_rule_version(vid1)
+    p2['tpls'].append(tpl1['rule_id'])
+    vid2 = catalog.create_rule(
         '_accept_p2_num', schema={'fields': fields3},
         transform={'fields': [{'target': '名称', 'apply': ['trim']},
                               {'target': '金额',
                                'apply': ['trim', 'number']}]})
-    tpl2 = catalog.get_template_version(vid2)
-    p2['tpls'].append(tpl2['template_id'])
+    tpl2 = catalog.get_rule_version(vid2)
+    p2['tpls'].append(tpl2['rule_id'])
 
     svc = start_service(8799)
     try:
@@ -618,19 +618,19 @@ def _main(syn_tasks, syn_fids, up, p2):
               >= {'c_name', 'c_amt', 'c_note'})
         st, j = http(8799, '/api/load/tables',
                      {'datasource_id': ds_id,
-                      'template_id': tpl1['template_id'],
+                      'rule_id': tpl1['rule_id'],
                       'target_table': P2_TABLE, 'write_mode': 'upsert',
                       'fields': FROWS})
         lt1 = j.get('id')
         p2['lts'].append(lt1)
         st2, j2 = http(8799, '/api/load/tables',
                        {'datasource_id': ds_id,
-                        'template_id': tpl2['template_id'],
+                        'rule_id': tpl2['rule_id'],
                         'target_table': P2_TABLE, 'write_mode': 'upsert',
                         'fields': FROWS})
         lt2 = j2.get('id')
         p2['lts'].append(lt2)
-        check('POST 映射 ×2（同表不同模板）', st == 200 and st2 == 200,
+        check('POST 映射 ×2（同表不同抽取规则）', st == 200 and st2 == 200,
               '{} {}'.format(lt1, lt2))
         stgd, jgd = http(8799, '/api/load/tables/{}'.format(lt1))
         check('映射详情：字段行＋业务键',
@@ -639,23 +639,23 @@ def _main(syn_tasks, syn_fids, up, p2):
                    if f['is_business_key']] == ['c_name'])
         stn, _ = http(8799, '/api/load/tables',
                       {'datasource_id': ds_id,
-                       'template_id': tpl1['template_id'],
+                       'rule_id': tpl1['rule_id'],
                        'target_table': P2_TABLE, 'write_mode': 'upsert',
                        'fields': FROWS[:1]})
         nobk = [dict(f, is_business_key=0) for f in FROWS]
         stn2, _ = http(8799, '/api/load/tables',
                        {'datasource_id': ds_id,
-                        'template_id': tpl1['template_id'],
+                        'rule_id': tpl1['rule_id'],
                         'target_table': '_accept_p2_other',
                         'write_mode': 'upsert', 'fields': nobk})
         check('映射契约 400（覆盖不全 / upsert 无业务键）',
               stn == 400 and stn2 == 400)
         stdup, _ = http(8799, '/api/load/tables',
                         {'datasource_id': ds_id,
-                         'template_id': tpl1['template_id'],
+                         'rule_id': tpl1['rule_id'],
                          'target_table': P2_TABLE, 'write_mode': 'upsert',
                          'fields': FROWS})
-        check('同数据源＋模板＋表重复映射 409', stdup == 409)
+        check('同数据源＋抽取规则＋表重复映射 409', stdup == 409)
         stlk, _ = http(8799, '/api/load/datasources/{}'.format(ds_id),
                        {'host': '127.0.0.1'}, method='PATCH')
         stpw, _ = http(8799, '/api/load/datasources/{}'.format(ds_id),
@@ -664,7 +664,7 @@ def _main(syn_tasks, syn_fids, up, p2):
               stlk == 409 and stpw == 200)
         stb, jb = http(8799, '/api/load/tables',
                        {'datasource_id': ds_id,
-                        'template_id': tpl1['template_id'],
+                        'rule_id': tpl1['rule_id'],
                         'target_table': '_accept_p2_nosuch',
                         'write_mode': 'upsert', 'fields': FROWS})
         lt_bad = jb.get('id')
@@ -676,7 +676,7 @@ def _main(syn_tasks, syn_fids, up, p2):
 
         # ---- Leg A：普通上传 → 入库时绑定（失败不留痕）→ 门禁 → 全确认 → loaded ----
         task_a, sta = upload(8799, src['data'], src['name'],
-                             {'template_version_id': vid1})
+                             {'rule_version_id': vid1})
         up.append(task_a)
         time.sleep(1)
         ra = catalog.get_task(task_a)
@@ -692,7 +692,7 @@ def _main(syn_tasks, syn_fids, up, p2):
         stz, _ = http(8799, '/api/tasks/{}/load'.format(task_a),
                       {'load_datasource_id': ds_id, 'load_table_id': lt_bad})
         ra = catalog.get_task(task_a)
-        check('入库时校验 400（缺目标 · 模板不匹配 · 目标表不存在）不留绑定',
+        check('入库时校验 400（缺目标 · 抽取规则不匹配 · 目标表不存在）不留绑定',
               stx == 400 and sty == 400 and stz == 400
               and ra.get('load') is None,
               '{} {} {}'.format(stx, sty, stz))
@@ -774,7 +774,7 @@ def _main(syn_tasks, syn_fids, up, p2):
                 catalog.set_task_load(tid, ds_id, lt)
             content_db.save_records(
                 {'schema': 'c1-structure-records/1', 'task_id': tid,
-                 'template': {'name': '_accept_p2', 'version': 1},
+                 'rule': {'name': '_accept_p2', 'version': 1},
                  'files': [{'task_file_id': tf, 'file_id': fid,
                             'name': 'accept-{}.pdf'.format(tag),
                             'records': recs}]})
@@ -884,7 +884,7 @@ def _main(syn_tasks, syn_fids, up, p2):
         p2['tables'].append(ALT_TABLE)
         st3, j3 = http(8799, '/api/load/tables',
                        {'datasource_id': ds_id,
-                        'template_id': tpl1['template_id'],
+                        'rule_id': tpl1['rule_id'],
                         'target_table': ALT_TABLE, 'write_mode': 'upsert',
                         'fields': FROWS})
         lt3 = j3.get('id')

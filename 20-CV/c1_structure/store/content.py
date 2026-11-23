@@ -1,7 +1,7 @@
 """
-store/content.py — 内容 repo（DB-only，design-task-schema.md）。
+store/content.py — 内容 repo（DB-only）。
 
-extract.json 经 artifact 接缝（BLOB，task_file_id 键）；records 经 content_db
+parse.json 经 artifact 接缝（BLOB，task_file_id 键）；records 经 content_db
 三表（task_id 键）；task 信封由 catalog 表投影（run.json 已退役）。
 DB 必选：错误上抛，由调用方显式失败/503。
 """
@@ -12,11 +12,11 @@ from . import content_db
 
 
 def get_extract(task_file_id):
-    return artifact.get_json(task_file_id, config.EXTRACT_JSON)
+    return artifact.get_json(task_file_id, config.PARSE_JSON)
 
 
 def save_extract(task_file_id, doc):
-    artifact.save_json(task_file_id, config.EXTRACT_JSON, doc)
+    artifact.save_json(task_file_id, config.PARSE_JSON, doc)
 
 
 def get_records(task_id):

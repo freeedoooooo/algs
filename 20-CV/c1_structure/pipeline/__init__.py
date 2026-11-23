@@ -1,4 +1,4 @@
-"""mvp/pipeline — 提取流水线包，对外只暴露 extract_one()。"""
-from .runner import extract_one
+"""mvp/pipeline — 提取流水线包，对外只暴露 parse_one()。"""
+from .runner import parse_one
 
-__all__ = ['extract_one']
+__all__ = ['parse_one']

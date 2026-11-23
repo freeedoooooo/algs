@@ -35,7 +35,7 @@ function thumbHtml(name,url){
     escHtml(name)+'"><span>'+escHtml(label.slice(0,4))+'</span></a>';
 }
 /* 写入方式存库值不变（upsert/insert/update），显示层统一用短标签；
-   完整解释见 load.html 下拉 title 悬浮提示 */
+   完整解释见 rules.html 下拉 title 悬浮提示 */
 var MODE_LABEL={
   upsert:'覆盖或新增',
   insert:'仅新增',
@@ -86,7 +86,7 @@ function b64(file){
     r.readAsDataURL(file);
   });
 }
-/* 入库回执/隔离抽屉（P2，tasks/staging 共用）：
+/* 入库回执/隔离抽屉（P2，任务/校验页共用）：
    页面放 #receipt/#rctitle/#rcbody/#rcclose 即可复用。只读。 */
 function closeReceiptDrawer(){
   var r=document.getElementById('receipt');

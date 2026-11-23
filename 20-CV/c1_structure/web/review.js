@@ -1,10 +1,10 @@
-/* web/staging.js — 校验台（P1）：DB 暂存记录表 + 编辑/确认/拒绝
+/* web/review.js — 校验台（P1）：DB 暂存记录表 + 编辑/确认/拒绝
    + 源图血缘回溯。右侧舞台忠实复刻对照报告（report.js 舞台逻辑移植）：默认零框，
    悬停/点击揭示单格，点图走 hitCell 命中测试可定位任意记录行/格（不限选中行），
    窗口式翻页（全页预渲染、切页只切显隐，与报告同架构）、原图/矫正图切换、
    叠加框开关、光标跟随提示、全屏浮层、左右方向键翻页。
    匹配键用 data-i（记录序）/data-key（字段）。单击=血缘钉住，双击=改值（P1）。
-   数据经 /api/tasks/<id>/staging|extract 读 DB；图片经 /files/<task_file_id>/…。 */
+   数据经 /api/tasks/<id>/staging|parse 读 DB；图片经 /files/<task_file_id>/…。 */
 var task=new URLSearchParams(location.search).get('task')||'';
 var curFile=new URLSearchParams(location.search).get('file')||'';
 var taskDoc=null, records=[], keys=[], selIdx=-1, selKey=null, stateFilter='';
@@ -593,7 +593,7 @@ function loadStaging(){
   updateLoadButtons();
   var u='/api/tasks/'+encodeURIComponent(task)+'/staging'+
     (curFile?('?file='+encodeURIComponent(curFile)):'');
-  var eu='/api/tasks/'+encodeURIComponent(task)+'/extract'+
+  var eu='/api/tasks/'+encodeURIComponent(task)+'/parse'+
     (curFile?('?file='+encodeURIComponent(curFile)):'');
   Promise.all([
     fetch(u).then(function(r){
@@ -613,7 +613,7 @@ function loadStaging(){
       links.innerHTML='<a class="btn mini" target="_blank" href="'+
         fileUrl(curFile,'对照报告.html')+'">对照报告</a>';
     }else links.innerHTML='';
-    var t=doc.template||{};
+    var t=doc.rule||{};
     document.getElementById('tplbadge').innerHTML=
       '<span class="badge blue">'+escHtml((t.name||'原始透传')+' v'+(t.version||1))+'</span>';
   }).catch(function(e){
@@ -636,7 +636,7 @@ function updateLoadButtons(){
 document.getElementById('loadbtn').onclick=function(){
   var t=taskDoc||{};
   if(!t.load&&t.state==='previewed'){
-    openLoadWizard({taskId:task, templateId:(t.template||{}).template_id,
+    openLoadWizard({taskId:task, ruleId:(t.rule||{}).rule_id,
       getSample:function(){ return Promise.resolve(records.slice(0,3)); },
       onDone:function(){ loadStaging(); }});
     return;
@@ -691,7 +691,7 @@ function ledMatch(r){
   if(lprog==='edited'&&!(r.edited_n>0)) return false;
   if(lprog==='done'&&r.pending_n>0) return false;
   if(lq){
-    var tpl=r.template||{};
+    var tpl=r.rule||{};
     var hay=(r.task_id+' '+(tpl.name||'')+' '+
       (r.files||[]).map(function(f){return f.name;}).join(' ')).toLowerCase();
     if(hay.indexOf(lq)<0) return false;
@@ -711,7 +711,7 @@ function renderLedger(){
       '<b>暂无可校验的记录</b>请先到「解析」页上传文件。';
   }
   document.getElementById('ledgerrows').innerHTML=info.rows.map(function(r,i){
-    var tpl=r.template||{};
+    var tpl=r.rule||{};
     var main='<tr class="led-task" data-task="'+r.task_id+'" title="点击展开/收起文件子行">'+
       '<td class="seq">'+seqNo(info,i)+'</td>'+
       '<td class="mono"><span class="led-caret">▸</span>#'+r.task_id+'</td>'+

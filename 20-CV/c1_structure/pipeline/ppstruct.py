@@ -8,7 +8,7 @@ pipeline/ppstruct.py — 图片 / 扫描件的「单次推理」路线（升级�
 
 文字投影 texts/scores/boxes 与版面 layout **不在这里算**：
 它们由 adapter.hydrate() 在提取期从 parsing 一次算好（官方 overall_ocr_res /
-parsing_res_list 的薄视图），随 extract.json 预生成落盘。parsing 经 _slim_parsing
+parsing_res_list 的薄视图），随 parse.json 预生成落盘。parsing 经 _slim_parsing
 裁掉代码从不读取的死字段（table_ocr_pred / rec_boxes / rec_polys 重复 /
 layout_det_res / 参数回显 / 本机 input_path），原样落 raw/paddle.json。
 

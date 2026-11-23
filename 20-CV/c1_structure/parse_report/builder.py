@@ -1,14 +1,14 @@
 """
-extract_report/builder.py — 组装对照报告（每个 case 一份独立自包含 HTML）。
+parse_report/builder.py — 组装对照报告（每个 case 一份独立自包含 HTML）。
 
 结构模板在 templates/report.html；CSS / JS / lightbox 是 web/ 下的独立文件
 （方便维护、IDE 高亮，与产品页面共用 hint/stage 资产），生成报告时把它们
 **内联**进 HTML —— 产出的对照报告.html 仍是自包含的。报告直接落在该 case
-的 output/<批次戳_文件名>/目录里，与 extract.json / 图片 / CSV 同级，
+的 output/<批次戳_文件名>/目录里，与 parse.json / 图片 / CSV 同级，
 每次上传各自独立、互不覆盖。
 一份报告只含一个文件，多文件批次由上传页顶部的文件页签切换各自的报告。
 
-消费契约 = c1-structure（extract.json 同形态）：派生视图已由 adapter 预生成，
+消费契约 = c1-structure（parse.json 同形态）：派生视图已由 adapter 预生成，
 渲染期不再现算任何内容数据。
 """
 import os

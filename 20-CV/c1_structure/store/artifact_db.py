@@ -1,5 +1,5 @@
 """
-store/artifact_db.py — 产物附件 repo（MySQL BLOB，design-task-schema.md）。
+store/artifact_db.py — 产物附件 repo（MySQL BLOB）。
 
 SQL 收敛本文件；只经 db.connect 拿 DB-API 连接。DB 必选：错误上抛不降级。
 键＝task_file_id（某次任务里的某个文件）；name＝task_file 内相对路径（正斜杠）。
@@ -16,7 +16,7 @@ def save(task_file_id, name, data, mime, kind):
     try:
         with conn.cursor() as cur:
             cur.execute(
-                'INSERT INTO extract_artifact (task_file_id, name, kind, mime,'
+                'INSERT INTO c1_artifact (task_file_id, name, kind, mime,'
                 ' size_bytes, sha256, content) VALUES (%s,%s,%s,%s,%s,%s,%s)'
                 ' ON DUPLICATE KEY UPDATE kind=VALUES(kind), mime=VALUES(mime),'
                 ' size_bytes=VALUES(size_bytes), sha256=VALUES(sha256),'
@@ -34,7 +34,7 @@ def get(task_file_id, name):
         with conn.cursor() as cur:
             cur.execute(
                 'SELECT kind, mime, size_bytes, sha256, content'
-                ' FROM extract_artifact WHERE task_file_id=%s AND name=%s',
+                ' FROM c1_artifact WHERE task_file_id=%s AND name=%s',
                 (task_file_id, name))
             row = cur.fetchone()
         if not row:
@@ -49,7 +49,7 @@ def exists(task_file_id, name):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT 1 FROM extract_artifact'
+            cur.execute('SELECT 1 FROM c1_artifact'
                         ' WHERE task_file_id=%s AND name=%s',
                         (task_file_id, name))
             return cur.fetchone() is not None
@@ -62,7 +62,7 @@ def list(task_file_id):
     try:
         with conn.cursor() as cur:
             cur.execute('SELECT name, kind, mime, size_bytes, sha256'
-                        ' FROM extract_artifact WHERE task_file_id=%s'
+                        ' FROM c1_artifact WHERE task_file_id=%s'
                         ' ORDER BY name', (task_file_id,))
             return [{'name': r[0], 'kind': r[1], 'mime': r[2],
                      'size': r[3], 'sha': r[4]} for r in cur.fetchall()]
@@ -71,11 +71,11 @@ def list(task_file_id):
 
 
 def latest_task_file_with(name):
-    """最新一份含指定产物的 task_file_id（/extract-report 重定向用）。"""
+    """最新一份含指定产物的 task_file_id（/parse-report 重定向用）。"""
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT task_file_id FROM extract_artifact'
+            cur.execute('SELECT task_file_id FROM c1_artifact'
                         ' WHERE name=%s ORDER BY id DESC LIMIT 1', (name,))
             row = cur.fetchone()
             return row[0] if row else None

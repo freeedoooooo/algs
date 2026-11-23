@@ -145,7 +145,7 @@ def apply_mapping(doc, mapping):
 
 
 def build(doc, tpl=None):
-    """按模板分发：mapping 空/无 fields＝passthrough（现状不变），否则选择器消费。"""
+    """按抽取规则分发：mapping 空/无 fields＝passthrough（现状不变），否则选择器消费。"""
     mapping = (tpl or {}).get('mapping_json') or {}
     if not mapping.get('fields'):
         return passthrough(doc)
@@ -153,12 +153,12 @@ def build(doc, tpl=None):
 
 
 def build_records_doc(doc, records, task_id=None, task_file_id=None,
-                      file_id=None, template=None):
+                      file_id=None, rule=None):
     """records.json 信封（L2 事实源形态）。"""
     return {
         'schema': RECORDS_SCHEMA,
         'task_id': task_id,
-        'template': template or {'name': '原始透传', 'version': 1},
+        'rule': rule or {'name': '原始透传', 'version': 1},
         'files': [{
             'task_file_id': task_file_id,
             'file_id': file_id,

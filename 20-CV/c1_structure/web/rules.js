@@ -1,6 +1,6 @@
-/* web/load.js — 入库规则：左业务库列表 · 右入库规则列表。
+/* web/rules.js — 入库规则：左业务库列表 · 右入库规则列表。
    一个业务库＝一个库（明文配置）；规则＝业务库×表×抽取规则绑定，字段行编辑。
-   契约见 design-p2b-datasource.md＋design-ux-load-wizard.md（用词改齐）。 */
+   契约见 （用词改齐）。 */
 var dss=[], maps=[], tpls=[], cols=[];
 var curDs=null, editDs=null, editLt=null, ltLocked=false;
 var dsPage=1, mapPage=1, dsSize=getListPer(), mapSize=getListPer();
@@ -94,7 +94,7 @@ function loadAll(keepSel){
   return Promise.all([
     api('GET','/api/load/datasources'),
     api('GET','/api/load/tables'),
-    api('GET','/api/templates')
+    api('GET','/api/extract-rules')
   ]).then(function(res){
     dss=res[0].items||[]; maps=res[1].items||[]; tpls=res[2].items||[];
     if(!keepSel||!dsById(curDs)) curDs=dss.length?dss[0].id:null;
@@ -177,7 +177,7 @@ document.getElementById('dssave').onclick=function(){
 };
 
 /* ---- 入库规则抽屉 ---- */
-/* 字段自动对齐（design-ux-load-wizard §1.3，纯前端）：规范化全等自动选中，
+/* 字段自动对齐（纯前端）：规范化全等自动选中，
    ✓=已对齐（灰底自动可改），？=待确认；只填当前为空的行，不动手动/预置值。 */
 function autoMatchRows(){
   if(ltLocked||!cols.length) return;
@@ -277,7 +277,7 @@ function loadColumns(table,after){
 function loadTplFields(){
   mprows.innerHTML=''; recomputeMatchBar();
   if(!mptpl.value) return;
-  api('GET','/api/templates/'+mptpl.value).then(function(j){
+  api('GET','/api/extract-rules/'+mptpl.value).then(function(j){
     var sj=j.schema_json;
     var fs=(sj&&typeof sj==='object'&&!Array.isArray(sj)&&sj.fields)||[];
     var names=fs.map(function(f){return f.name;}).filter(Boolean);
@@ -308,15 +308,15 @@ function openMap(lt){
   mpmsg.textContent=''; cols=[]; mprows.innerHTML=''; recomputeMatchBar();
   document.getElementById('mpthint').textContent='';
   if(lt){
-    mptpl.value=String(lt.template_id);
+    mptpl.value=String(lt.rule_id);
     mptable.innerHTML='<option value="'+escHtml(lt.target_table)+'">'+
       escHtml(lt.target_table)+'</option>';
     mptable.disabled=true;
     var preset={};
     (lt.fields||[]).forEach(function(f){
-      preset[f.template_field]={col:f.target_column,bk:!!f.is_business_key};
+      preset[f.rule_field]={col:f.target_column,bk:!!f.is_business_key};
     });
-    var names=(lt.fields||[]).map(function(f){return f.template_field;});
+    var names=(lt.fields||[]).map(function(f){return f.rule_field;});
     loadColumns(lt.target_table,function(){ buildRows(names,preset); });
   }else{
     mptable.innerHTML='<option value="">选择目标表</option>';
@@ -358,7 +358,7 @@ document.getElementById('mpsave').onclick=function(){
     if(!c){ err='字段「'+f+'」尚未选择目标列'; return; }
     if(seen[c]){ err='多个字段指向同一目标列：'+c; return; }
     seen[c]=1;
-    fields.push({template_field:f,target_column:c,
+    fields.push({rule_field:f,target_column:c,
                  is_business_key:div.querySelector('.fbk').checked?1:0});
   });
   if(err){ mpmsg.textContent=err; return; }
@@ -369,7 +369,7 @@ document.getElementById('mpsave').onclick=function(){
     ?api('PATCH','/api/load/tables/'+editLt.id,
          {write_mode:mpmode.value,fields:fields})
     :api('POST','/api/load/tables',
-         {datasource_id:curDs,template_id:Number(mptpl.value),
+         {datasource_id:curDs,rule_id:Number(mptpl.value),
           target_table:mptable.value,write_mode:mpmode.value,fields:fields});
   p.then(function(){
     closeDmap(); showOk('已保存入库规则（'+(editLt?editLt.target_table:mptable.value)+

@@ -12,7 +12,7 @@ page 参数填 all 时 PDF 逐页全量提取，否则只处理指定页（默�
 
 落盘边界（数据分层，算法零改动）：
   raw/*.json   引擎原样返回按路线分文件（paddle/pdfplumber/plain），永不服务前端；
-  extract.json adapter 产出的 c1-structure 自有标准（派生视图提取期一次算好）。
+  parse.json adapter 产出的 c1-structure 自有标准（派生视图提取期一次算好）。
 内部 rec 的 parsing / 投影中间态不出 adapter；跨页续表由 structure.stitch_tables
 合并成 stitched_tables（每格带 page/space，供报告页感知回溯）。
 """
@@ -61,7 +61,7 @@ def _pp_route_page(page, img_path, case_abs, params, use_unwarp, log, emit,
     """图片/扫描路线：PPStructureV3 单次推理，官方 parsing 为源，返回 raw 表。
 
     投影 texts/scores/boxes 与 layout 由 adapter.hydrate 在提取期从 parsing
-    派生（写进 extract.json，渲染期不再现算）；parsing 本体只落 raw/paddle.json。
+    派生（写进 parse.json，渲染期不再现算）；parsing 本体只落 raw/paddle.json。
     """
     res = pp_mod.extract(img_path, case_abs, use_unwarp=use_unwarp,
                          params=params, emit=emit, rect_name=rect_name)
@@ -80,7 +80,7 @@ def _pp_route_page(page, img_path, case_abs, params, use_unwarp, log, emit,
     return raw
 
 
-def _extract_page_plain(src_path, case_abs, ext, log):
+def _parse_page_plain(src_path, case_abs, ext, log):
     page = _blank_page(1)
     text, enc = plain_mod.read_text(src_path)
     page['plain_text'] = text
@@ -98,7 +98,7 @@ def _extract_page_plain(src_path, case_abs, ext, log):
     return page, enc
 
 
-def _extract_page_image(src_path, case_abs, ext, params, use_unwarp, log, emit):
+def _parse_page_image(src_path, case_abs, ext, params, use_unwarp, log, emit):
     page = _blank_page(1)
     src_name = 'source' + ext
     shutil.copy2(src_path, os.path.join(case_abs, src_name))
@@ -113,7 +113,7 @@ def _extract_page_image(src_path, case_abs, ext, params, use_unwarp, log, emit):
     return page
 
 
-def _extract_page_pdf(src_path, case_abs, pno, npages, params, dpi,
+def _parse_page_pdf(src_path, case_abs, pno, npages, params, dpi,
                       use_unwarp, log, emit, multi):
     page = _blank_page(pno)
     if multi:
@@ -167,9 +167,9 @@ def _extract_page_pdf(src_path, case_abs, pno, npages, params, dpi,
     return page
 
 
-def extract_one(src_path, case_abs, params=None, emit=None):
+def parse_one(src_path, case_abs, params=None, emit=None):
     """
-    处理一个文件，写产物到 case_abs（raw/ + extract.json + 页图 + CSV），
+    处理一个文件，写产物到 case_abs（raw/ + parse.json + 页图 + CSV），
     返回 c1-structure 信封（含 pages / stitched_tables，自有标准，无引擎结构）。
 
     params 是本批调试参数；emit 是可选的日志回调 (level, stage, msg)，
@@ -197,7 +197,7 @@ def extract_one(src_path, case_abs, params=None, emit=None):
     if ext in config.TEXT_EXTS:
         file_rec['kind'] = 'csv'
         log('info', 'split', '载体：{} · 纯文本直读（不跑 OCR）'.format(ext.lstrip('.')))
-        page, enc = _extract_page_plain(src_path, case_abs, ext, log)
+        page, enc = _parse_page_plain(src_path, case_abs, ext, log)
         file_rec['encoding'] = enc
         pages = [page]
 
@@ -220,7 +220,7 @@ def extract_one(src_path, case_abs, params=None, emit=None):
         multi = len(page_list) > 1
         pages = []
         for pno in page_list:
-            pg = _extract_page_pdf(src_path, case_abs, pno, npages, params,
+            pg = _parse_page_pdf(src_path, case_abs, pno, npages, params,
                                    dpi, use_unwarp, log, emit, multi)
             if not multi and page_param != 'all' \
                     and page_list[0] != int(page_param):
@@ -230,7 +230,7 @@ def extract_one(src_path, case_abs, params=None, emit=None):
 
     else:
         file_rec['kind'] = 'image'
-        pages = [_extract_page_image(src_path, case_abs, ext, params,
+        pages = [_parse_page_image(src_path, case_abs, ext, params,
                                      use_unwarp, log, emit)]
 
     file_rec['pages'] = pages
@@ -287,11 +287,11 @@ def extract_one(src_path, case_abs, params=None, emit=None):
                 .format(t['csv_file'], t['n_rows'], t['n_cols'],
                         t['source_pages']))
 
-    # 落盘 = 数据分层：raw/ 引擎原样（按路线分文件）+ extract.json（c1-structure）。
+    # 落盘 = 数据分层：raw/ 引擎原样（按路线分文件）+ parse.json（c1-structure）。
     # 紧凑序列化（报告 JSON tab 渲染时再美化），避免 indent 把数值数组撑大。
     _write_raw(file_rec, case_abs)
     doc = adapter.adapt(file_rec)
-    with open(os.path.join(case_abs, config.EXTRACT_JSON), 'w',
+    with open(os.path.join(case_abs, config.PARSE_JSON), 'w',
               encoding='utf-8') as f:
         json.dump(doc, f, ensure_ascii=False, separators=(',', ':'))
     return doc

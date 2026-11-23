@@ -1,7 +1,7 @@
 """
 adapter/base.py — c1-structure 标准契约 + 适配入口（纯函数，不加载模型）。
 
-c1-structure/1 契约（extract.json）：
+c1-structure/1 契约（parse.json）：
   信封  schema / case / file{name,kind,encoding,page_count} / params /
         pages:[page…] / stitched_tables:[跨页合并表…]
   page  index(1起) / size[w,h] / rectified_size / image / rectified_image /

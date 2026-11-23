@@ -1,5 +1,5 @@
-/* web/templates.js — 抽取规则管理：列表＋编辑抽屉（结构化字段行
-   表单＋参考文件预览辅助选表选列）＋版本历史。契约见 design-p1b-templates.md §二。 */
+/* web/extract.js — 抽取规则管理：列表＋编辑抽屉（结构化字段行
+   表单＋参考文件预览辅助选表选列）＋版本历史。 */
 var items=[], cur=null, origName='', origDesc='', cands=null, pendingTable=null,
     page=1, size=getListPer();
 var rows=document.getElementById('rows');
@@ -65,7 +65,7 @@ function render(){
   pg.render(info);
 }
 function load(){
-  return api('GET','/api/templates').then(function(j){
+  return api('GET','/api/extract-rules').then(function(j){
     items=j.items||[]; render();
     document.getElementById('err').hidden=true;
   }).catch(function(e){
@@ -78,7 +78,7 @@ rows.addEventListener('click',function(e){
   var b=e.target.closest?e.target.closest('[data-edit],[data-del]'):null;
   if(!b) return;
   if(b.hasAttribute('data-del')){
-    delTemplate(Number(b.getAttribute('data-del')),b.getAttribute('data-name'));
+    delRule(Number(b.getAttribute('data-del')),b.getAttribute('data-name'));
     return;
   }
   openEditor(Number(b.getAttribute('data-edit')));
@@ -169,7 +169,7 @@ function addRow(target,col,fx){
   div.querySelector('.fdel').onclick=function(){div.remove();};
   updateDestHints();
 }
-/* ---- 「这些字段去了哪」（design-ux-load-wizard §1.4）：编辑抽屉字段行尾部
+/* ---- 「这些字段去了哪」：编辑抽屉字段行尾部
    显示该字段在入库规则里的目标列。本规则没有任何入库规则时**不显示**
    （避免逐行刷「未配置」噪音）；有规则时按字段显示 去向/未配去向。 ---- */
 var destMap=null;   // null=本规则未查/新建；{field:[{表.列}…]}=已加载
@@ -177,7 +177,7 @@ var destHasRules=false;
 function loadDestHints(id){
   destMap=null; destHasRules=false;
   api('GET','/api/load/tables').then(function(j){
-    var rules=(j.items||[]).filter(function(m){return m.template_id===id;});
+    var rules=(j.items||[]).filter(function(m){return m.rule_id===id;});
     if(!rules.length){ destMap={}; updateDestHints(); return; }
     destHasRules=true;
     Promise.all(rules.map(function(m){
@@ -187,7 +187,7 @@ function loadDestHints(id){
       details.forEach(function(d){
         if(!d) return;
         (d.fields||[]).forEach(function(f){
-          (map[f.template_field]=map[f.template_field]||[]).push(
+          (map[f.rule_field]=map[f.rule_field]||[]).push(
             d.target_table+'.'+f.target_column);
         });
       });
@@ -270,7 +270,7 @@ refsel.onchange=function(){
   if(!v){manualMode();return;}
   var p=v.split(':');
   refhint.textContent='正在加载参考…';
-  api('GET','/api/tasks/'+p[0]+'/extract?file='+p[1]).then(function(doc){
+  api('GET','/api/tasks/'+p[0]+'/parse?file='+p[1]).then(function(doc){
     cands=candidates(doc);
     if(!cands.length){manualMode('该文件未解析出表格，请手动填写源表。');return;}
     tblsel.innerHTML=cands.map(function(c,i){
@@ -298,7 +298,7 @@ document.addEventListener('keydown',function(e){
 });
 
 function loadVersions(id){
-  api('GET','/api/templates/'+id+'/versions').then(function(j){
+  api('GET','/api/extract-rules/'+id+'/versions').then(function(j){
     var list=j.items||j.versions||j;
     if(!Array.isArray(list)) list=[];
     document.getElementById('verlist').innerHTML=list.map(function(v){
@@ -319,7 +319,7 @@ document.getElementById('verlist').addEventListener('click',function(e){
   var b=e.target.closest?e.target.closest('[data-setcur]'):null;
   if(!b||cur==null) return;
   var v=Number(b.getAttribute('data-setcur'));
-  api('PATCH','/api/templates/'+cur,{current_version:v}).then(function(){
+  api('PATCH','/api/extract-rules/'+cur,{current_version:v}).then(function(){
     document.getElementById('everbadge').innerHTML=
       '<span class="badge green">v'+v+'</span>';
     loadVersions(cur); load();
@@ -344,7 +344,7 @@ function openEditor(id){
     edit.hidden=false; loadRefs();
     return;
   }
-  api('GET','/api/templates/'+id).then(function(j){
+  api('GET','/api/extract-rules/'+id).then(function(j){
     document.getElementById('etitle').textContent='编辑规则 #'+id;
     document.getElementById('everbadge').innerHTML=
       '<span class="badge green">v'+j.current_version+'</span>';
@@ -405,16 +405,16 @@ savebtn.onclick=function(){
   savebtn.disabled=true;
   var p;
   if(cur==null){
-    p=api('POST','/api/templates',
+    p=api('POST','/api/extract-rules',
           {name:name,description:desc||null,schema:schema,mapping:mapping,
            transform:transform});
   }else{
     var patch={};
     if(name!==origName) patch.name=name;
     if(desc!==origDesc) patch.description=desc;
-    p=(Object.keys(patch).length?api('PATCH','/api/templates/'+cur,patch):
+    p=(Object.keys(patch).length?api('PATCH','/api/extract-rules/'+cur,patch):
         Promise.resolve()).then(function(){
-      return api('POST','/api/templates/'+cur+'/versions',
+      return api('POST','/api/extract-rules/'+cur+'/versions',
                  {schema:schema,mapping:mapping,transform:transform});
     });
   }
@@ -428,7 +428,7 @@ savebtn.onclick=function(){
     }else{
       origName=name; origDesc=desc;
       loadVersions(cur);
-      api('GET','/api/templates/'+cur).then(function(j){
+      api('GET','/api/extract-rules/'+cur).then(function(j){
         document.getElementById('everbadge').innerHTML=
           '<span class="badge green">v'+j.current_version+'</span>';
       }).catch(function(){});
@@ -437,9 +437,9 @@ savebtn.onclick=function(){
    .then(function(){savebtn.disabled=false;});
 };
 
-function delTemplate(id,name){
+function delRule(id,name){
   if(!window.confirm('删除规则「'+name+'」及其全部版本？')) return;
-  api('DELETE','/api/templates/'+id).then(function(){
+  api('DELETE','/api/extract-rules/'+id).then(function(){
     if(cur===id) closeEditor();
     showOk('已删除规则「'+name+'」。');
     load();
@@ -449,7 +449,7 @@ function delTemplate(id,name){
   });
 }
 delbtn.onclick=function(){
-  if(cur!=null) delTemplate(cur,ename.value.trim());
+  if(cur!=null) delRule(cur,ename.value.trim());
 };
 
 load();

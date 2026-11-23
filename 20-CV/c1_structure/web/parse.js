@@ -1,4 +1,4 @@
-/* web/upload.js — 上传页交互：参数面板 + base64 上传 + 进度轮询 */
+/* web/parse.js — 上传页交互：参数面板 + base64 上传 + 进度轮询 */
 var picked=[],timer=null,paramSchema=[];
 var drop=document.getElementById('drop'),picker=document.getElementById('picker');
 var list=document.getElementById('filelist'),go=document.getElementById('go');
@@ -82,11 +82,11 @@ fetch('/api/params').then(function(r){return r.json();}).then(function(j){
   if(j.schema) renderParams(j.schema);
 }).catch(function(){});
 
-/* 抽取规则下拉：/api/templates（DB 降级时后端回内置「原始透传」）。
+/* 抽取规则下拉：/api/extract-rules（DB 降级时后端回内置「原始透传」）。
    value = 规则版本 id；降级项无 id，提交时省略走后端默认。 */
 var tplsel=document.getElementById('tplsel');
 function tplFallback(){ tplsel.innerHTML='<option value="">原始透传 v1</option>'; }
-fetch('/api/templates').then(function(r){return r.json();}).then(function(j){
+fetch('/api/extract-rules').then(function(r){return r.json();}).then(function(j){
   var items=j.items||[];
   if(!items.length){ tplFallback(); return; }
   tplsel.innerHTML=items.map(function(t){
@@ -347,7 +347,7 @@ function showResult(cases){
     reportFrame.src=reportUrl(cases[0].task_file_id)+'?t='+Date.now();
   }else{
     /* 单文件：直接落该 task_file 报告；cases 未知才走最新报告重定向 */
-    reportFrame.src=(cases.length?reportUrl(cases[0].task_file_id):'/extract-report')+'?t='+Date.now();
+    reportFrame.src=(cases.length?reportUrl(cases[0].task_file_id):'/parse-report')+'?t='+Date.now();
   }
 }
 /* 完成后点「查看日志」：进度卡作为抽屉叠加在报告上，「关闭」收回 */
@@ -419,7 +419,7 @@ go.onclick=async function(){
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({files:files,params:collectParams(),
-        template_version_id:tplVersionId()})
+        rule_version_id:tplVersionId()})
     });
     var j=await res.json();
     if(!j.ok) throw new Error(j.error||'上传失败');
@@ -514,7 +514,7 @@ srcgo.onclick=async function(){
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({file_ids:ids,params:collectParams(),
-        template_version_id:tplVersionId()})
+        rule_version_id:tplVersionId()})
     });
     var j=await res.json();
     if(!j.ok) throw new Error(j.error||'发起失败');
@@ -532,7 +532,7 @@ srcgo.onclick=async function(){
     srcgo.disabled=false;
   }
 };
-/* 资料页「解析」跳转：/extract?from_source=<id> → 打开抽屉并预选 */
+/* 资料页「解析」跳转：/parse?from_source=<id> → 打开抽屉并预选 */
 var fromSrc=new URLSearchParams(location.search).get('from_source');
 if(fromSrc) openSrcDrawer(+fromSrc);
 

@@ -268,7 +268,7 @@ function loadFileJson(card){
     var pretty=JSON.stringify(JSON.parse(src.textContent),null,2);
     fjCache.set(fc,pretty); fill(pretty);
   }catch(e){
-    pre.textContent='完整 JSON 解析失败：请点上方「下载」查看 extract.json。';
+    pre.textContent='完整 JSON 解析失败：请点上方「下载」查看 parse.json。';
   }
 }
 
@@ -368,7 +368,7 @@ function activeStitchOf(fc){
 /* 切页保留当前激活 tab：在「跨页合并」tab 翻页时合并表不丢；悬停合并格切页同理。
    合并表内容渲染在每个页卡片的 stitch tab 里，切页后点亮新卡片的同一 tab 即可无缝衔接。
    多条跨页链时一并保留选中的合并表子页签，避免切页后高亮落在隐藏链上。 */
-/* 单一整合页头：切页时把激活页的「页码片段」模板注入文件级 .pagehead-slot，
+/* 单一整合页头：切页时把激活页的「页码片段」抽取规则注入文件级 .pagehead-slot，
    文件级汇总不动，只有当前页码随页更新（路线/统计/链接已整合进右侧 tab，页头不再重复）。 */
 function updatePageHead(fc){
   if(!fc) return;

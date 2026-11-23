@@ -6,22 +6,22 @@ c1_structure/app.py — Web 工具入口（FastAPI + uvicorn）。只负责 HTTP
     D:\\miniforge3\\envs\\paddle\\python.exe c1_structure/app.py
     浏览器打开 http://127.0.0.1:8765
 
-路由（页面地址＝产品名词，模板文件名是历史内部名，对应关系见 docs/功能映射表）：
+路由（页面地址＝产品名词，与 web/ 文件一一对应）：
     GET  /              工作台首页（web/home.html）
-    GET  /extract       解析页（upload.html） · /sources 资料 · /templates 抽取规则
-    GET  /review        校验台（staging.html） · /rules 入库规则（load.html）
+    GET  /parse         解析页（parse.html） · /sources 资料 · /extract 抽取规则
+    GET  /review        校验台（review.html） · /rules 入库规则（rules.html）
     GET  /tasks         任务页 · GET /healthz 健康检查
     POST /api/upload    上传（base64 JSON，不依赖 python-multipart）
     GET  /api/status    处理进度
-    GET  /extract-report   对照报告（重定向到最新 task_file 的报告真实地址）
+    GET  /parse-report   对照报告（重定向到最新 task_file 的报告真实地址）
     /files/<task_file_id>/<path>   产物（DB BLOB，白名单，raw 403）
-    /srcfiles/<file_id>            原件（extract_file.content BLOB）
+    /srcfiles/<file_id>            原件（c1_file.content BLOB）
     /static/<path>      页面 css / js
 
-存储契约（design-task-schema.md）：DB 唯一事实源——目录/记录/血缘关系表，
-原件字节 extract_file.content，产物字节 extract_artifact（task_file 粒度）；
+存储契约：DB 唯一事实源——目录/记录/血缘关系表，
+原件字节 c1_file.content，产物字节 c1_artifact（task_file 粒度）；
 磁盘仅 tmp/ 运行期 scratch。DB 不可用显式 503/failed，不降级。
-审计/file:// 用 export_artifacts.py。解析逻辑在 pipeline/，报告在 extract_report/。
+审计/file:// 用 export_artifacts.py。解析逻辑在 pipeline/，报告在 parse_report/。
 """
 import base64
 import importlib
@@ -107,8 +107,8 @@ async def fallback_error_handler(_request, exc):
 
 # ---- 产物白名单：页面只见预生成的自有标准视图 ----
 # raw/（引擎原样）与旧 result.json 一律 403 —— 引擎结构不出适配层（防方案抄袭）。
-_TOP_FILES = {config.EXTRACT_JSON, config.BOXES_NAME,
-              config.EXTRACT_REPORT_NAME, 'index.html'}
+_TOP_FILES = {config.PARSE_JSON, config.BOXES_NAME,
+              config.PARSE_REPORT_NAME, 'index.html'}
 _IMAGE_SRCS = {'source' + e for e in config.IMAGE_EXTS}
 _CSV_PATTERNS = ('table_*.csv', 'stitched_*.csv', 'p*_table_*.csv')
 
@@ -157,7 +157,7 @@ def files_db(path: str, request: Request):
 
 @app.get('/srcfiles/{file_id:int}')
 def srcfiles_db(file_id: int, request: Request):
-    """/srcfiles/<file_id>：原件字节（extract_file.content）。
+    """/srcfiles/<file_id>：原件字节（c1_file.content）。
     用 id 不用名字——同名不同字节是两行，名字会撞。"""
     s = _load('store.catalog').get_file_content(file_id)
     if s is None:
@@ -190,9 +190,9 @@ def index():
     return HTMLResponse(asset('home.html'))
 
 
-@app.get('/extract', response_class=HTMLResponse)
-def extract_page():
-    return HTMLResponse(asset('upload.html'))
+@app.get('/parse', response_class=HTMLResponse)
+def parse_page():
+    return HTMLResponse(asset('parse.html'))
 
 
 @app.get('/sources', response_class=HTMLResponse)
@@ -207,17 +207,17 @@ def tasks_page():
 
 @app.get('/review', response_class=HTMLResponse)
 def review_page():
-    return HTMLResponse(asset('staging.html'))
+    return HTMLResponse(asset('review.html'))
 
 
-@app.get('/templates', response_class=HTMLResponse)
-def templates_page():
-    return HTMLResponse(asset('templates.html'))
+@app.get('/extract', response_class=HTMLResponse)
+def extract_page():
+    return HTMLResponse(asset('extract.html'))
 
 
 @app.get('/rules', response_class=HTMLResponse)
 def rules_page():
-    return HTMLResponse(asset('load.html'))
+    return HTMLResponse(asset('rules.html'))
 
 
 @app.get('/healthz')
@@ -271,11 +271,11 @@ async def upload(request: Request):
     if not files:
         return JSONResponse({'ok': False, 'error': '未收到文件'},
                             status_code=400)
-    tpl = service.resolve_template(body.get('template_version_id'))
+    tpl = service.resolve_rule(body.get('rule_version_id'))
     # 调试参数：校验一次，非法值回退默认并把警告带回页面（不让整批失败）
     params, warns = params_mod.normalize(body.get('params'))
 
-    # 输入副本只落 tmp/input scratch（字节事实源在 extract_file.content），跑完即清；
+    # 输入副本只落 tmp/input scratch（字节事实源在 c1_file.content），跑完即清；
     # 任何失败路径（校验 400 / DB 503）都由 finally 回收，不留孤儿
     in_dir = tempfile.mkdtemp(prefix='in_', dir=config.TMP_INPUT)
     launched = False
@@ -333,22 +333,22 @@ def api_logs():
                             service.STATE.get('task_id')))
 
 
-@app.get('/extract-report')
-def extract_report():
+@app.get('/parse-report')
+def parse_report():
     """对照报告：重定向到最新 task_file 的 对照报告.html 真实地址。
     报告内资源全是相对路径，必须落在该 task_file 的 URL 下才能解析；
     file:// 直开用 export_artifacts.py 按需导出。"""
     from urllib.parse import quote
     tf = _load('store.artifact_db').latest_task_file_with(
-        config.EXTRACT_REPORT_NAME)
+        config.PARSE_REPORT_NAME)
     if tf is not None:
         return RedirectResponse('/files/{}/{}'.format(
-            tf, quote(config.EXTRACT_REPORT_NAME, safe='')))
+            tf, quote(config.PARSE_REPORT_NAME, safe='')))
     return HTMLResponse(
         '<h3>还没有对照报告</h3><p><a href="/">返回工作台</a>先上传文件发起解析。</p>')
 
 
-# ---- 数据链路 API（P0：资料库 / 模板 / 任务 / 预生成内容读取）----
+# ---- 数据链路 API（P0：资料库 / 抽取规则 / 任务 / 预生成内容读取）----
 # 全部经 catalog / content / artifact repo 查 DB。错误分类归异常处理器：
 # StoreError→对应码，DB 故障→503，编程错误→500。任务以 task id 为键；
 # 文件以 task_file_id 为键；原件以 file_id 为键。
@@ -389,59 +389,59 @@ def api_sources_del(file_id: int):
     return {'ok': True}
 
 
-@app.get('/api/templates')
-def api_templates():
-    return {'items': _load('store.catalog').list_templates()}
+@app.get('/api/extract-rules')
+def api_rules():
+    return {'items': _load('store.catalog').list_rules()}
 
 
-@app.post('/api/templates')
-async def api_templates_add(request: Request):
+@app.post('/api/extract-rules')
+async def api_rules_add(request: Request):
     body = await _json_body(request)
-    vid = _load('store.catalog').create_template(
+    vid = _load('store.catalog').create_rule(
         body.get('name'), body.get('description'),
         body.get('schema'), body.get('mapping'), body.get('transform'))
     return {'ok': True, 'version_id': vid}
 
 
-@app.get('/api/templates/{template_id}')
-def api_template_get(template_id: int):
-    return _load('store.catalog').get_template(template_id)
+@app.get('/api/extract-rules/{rule_id}')
+def api_rule_get(rule_id: int):
+    return _load('store.catalog').get_rule(rule_id)
 
 
-@app.patch('/api/templates/{template_id}')
-async def api_template_patch(template_id: int, request: Request):
+@app.patch('/api/extract-rules/{rule_id}')
+async def api_rule_patch(rule_id: int, request: Request):
     body = await _json_body(request)
-    _load('store.catalog').update_template(
-        template_id, name=body.get('name'),
+    _load('store.catalog').update_rule(
+        rule_id, name=body.get('name'),
         description=body.get('description'),
         current_version=body.get('current_version'))
     return {'ok': True}
 
 
-@app.delete('/api/templates/{template_id}')
-def api_template_del(template_id: int):
-    _load('store.catalog').delete_template(template_id)
+@app.delete('/api/extract-rules/{rule_id}')
+def api_rule_del(rule_id: int):
+    _load('store.catalog').delete_rule(rule_id)
     return {'ok': True}
 
 
-@app.get('/api/templates/{template_id}/versions')
-def api_template_versions(template_id: int):
-    return {'items': _load('store.catalog').list_versions(template_id)}
+@app.get('/api/extract-rules/{rule_id}/versions')
+def api_rule_versions(rule_id: int):
+    return {'items': _load('store.catalog').list_versions(rule_id)}
 
 
-@app.get('/api/templates/{template_id}/versions/{version_id}')
-def api_template_version_get(template_id: int, version_id: int):
-    tv = _load('store.catalog').get_template_version(version_id=version_id)
-    if not tv or tv['template_id'] != template_id:
+@app.get('/api/extract-rules/{rule_id}/versions/{version_id}')
+def api_rule_version_get(rule_id: int, version_id: int):
+    tv = _load('store.catalog').get_rule_version(version_id=version_id)
+    if not tv or tv['rule_id'] != rule_id:
         raise _load('store.errors').NotFound('抽取规则版本不存在')
     return tv
 
 
-@app.post('/api/templates/{template_id}/versions')
-async def api_template_version_add(template_id: int, request: Request):
+@app.post('/api/extract-rules/{rule_id}/versions')
+async def api_rule_version_add(rule_id: int, request: Request):
     body = await _json_body(request)
     vid = _load('store.catalog').create_version(
-        template_id, body.get('schema'), body.get('mapping'),
+        rule_id, body.get('schema'), body.get('mapping'),
         body.get('transform'))
     return {'ok': True, 'version_id': vid}
 
@@ -537,7 +537,7 @@ async def api_load_table_add(request: Request):
     body = await _json_body(request)
     try:
         ds_id = int(body.get('datasource_id'))
-        tpl_id = int(body.get('template_id'))
+        tpl_id = int(body.get('rule_id'))
     except (TypeError, ValueError):
         raise store_errors.BadRequest('须选择业务库与抽取规则')
     lt_id = _load('store.catalog').create_load_table(
@@ -655,12 +655,12 @@ def _tf_of(task_id, file):
     return tfs[0]
 
 
-@app.get('/api/tasks/{task_id}/extract')
+@app.get('/api/tasks/{task_id}/parse')
 def api_task_extract(task_id: int, file: str = None):
     tf = _tf_of(task_id, file)
     doc = _load('store.content').get_extract(tf) if tf else None
     if doc is None:
-        return JSONResponse({'ok': False, 'error': 'extract.json 不存在'},
+        return JSONResponse({'ok': False, 'error': 'parse.json 不存在'},
                             status_code=404)
     return doc
 
@@ -751,7 +751,7 @@ async def api_staging_review(task_id: int, task_file_id: int,
 
 @app.post('/api/tasks')
 async def api_tasks_create(request: Request):
-    """从资料库选文件发起任务（复用上传编排；字节直读 extract_file.content）。"""
+    """从资料库选文件发起任务（复用上传编排；字节直读 c1_file.content）。"""
     if service.STATE['running']:
         return JSONResponse({'ok': False, 'error': '已有任务正在处理'},
                             status_code=409)
@@ -767,7 +767,7 @@ async def api_tasks_create(request: Request):
         return JSONResponse({'ok': False, 'error': '存在未登记的文件 id'},
                             status_code=400)
     params, warns = params_mod.normalize(body.get('params'))
-    tpl = service.resolve_template(body.get('template_version_id'))
+    tpl = service.resolve_rule(body.get('rule_version_id'))
     in_dir = tempfile.mkdtemp(prefix='in_', dir=config.TMP_INPUT)
     launched = False
     try:

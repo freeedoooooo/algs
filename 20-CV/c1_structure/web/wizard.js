@@ -1,4 +1,4 @@
-/* web/wizard.js — 四步入库向导（design-ux-load-wizard §2，tasks/staging 共用）：
+/* web/wizard.js — 四步入库向导（任务/校验页共用）：
    ① 选目标（已有规则直达③／新建＝业务库＋表）→ ② 字段对齐（自动匹配，仅新建）
    → ③ 过目（前 3 条样例＋load-preview dry-run 计数）→ ④ 执行。
    红线：④ 前不落库；新建规则在执行瞬间 POST /api/load/tables 落库，
@@ -50,7 +50,7 @@ function wzUi(){
   return m;
 }
 function openLoadWizard(opts){
-  wz={taskId:opts.taskId, templateId:opts.templateId,
+  wz={taskId:opts.taskId, ruleId:opts.ruleId,
       onDone:opts.onDone, getSample:opts.getSample||null,
       step:1, mode:'', ds1:'', rule1:'', ds2:'', table2:'',
       dsList:null, ruleList:null, tables2:null,
@@ -108,7 +108,7 @@ function wzStep1(b){
       if(!wz||wz.step!==1) return;
       wz.dsList=res[0].items||[];
       wz.ruleList=(res[1].items||[]).filter(function(m){
-        return String(m.template_id)===String(wz.templateId);});
+        return String(m.rule_id)===String(wz.ruleId);});
       wzRender();
     }).catch(function(e){
       if(!wz||wz.step!==1) return;
@@ -212,12 +212,12 @@ function wzAdvance(){
   if(wz.step===2){ if(wzCollect()) wzGo(3); return; }
   if(wz.step===3){ wzExecute(); return; }
 }
-/* ---- step2 字段对齐（新建规则草稿，复用 §1.3 自动匹配口径） ---- */
+/* ---- step2 字段对齐（新建规则草稿，复用自动匹配口径） ---- */
 function wzStep2(b){
   if(!wz.tfields){
     b.innerHTML='<div class="empty">加载规则字段与目标列…</div>';
     Promise.all([
-      wzApi('GET','/api/templates/'+wz.templateId).then(function(j){
+      wzApi('GET','/api/extract-rules/'+wz.ruleId).then(function(j){
         var sj=j.schema_json;
         var fs=(sj&&typeof sj==='object'&&!Array.isArray(sj)&&sj.fields)||[];
         return fs.map(function(f){return f.name;}).filter(Boolean);
@@ -306,7 +306,7 @@ function wzCollect(){
     if(!c){ err='字段「'+f+'」尚未选择目标列'; return; }
     if(seen[c]){ err='多个字段指向同一目标列：'+c; return; }
     seen[c]=1;
-    fields.push({template_field:f,target_column:c,
+    fields.push({rule_field:f,target_column:c,
       is_business_key:div.querySelector('.wzfbk').checked?1:0});
   });
   if(err){ wzMsg(err,true); return false; }
@@ -394,7 +394,7 @@ function wzExecute(){
   var p=Promise.resolve();
   if(wz.mode==='new'){
     p=wzApi('POST','/api/load/tables',{
-      datasource_id:wz.dsId, template_id:wz.templateId,
+      datasource_id:wz.dsId, rule_id:wz.ruleId,
       target_table:wz.table, write_mode:wz.wm, fields:wz.fields
     }).then(function(j){ wz.createdRule=j.id; });
   }

@@ -30,7 +30,7 @@ function render(){
       '<td class="seq">'+seqNo(info,i)+'</td>'+
       '<td class="mono">#'+r.task_id+'</td>'+
       '<td class="num">'+(r.files||[]).length+'</td>'+
-      '<td>'+tplLabel(r.template)+'</td>'+
+      '<td>'+tplLabel(r.rule)+'</td>'+
       '<td>'+(r.load?escHtml(r.load.target_table+' · '+
         modeLabel(r.load.write_mode||'')):'—')+'</td>'+
       '<td>'+stateBadge(r.state)+'</td>'+
@@ -76,7 +76,7 @@ function renderDetail(j){
       ' · '+(live.progress||0)+'%（自动刷新）</div>';
   }
   if(r.error) html+='<div class="banner err">任务出错：'+escHtml(r.error)+'</div>';
-  html+='<div class="msg" style="margin-bottom:10px">抽取规则 '+tplLabel(r.template)+
+  html+='<div class="msg" style="margin-bottom:10px">抽取规则 '+tplLabel(r.rule)+
     ' · 发起 '+fmtTime(r.created_at)+'</div>';
   html+='<table class="list"><thead><tr><th>资料</th><th>状态</th><th>暂存记录</th><th>产物</th></tr></thead><tbody>'+
     (r.files||[]).map(function(f){return fileRow(f,r.task_id);}).join('')+'</tbody></table>';
@@ -110,7 +110,7 @@ function renderDetail(j){
   var lb=document.getElementById('loadbtn');
   if(lb) lb.onclick=function(){
     if(!hasLoad&&r.state==='previewed'){
-      openLoadWizard({taskId:r.task_id, templateId:(r.template||{}).template_id,
+      openLoadWizard({taskId:r.task_id, ruleId:(r.rule||{}).rule_id,
         onDone:function(){ refreshDetail(r.task_id); }});
       return;
     }
@@ -123,7 +123,7 @@ function renderDetail(j){
   if(live&&live.running) pollTimer=setTimeout(function(){refreshDetail(r.task_id);},1500);
 }
 /* 门禁计数提示：仅全部 confirmed 可入库（后端 409 兜底，这里先给可见预期）。
-   走 /gate 轻量计数端点——旧版为此全量拉 /staging（~150KB×每次刷新轮询）。 */
+   走 /gate 轻量计数端点——旧版为此全量拉 staging（~150KB×每次刷新轮询）。 */
 function loadGateInfo(taskId){
   fetch('/api/tasks/'+taskId+'/gate').then(function(r){
     if(!r.ok) throw new Error();
