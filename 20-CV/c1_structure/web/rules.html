@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="/static/shell.css">
 <link rel="stylesheet" href="/static/extract.css">
 <link rel="stylesheet" href="/static/rules.css">
+<link rel="stylesheet" href="/static/hint.css">
 </head>
 <body>
 <nav class="topnav">
@@ -24,8 +25,7 @@
 <div class="pagebody">
   <div class="pagehead">
     <h1>入库规则</h1>
-    <span class="spacer"></span>
-    <span class="msg">左侧选择业务库（一个业务库对应一个数据库），右侧配置入库规则；记录须先完成解析与校验，全部确认后手动入库</span>
+    <span class="hint" tabindex="0" data-tip="左侧选择业务库（一个业务库对应一个数据库），右侧配置入库规则。&#10;记录须先完成解析与校验，全部确认后手动入库。">?</span>
   </div>
   <div class="banner err" id="err" hidden></div>
   <div class="banner info" id="ok" hidden></div>
@@ -103,7 +103,7 @@
       <div class="fsec">
         <label class="flab" for="dspass">密码</label>
         <input type="text" class="tin" id="dspass">
-        <div class="hint">密码当前以明文保存；日志与连接测试结果均不会显示密码。</div>
+        <div class="sthint">密码当前以明文保存；日志与连接测试结果均不会显示密码。</div>
       </div>
       <div class="fsec">
         <label class="flab" for="dsdb">库名</label>
@@ -112,9 +112,9 @@
       <div class="fsec">
         <label class="flab">类型</label>
         <input type="text" class="tin" value="mysql" disabled>
-        <div class="hint">当前版本仅支持 MySQL。</div>
+        <div class="sthint">当前版本仅支持 MySQL。</div>
       </div>
-      <div class="hint" id="dslock" hidden>该业务库已被入库规则引用，主机、端口、库名不可修改（修改将改变目标库，导致历史回执无法追溯）；账号与密码可以修改。如需更换目标库，请新建业务库。</div>
+      <div class="sthint" id="dslock" hidden>该业务库已被入库规则引用，主机、端口、库名不可修改（修改将改变目标库，导致历史回执无法追溯）；账号与密码可以修改。如需更换目标库，请新建业务库。</div>
     </div>
     <div class="dfoot">
       <span class="msg" id="dsmsg"></span>
@@ -142,7 +142,7 @@
       <div class="fsec">
         <label class="flab" for="mptable">目标表（仅支持已有表）</label>
         <select class="tin" id="mptable" disabled><option value="">加载中…</option></select>
-        <div class="hint" id="mpthint"></div>
+        <div class="sthint" id="mpthint"></div>
       </div>
       <div class="fsec">
         <label class="flab" for="mpmode">写入方式</label>
@@ -154,11 +154,11 @@
       </div>
       <div class="fsec">
         <label class="flab">字段对齐（规则字段 → 目标列）</label>
-        <div class="hint" id="mpmatch"></div>
+        <div class="sthint" id="mpmatch"></div>
         <div id="mprows"></div>
-        <div class="hint">勾选「去重依据」的列用于判断记录是否已存在（如发票号）。系统按字段名自动对齐，无法匹配的需要手动选择。</div>
+        <div class="sthint">勾选「去重依据」的列用于判断记录是否已存在（如发票号）。系统按字段名自动对齐，无法匹配的需要手动选择。</div>
       </div>
-      <div class="hint" id="mplock" hidden>该规则已被任务引用，为保证历史回执一致，不再允许修改；如需调整请新建规则。</div>
+      <div class="sthint" id="mplock" hidden>该规则已被任务引用，为保证历史回执一致，不再允许修改；如需调整请新建规则。</div>
     </div>
     <div class="dfoot">
       <span class="msg" id="mpmsg"></span>
@@ -168,6 +168,7 @@
   </div>
 </div>
 <script src="/static/shell.js"></script>
+<script src="/static/hint.js"></script>
 <script src="/static/rules.js"></script>
 </body>
 </html>

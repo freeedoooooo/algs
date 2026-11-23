@@ -26,7 +26,6 @@ button{font:inherit;cursor:pointer}
 .pagehead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
 .pagehead h1{font-size:16px;font-weight:600;margin:0;color:#25324a}
 .pagehead .spacer{flex:1}
-.pagehead .sub{font-size:12px;color:#6b7688}
 
 /* ---- 流程条组件已移除（见 shell.js） ---- */
 .toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}

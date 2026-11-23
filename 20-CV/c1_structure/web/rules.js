@@ -282,12 +282,12 @@ function loadTplFields(){
     var fs=(sj&&typeof sj==='object'&&!Array.isArray(sj)&&sj.fields)||[];
     var names=fs.map(function(f){return f.name;}).filter(Boolean);
     if(!names.length){
-      mprows.innerHTML='<div class="hint">该规则无固定目标字段（原始透传），不支持入库。请选择固定字段抽取规则。</div>';
+      mprows.innerHTML='<div class="sthint">该规则无固定目标字段（原始透传），不支持入库。请选择固定字段抽取规则。</div>';
       return;
     }
     buildRows(names,null);
   }).catch(function(e){
-    mprows.innerHTML='<div class="hint">规则字段加载失败：'+escHtml(e.message)+'</div>';
+    mprows.innerHTML='<div class="sthint">规则字段加载失败：'+escHtml(e.message)+'</div>';
   });
 }
 function openMap(lt){
