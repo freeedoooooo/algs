@@ -14,18 +14,27 @@ var tindex=document.getElementById('tindex'), tkw=document.getElementById('tkw')
 var frows=document.getElementById('frows'), emsg=document.getElementById('emsg');
 var savebtn=document.getElementById('savebtn'), delbtn=document.getElementById('delbtn');
 var modeSimple=document.getElementById('modeSimple'), modeJson=document.getElementById('modeJson');
+var modeSmart=document.getElementById('modeSmart');
 var jsonsec=document.getElementById('jsonsec'), jsonspec=document.getElementById('jsonspec');
-var simpleSec=document.getElementById('simpleSec'), mode='simple';
+var simpleSec=document.getElementById('simpleSec'), smartSec=document.getElementById('smartSec');
+var smartRows=document.getElementById('smartRows'), smartAdd=document.getElementById('smartAdd');
+var smartScope=document.getElementById('smartScope'), smartPage=document.getElementById('smartPage');
+var smartPrompt=document.getElementById('smartPrompt'), smartModel=document.getElementById('smartModel');
+var mode='simple';
 function setMode(m){
   mode=m;
   modeSimple.className='tab'+(m==='simple'?' on':'');
   modeJson.className='tab'+(m==='json'?' on':'');
+  modeSmart.className='tab'+(m==='smart'?' on':'');
   simpleSec.hidden=(m!=='simple');
   jsonsec.hidden=(m!=='json');
+  smartSec.hidden=(m!=='smart');
   if(m==='simple') emsg.textContent='';
 }
 modeSimple.onclick=function(){setMode('simple');};
 modeJson.onclick=function(){setMode('json');};
+modeSmart.onclick=function(){setMode('smart');};
+smartScope.onchange=function(){smartPage.hidden=(smartScope.value!=='page');};
 var vertoggle=document.getElementById('vertoggle'), verlist=document.getElementById('verlist');
 vertoggle.onclick=function(){
   var open=verlist.hidden;
@@ -66,6 +75,30 @@ function bindTableEvents(){
   if(add) add.onclick=function(){
     tplForm.querySelector('#tk_rows').insertAdjacentHTML('beforeend',tableRow());
     bindTableEvents();
+  };
+}
+function smartRow(name,desc){
+  return '<div class="tplrow">'+
+    '<input class="tin sm_name" placeholder="目标字段名" value="'+
+      escHtml(name||'')+'">'+
+    '<input class="tin sm_desc" placeholder="字段说明（给模型看的提示）" value="'+
+      escHtml(desc||'')+'">'+
+    '<button type="button" class="linkbtn danger sm_del" title="删除该行">×</button>'+
+  '</div>';
+}
+function bindSmartEvents(){
+  var rows=smartRows.querySelectorAll('.tplrow');
+  for(var i=0;i<rows.length;i++){
+    rows[i].querySelector('.sm_del').onclick=function(){
+      if(smartRows.querySelectorAll('.tplrow').length<=1){
+        emsg.textContent='至少保留一个字段'; return;
+      }
+      this.parentNode.remove(); emsg.textContent='';
+    };
+  }
+  smartAdd.onclick=function(){
+    smartRows.insertAdjacentHTML('beforeend',smartRow('',''));
+    bindSmartEvents();
   };
 }
 var TPL={
@@ -126,15 +159,14 @@ var TPL={
   },
   page:{
     render:function(){
-      return '<label class="full">目标字段名'+
-        '<span class="hint" tabindex="0" data-tip="固定行为：每页一条记录，值为该页 plain_text 全文；不支持选列或正则。&#10;需要更细的抽取请选其他模板或直接编辑 JSON。">?</span>'+
-        '<input class="tin" id="pg_target" value="正文"></label>'+
-        '<label class="full checkrow"><input type="checkbox" id="pg_note" checked> 每页一条记录</label>';
+      return '<label class="full"><span class="lblrow">输出字段名'+
+        '<span class="hint" tabindex="0" data-tip="该页正文写入 records 的这个键。&#10;固定行为：取该页 plain_text 全文，每页产出一条记录；不支持选列或正则。">?</span></span>'+
+        '<input class="tin" id="pg_target" value="正文"></label>';
     },
     build:function(){
       var target=tv('pg_target')||'正文';
       return {spec_version:2,
-        records:{strategy:document.getElementById('pg_note').checked?'one_per_page':'row'},
+        records:{strategy:'one_per_page'},
         fields:[{target:target,pipeline:[{op:'page_text'}]}]};
     }
   }
@@ -472,6 +504,9 @@ function openEditor(id){
   cur=id; cands=null; pendingTable=null;
   emsg.textContent=''; frows.innerHTML='';
   setMode('simple'); jsonspec.value='';
+  smartRows.innerHTML=smartRow('',''); bindSmartEvents();
+  smartScope.value='all'; smartPage.value=''; smartPage.hidden=true;
+  smartPrompt.value=''; smartModel.value='';
   tplKind.value=''; renderTplForm();
   refsel.value=''; tindex.value=''; tkw.value='';
   manualMode();
@@ -495,7 +530,19 @@ function openEditor(id){
     ename.value=j.name||''; edesc.value=j.description||'';
     origName=j.name||''; origDesc=j.description||'';
     var mp=j.mapping_json||{};
-    if(mp.spec_version===2){
+    if(mp.spec_version===3){
+      setMode('smart');
+      var sfs=mp.fields||[];
+      smartRows.innerHTML=sfs.length
+        ? sfs.map(function(f){return smartRow(f.target,f.description||'');}).join('')
+        : smartRow('','');
+      bindSmartEvents();
+      smartScope.value=((mp.records||{}).scope)||'all';
+      smartPage.value=((mp.records||{}).page)||'';
+      smartPage.hidden=(smartScope.value!=='page');
+      var sm=mp.smart||{};
+      smartPrompt.value=sm.prompt_template||''; smartModel.value=sm.model||'';
+    }else if(mp.spec_version===2){
       setMode('json'); jsonspec.value=JSON.stringify(mp,null,2);
     }else{
       pendingTable=mp.table||null;
@@ -525,7 +572,30 @@ savebtn.onclick=function(){
   var name=ename.value.trim();
   if(!name){emsg.textContent='规则名不能为空';return;}
   var schema, mapping, transform;
-  if(mode==='json'){
+  if(mode==='smart'){
+    var sfields=[], sseen={}, serr=null;
+    var srows=smartRows.querySelectorAll('.tplrow');
+    for(var si=0;si<srows.length;si++){
+      var sn=srows[si].querySelector('.sm_name').value.trim();
+      var sd=srows[si].querySelector('.sm_desc').value.trim();
+      if(!sn){serr='目标字段名不能为空';break;}
+      if(sseen[sn]){serr='字段名重复：'+sn;break;}
+      sseen[sn]=1; sfields.push({target:sn,description:sd});
+    }
+    if(serr){emsg.textContent=serr;return;}
+    if(!sfields.length){emsg.textContent='至少需要一个目标字段';return;}
+    var srec={strategy:'all',scope:smartScope.value};
+    if(smartScope.value==='page'){
+      if(!smartPage.value){emsg.textContent='请填写页码';return;}
+      srec.page=Number(smartPage.value);
+    }
+    var sconf={};
+    if(smartPrompt.value.trim()) sconf.prompt_template=smartPrompt.value.trim();
+    if(smartModel.value.trim()) sconf.model=smartModel.value.trim();
+    mapping={spec_version:3,records:srec,fields:sfields,smart:sconf};
+    schema={fields:sfields.map(function(f){return {name:f.target,type:'text'};})};
+    transform=null;
+  }else if(mode==='json'){
     var parsed;
     try{ parsed=JSON.parse(jsonspec.value); }
     catch(e){ emsg.textContent='JSON 语法错误：'+e.message; return; }

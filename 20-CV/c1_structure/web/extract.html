@@ -72,11 +72,12 @@
         <div class="modetabs">
           <button type="button" class="tab on" id="modeSimple">简单抽取</button>
           <button type="button" class="tab" id="modeJson">复杂抽取</button>
+          <button type="button" class="tab" id="modeSmart">智能抽取</button>
         </div>
       </div>
       <div class="fsec" id="jsonsec" hidden>
         <label class="flab" for="tplKind">场景模板
-          <span class="hint" tabindex="0" data-tip="选择常见场景，填写业务参数后点“生成配置”。&#10;生成结果会覆盖下方 JSON，可在文本框里继续微调。&#10;模板不覆盖的场景请直接编辑 JSON。">?</span>
+          <span class="hint" tabindex="0" data-tip="选择常见场景，填写业务参数后点“生成配置”。&#10;复杂抽取可复用 C1 提取规则资产：把已有规则版本的 mapping_json 复制到下方配置框微调。&#10;保存会生成新的不可变版本，旧任务不受影响。">?</span>
         </label>
         <select class="tin" id="tplKind">
           <option value="">自定义</option>
@@ -89,6 +90,33 @@
           <span class="hint" tabindex="0" data-tip="生成配置会覆盖下方 JSON；生成后仍可手动微调。&#10;JSON 须为对象且含 spec_version=2；保存生成新版本，旧任务不受影响。&#10;此处不做算子级校验，写错算子会在抽取时报错。">?</span></span>
         <div class="flab" style="margin-top:10px">配置预览</div>
         <textarea class="tin jsonarea" id="jsonspec" spellcheck="false" placeholder='{"spec_version":2,"tables":[],"records":{"strategy":"row"},"fields":[]}'></textarea>
+      </div>
+      <div class="fsec" id="smartSec" hidden>
+        <div class="tplform smartform">
+          <div class="full tplhead"><span>目标字段名</span><span>字段说明</span><span></span></div>
+          <div class="full" id="smartRows"></div>
+          <button type="button" class="btn mini ghost" id="smartAdd">＋添加字段</button>
+        </div>
+        <div class="fsec" style="margin-top:12px">
+          <label class="flab" for="smartScope">抽取范围</label>
+          <select class="tin" id="smartScope">
+            <option value="all">全文档</option>
+            <option value="page">指定页</option>
+          </select>
+          <input type="number" class="tin" id="smartPage" min="1" placeholder="页码" hidden style="margin-top:6px;width:120px">
+        </div>
+        <div class="fsec">
+          <label class="flab" for="smartPrompt">提示词模板
+            <span class="hint" tabindex="0" data-tip="可选。留空使用内置提示词。&#10;要求模型对每个字段返回 target / value / evidence，evidence 必须取自解析结果原文。">?</span>
+          </label>
+          <textarea class="tin jsonarea" id="smartPrompt" spellcheck="false" placeholder="留空使用内置提示词；高级用户可自定义"></textarea>
+        </div>
+        <div class="fsec">
+          <label class="flab" for="smartModel">模型名
+            <span class="hint" tabindex="0" data-tip="可选。留空使用服务端 C1_LLM_MODEL。&#10;端点与密钥只在服务端环境变量配置，不写入规则版本。">?</span>
+          </label>
+          <input type="text" class="tin" id="smartModel" placeholder="留空使用服务端默认模型" style="max-width:360px">
+        </div>
       </div>
       <div id="simpleSec">
       <div class="fsec">

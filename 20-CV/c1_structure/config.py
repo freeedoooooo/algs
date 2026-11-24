@@ -45,6 +45,17 @@ PDF_DPI = 110
 LOW_SCORE = 0.8
 MIN_TEXT_LAYER_CHARS = 50
 
+# ---- 智能抽取（OpenAI 兼容端点；凭据只从环境变量读取，不进代码/DB/日志）----
+# 例：C1_LLM_BASE_URL=https://api.example.com/v1 C1_LLM_API_KEY=... C1_LLM_MODEL=gpt-4o-mini
+LLM_BASE_URL = os.getenv('C1_LLM_BASE_URL', '').rstrip('/')
+LLM_API_KEY = os.getenv('C1_LLM_API_KEY', '')
+LLM_MODEL = os.getenv('C1_LLM_MODEL', '')
+LLM_TIMEOUT = float(os.getenv('C1_LLM_TIMEOUT', '60'))
+LLM_TEMPERATURE = float(os.getenv('C1_LLM_TEMPERATURE', '0'))
+# 智能抽取占位开关：默认开启，固定返回 field1=智能抽取结果1；
+# 设 C1_SMART_STUB=0 恢复真实模型调用。
+SMART_STUB = os.getenv('C1_SMART_STUB', '1') == '1'
+
 # ---- 输入类型 ----
 IMAGE_EXTS = ('.png', '.jpg', '.jpeg', '.bmp', '.webp', '.tif', '.tiff')
 PDF_EXTS = ('.pdf',)

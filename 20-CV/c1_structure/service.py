@@ -288,9 +288,11 @@ def task_batch(paths, params=None, log=None, task_ctx=None):
 
 def run_extract(task_id, task_file_ids=None, force=False,
                   rule_version_id=None):
-    """执行抽取：逐文件回读 parse.json → collect.build → save_records
-    （字段映射+逐格溯源），无 OCR、同步毫秒级。规则解析优先级：本次显式
-    选择 > 任务已绑定 > 默认「原始透传」；抽取成功即把版本回写任务头。
+    """执行抽取：逐文件回读 parse.json → 规则分流 → save_records。
+    spec_version 缺省/1/2 走 collect.build（纯函数、毫秒级）；
+    =3 走 smart_extract（大模型，需端点配置，证据回锚）。
+    规则解析优先级：本次显式选择 > 任务已绑定 > 默认「原始透传」；
+    抽取成功即把版本回写任务头。
 
     仅处理 to_extract 文件；已有暂存记录的文件（to_review/to_load）
     须 force=true——重抽按 task_file 先删后插，
@@ -326,7 +328,11 @@ def run_extract(task_id, task_file_ids=None, force=False,
         if doc is None:
             raise errors.Conflict(
                 '文件「{}」缺少解析产物，请重新解析'.format(f['name']))
-        recs = collect.build(doc, tpl)
+        spec = tpl.get('mapping_json') or {}
+        if spec.get('spec_version') == 3:
+            recs = _load('smart_extract').build_smart(doc, tpl)
+        else:
+            recs = collect.build(doc, tpl)
         content.save_records(collect.build_records_doc(
             doc, recs, task_id=task_id,
             task_file_id=f['task_file_id'], file_id=f['file_id'],
