@@ -1,0 +1,62 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', padding: '54px 60px 44px 60px', flexDirection: 'column' }}>
+  <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#1A3358' }}>分三段推进，每段独立见效</Text>
+    <Text style={{ fontSize: 14, color: '#8C929A' }}>演进路线</Text>
+  </Box>
+  <Box style={{ height: 1, background: '#D3DBE5', marginTop: 12 }} />
+
+  <Box style={{ marginTop: 18, background: '#EAF0F7', borderRadius: 8, padding: '12px 20px' }}>
+    <Text style={{ fontSize: 19, color: '#26282E', lineHeight: 1.5 }}>
+      按<span style={{ color: '#234B80', fontWeight: 'bold' }}>审计可信 / 资产沉淀 / 四步独立 / 标准适配</span>四方面推进，每段都能独立交付价值，不相互阻塞，务实起步。
+    </Text>
+  </Box>
+
+  <Box style={{ marginTop: 22, flex: 1, flexDirection: 'row', gap: 20 }}>
+    <Box style={{ flex: 1, background: '#F7F9FC', borderRadius: 12, padding: '22px 20px', borderTop: '5px solid #1A3358', flexDirection: 'column' }}>
+      <Box style={{ width: 52, height: 52, borderRadius: 26, background: '#1A3358', alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#FFFFFF' }}>1</Text>
+      </Box>
+      <Text style={{ marginTop: 16, fontSize: 24, fontWeight: 'bold', color: '#1A3358' }}>打底座</Text>
+      <Text style={{ marginTop: 6, fontSize: 15, color: '#4A73A8' }}>标准适配 + 抽取能力</Text>
+      <Box style={{ marginTop: 14, height: 1, background: '#D3DBE5' }} />
+      <Text style={{ marginTop: 14, fontSize: 17, color: '#3A404A', lineHeight: 1.6 }}>统一标准数据结构，抽取能力就位。抽取层已用真实附件解析结果验证，字段血缘不退化。</Text>
+      <Box style={{ marginTop: 12, borderRadius: 6, background: '#E4ECF6', alignSelf: 'flex-start', padding: '4px 10px' }}>
+        <Text style={{ fontSize: 13, color: '#234B80' }}>已验证</Text>
+      </Box>
+    </Box>
+
+    <Box style={{ flex: 1, background: '#F7F9FC', borderRadius: 12, padding: '22px 20px', borderTop: '5px solid #4A73A8', flexDirection: 'column' }}>
+      <Box style={{ width: 52, height: 52, borderRadius: 26, background: '#4A73A8', alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#FFFFFF' }}>2</Text>
+      </Box>
+      <Text style={{ marginTop: 16, fontSize: 24, fontWeight: 'bold', color: '#1A3358' }}>强可信</Text>
+      <Text style={{ marginTop: 6, fontSize: 15, color: '#4A73A8' }}>字段级双向血缘 + 框架计算延伸</Text>
+      <Box style={{ marginTop: 14, height: 1, background: '#D3DBE5' }} />
+      <Text style={{ marginTop: 14, fontSize: 17, color: '#3A404A', lineHeight: 1.6 }}>从附件到业务表、再到框架计算结果，形成审计可信闭环，把用户最能感知的价值做实。</Text>
+      <Box style={{ marginTop: 12, borderRadius: 6, background: '#E4ECF6', alignSelf: 'flex-start', padding: '4px 10px' }}>
+        <Text style={{ fontSize: 13, color: '#234B80' }}>主打价值</Text>
+      </Box>
+    </Box>
+
+    <Box style={{ flex: 1, background: '#F7F9FC', borderRadius: 12, padding: '22px 20px', borderTop: '5px solid #82A1C4', flexDirection: 'column' }}>
+      <Box style={{ width: 52, height: 52, borderRadius: 26, background: '#82A1C4', alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#FFFFFF' }}>3</Text>
+      </Box>
+      <Text style={{ marginTop: 16, fontSize: 24, fontWeight: 'bold', color: '#1A3358' }}>促沉淀</Text>
+      <Text style={{ marginTop: 6, fontSize: 15, color: '#4A73A8' }}>老资产复用 + 跨平台可移植</Text>
+      <Box style={{ marginTop: 14, height: 1, background: '#D3DBE5' }} />
+      <Text style={{ marginTop: 14, fontSize: 17, color: '#3A404A', lineHeight: 1.6 }}>既有配置沉淀为可复用资产，跨项目、跨平台可移植；接入与业务系统无关，视需要再推进。</Text>
+      <Box style={{ marginTop: 12, borderRadius: 6, background: '#E4ECF6', alignSelf: 'flex-start', padding: '4px 10px' }}>
+        <Text style={{ fontSize: 13, color: '#234B80' }}>自然延展</Text>
+      </Box>
+    </Box>
+  </Box>
+
+  <Box style={{ marginTop: 16, background: '#1A3358', borderRadius: 8, padding: '11px 18px' }}>
+    <Text style={{ fontSize: 17, color: '#FFFFFF', fontWeight: 'bold' }}>所以呢：三段各自交付价值、不相互阻塞——先把 C1 这套做扎实，不铺大摊子。</Text>
+  </Box>
+  <Box style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+    <Text style={{ fontSize: 14, color: '#8C929A' }}>C1-结构化产品升级</Text>
+    <Text style={{ fontSize: 14, color: '#8C929A' }}>10</Text>
+  </Box>
+</Slide>

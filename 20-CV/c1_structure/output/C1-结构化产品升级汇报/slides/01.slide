@@ -1,0 +1,49 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', position: 'relative', padding: 0 }}>
+  <Box style={{ position: 'absolute', left: 0, top: 0, width: 720, height: 720, background: '#234B80' }} />
+  <Box style={{ position: 'absolute', left: 720, top: 0, width: 4, height: 720, background: '#1A3358' }} />
+  <Box style={{ position: 'absolute', left: 70, top: 150, width: 600 }}>
+    <Text style={{ fontSize: 18, color: '#82A1C4', letterSpacing: 2 }}>结构化能力 · 产品化演进</Text>
+  </Box>
+  <Box style={{ position: 'absolute', left: 70, top: 205, width: 610 }}>
+    <Text style={{ fontSize: 56, fontWeight: 'bold', color: '#FFFFFF', lineHeight: 1.2 }}>C1-结构化产品升级</Text>
+  </Box>
+  <Box style={{ position: 'absolute', left: 70, top: 305, width: 40, height: 2, background: '#82A1C4' }} />
+  <Box style={{ position: 'absolute', left: 70, top: 340, width: 600 }}>
+    <Text style={{ fontSize: 23, color: '#FFFFFF', lineHeight: 1.5 }}>审计可信 · 资产复用 · 简单易用 · 标准适配</Text>
+  </Box>
+  <Box style={{ position: 'absolute', left: 70, top: 415, width: 560 }}>
+    <Text style={{ fontSize: 17, color: '#C9D6E5', lineHeight: 1.75 }}>把已经验证好用的结构化能力做一次设计升级，先把 C1 这套做扎实。</Text>
+  </Box>
+  <Box style={{ position: 'absolute', left: 70, top: 628 }}>
+    <Text style={{ fontSize: 15, color: '#82A1C4' }}>2026.11  ｜  业务汇报</Text>
+  </Box>
+
+  <Box style={{ position: 'absolute', left: 796, top: 148, width: 384, height: 84, background: '#EAF0F7', borderRadius: 10, justifyContent: 'center', paddingLeft: 24 }}>
+    <Text style={{ fontSize: 21, fontWeight: 'bold', color: '#1A3358' }}>附件解析</Text>
+    <Text style={{ fontSize: 14, color: '#4A73A8', marginTop: 4 }}>底层面向多方案</Text>
+  </Box>
+  <Box style={{ position: 'absolute', left: 976, top: 238, width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}>
+    <FAIcon name='arrow-down' style={{ fill: '#82A1C4', width: 22, height: 22 }} />
+  </Box>
+  <Box style={{ position: 'absolute', left: 796, top: 268, width: 384, height: 84, background: '#D8E3F0', borderRadius: 10, justifyContent: 'center', paddingLeft: 24 }}>
+    <Text style={{ fontSize: 21, fontWeight: 'bold', color: '#1A3358' }}>统一标准适配</Text>
+    <Text style={{ fontSize: 14, color: '#4A73A8', marginTop: 4 }}>统一标准的数据结构</Text>
+  </Box>
+  <Box style={{ position: 'absolute', left: 976, top: 358, width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}>
+    <FAIcon name='arrow-down' style={{ fill: '#82A1C4', width: 22, height: 22 }} />
+  </Box>
+  <Box style={{ position: 'absolute', left: 796, top: 388, width: 384, height: 84, background: '#C2D2E5', borderRadius: 10, justifyContent: 'center', paddingLeft: 24 }}>
+    <Text style={{ fontSize: 21, fontWeight: 'bold', color: '#1A3358' }}>抽取 · 复用既有配置</Text>
+    <Text style={{ fontSize: 14, color: '#234B80', marginTop: 4 }}>算法不变，资产可复用</Text>
+  </Box>
+  <Box style={{ position: 'absolute', left: 976, top: 478, width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}>
+    <FAIcon name='arrow-down' style={{ fill: '#82A1C4', width: 22, height: 22 }} />
+  </Box>
+  <Box style={{ position: 'absolute', left: 796, top: 508, width: 384, height: 84, background: '#A9BFD8', borderRadius: 10, justifyContent: 'center', paddingLeft: 24 }}>
+    <Text style={{ fontSize: 21, fontWeight: 'bold', color: '#FFFFFF' }}>校验 · 入库</Text>
+    <Text style={{ fontSize: 14, color: '#FFFFFF', marginTop: 4, opacity: 0.9 }}>四步独立，可追溯</Text>
+  </Box>
+  <Box style={{ position: 'absolute', left: 1180, top: 628 }}>
+    <Text style={{ fontSize: 14, color: '#8C929A' }}>01</Text>
+  </Box>
+</Slide>

@@ -1,0 +1,53 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', padding: '54px 60px 44px 60px', flexDirection: 'column' }}>
+  <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#1A3358' }}>标准适配之后，接入方与业务系统无关</Text>
+    <Text style={{ fontSize: 14, color: '#8C929A', fontWeight: 'bold' }}>顺带延展</Text>
+  </Box>
+  <Box style={{ height: 1, background: '#D3DBE5', marginTop: 12 }} />
+
+  <Box style={{ marginTop: 22, background: '#EAF0F7', borderRadius: 8, padding: '14px 20px' }}>
+    <Text style={{ fontSize: 20, color: '#26282E', lineHeight: 1.55 }}>
+      因为做了标准适配、抽取能力成了可复用资产，升级后的结构化<span style={{ color: '#234B80', fontWeight: 'bold' }}>做到了与接入的业务系统无关</span>——业务系统怎么变，结构化能力不用跟着改。
+    </Text>
+  </Box>
+
+  <Box style={{ marginTop: 22, height: 260, borderRadius: 12, background: '#F7F9FC', padding: '18px 20px', flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+    <svg width={1000} height={220} viewBox='0 0 1000 220'>
+      <defs>
+        <marker id='ar' markerWidth='10' markerHeight='10' refX='8' refY='3' orient='auto'>
+          <path d='M0,0 L0,6 L8,3 z' fill='#82A1C4' />
+        </marker>
+      </defs>
+      <rect x='330' y='60' width='340' height='100' rx='12' fill='#234B80' />
+      <text x='500' y='102' fontFamily='Microsoft YaHei' fontSize='22' fontWeight='bold' fill='#FFFFFF' textAnchor='middle'>结构化能力底座</text>
+      <text x='500' y='132' fontFamily='Microsoft YaHei' fontSize='14' fill='#D3E0EF' textAnchor='middle'>标准适配 + 可复用抽取资产</text>
+
+      <rect x='30' y='70' width='215' height='80' rx='10' fill='#EAF0F7' stroke='#82A1C4' strokeWidth='2' />
+      <text x='137' y='104' fontFamily='Microsoft YaHei' fontSize='18' fontWeight='bold' fill='#1A3358' textAnchor='middle'>业务系统 A</text>
+      <text x='137' y='128' fontFamily='Microsoft YaHei' fontSize='13' fill='#4A73A8' textAnchor='middle'>接入方</text>
+
+      <rect x='755' y='70' width='215' height='80' rx='10' fill='#EAF0F7' stroke='#82A1C4' strokeWidth='2' />
+      <text x='862' y='104' fontFamily='Microsoft YaHei' fontSize='18' fontWeight='bold' fill='#1A3358' textAnchor='middle'>业务系统 B</text>
+      <text x='862' y='128' fontFamily='Microsoft YaHei' fontSize='13' fill='#4A73A8' textAnchor='middle'>接入方</text>
+
+      <line x1='330' y1='100' x2='249' y2='100' stroke='#82A1C4' strokeWidth='2' strokeDasharray='6 4' markerEnd='url(#ar)' />
+      <line x1='670' y1='100' x2='751' y2='100' stroke='#82A1C4' strokeWidth='2' strokeDasharray='6 4' markerEnd='url(#ar)' />
+
+      <text x='500' y='190' fontFamily='Microsoft YaHei' fontSize='16' fill='#4A73A8' textAnchor='middle'>可接入、互不绑定 —— 这是标准适配顺带带来的能力</text>
+    </svg>
+  </Box>
+
+  <Box style={{ marginTop: 20, background: '#F4F7FB', borderRadius: 8, padding: '14px 20px', borderLeft: '3px solid #8C929A' }}>
+    <Text style={{ fontSize: 16, color: '#5F6670', lineHeight: 1.6 }}>
+      本次先把 C1 这套做扎实，不主张统一全公司、不与外部比大比全。此处点到为止，若需要进一步展开再单独讨论。
+    </Text>
+  </Box>
+
+  <Box style={{ marginTop: 16, background: '#1A3358', borderRadius: 8, padding: '11px 18px' }}>
+    <Text style={{ fontSize: 17, color: '#FFFFFF', fontWeight: 'bold' }}>所以呢：升级后确实做到了接入与业务系统无关，但这是延展，不是本次要铺开的目标。</Text>
+  </Box>
+  <Box style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+    <Text style={{ fontSize: 14, color: '#8C929A' }}>C1-结构化产品升级</Text>
+    <Text style={{ fontSize: 14, color: '#8C929A' }}>09</Text>
+  </Box>
+</Slide>

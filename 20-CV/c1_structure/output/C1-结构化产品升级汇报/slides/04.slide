@@ -1,0 +1,78 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', padding: '54px 60px 44px 60px', flexDirection: 'column' }}>
+  <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+      <Box style={{ width: 40, height: 40, borderRadius: 20, background: '#1A3358', alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#FFFFFF' }}>1</Text>
+      </Box>
+      <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#1A3358' }}>每个值都能追到原件，也能查到去向</Text>
+    </Box>
+    <Text style={{ fontSize: 14, color: '#234B80', fontWeight: 'bold' }}>主打 · 审计可信</Text>
+  </Box>
+  <Box style={{ height: 1, background: '#D3DBE5', marginTop: 12 }} />
+
+  <Box style={{ marginTop: 18, height: 250, borderRadius: 12, background: '#F7F9FC', padding: '18px 20px', flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+    <svg width={1120} height={215} viewBox='0 0 1120 215'>
+      <defs>
+        <marker id='ar' markerWidth='10' markerHeight='10' refX='8' refY='3' orient='auto'>
+          <path d='M0,0 L0,6 L8,3 z' fill='#234B80' />
+        </marker>
+        <marker id='ablue' markerWidth='10' markerHeight='10' refX='8' refY='3' orient='auto'>
+          <path d='M0,0 L0,6 L8,3 z' fill='#4A73A8' />
+        </marker>
+      </defs>
+      <rect x='10' y='55' width='185' height='95' rx='10' fill='#1A3358' />
+      <text x='102' y='95' fontFamily='Microsoft YaHei' fontSize='19' fontWeight='bold' fill='#FFFFFF' textAnchor='middle'>附件单元格</text>
+      <text x='102' y='120' fontFamily='Microsoft YaHei' fontSize='13' fill='#C9D6E5' textAnchor='middle'>页码 · 坐标 · 原文</text>
+
+      <rect x='250' y='55' width='185' height='95' rx='10' fill='#234B80' />
+      <text x='342' y='95' fontFamily='Microsoft YaHei' fontSize='19' fontWeight='bold' fill='#FFFFFF' textAnchor='middle'>标准解析数据</text>
+      <text x='342' y='120' fontFamily='Microsoft YaHei' fontSize='13' fill='#D3E0EF' textAnchor='middle'>字段锚点</text>
+
+      <rect x='490' y='55' width='185' height='95' rx='10' fill='#4A73A8' />
+      <text x='582' y='95' fontFamily='Microsoft YaHei' fontSize='19' fontWeight='bold' fill='#FFFFFF' textAnchor='middle'>抽取记录</text>
+      <text x='582' y='120' fontFamily='Microsoft YaHei' fontSize='13' fill='#E4ECF6' textAnchor='middle'>字段级值</text>
+
+      <rect x='730' y='55' width='175' height='95' rx='10' fill='#82A1C4' />
+      <text x='817' y='95' fontFamily='Microsoft YaHei' fontSize='19' fontWeight='bold' fill='#FFFFFF' textAnchor='middle'>暂存记录</text>
+      <text x='817' y='120' fontFamily='Microsoft YaHei' fontSize='13' fill='#FFFFFF' textAnchor='middle'>改值留痕</text>
+
+      <rect x='955' y='55' width='155' height='95' rx='10' fill='#234B80' />
+      <text x='1032' y='95' fontFamily='Microsoft YaHei' fontSize='19' fontWeight='bold' fill='#FFFFFF' textAnchor='middle'>业务表列</text>
+      <text x='1032' y='120' fontFamily='Microsoft YaHei' fontSize='13' fill='#D3E0EF' textAnchor='middle'>最终落点</text>
+
+      <line x1='198' y1='102' x2='246' y2='102' stroke='#234B80' strokeWidth='2.5' markerEnd='url(#ar)' />
+      <line x1='438' y1='102' x2='486' y2='102' stroke='#234B80' strokeWidth='2.5' markerEnd='url(#ar)' />
+      <line x1='678' y1='102' x2='726' y2='102' stroke='#4A73A8' strokeWidth='2.5' markerEnd='url(#ar)' />
+      <line x1='908' y1='102' x2='951' y2='102' stroke='#82A1C4' strokeWidth='2.5' markerEnd='url(#ar)' />
+
+      <path d='M1032,158 L1032,185 L102,185 L102,158' fill='none' stroke='#4A73A8' strokeWidth='2' strokeDasharray='6 4' markerEnd='url(#ablue)' />
+      <text x='567' y='178' fontFamily='Microsoft YaHei' fontSize='14' fill='#4A73A8' textAnchor='middle'>反查：从业务表的数，一路回到原始单元格</text>
+
+      <path d='M102,158 L102,205 L1032,205 L1032,158' fill='none' stroke='#82A1C4' strokeWidth='1.6' strokeDasharray='5 4' />
+      <text x='567' y='201' fontFamily='Microsoft YaHei' fontSize='13' fill='#8C929A' textAnchor='middle'>正查：从附件单元格，看被哪些表引用</text>
+    </svg>
+  </Box>
+
+  <Box style={{ marginTop: 20, flexDirection: 'row', gap: 18 }}>
+    <Box style={{ flex: 1, background: '#F4F7FB', borderRadius: 10, padding: '16px 18px' }}>
+      <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#234B80' }}>粒度到字段级</Text>
+      <Text style={{ marginTop: 6, fontSize: 17, color: '#3A404A', lineHeight: 1.5 }}>每个值都带原件位置与原文，能对回附件。</Text>
+    </Box>
+    <Box style={{ flex: 1, background: '#F4F7FB', borderRadius: 10, padding: '16px 18px' }}>
+      <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#234B80' }}>方向是双向</Text>
+      <Text style={{ marginTop: 6, fontSize: 17, color: '#3A404A', lineHeight: 1.5 }}>数值能回溯到单元格，附件也能正查去向。</Text>
+    </Box>
+    <Box style={{ flex: 1, background: '#F4F7FB', borderRadius: 10, padding: '16px 18px' }}>
+      <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#234B80' }}>链路完整</Text>
+      <Text style={{ marginTop: 6, fontSize: 17, color: '#3A404A', lineHeight: 1.5 }}>附件到业务表，中间环节不断链。</Text>
+    </Box>
+  </Box>
+
+  <Box style={{ marginTop: 16, background: '#1A3358', borderRadius: 8, padding: '11px 18px' }}>
+    <Text style={{ fontSize: 17, color: '#FFFFFF', fontWeight: 'bold' }}>所以呢：对数不用再翻原件，点一下看到这个数从哪来、用到了哪去。</Text>
+  </Box>
+  <Box style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+    <Text style={{ fontSize: 14, color: '#8C929A' }}>C1-结构化产品升级</Text>
+    <Text style={{ fontSize: 14, color: '#8C929A' }}>04</Text>
+  </Box>
+</Slide>

@@ -1,0 +1,64 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', padding: '54px 60px 44px 60px', flexDirection: 'column' }}>
+  <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#1A3358' }}>收益来自设计改进，请拍板优先级</Text>
+    <Text style={{ fontSize: 14, color: '#8C929A' }}>收尾</Text>
+  </Box>
+  <Box style={{ height: 1, background: '#D3DBE5', marginTop: 12 }} />
+
+  <Box style={{ marginTop: 18, background: '#EAF0F7', borderRadius: 8, padding: '12px 20px' }}>
+    <Text style={{ fontSize: 19, color: '#26282E', lineHeight: 1.5 }}>
+      本次是<span style={{ color: '#234B80', fontWeight: 'bold' }}>设计改进</span>，抽取算法没变、技术能力没有更新——价值来自让能力更好用、资产能沉淀、结果可追溯。
+    </Text>
+  </Box>
+
+  <Box style={{ marginTop: 20, flexDirection: 'row', gap: 18 }}>
+    <Box style={{ flex: 1, background: '#F4F7FB', borderRadius: 10, padding: '16px 18px', borderTop: '3px solid #1A3358' }}>
+      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#1A3358' }}>审计可信</Text>
+      <Text style={{ marginTop: 6, fontSize: 16, color: '#3A404A', lineHeight: 1.5 }}>从附件到框架计算结果全链路可追溯，对数不用翻原件。</Text>
+    </Box>
+    <Box style={{ flex: 1, background: '#F4F7FB', borderRadius: 10, padding: '16px 18px', borderTop: '3px solid #234B80' }}>
+      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#1A3358' }}>资产沉淀</Text>
+      <Text style={{ marginTop: 6, fontSize: 16, color: '#3A404A', lineHeight: 1.5 }}>老配置真正可复用，跨项目、跨平台可移植。</Text>
+    </Box>
+    <Box style={{ flex: 1, background: '#F4F7FB', borderRadius: 10, padding: '16px 18px', borderTop: '3px solid #4A73A8' }}>
+      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#1A3358' }}>简单易用</Text>
+      <Text style={{ marginTop: 6, fontSize: 16, color: '#3A404A', lineHeight: 1.5 }}>四步独立、上手快，先调试、后建表。</Text>
+    </Box>
+    <Box style={{ flex: 1, background: '#F4F7FB', borderRadius: 10, padding: '16px 18px', borderTop: '3px solid #82A1C4' }}>
+      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#1A3358' }}>标准适配</Text>
+      <Text style={{ marginTop: 6, fontSize: 16, color: '#3A404A', lineHeight: 1.5 }}>解析面向多方案，接入方与业务系统无关。</Text>
+    </Box>
+  </Box>
+
+  <Box style={{ marginTop: 26, background: '#F7F9FC', borderRadius: 12, padding: '20px 24px', flex: 1 }}>
+    <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#1A3358' }}>请领导拍板</Text>
+    <Box style={{ marginTop: 14, flexDirection: 'column', gap: 12 }}>
+      <Box style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
+        <Box style={{ width: 30, height: 30, borderRadius: 15, background: '#234B80', alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#FFFFFF' }}>1</Text>
+        </Box>
+        <Text style={{ fontSize: 18, color: '#26282E' }}>资源与优先级：是否按「打底座 → 强可信 → 促沉淀」顺序投入？</Text>
+      </Box>
+      <Box style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
+        <Box style={{ width: 30, height: 30, borderRadius: 15, background: '#234B80', alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#FFFFFF' }}>2</Text>
+        </Box>
+        <Text style={{ fontSize: 18, color: '#26282E' }}>对外主打：是否以「审计可信」作为这次升级的核心说法？</Text>
+      </Box>
+      <Box style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
+        <Box style={{ width: 30, height: 30, borderRadius: 15, background: '#234B80', alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#FFFFFF' }}>3</Text>
+        </Box>
+        <Text style={{ fontSize: 18, color: '#26282E' }}>分期节奏：每段独立见效，是否认可务实起步、不铺大摊子？</Text>
+      </Box>
+    </Box>
+  </Box>
+
+  <Box style={{ marginTop: 16, background: '#1A3358', borderRadius: 8, padding: '12px 18px', alignItems: 'center' }}>
+    <Text style={{ fontSize: 20, color: '#FFFFFF', fontWeight: 'bold' }}>先把 C1 这套做扎实，再把可复用的能力沉淀下来。</Text>
+  </Box>
+  <Box style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+    <Text style={{ fontSize: 14, color: '#8C929A' }}>C1-结构化产品升级</Text>
+    <Text style={{ fontSize: 14, color: '#8C929A' }}>11</Text>
+  </Box>
+</Slide>

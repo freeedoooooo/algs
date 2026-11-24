@@ -1,0 +1,69 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', padding: '54px 60px 44px 60px', flexDirection: 'column' }}>
+  <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#1A3358' }}>现状四处卡点，都指向同一个设计根</Text>
+    <Text style={{ fontSize: 14, color: '#8C929A' }}>为什么升级</Text>
+  </Box>
+  <Box style={{ height: 1, background: '#D3DBE5', marginTop: 12 }} />
+
+  <Box style={{ marginTop: 20, flex: 1, flexDirection: 'row', gap: 22 }}>
+    <Box style={{ width: 540, flexDirection: 'column' }}>
+      <Box style={{ background: '#5F6670', borderRadius: 8, padding: '10px 18px' }}>
+        <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#FFFFFF' }}>现状：环环相扣、各处重复</Text>
+      </Box>
+      <Box style={{ marginTop: 14, flexDirection: 'column', gap: 12 }}>
+        <Box style={{ background: '#F4F4F4', borderRadius: 8, padding: '12px 16px', borderLeft: '3px solid #8C929A' }}>
+          <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#26282E' }}>解析效果吃不到模型进步</Text>
+          <Text style={{ marginTop: 4, fontSize: 16, color: '#5F6670', lineHeight: 1.4 }}>绑定单一技术栈，难以面向多方案择优。</Text>
+        </Box>
+        <Box style={{ background: '#F4F4F4', borderRadius: 8, padding: '12px 16px', borderLeft: '3px solid #8C929A' }}>
+          <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#26282E' }}>配置抽取依赖物理表</Text>
+          <Text style={{ marginTop: 4, fontSize: 16, color: '#5F6670', lineHeight: 1.4 }}>要先有元数据物理表，才能配抽取规则。</Text>
+        </Box>
+        <Box style={{ background: '#F4F4F4', borderRadius: 8, padding: '12px 16px', borderLeft: '3px solid #8C929A' }}>
+          <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#26282E' }}>经验留不下来</Text>
+          <Text style={{ marginTop: 4, fontSize: 16, color: '#5F6670', lineHeight: 1.4 }}>配置散在各项目，换项目就要重配。</Text>
+        </Box>
+        <Box style={{ background: '#F4F4F4', borderRadius: 8, padding: '12px 16px', borderLeft: '3px solid #8C929A' }}>
+          <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#26282E' }}>对数靠人工翻原件</Text>
+          <Text style={{ marginTop: 4, fontSize: 16, color: '#5F6670', lineHeight: 1.4 }}>数值对不上附件，来源说不清。</Text>
+        </Box>
+      </Box>
+    </Box>
+
+    <Box style={{ width: 56, justifyContent: 'center', alignItems: 'center' }}>
+      <FAIcon name='arrow-right' style={{ fill: '#234B80', width: 44, height: 44 }} />
+    </Box>
+
+    <Box style={{ flex: 1, flexDirection: 'column' }}>
+      <Box style={{ background: '#234B80', borderRadius: 8, padding: '10px 18px' }}>
+        <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#FFFFFF' }}>升级后：标准统一、四步独立</Text>
+      </Box>
+      <Box style={{ marginTop: 14, flexDirection: 'column', gap: 12 }}>
+        <Box style={{ background: '#EAF0F7', borderRadius: 8, padding: '12px 16px', borderLeft: '3px solid #234B80' }}>
+          <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#1A3358' }}>解析面向多方案</Text>
+          <Text style={{ marginTop: 4, fontSize: 16, color: '#3A404A', lineHeight: 1.4 }}>标准适配层统一结构，吃住更强模型。</Text>
+        </Box>
+        <Box style={{ background: '#EAF0F7', borderRadius: 8, padding: '12px 16px', borderLeft: '3px solid #234B80' }}>
+          <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#1A3358' }}>配置与物理表解耦</Text>
+          <Text style={{ marginTop: 4, fontSize: 16, color: '#3A404A', lineHeight: 1.4 }}>先解析、先抽取、先调参，验证后再建表。</Text>
+        </Box>
+        <Box style={{ background: '#EAF0F7', borderRadius: 8, padding: '12px 16px', borderLeft: '3px solid #234B80' }}>
+          <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#1A3358' }}>配置沉淀为资产</Text>
+          <Text style={{ marginTop: 4, fontSize: 16, color: '#3A404A', lineHeight: 1.4 }}>算法没变，资产可复用、跨平台可移植。</Text>
+        </Box>
+        <Box style={{ background: '#EAF0F7', borderRadius: 8, padding: '12px 16px', borderLeft: '3px solid #234B80' }}>
+          <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#1A3358' }}>全链路可追溯</Text>
+          <Text style={{ marginTop: 4, fontSize: 16, color: '#3A404A', lineHeight: 1.4 }}>附件到业务表，字段级双向血缘。</Text>
+        </Box>
+      </Box>
+    </Box>
+  </Box>
+
+  <Box style={{ marginTop: 14, background: '#EAF0F7', borderRadius: 8, padding: '10px 18px' }}>
+    <Text style={{ fontSize: 17, color: '#234B80', fontWeight: 'bold' }}>所以呢：四处卡点同一个根——缺统一标准与解耦设计，这次升级正对这个根。</Text>
+  </Box>
+  <Box style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+    <Text style={{ fontSize: 14, color: '#8C929A' }}>C1-结构化产品升级</Text>
+    <Text style={{ fontSize: 14, color: '#8C929A' }}>03</Text>
+  </Box>
+</Slide>

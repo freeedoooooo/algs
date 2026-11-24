@@ -1,0 +1,65 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', padding: '54px 60px 44px 60px', flexDirection: 'column' }}>
+  <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#1A3358' }}>一次设计升级，换来四方面提升</Text>
+    <Text style={{ fontSize: 14, color: '#8C929A' }}>汇报摘要</Text>
+  </Box>
+  <Box style={{ height: 1, background: '#D3DBE5', marginTop: 12 }} />
+
+  <Box style={{ marginTop: 18, background: '#EAF0F7', borderRadius: 10, padding: '14px 20px', borderLeft: '4px solid #234B80' }}>
+    <Text style={{ fontSize: 19, color: '#26282E', lineHeight: 1.5 }}>
+      把已验证好用的结构化能力做一次设计升级：<span style={{ color: '#234B80', fontWeight: 'bold' }}>结果可追溯、资产可复用、上手更容易、解析面向多方案</span>。抽取算法没变，既有配置全部保留。
+    </Text>
+  </Box>
+
+  <Box style={{ marginTop: 20, height: 330, flexDirection: 'row', gap: 20 }}>
+    <Box style={{ width: 440, background: '#1A3358', borderRadius: 12, padding: '22px 24px', flexDirection: 'column' }}>
+      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <Box style={{ width: 42, height: 42, borderRadius: 21, background: '#FFFFFF', alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 21, fontWeight: 'bold', color: '#1A3358' }}>1</Text>
+        </Box>
+        <Text style={{ fontSize: 25, fontWeight: 'bold', color: '#FFFFFF' }}>审计可信</Text>
+      </Box>
+      <Box style={{ marginTop: 10, borderRadius: 6, background: '#234B80', alignSelf: 'flex-start', padding: '4px 12px' }}>
+        <Text style={{ fontSize: 13, color: '#FFFFFF' }}>本次主打</Text>
+      </Box>
+      <Text style={{ marginTop: 14, fontSize: 18, color: '#E4ECF6', lineHeight: 1.55 }}>
+        字段级双向血缘，从附件到业务表、再到框架计算结果，点一下看到全链路。
+      </Text>
+      <Text style={{ marginTop: 12, fontSize: 15, color: '#A9BFD8', lineHeight: 1.45 }}>
+        对数不必再翻原件，结论可复核、可举证。
+      </Text>
+    </Box>
+
+    <Box style={{ flex: 1, flexDirection: 'column', gap: 14 }}>
+      <Box style={{ flex: 1, background: '#F4F7FB', borderRadius: 12, padding: '14px 20px', borderTop: '3px solid #4A73A8' }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <Text style={{ fontSize: 21, fontWeight: 'bold', color: '#4A73A8' }}>2</Text>
+          <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#1A3358' }}>资产沉淀</Text>
+        </Box>
+        <Text style={{ marginTop: 8, fontSize: 17, color: '#3A404A', lineHeight: 1.45 }}>算法没变，复用既有大量配置；改进设计让资产真正可复用、易沉淀。</Text>
+      </Box>
+      <Box style={{ flex: 1, background: '#F4F7FB', borderRadius: 12, padding: '14px 20px', borderTop: '3px solid #4A73A8' }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <Text style={{ fontSize: 21, fontWeight: 'bold', color: '#4A73A8' }}>3</Text>
+          <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#1A3358' }}>四步独立</Text>
+        </Box>
+        <Text style={{ marginTop: 8, fontSize: 17, color: '#3A404A', lineHeight: 1.45 }}>解析、抽取、校验、入库各自独立、不互相阻塞，新人也能快速上手。</Text>
+      </Box>
+      <Box style={{ flex: 1, background: '#F4F7FB', borderRadius: 12, padding: '14px 20px', borderTop: '3px solid #4A73A8' }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <Text style={{ fontSize: 21, fontWeight: 'bold', color: '#4A73A8' }}>4</Text>
+          <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#1A3358' }}>标准适配</Text>
+        </Box>
+        <Text style={{ marginTop: 8, fontSize: 17, color: '#3A404A', lineHeight: 1.45 }}>统一标准数据结构，解析面向多方案；配置抽取不再依赖物理表。</Text>
+      </Box>
+    </Box>
+  </Box>
+
+  <Box style={{ marginTop: 14, background: '#EAF0F7', borderRadius: 8, padding: '10px 18px' }}>
+    <Text style={{ fontSize: 17, color: '#234B80', fontWeight: 'bold' }}>所以呢：先把 C1 这套做扎实；接入方与业务系统无关，作为顺带延展。</Text>
+  </Box>
+  <Box style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+    <Text style={{ fontSize: 14, color: '#8C929A' }}>C1-结构化产品升级</Text>
+    <Text style={{ fontSize: 14, color: '#8C929A' }}>02</Text>
+  </Box>
+</Slide>

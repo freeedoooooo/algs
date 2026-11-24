@@ -1,0 +1,78 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', padding: '54px 60px 44px 60px', flexDirection: 'column' }}>
+  <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+      <Box style={{ width: 40, height: 40, borderRadius: 20, background: '#1A3358', alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#FFFFFF' }}>4</Text>
+      </Box>
+      <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#1A3358' }}>统一标准适配，让解析面向多方案</Text>
+    </Box>
+    <Text style={{ fontSize: 14, color: '#234B80', fontWeight: 'bold' }}>标准适配</Text>
+  </Box>
+  <Box style={{ height: 1, background: '#D3DBE5', marginTop: 12 }} />
+
+  <Box style={{ marginTop: 18, background: '#EAF0F7', borderRadius: 8, padding: '12px 20px' }}>
+    <Text style={{ fontSize: 19, color: '#26282E', lineHeight: 1.5 }}>
+      有一层<span style={{ color: '#234B80', fontWeight: 'bold' }}>统一的适配层</span>，把附件解析成规范的数据结构。解析层面向多方案、依托不断进步的更强模型，底层变化由适配层统一，上层业务不受影响。
+    </Text>
+  </Box>
+
+  <Box style={{ marginTop: 18, height: 210, borderRadius: 12, background: '#F7F9FC', padding: '14px 20px', flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+    <svg width={1110} height={182} viewBox='0 0 1110 182'>
+      <defs>
+        <marker id='ar' markerWidth='10' markerHeight='10' refX='8' refY='3' orient='auto'>
+          <path d='M0,0 L0,6 L8,3 z' fill='#234B80' />
+        </marker>
+      </defs>
+      <rect x='20' y='20' width='205' height='44' rx='8' fill='#8C929A' />
+      <text x='122' y='48' fontFamily='Microsoft YaHei' fontSize='17' fill='#FFFFFF' textAnchor='middle'>解析方案 A</text>
+      <rect x='20' y='70' width='205' height='44' rx='8' fill='#5F6670' />
+      <text x='122' y='98' fontFamily='Microsoft YaHei' fontSize='17' fill='#FFFFFF' textAnchor='middle'>更强模型 / 方案 B</text>
+      <rect x='20' y='120' width='205' height='44' rx='8' fill='#8C929A' />
+      <text x='122' y='148' fontFamily='Microsoft YaHei' fontSize='17' fill='#FFFFFF' textAnchor='middle'>后续新方案</text>
+
+      <rect x='300' y='40' width='265' height='104' rx='10' fill='#234B80' />
+      <text x='432' y='82' fontFamily='Microsoft YaHei' fontSize='20' fontWeight='bold' fill='#FFFFFF' textAnchor='middle'>统一标准适配层</text>
+      <text x='432' y='110' fontFamily='Microsoft YaHei' fontSize='14' fill='#D3E0EF' textAnchor='middle'>统一标准解析数据结构</text>
+
+      <rect x='640' y='40' width='205' height='104' rx='10' fill='#4A73A8' />
+      <text x='742' y='82' fontFamily='Microsoft YaHei' fontSize='19' fontWeight='bold' fill='#FFFFFF' textAnchor='middle'>抽取</text>
+      <text x='742' y='110' fontFamily='Microsoft YaHei' fontSize='13' fill='#E4ECF6' textAnchor='middle'>只认标准数据</text>
+
+      <rect x='865' y='40' width='225' height='104' rx='10' fill='#82A1C4' />
+      <text x='977' y='82' fontFamily='Microsoft YaHei' fontSize='19' fontWeight='bold' fill='#FFFFFF' textAnchor='middle'>校验 · 入库</text>
+      <text x='977' y='110' fontFamily='Microsoft YaHei' fontSize='13' fill='#FFFFFF' textAnchor='middle'>不感知底层</text>
+
+      <line x1='228' y1='42' x2='296' y2='80' stroke='#5F6670' strokeWidth='2' markerEnd='url(#ar)' />
+      <line x1='228' y1='92' x2='296' y2='92' stroke='#5F6670' strokeWidth='2' markerEnd='url(#ar)' />
+      <line x1='228' y1='142' x2='296' y2='104' stroke='#5F6670' strokeWidth='2' markerEnd='url(#ar)' />
+      <line x1='567' y1='92' x2='636' y2='92' stroke='#234B80' strokeWidth='2.5' markerEnd='url(#ar)' />
+      <line x1='847' y1='92' x2='861' y2='92' stroke='#4A73A8' strokeWidth='2.5' markerEnd='url(#ar)' />
+
+      <text x='432' y='168' fontFamily='Microsoft YaHei' fontSize='14' fill='#4A73A8' textAnchor='middle'>解析与抽取互不影响，每层输入输出单一明确</text>
+      <text x='800' y='168' fontFamily='Microsoft YaHei' fontSize='14' fill='#4A73A8' textAnchor='middle'>换底层不动上层业务</text>
+    </svg>
+  </Box>
+
+  <Box style={{ marginTop: 18, flexDirection: 'row', gap: 18 }}>
+    <Box style={{ flex: 1, background: '#F4F7FB', borderRadius: 10, padding: '16px 18px' }}>
+      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#234B80' }}>吃住模型进步</Text>
+      <Text style={{ marginTop: 6, fontSize: 16, color: '#3A404A', lineHeight: 1.5 }}>模型更强、方案更多，结构化效果跟着涨。</Text>
+    </Box>
+    <Box style={{ flex: 1, background: '#F4F7FB', borderRadius: 10, padding: '16px 18px' }}>
+      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#234B80' }}>配置与建表分开</Text>
+      <Text style={{ marginTop: 6, fontSize: 16, color: '#3A404A', lineHeight: 1.5 }}>抽取配置不再依赖物理表，先验证后建表。</Text>
+    </Box>
+    <Box style={{ flex: 1, background: '#F4F7FB', borderRadius: 10, padding: '16px 18px' }}>
+      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#234B80' }}>业务不受影响</Text>
+      <Text style={{ marginTop: 6, fontSize: 16, color: '#3A404A', lineHeight: 1.5 }}>底层再怎么变，上层应用不用跟着改。</Text>
+    </Box>
+  </Box>
+
+  <Box style={{ marginTop: 16, background: '#1A3358', borderRadius: 8, padding: '11px 18px' }}>
+    <Text style={{ fontSize: 17, color: '#FFFFFF', fontWeight: 'bold' }}>所以呢：模型在进步、方案在变多，结构化能力跟着涨，业务不用跟着改。</Text>
+  </Box>
+  <Box style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+    <Text style={{ fontSize: 14, color: '#8C929A' }}>C1-结构化产品升级</Text>
+    <Text style={{ fontSize: 14, color: '#8C929A' }}>08</Text>
+  </Box>
+</Slide>

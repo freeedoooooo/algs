@@ -1,0 +1,77 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', padding: '54px 60px 44px 60px', flexDirection: 'column' }}>
+  <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+      <Box style={{ width: 40, height: 40, borderRadius: 20, background: '#1A3358', alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#FFFFFF' }}>1</Text>
+      </Box>
+      <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#1A3358' }}>血缘延伸到框架计算结果，审计链才算闭合</Text>
+    </Box>
+    <Text style={{ fontSize: 14, color: '#234B80', fontWeight: 'bold' }}>审计可信</Text>
+  </Box>
+  <Box style={{ height: 1, background: '#D3DBE5', marginTop: 12 }} />
+
+  <Box style={{ marginTop: 18, background: '#EAF0F7', borderRadius: 8, padding: '12px 20px' }}>
+    <Text style={{ fontSize: 19, color: '#26282E', lineHeight: 1.5 }}>
+      依托现有数据准备的计算能力/数据图谱，把血缘从业务表再往后延伸到<span style={{ color: '#234B80', fontWeight: 'bold' }}>框架计算结果</span>——附件 → 业务表 → 框架计算结果，一条链打到底。
+    </Text>
+  </Box>
+
+  <Box style={{ marginTop: 18, height: 210, borderRadius: 12, background: '#F7F9FC', padding: '14px 20px', flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+    <svg width={1110} height={180} viewBox='0 0 1110 180'>
+      <defs>
+        <marker id='a1' markerWidth='10' markerHeight='10' refX='8' refY='3' orient='auto'>
+          <path d='M0,0 L0,6 L8,3 z' fill='#234B80' />
+        </marker>
+        <marker id='a2' markerWidth='10' markerHeight='10' refX='8' refY='3' orient='auto'>
+          <path d='M0,0 L0,6 L8,3 z' fill='#4A73A8' />
+        </marker>
+      </defs>
+      <rect x='30' y='35' width='280' height='92' rx='10' fill='#1A3358' />
+      <text x='170' y='74' fontFamily='Microsoft YaHei' fontSize='21' fontWeight='bold' fill='#FFFFFF' textAnchor='middle'>原始附件</text>
+      <text x='170' y='100' fontFamily='Microsoft YaHei' fontSize='13' fill='#C9D6E5' textAnchor='middle'>凭证 · 合同 · 票据</text>
+
+      <rect x='415' y='35' width='280' height='92' rx='10' fill='#234B80' />
+      <text x='555' y='74' fontFamily='Microsoft YaHei' fontSize='21' fontWeight='bold' fill='#FFFFFF' textAnchor='middle'>业务表</text>
+      <text x='555' y='100' fontFamily='Microsoft YaHei' fontSize='13' fill='#D3E0EF' textAnchor='middle'>结构化数据落库</text>
+
+      <rect x='800' y='35' width='280' height='92' rx='10' fill='#4A73A8' />
+      <text x='940' y='74' fontFamily='Microsoft YaHei' fontSize='21' fontWeight='bold' fill='#FFFFFF' textAnchor='middle'>框架计算结果</text>
+      <text x='940' y='100' fontFamily='Microsoft YaHei' fontSize='13' fill='#E4ECF6' textAnchor='middle'>依托现有计算能力</text>
+
+      <line x1='312' y1='80' x2='411' y2='80' stroke='#234B80' strokeWidth='3' markerEnd='url(#a1)' />
+      <line x1='697' y1='80' x2='796' y2='80' stroke='#4A73A8' strokeWidth='3' markerEnd='url(#a1)' />
+
+      <line x1='940' y1='132' x2='940' y2='155' stroke='#4A73A8' strokeWidth='1.8' />
+      <line x1='555' y1='132' x2='555' y2='155' stroke='#4A73A8' strokeWidth='1.8' />
+      <line x1='555' y1='155' x2='940' y2='155' stroke='#4A73A8' strokeWidth='1.8' strokeDasharray='6 4' markerEnd='url(#a2)' />
+      <text x='747' y='151' fontFamily='Microsoft YaHei' fontSize='13' fill='#4A73A8' textAnchor='middle'>逐层下钻 · 审计举证</text>
+
+      <line x1='170' y1='132' x2='170' y2='172' stroke='#82A1C4' strokeWidth='1.6' />
+      <line x1='940' y1='166' x2='170' y2='166' stroke='#82A1C4' strokeWidth='1.6' strokeDasharray='5 4' />
+      <text x='555' y='178' fontFamily='Microsoft YaHei' fontSize='13' fill='#8C929A' textAnchor='middle'>字段级血缘贯穿全程，每个计算结果可追到原始凭证</text>
+    </svg>
+  </Box>
+
+  <Box style={{ marginTop: 18, flexDirection: 'row', gap: 18 }}>
+    <Box style={{ flex: 1, background: '#F4F7FB', borderRadius: 10, padding: '16px 18px' }}>
+      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#234B80' }}>审计可信</Text>
+      <Text style={{ marginTop: 6, fontSize: 16, color: '#3A404A', lineHeight: 1.5 }}>结果可逐层下钻到凭证，可复核、可举证。</Text>
+    </Box>
+    <Box style={{ flex: 1, background: '#F4F7FB', borderRadius: 10, padding: '16px 18px' }}>
+      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#234B80' }}>用户价值</Text>
+      <Text style={{ marginTop: 6, fontSize: 16, color: '#3A404A', lineHeight: 1.5 }}>从人肉对数、说不清来源，到点一下看全链路。</Text>
+    </Box>
+    <Box style={{ flex: 1, background: '#F4F7FB', borderRadius: 10, padding: '16px 18px' }}>
+      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#234B80' }}>合规风控</Text>
+      <Text style={{ marginTop: 6, fontSize: 16, color: '#3A404A', lineHeight: 1.5 }}>结果可追溯即过程可审计，满足内控留痕。</Text>
+    </Box>
+  </Box>
+
+  <Box style={{ marginTop: 16, background: '#1A3358', borderRadius: 8, padding: '11px 18px' }}>
+    <Text style={{ fontSize: 17, color: '#FFFFFF', fontWeight: 'bold' }}>所以呢：三个环节一条链，结论可举证，这是用户端最能感知的价值。</Text>
+  </Box>
+  <Box style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+    <Text style={{ fontSize: 14, color: '#8C929A' }}>C1-结构化产品升级</Text>
+    <Text style={{ fontSize: 14, color: '#8C929A' }}>05</Text>
+  </Box>
+</Slide>

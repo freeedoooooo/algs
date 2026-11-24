@@ -1,0 +1,78 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', padding: '54px 60px 44px 60px', flexDirection: 'column' }}>
+  <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+      <Box style={{ width: 40, height: 40, borderRadius: 20, background: '#1A3358', alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#FFFFFF' }}>3</Text>
+      </Box>
+      <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#1A3358' }}>四步各自独立，一步卡住不停全线</Text>
+    </Box>
+    <Text style={{ fontSize: 14, color: '#234B80', fontWeight: 'bold' }}>四步独立</Text>
+  </Box>
+  <Box style={{ height: 1, background: '#D3DBE5', marginTop: 12 }} />
+
+  <Box style={{ marginTop: 18, background: '#EAF0F7', borderRadius: 8, padding: '12px 20px' }}>
+    <Text style={{ fontSize: 19, color: '#26282E', lineHeight: 1.5 }}>
+      解析、抽取、校验、入库<span style={{ color: '#234B80', fontWeight: 'bold' }}>各自独立、可分阶段推进</span>，每一步的输入输出清楚单一；下一步不阻塞上一步。
+    </Text>
+  </Box>
+
+  <Box style={{ marginTop: 18, height: 200, borderRadius: 12, background: '#F7F9FC', padding: '14px 20px', flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+    <svg width={1110} height={172} viewBox='0 0 1110 172'>
+      <defs>
+        <marker id='ar' markerWidth='10' markerHeight='10' refX='8' refY='3' orient='auto'>
+          <path d='M0,0 L0,6 L8,3 z' fill='#234B80' />
+        </marker>
+      </defs>
+      <rect x='20' y='30' width='235' height='86' rx='10' fill='#1A3358' />
+      <text x='137' y='66' fontFamily='Microsoft YaHei' fontSize='15' fill='#C9D6E5' textAnchor='middle'>STEP 1</text>
+      <text x='137' y='94' fontFamily='Microsoft YaHei' fontSize='21' fontWeight='bold' fill='#FFFFFF' textAnchor='middle'>解析</text>
+
+      <rect x='305' y='30' width='235' height='86' rx='10' fill='#234B80' />
+      <text x='422' y='66' fontFamily='Microsoft YaHei' fontSize='15' fill='#D3E0EF' textAnchor='middle'>STEP 2</text>
+      <text x='422' y='94' fontFamily='Microsoft YaHei' fontSize='21' fontWeight='bold' fill='#FFFFFF' textAnchor='middle'>抽取调试</text>
+
+      <rect x='590' y='30' width='235' height='86' rx='10' fill='#4A73A8' />
+      <text x='707' y='66' fontFamily='Microsoft YaHei' fontSize='15' fill='#E4ECF6' textAnchor='middle'>STEP 3</text>
+      <text x='707' y='94' fontFamily='Microsoft YaHei' fontSize='21' fontWeight='bold' fill='#FFFFFF' textAnchor='middle'>校验确认</text>
+
+      <rect x='875' y='30' width='215' height='86' rx='10' fill='#82A1C4' />
+      <text x='982' y='66' fontFamily='Microsoft YaHei' fontSize='15' fill='#FFFFFF' textAnchor='middle'>STEP 4</text>
+      <text x='982' y='94' fontFamily='Microsoft YaHei' fontSize='21' fontWeight='bold' fill='#FFFFFF' textAnchor='middle'>入库</text>
+
+      <line x1='257' y1='73' x2='301' y2='73' stroke='#234B80' strokeWidth='2.5' markerEnd='url(#ar)' />
+      <line x1='542' y1='73' x2='586' y2='73' stroke='#234B80' strokeWidth='2.5' markerEnd='url(#ar)' />
+      <line x1='827' y1='73' x2='871' y2='73' stroke='#4A73A8' strokeWidth='2.5' markerEnd='url(#ar)' />
+
+      <text x='137' y='145' fontFamily='Microsoft YaHei' fontSize='13' fill='#5F6670' textAnchor='middle'>标准解析数据</text>
+      <text x='422' y='145' fontFamily='Microsoft YaHei' fontSize='13' fill='#234B80' textAnchor='middle'>不依赖物理表</text>
+      <text x='707' y='145' fontFamily='Microsoft YaHei' fontSize='13' fill='#4A73A8' textAnchor='middle'>改值留痕</text>
+      <text x='982' y='145' fontFamily='Microsoft YaHei' fontSize='13' fill='#4A73A8' textAnchor='middle'>验证后再设计表</text>
+
+      <path d='M315,130 L315,158 L530,158 L530,130' fill='none' stroke='#82A1C4' strokeWidth='1.6' strokeDasharray='5 4' />
+      <text x='422' y='168' fontFamily='Microsoft YaHei' fontSize='12' fill='#8C929A' textAnchor='middle'>参数不对，回到抽取重调</text>
+    </svg>
+  </Box>
+
+  <Box style={{ marginTop: 18, flexDirection: 'row', gap: 18 }}>
+    <Box style={{ flex: 1, background: '#F4F7FB', borderRadius: 10, padding: '16px 18px' }}>
+      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#234B80' }}>先调试，后建表</Text>
+      <Text style={{ marginTop: 6, fontSize: 16, color: '#3A404A', lineHeight: 1.5 }}>先解析、抽取、调参，验证通过再设计物理表。</Text>
+    </Box>
+    <Box style={{ flex: 1, background: '#F4F7FB', borderRadius: 10, padding: '16px 18px' }}>
+      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#234B80' }}>上手门槛低</Text>
+      <Text style={{ marginTop: 6, fontSize: 16, color: '#3A404A', lineHeight: 1.5 }}>过程清楚、步骤简单，新人也能快速接手。</Text>
+    </Box>
+    <Box style={{ flex: 1, background: '#F4F7FB', borderRadius: 10, padding: '16px 18px' }}>
+      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#234B80' }}>可并行可回滚</Text>
+      <Text style={{ marginTop: 6, fontSize: 16, color: '#3A404A', lineHeight: 1.5 }}>一步卡住不影响其它步骤，各段独立推进。</Text>
+    </Box>
+  </Box>
+
+  <Box style={{ marginTop: 16, background: '#1A3358', borderRadius: 8, padding: '11px 18px' }}>
+    <Text style={{ fontSize: 17, color: '#FFFFFF', fontWeight: 'bold' }}>所以呢：调试的主动权交还给用户，不必先建表才能干活。</Text>
+  </Box>
+  <Box style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+    <Text style={{ fontSize: 14, color: '#8C929A' }}>C1-结构化产品升级</Text>
+    <Text style={{ fontSize: 14, color: '#8C929A' }}>07</Text>
+  </Box>
+</Slide>
