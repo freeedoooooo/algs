@@ -15,12 +15,9 @@ from c1_structure.store import errors
 
 
 class _Catalog:
-    def get_task(self, task_id):
-        return {'id': task_id, 'state': 'to_extract',
-                'rule': {'version_id': 1},
-                'files': [{'task_file_id': 10, 'file_id': 5,
-                           'name': 'a.pdf', 'state': 'to_extract',
-                           'records_n': 0}]}
+    def get_file(self, file_id):
+        return {'id': file_id, 'state': 'to_extract',
+                'rule_version_id': 1, 'name': 'a.pdf'}
 
     def get_rule_version(self, version_id=None):
         return {'id': version_id or 1, 'rule_id': 1, 'version': 1,
@@ -29,13 +26,10 @@ class _Catalog:
                     {'target': '信用代码', 'description': '18 位码'}]},
                 'transform_json': {}}
 
-    def set_task_rule(self, task_id, version_id):
+    def set_rule(self, file_id, version_id):
         pass
 
-    def set_task_file_state(self, task_file_id, state):
-        pass
-
-    def rollup_task_state(self, task_id):
+    def set_state(self, file_id, state, error=None):
         pass
 
 
