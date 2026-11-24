@@ -1,0 +1,43 @@
+/* web/sources.css — 资料页：文件名可点 + 流程追踪弹窗 */
+.nm.pipe-link{cursor:pointer;color:#2563eb}
+.nm.pipe-link:hover{text-decoration:underline}
+.pipe-panel{width:min(920px,96vw)}
+.pipe-switch{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:9px 12px;background:#f7f9fd;border:1px solid #e2e7f0;
+  border-radius:8px;margin-bottom:12px;font-size:12px;color:#6b7688}
+.pipe-switch select{font:inherit;font-size:12px;padding:3px 8px;
+  border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#1f2738}
+.pipe-flow{display:flex;gap:6px;margin-bottom:14px}
+.pipe-node{flex:1;min-width:0;text-align:left;padding:10px 12px;border-radius:8px;
+  border:1px solid #e2e7f0;background:#fff;cursor:pointer;transition:.15s}
+.pipe-node:hover{border-color:#2563eb;background:#f7f9fd}
+.pipe-node.on{border-color:#2563eb;box-shadow:0 0 0 1px #2563eb inset}
+.pipe-node .pn-t{font-size:13px;font-weight:600;color:#25324a;
+  display:flex;align-items:center;gap:6px}
+.pipe-node .pn-d{font-size:11px;color:#8a94a6;margin-top:4px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pipe-node .dot{width:7px;height:7px;border-radius:50%;background:#cbd5e1;flex:none}
+.pipe-node.done .dot{background:#177245}
+.pipe-node.doing .dot{background:#2563eb}
+.pipe-node.fail .dot{background:#b42318}
+.pipe-detail{display:flex;gap:12px;min-height:200px;
+  border:1px solid #e2e7f0;border-radius:8px;overflow:hidden}
+.pipe-list{flex:0 0 240px;border-right:1px solid #e2e7f0;background:#f7f9fd;
+  max-height:360px;overflow:auto}
+.pipe-list .pl-item{padding:9px 12px;font-size:12px;color:#3b4a63;cursor:pointer;
+  border-bottom:1px solid #eef2f8}
+.pipe-list .pl-item:hover{background:#eef4fc}
+.pipe-list .pl-item.on{background:#e7f0ff;color:#2563eb;font-weight:500}
+.pipe-view{flex:1;min-width:0;padding:12px 14px;max-height:360px;overflow:auto;
+  font-size:12px;color:#3b4a63;line-height:1.7}
+.pipe-view h4{margin:0 0 8px;font-size:13px;color:#25324a}
+.pipe-view .kv{margin:2px 0}
+.pipe-view .kv b{color:#6b7688;font-weight:400;display:inline-block;min-width:74px}
+.pipe-view code{word-break:break-all}
+.pipe-view .empty{padding:30px 10px}
+/* 解析节点：左侧解析报告、右侧 parse.json 并排 */
+.parse-pair{display:flex;gap:12px;padding:14px}
+.parse-card{flex:1;min-width:0;padding:12px 14px;border:1px solid #e2e7f0;
+  border-radius:8px;background:#fff}
+.parse-card h4{margin:0 0 6px;font-size:13px;color:#25324a}
+.parse-card .linkbtn{margin-top:6px}

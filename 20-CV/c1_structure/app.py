@@ -158,13 +158,20 @@ def files_db(path: str, request: Request):
 
 
 @app.get('/srcfiles/{file_id:int}')
-def srcfiles_db(file_id: int, request: Request):
+def srcfiles_db(file_id: int, request: Request, download: int = 0):
     """/srcfiles/<file_id>：原件字节（c1_doc_file.content）。
-    用 id 不用名字——同名不同字节是两行，名字会撞。"""
+    用 id 不用名字——同名不同字节是两行，名字会撞。
+    ?download=1 时加 Content-Disposition: attachment 触发下载。"""
     s = _load('store.catalog').get_file_content(file_id)
     if s is None:
         return PlainTextResponse('404 Not Found', status_code=404)
     mime = _load('store.artifact').mime_of(s['name'])
+    if download:
+        from urllib.parse import quote
+        resp = _blob_response(s['data'], mime, s['sha'], request)
+        resp.headers['Content-Disposition'] = (
+            "attachment; filename*=UTF-8''" + quote(s['name']))
+        return resp
     return _blob_response(s['data'], mime, s['sha'], request)
 
 
@@ -403,6 +410,16 @@ async def api_sources_add(request: Request):
 def api_sources_del(file_id: int):
     _load('store.catalog').delete_file(file_id)
     return {'ok': True}
+
+
+@app.get('/api/sources/{file_id}/pipeline')
+def api_sources_pipeline(file_id: int):
+    """资料文件流程追踪：按 file_id 聚合关联 task 的四节点状态与产物入口。"""
+    f = _load('store.catalog').get_file(file_id)
+    if f is None:
+        raise store_errors.NotFound('资料文件不存在')
+    return {'ok': True, 'file': f,
+            'tasks': _load('store.catalog').file_pipeline(file_id)}
 
 
 @app.get('/api/extract-rules')

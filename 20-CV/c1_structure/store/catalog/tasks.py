@@ -205,6 +205,75 @@ def task_file_ids(task_id):
         conn.close()
 
 
+def file_pipeline(file_id):
+    """资料文件流程追踪：按 file_id 反查关联 task，逐 task 聚合四节点摘要。
+    一个文件可被多次解析→多条链路，按 task id 倒序（最近在前）。"""
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                _HEAD_SQL
+                + ' WHERE r.id IN (SELECT task_id FROM c1_task_file'
+                + ' WHERE file_id=%s) ORDER BY r.id DESC', (file_id,))
+            heads = _rows(cur)
+            if not heads:
+                return []
+            tids = [h['id'] for h in heads]
+            ph = ','.join(['%s'] * len(tids))
+            cur.execute(
+                ' SELECT tf.task_id, tf.id, tf.state,'
+                ' tf.file_id, s.name,'
+                ' (SELECT COUNT(*) FROM c1_staging_record sr'
+                '   WHERE sr.task_file_id=tf.id) AS records_n'
+                ' FROM c1_task_file tf'
+                ' JOIN c1_doc_file s ON s.id=tf.file_id'
+                ' WHERE tf.task_id IN ({}) ORDER BY tf.task_id, tf.id'.format(ph),
+                tids)
+            files = _rows(cur)
+            cur.execute(
+                ' SELECT task_file_id, name, kind FROM c1_parse_artifact'
+                ' WHERE task_file_id IN ('
+                '   SELECT id FROM c1_task_file WHERE task_id IN ({}))'
+                "  AND name IN ('对照报告.html','parse.json')"
+                ' ORDER BY task_file_id, name'.format(ph), tids)
+            arts = _rows(cur)
+            cur.execute(
+                ' SELECT task_id, action, COUNT(*) AS n FROM c1_load_log'
+                ' WHERE task_id IN ({}) GROUP BY task_id, action'.format(ph),
+                tids)
+            logs = _rows(cur)
+            cur.execute(
+                ' SELECT sr.task_file_id, sr.review_state, COUNT(*) AS n'
+                ' FROM c1_staging_record sr'
+                ' WHERE sr.task_file_id IN ('
+                '   SELECT id FROM c1_task_file WHERE task_id IN ({}))'
+                ' GROUP BY sr.task_file_id, sr.review_state'.format(ph), tids)
+            reviews = _rows(cur)
+    finally:
+        conn.close()
+    by_file, by_art, by_log, by_review = {}, {}, {}, {}
+    for f in files:
+        by_file.setdefault(f['task_id'], []).append(_file_row(f))
+    for a in arts:
+        by_art.setdefault(a['task_file_id'], []).append(a['name'])
+    for l in logs:
+        by_log.setdefault(l['task_id'], {})[l['action']] = l['n']
+    for r in reviews:
+        by_review.setdefault(r['task_file_id'], {})[r['review_state']] = r['n']
+    out = []
+    for h in heads:
+        tf = (by_file.get(h['id']) or [{}])[0]
+        doc = _mk_doc(h, by_file.get(h['id'], []))
+        out.append({
+            'task': doc,
+            'task_file_id': tf.get('task_file_id'),
+            'parse_artifacts': by_art.get(tf.get('task_file_id'), []),
+            'review_counts': by_review.get(tf.get('task_file_id'), {}),
+            'load_actions': by_log.get(h['id'], {}),
+        })
+    return out
+
+
 # ---- c1_load_quarantine ----
 
 def add_quarantine(task_id, task_file_id, record_index, stage, reason, payload):

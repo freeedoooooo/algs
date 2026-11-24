@@ -21,7 +21,7 @@ from .rules import (list_rules, get_rule_version, get_rule,
 from .tasks import (create_task, set_task_state, set_task_rule,
                     add_task_file, clear_quarantine,
                     set_task_file_state, rollup_task_state, get_task,
-                    list_tasks, task_file_ids,
+                    list_tasks, task_file_ids, file_pipeline,
                     add_quarantine, list_quarantine)
 from .load import (list_datasources, get_datasource, create_datasource,
                    update_datasource, delete_datasource,
