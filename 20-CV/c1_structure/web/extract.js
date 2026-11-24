@@ -13,6 +13,146 @@ var tblsel=document.getElementById('tblsel'), tmanual=document.getElementById('t
 var tindex=document.getElementById('tindex'), tkw=document.getElementById('tkw');
 var frows=document.getElementById('frows'), emsg=document.getElementById('emsg');
 var savebtn=document.getElementById('savebtn'), delbtn=document.getElementById('delbtn');
+var modeSimple=document.getElementById('modeSimple'), modeJson=document.getElementById('modeJson');
+var jsonsec=document.getElementById('jsonsec'), jsonspec=document.getElementById('jsonspec');
+var simpleSec=document.getElementById('simpleSec'), mode='simple';
+function setMode(m){
+  mode=m;
+  modeSimple.className='tab'+(m==='simple'?' on':'');
+  modeJson.className='tab'+(m==='json'?' on':'');
+  simpleSec.hidden=(m!=='simple');
+  jsonsec.hidden=(m!=='json');
+  if(m==='simple') emsg.textContent='';
+}
+modeSimple.onclick=function(){setMode('simple');};
+modeJson.onclick=function(){setMode('json');};
+var vertoggle=document.getElementById('vertoggle'), verlist=document.getElementById('verlist');
+vertoggle.onclick=function(){
+  var open=verlist.hidden;
+  verlist.hidden=!open;
+  vertoggle.textContent=open?'收起':'展开';
+};
+
+/* ---- 复杂抽取：场景模板 → 生成 mapping_json（可继续手动微调） ---- */
+var tplKind=document.getElementById('tplKind'), tplForm=document.getElementById('tplForm');
+var genJson=document.getElementById('genJson');
+function tv(id){var e=document.getElementById(id);return e?e.value.trim():'';}
+function colSel(mode,raw){
+  if(mode==='index') return {index:Number(raw||0)};
+  if(mode==='exact') return {name:raw};
+  return {header_contains:raw};
+}
+function tableRow(){
+  return '<div class="tplrow">'+
+    '<input class="tin tk_col" placeholder="原始列名 / 列序号">'+
+    '<input class="tin tk_name" placeholder="目标字段名">'+
+    '<select class="tin tk_type" title="字段类型">'+
+      '<option value="text">文本</option><option value="amount">金额</option>'+
+    '</select>'+
+    '<button type="button" class="linkbtn danger tk_del" title="删除该行">×</button>'+
+  '</div>';
+}
+function bindTableEvents(){
+  var rows=tplForm.querySelectorAll('#tk_rows .tplrow');
+  for(var i=0;i<rows.length;i++){
+    rows[i].querySelector('.tk_del').onclick=function(){
+      if(tplForm.querySelectorAll('#tk_rows .tplrow').length<=1){
+        emsg.textContent='至少保留一个普通字段行'; return;
+      }
+      this.parentNode.remove(); emsg.textContent='';
+    };
+  }
+  var add=tplForm.querySelector('#tk_add');
+  if(add) add.onclick=function(){
+    tplForm.querySelector('#tk_rows').insertAdjacentHTML('beforeend',tableRow());
+    bindTableEvents();
+  };
+}
+var TPL={
+  table:{
+    render:function(){
+      return '<label>表头关键词<input class="tin" id="tk_table" placeholder="留空则取第一张表"></label>'+
+        '<label>列匹配方式<select class="tin" id="tk_mode">'+
+        '<option value="contains">表头包含</option><option value="exact">表头原名</option>'+
+        '<option value="index">列序号</option></select></label>'+
+        '<div class="full tplhead"><span>原始列名</span><span>目标字段名</span>'+
+        '<span>类型<span class="hint" tabindex="0" data-tip="金额：自动追加 regex 与 number，去逗号并转数值。&#10;文本：只取原格文本。">?</span></span><span></span></div>'+
+        '<div class="full" id="tk_rows">'+tableRow()+tableRow()+'</div>'+
+        '<button type="button" class="btn mini ghost" id="tk_add">＋添加字段</button>';
+    },
+    build:function(){
+      var mode=tv('tk_mode')||'contains', fields=[];
+      var rows=tplForm.querySelectorAll('#tk_rows .tplrow');
+      for(var i=0;i<rows.length;i++){
+        var n=rows[i].querySelector('.tk_name').value.trim();
+        var c=rows[i].querySelector('.tk_col').value.trim();
+        if(!n||!c) continue;
+        var pipe=[{op:'cell',source:'main',column:colSel(mode,c)}];
+        if(rows[i].querySelector('.tk_type').value==='amount'){
+          pipe.push({op:'regex',pattern:'-?[\\d,]+\\.\\d{2}'});
+          pipe.push({op:'number',strip:','});
+        }
+        fields.push({target:n,pipeline:pipe});
+      }
+      if(!fields.length) return null;
+      var spec={spec_version:2,records:{strategy:'row'},fields:fields};
+      var kw=tv('tk_table'); if(kw) spec.tables=[{ref:'main',header_contains:kw}];
+      return spec;
+    }
+  },
+  kv:{
+    render:function(){
+      return '<label class="full">目标字段名<input class="tin" id="kv_target" value="信用代码"></label>'+
+        '<label class="full">标签文本<input class="tin" id="kv_label" value="统一社会信用代码"></label>'+
+        '<label>匹配方式<select class="tin" id="kv_match">'+
+        '<option value="contains">包含</option><option value="exact">完全相同</option>'+
+        '<option value="regex">正则</option></select></label>'+
+        '<label>值方向<select class="tin" id="kv_dir">'+
+        '<option value="inline">同一行冒号后</option><option value="right">同行右侧</option>'+
+        '<option value="below">下一行</option></select></label>'+
+        '<label>值正则<input class="tin" id="kv_regex" value="[0-9A-Z]{18}"></label>'+
+        '<label>记录策略<select class="tin" id="kv_strategy">'+
+        '<option value="one_per_page">每页一条</option><option value="row">表格行</option></select></label>';
+    },
+    build:function(){
+      var target=tv('kv_target')||'字段', label=tv('kv_label');
+      if(!label) return null;
+      var value={direction:tv('kv_dir')||'inline'}, re=tv('kv_regex');
+      if(re) value.regex=re;
+      return {spec_version:2,records:{strategy:tv('kv_strategy')||'one_per_page'},
+        fields:[{target:target,pipeline:[{op:'kv',source:'texts',
+          label:{text:label,match:tv('kv_match')||'contains'},value:value}]}]};
+    }
+  },
+  page:{
+    render:function(){
+      return '<label class="full">目标字段名'+
+        '<span class="hint" tabindex="0" data-tip="固定行为：每页一条记录，值为该页 plain_text 全文；不支持选列或正则。&#10;需要更细的抽取请选其他模板或直接编辑 JSON。">?</span>'+
+        '<input class="tin" id="pg_target" value="正文"></label>'+
+        '<label class="full checkrow"><input type="checkbox" id="pg_note" checked> 每页一条记录</label>';
+    },
+    build:function(){
+      var target=tv('pg_target')||'正文';
+      return {spec_version:2,
+        records:{strategy:document.getElementById('pg_note').checked?'one_per_page':'row'},
+        fields:[{target:target,pipeline:[{op:'page_text'}]}]};
+    }
+  }
+};
+function renderTplForm(){
+  var f=TPL[tplKind.value];
+  tplForm.innerHTML=f?f.render():'<div class="full sthint">选择模板或直接编辑 JSON。</div>';
+  bindTableEvents();
+  emsg.textContent='';
+}
+tplKind.onchange=renderTplForm;
+genJson.onclick=function(){
+  var f=TPL[tplKind.value];
+  if(!f){emsg.textContent='请先选择一个场景模板';return;}
+  var spec=f.build();
+  if(!spec){emsg.textContent='请至少填写一个字段或标签';return;}
+  jsonspec.value=JSON.stringify(spec,null,2);
+};
 
 function api(method,url,body){
   var opt={method:method,headers:{}};
@@ -331,8 +471,11 @@ document.getElementById('verlist').addEventListener('click',function(e){
 function openEditor(id){
   cur=id; cands=null; pendingTable=null;
   emsg.textContent=''; frows.innerHTML='';
+  setMode('simple'); jsonspec.value='';
+  tplKind.value=''; renderTplForm();
   refsel.value=''; tindex.value=''; tkw.value='';
   manualMode();
+  verlist.hidden=true; vertoggle.textContent='展开';
   document.getElementById('ok').hidden=true;
   if(id==null){
     document.getElementById('etitle').textContent='新建规则';
@@ -352,18 +495,22 @@ function openEditor(id){
     ename.value=j.name||''; edesc.value=j.description||'';
     origName=j.name||''; origDesc=j.description||'';
     var mp=j.mapping_json||{};
-    pendingTable=mp.table||null;
-    if(pendingTable){
-      if(typeof pendingTable.index==='number') tindex.value=pendingTable.index;
-      if(pendingTable.header_contains) tkw.value=pendingTable.header_contains;
+    if(mp.spec_version===2){
+      setMode('json'); jsonspec.value=JSON.stringify(mp,null,2);
+    }else{
+      pendingTable=mp.table||null;
+      if(pendingTable){
+        if(typeof pendingTable.index==='number') tindex.value=pendingTable.index;
+        if(pendingTable.header_contains) tkw.value=pendingTable.header_contains;
+      }
+      var fs=mp.fields||[];
+      var fxMap={};
+      ((j.transform_json||{}).fields||[]).forEach(function(f){
+        fxMap[f.target]=(f.apply||[]).join(',');
+      });
+      if(fs.length) fs.forEach(function(f){addRow(f.target,f.column,fxMap[f.target]);});
+      else addRow('',null);
     }
-    var fs=mp.fields||[];
-    var fxMap={};
-    ((j.transform_json||{}).fields||[]).forEach(function(f){
-      fxMap[f.target]=(f.apply||[]).join(',');
-    });
-    if(fs.length) fs.forEach(function(f){addRow(f.target,f.column,fxMap[f.target]);});
-    else addRow('',null);
     delbtn.hidden=false;
     document.getElementById('versec').hidden=false;
     loadVersions(id);
@@ -377,31 +524,48 @@ savebtn.onclick=function(){
   emsg.textContent='';
   var name=ename.value.trim();
   if(!name){emsg.textContent='规则名不能为空';return;}
-  var fields=[], seen={}, err=null, xf=[];
-  Array.prototype.forEach.call(frows.children,function(div){
-    if(err) return;
-    var t=div.querySelector('.fname').value.trim();
-    if(!t){err='目标字段名不能为空';return;}
-    if(seen[t]){err='字段名重复：'+t;return;}
-    seen[t]=1;
-    var col=readCol(div);
-    if(!col){err='字段「'+t+'」未选源列';return;}
-    fields.push({target:t,column:col});
-    var fx=div.querySelector('.fxform').value;
-    if(fx) xf.push({target:t,apply:fx.split(',')});
-  });
-  if(err){emsg.textContent=err;return;}
-  if(!fields.length){
-    emsg.textContent='至少需要一个字段；如需逐行原样输出，请使用内置「原始透传」规则';return;
+  var schema, mapping, transform;
+  if(mode==='json'){
+    var parsed;
+    try{ parsed=JSON.parse(jsonspec.value); }
+    catch(e){ emsg.textContent='JSON 语法错误：'+e.message; return; }
+    if(!parsed || typeof parsed!=='object' || Array.isArray(parsed)){
+      emsg.textContent='mapping_json 须为 JSON 对象'; return;
+    }
+    if(parsed.spec_version!==2){
+      emsg.textContent='高级 JSON 模式要求 spec_version 为 2'; return;
+    }
+    schema={fields:(parsed.fields||[]).filter(function(f){
+      return f && f.target;
+    }).map(function(f){return {name:f.target,type:'text'};})};
+    mapping=parsed; transform=null;
+  }else{
+    var fields=[], seen={}, err=null, xf=[];
+    Array.prototype.forEach.call(frows.children,function(div){
+      if(err) return;
+      var t=div.querySelector('.fname').value.trim();
+      if(!t){err='目标字段名不能为空';return;}
+      if(seen[t]){err='字段名重复：'+t;return;}
+      seen[t]=1;
+      var col=readCol(div);
+      if(!col){err='字段「'+t+'」未选源列';return;}
+      fields.push({target:t,column:col});
+      var fx=div.querySelector('.fxform').value;
+      if(fx) xf.push({target:t,apply:fx.split(',')});
+    });
+    if(err){emsg.textContent=err;return;}
+    if(!fields.length){
+      emsg.textContent='至少需要一个字段；如需逐行原样输出，请使用内置「原始透传」规则';return;
+    }
+    var table;
+    if(cands&&!tblsel.disabled) table={index:Number(tblsel.value)};
+    else if(tindex.value!=='') table={index:Number(tindex.value)};
+    else if(tkw.value.trim()) table={header_contains:tkw.value.trim()};
+    else{emsg.textContent='请选择源表（选择参考文件，或手动填写序号 / 表头关键词）';return;}
+    schema={fields:fields.map(function(f){return {name:f.target,type:'text'};})};
+    mapping={table:table,fields:fields};
+    transform=xf.length?{fields:xf}:null;
   }
-  var table;
-  if(cands&&!tblsel.disabled) table={index:Number(tblsel.value)};
-  else if(tindex.value!=='') table={index:Number(tindex.value)};
-  else if(tkw.value.trim()) table={header_contains:tkw.value.trim()};
-  else{emsg.textContent='请选择源表（选择参考文件，或手动填写序号 / 表头关键词）';return;}
-  var schema={fields:fields.map(function(f){return {name:f.target,type:'text'};})};
-  var mapping={table:table,fields:fields};
-  var transform=xf.length?{fields:xf}:null;
   var desc=edesc.value.trim();
   savebtn.disabled=true;
   var p;
