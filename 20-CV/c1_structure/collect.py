@@ -6,6 +6,7 @@ P0：passthrough（无配置整表透传）——每表每行一条记录，键 
 被并入跨页合并表的逐页表跳过（避免重复计数）；合并表 cells 逐格带 page，
 血缘页码天然正确。P1b 选择器已实现（build/apply_mapping：单源表
 table{index|header_contains} × column{name|index}＋重命名）；transform 留 P2。
+spec_version=2 走 collect_logic.build_logic 新引擎（C1 分发占位，C2 实现）。
 """
 from .adapter.base import RECORDS_SCHEMA
 
@@ -145,8 +146,15 @@ def apply_mapping(doc, mapping):
 
 
 def build(doc, tpl=None):
-    """按抽取规则分发：mapping 空/无 fields＝passthrough（现状不变），否则选择器消费。"""
+    """按抽取规则分发：mapping 空/无 fields＝passthrough（现状不变），否则选择器消费。
+
+    spec_version=2 → collect_logic.build_logic；缺省/1 走下面两行原分支，
+    一行不改，保证存量规则与任务的逐字段输出完全不变。
+    """
     mapping = (tpl or {}).get('mapping_json') or {}
+    if mapping.get('spec_version') == 2:
+        from .collect_logic import build_logic
+        return build_logic(doc, tpl)
     if not mapping.get('fields'):
         return passthrough(doc)
     return apply_mapping(doc, mapping)

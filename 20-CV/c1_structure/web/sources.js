@@ -294,6 +294,9 @@ function openPipe(fileId,name){
 document.getElementById('pipeClose').onclick=function(){
   document.getElementById('pipe').hidden=true;
 };
+document.getElementById('pipe').addEventListener('click',function(e){
+  if(e.target===this) this.hidden=true;
+});
 document.addEventListener('keydown',function(e){
   if(e.key==='Escape') document.getElementById('pipe').hidden=true;
 });
