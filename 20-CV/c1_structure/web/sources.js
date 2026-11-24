@@ -16,6 +16,7 @@ function render(items){
       '<td class="mono">'+r.id+'</td>'+
       '<td><div class="namecell">'+thumbHtml(r.name,srcUrl(r))+
         '<a class="nm pipe-link" href="#" data-pipe="'+r.id+
+        '" data-name="'+escHtml(r.name)+
         '" title="查看该文件流程">'+escHtml(r.name)+'</a></div></td>'+
       '<td>'+(KIND_LABEL[r.kind]||escHtml(r.kind))+'</td>'+
       '<td class="num">'+fmtSize(r.size_bytes)+'</td>'+
@@ -23,6 +24,8 @@ function render(items){
       '<td>'+escHtml(r.tags||'—')+'</td>'+
       '<td class="num">'+fmtTime(r.created_at)+'</td>'+
       '<td style="white-space:nowrap">'+
+        '<button type="button" class="linkbtn" data-pipe="'+r.id+
+        '" data-name="'+escHtml(r.name)+'" title="查看该文件流程">查看</button>'+
         '<a class="linkbtn" href="'+srcUrl(r)+'?download=1" title="下载原件">下载</a>'+
         '<a class="linkbtn" href="/parse?from_source='+r.id+'" title="在解析页使用此文件">解析</a>'+
         '<button type="button" class="linkbtn danger" data-del="'+r.id+
@@ -59,7 +62,8 @@ document.getElementById('kind').onchange=function(){ kind=this.value; page=1; lo
 
 rows.addEventListener('click',function(e){
   var a=e.target.closest?e.target.closest('[data-pipe]'):null;
-  if(a){ e.preventDefault(); openPipe(a.getAttribute('data-pipe'),a.textContent); return; }
+  if(a){ e.preventDefault(); openPipe(a.getAttribute('data-pipe'),
+    a.getAttribute('data-name')||a.textContent); return; }
   var b=e.target.closest?e.target.closest('[data-del]'):null;
   if(!b) return;
   var id=b.getAttribute('data-del'),name=b.getAttribute('data-name');
