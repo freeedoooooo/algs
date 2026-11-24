@@ -86,18 +86,47 @@ function b64(file){
     r.readAsDataURL(file);
   });
 }
+/* 台账抽屉动画（任务详情 #detail / 入库回执 #receipt 共用）：
+   hidden 仍是最终状态标记（各处 hidden 判断不动），打开走进场、关闭先出场再置 hidden。 */
+function animDrawerOpen(el){
+  if(!el) return;
+  if(el._animClose){ el._animClose(); el._animClose=null; } /* 取消未完成的关闭，避免闪退 */
+  el.classList.add('drawer-anim');       /* 打标记：仅台账抽屉吃动画，其它抽屉不变 */
+  el.hidden=false;
+  void el.offsetWidth;                   /* 强制回流：让初始态先落地，下一帧才过渡 */
+  el.classList.add('open');
+}
+function animDrawerClose(el){
+  if(!el||el.hidden||!el.classList.contains('open')) return;
+  el.classList.remove('open');
+  var done=false;
+  var cancel=function(){
+    done=true; el.removeEventListener('transitionend',onEnd);
+    if(el._animClose===cancel) el._animClose=null;
+  };
+  var finish=function(){
+    if(done) return;
+    done=true; el.removeEventListener('transitionend',onEnd);
+    if(el._animClose===cancel) el._animClose=null;
+    if(!el.hidden) el.hidden=true;
+  };
+  var onEnd=function(e){ if(e.target===el) finish(); };
+  el._animClose=cancel;
+  el.addEventListener('transitionend',onEnd);
+  setTimeout(finish,260);                 /* 兜底：无过渡/被降帧时也能收起 */
+}
 /* 入库回执/隔离抽屉（P2，任务/校验页共用）：
    页面放 #receipt/#rctitle/#rcbody/#rcclose 即可复用。只读。 */
 function closeReceiptDrawer(){
   var r=document.getElementById('receipt');
-  if(r) r.hidden=true;
+  if(r) animDrawerClose(r);
 }
 function openReceiptDrawer(taskId){
   var drawer=document.getElementById('receipt');
   if(!drawer) return;
   document.getElementById('rctitle').textContent='任务 #'+taskId+' · 入库回执';
   document.getElementById('rcbody').innerHTML='<div class="empty">加载中…</div>';
-  drawer.hidden=false;
+  animDrawerOpen(drawer);
   Promise.all([
     fetch('/api/tasks/'+taskId+'/load-log').then(function(r){return r.json();}),
     fetch('/api/tasks/'+taskId+'/quarantine').then(function(r){return r.json();})

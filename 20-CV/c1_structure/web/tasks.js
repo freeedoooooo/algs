@@ -195,12 +195,12 @@ function refreshDetail(taskId){
   }).catch(function(){});
 }
 function openDetail(taskId){
-  curTask=taskId; detail.hidden=false;
+  curTask=taskId; animDrawerOpen(detail);
   document.getElementById('dbody').innerHTML='<div class="empty">加载中…</div>';
   refreshDetail(taskId);
 }
 function closeDetail(){
-  curTask=null; detail.hidden=true; clearTimeout(pollTimer);
+  curTask=null; animDrawerClose(detail); clearTimeout(pollTimer);
 }
 document.getElementById('dclose').onclick=closeDetail;
 detail.addEventListener('click',function(e){ if(e.target===detail) closeDetail(); });

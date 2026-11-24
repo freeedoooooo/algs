@@ -35,12 +35,7 @@ modeSimple.onclick=function(){setMode('simple');};
 modeJson.onclick=function(){setMode('json');};
 modeSmart.onclick=function(){setMode('smart');};
 smartScope.onchange=function(){smartPage.hidden=(smartScope.value!=='page');};
-var vertoggle=document.getElementById('vertoggle'), verlist=document.getElementById('verlist');
-vertoggle.onclick=function(){
-  var open=verlist.hidden;
-  verlist.hidden=!open;
-  vertoggle.textContent=open?'收起':'展开';
-};
+/* 版本历史默认展开，不再提供收起开关 */
 
 /* ---- 复杂抽取：场景模板 → 生成 mapping_json（可继续手动微调） ---- */
 var tplKind=document.getElementById('tplKind'), tplForm=document.getElementById('tplForm');
@@ -510,7 +505,6 @@ function openEditor(id){
   tplKind.value=''; renderTplForm();
   refsel.value=''; tindex.value=''; tkw.value='';
   manualMode();
-  verlist.hidden=true; vertoggle.textContent='展开';
   document.getElementById('ok').hidden=true;
   if(id==null){
     document.getElementById('etitle').textContent='新建规则';
