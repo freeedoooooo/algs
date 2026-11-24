@@ -104,17 +104,24 @@ picker.onchange=function(){add(picker.files);};
 
 var ALLOWED=['png','jpg','jpeg','bmp','webp','tif','tiff','pdf','csv','txt','md'];
 function add(fs){
-  var rejected=[];
-  for(var i=0;i<fs.length;i++){
-    var f=fs[i];
-    var e=(f.name.split('.').pop()||'').toLowerCase();
-    if(ALLOWED.indexOf(e)<0){ rejected.push(f.name); continue; }
-    if(picked.some(function(p){return p.name===f.name&&p.size===f.size;})) continue;
-    picked.push(f);
+  // 一条资料 = 一次运行（单文件）：一次只解析一个文件
+  if(!fs||!fs.length) return;
+  var f=fs[0], multi=fs.length>1;
+  var e=(f.name.split('.').pop()||'').toLowerCase();
+  if(ALLOWED.indexOf(e)<0){
+    msg.innerHTML='<span class="err">不支持的格式：'+escHtml(e)+'</span>';
+    return;
   }
-  if(rejected.length)
-    msg.innerHTML='<span class="err">以下文件不支持，已忽略：'+escHtml(rejected.join('、'))+'</span>';
+  if(f.size>20*1024*1024){
+    msg.innerHTML='<span class="err">文件超过 20MB，已忽略</span>';
+    return;
+  }
+  picked.forEach(function(p){ if(p._url) URL.revokeObjectURL(p._url); });
+  picked=[f];
   render();
+  msg.innerHTML=multi
+    ? '<span class="warn">已选多个文件，本次只解析「'+escHtml(f.name)+'」</span>'
+    : '';
 }
 function fileRow(name,size,url){
   return '<span class="fthumb">'+thumbHtml(name,url)+'</span>'+

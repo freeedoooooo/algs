@@ -30,17 +30,16 @@ hdrop.ondrop=function(e){
 };
 hpick.onchange=function(){ addFiles(hpick.files); hpick.value=''; };
 function addFiles(fs){
-  var rejected=[];
-  for(var i=0;i<fs.length;i++){
-    var f=fs[i];
-    var e=(f.name.split('.').pop()||'').toLowerCase();
-    if(ALLOWED.indexOf(e)<0){ rejected.push(f.name); continue; }
-    if(f.size>20*1024*1024){ rejected.push(f.name+'（超过 20MB）'); continue; }
-    if(hpicked.some(function(p){return p.name===f.name&&p.size===f.size;})) continue;
-    hpicked.push(f);
-  }
-  if(rejected.length) say('以下文件不支持或超过 20MB，已忽略：'+rejected.join('、'),'err');
-  else if(hpicked.length) say('已选 '+hpicked.length+' 个文件，点击「开始解析」');
+  // 一条资料 = 一次运行（单文件）：一次只解析一个文件
+  if(!fs||!fs.length) return;
+  var f=fs[0];
+  var multi=fs.length>1;
+  var e=(f.name.split('.').pop()||'').toLowerCase();
+  hpicked=[];
+  if(ALLOWED.indexOf(e)<0){ say('不支持的格式：'+e+'，请选 pdf / 图片 / csv / txt / md','err'); renderPicked(); return; }
+  if(f.size>20*1024*1024){ say('文件超过 20MB，已忽略','err'); renderPicked(); return; }
+  hpicked.push(f);
+  say((multi?'已选多个文件，本次只解析「'+f.name+'」；':'已选 ')+f.name+'，点击「开始解析」',multi?'warn':'');
   renderPicked();
 }
 function renderPicked(){

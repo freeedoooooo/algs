@@ -292,11 +292,15 @@ async def upload(request: Request):
     if not files:
         return JSONResponse({'ok': False, 'error': '未收到文件'},
                             status_code=400)
-    if len(files) > 1:
-        return JSONResponse({'ok': False, 'error': '一次只能解析一个文件'},
-                            status_code=400)
+    # 一条资料 = 一次运行（单文件）：兼容旧缓存前端的多选请求，只取第一个，
+    # 把"忽略其余文件"作为 warning 回显，不让整次上传静默失败。
+    extra_n = max(0, len(files) - 1)
+    if extra_n:
+        files = files[:1]
     # 调试参数：校验一次，非法值回退默认并把警告带回页面（不让整批失败）
     params, warns = params_mod.normalize(body.get('params'))
+    if extra_n:
+        warns.insert(0, '一次只解析一个文件，已忽略另外 {} 个文件'.format(extra_n))
 
     # 输入副本只落 tmp/input scratch（字节事实源在 c1_doc_file.content），跑完即清；
     # 任何失败路径（校验 400 / DB 503）都由 finally 回收，不留孤儿
