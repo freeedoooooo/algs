@@ -70,7 +70,7 @@ function bindLightbox(){
     if(!lb.hidden&&e.key==='Escape'){ lb.hidden=true; img.removeAttribute('src'); }
   });
 }
-/* 文件产物链接（/files/<task_file_id>/…，白名单挂载，raw 不会出现） */
+/* 文件产物链接（/files/<file_id>/…，白名单挂载，raw 不会出现） */
 function fileUrl(rfId,rel){
   return '/files/'+rfId+'/'+encodeURIComponent(rel);
 }
@@ -86,7 +86,7 @@ function b64(file){
     r.readAsDataURL(file);
   });
 }
-/* 台账抽屉动画（任务详情 #detail / 入库回执 #receipt 共用）：
+/* 抽屉动画（入库回执 #receipt 等共用）：
    hidden 仍是最终状态标记（各处 hidden 判断不动），打开走进场、关闭先出场再置 hidden。 */
 function animDrawerOpen(el){
   if(!el) return;
@@ -115,21 +115,21 @@ function animDrawerClose(el){
   el.addEventListener('transitionend',onEnd);
   setTimeout(finish,260);                 /* 兜底：无过渡/被降帧时也能收起 */
 }
-/* 入库回执/隔离抽屉（P2，任务/校验页共用）：
+/* 入库回执/隔离抽屉（资料清单/数据预览共用）：
    页面放 #receipt/#rctitle/#rcbody/#rcclose 即可复用。只读。 */
 function closeReceiptDrawer(){
   var r=document.getElementById('receipt');
   if(r) animDrawerClose(r);
 }
-function openReceiptDrawer(taskId){
+function openReceiptDrawer(fileId){
   var drawer=document.getElementById('receipt');
   if(!drawer) return;
-  document.getElementById('rctitle').textContent='任务 #'+taskId+' · 入库回执';
+  document.getElementById('rctitle').textContent='资料 #'+fileId+' · 入库回执';
   document.getElementById('rcbody').innerHTML='<div class="empty">加载中…</div>';
   animDrawerOpen(drawer);
   Promise.all([
-    fetch('/api/tasks/'+taskId+'/load-log').then(function(r){return r.json();}),
-    fetch('/api/tasks/'+taskId+'/quarantine').then(function(r){return r.json();})
+    fetch('/api/sources/'+fileId+'/load-log').then(function(r){return r.json();}),
+    fetch('/api/sources/'+fileId+'/quarantine').then(function(r){return r.json();})
   ]).then(function(res){
     var logs=(res[0].items||[]), qs=(res[1].items||[]).filter(function(q){
       return q.stage==='load';
@@ -140,7 +140,7 @@ function openReceiptDrawer(taskId){
       '<table class="list"><thead><tr><th>资料ID</th><th>记录</th><th>动作</th>'+
       '<th>目标主键</th><th>时间</th></tr></thead><tbody>'+
       logs.map(function(l){
-        return '<tr><td class="mono">'+l.task_file_id+'</td>'+
+        return '<tr><td class="mono">'+l.file_id+'</td>'+
           '<td class="num">'+(l.record_index+1)+'</td>'+
           '<td>'+escHtml({insert:'新增',update:'覆盖'}[l.action]||l.action)+'</td>'+
           '<td><code class="mono">'+escHtml(l.target_pk)+'</code></td>'+
@@ -153,7 +153,7 @@ function openReceiptDrawer(taskId){
       '<table class="list"><thead><tr><th>资料ID</th><th>记录</th><th>原因</th>'+
       '<th>时间</th></tr></thead><tbody>'+
       qs.map(function(q){
-        return '<tr><td class="mono">'+q.task_file_id+'</td>'+
+        return '<tr><td class="mono">'+q.file_id+'</td>'+
           '<td class="num">'+(q.record_index+1)+'</td>'+
           '<td>'+escHtml(q.reason)+'</td>'+
           '<td class="num">'+fmtTime(q.created_at)+'</td></tr>';
@@ -165,7 +165,7 @@ function openReceiptDrawer(taskId){
       '<div class="empty">读取失败：平台库不可用</div>';
   });
 }
-/* ---- 列表分页共用组件（资料/任务/抽取规则/校验台账/入库）。
+/* ---- 列表分页共用组件（资料/抽取规则/校验台账/入库）。
    每页条数用户可选（10/20/50/100，默认 20，localStorage 记忆，全站点统一）；
    列表为空时隐藏分页条；翻页后滚回列表顶部；筛选变化由各页自行回第 1 页。
    markup 约定：

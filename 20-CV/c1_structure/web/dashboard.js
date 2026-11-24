@@ -2,7 +2,7 @@
 var qs=new URLSearchParams(location.search);
 var ds=qs.get('ds')||'', table=qs.get('table')||'';
 var page=1, perPage=100, lastData=null;
-var TRACE=['task_id','task_file_id','record_id'];
+var TRACE=['file_id','record_id'];
 var selRid=null;
 
 function showErr(t){
@@ -80,8 +80,7 @@ function showLineage(rid,tr){
       msg.textContent='该行无匹配暂存记录，无法溯源（可能非本平台入库、已被清理，或来自其他系统）。';
       return;
     }
-    frame.src='/preview?embed=1&task='+encodeURIComponent(o.j.task_id)+
-      '&file='+encodeURIComponent(o.j.task_file_id)+
+    frame.src='/preview?embed=1&file='+encodeURIComponent(o.j.file_id)+
       '&index='+encodeURIComponent(o.j.record_index);
     frame.hidden=false;
   }).catch(function(e){

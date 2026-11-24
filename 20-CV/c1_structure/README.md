@@ -3,12 +3,17 @@
 面向审计场景的**本地文档结构化工作台**：浏览器上传文件 → **解析**（结构化数据）→
 **抽取**（按抽取规则生成记录）→ **校验** → **入库**（业务库）。
 **DB 是唯一事实源**（MySQL）：原件字节、产物附件、暂存记录全部入库，磁盘只有跑完即清的
-临时 scratch。每个 task_file 一份独立自包含的 `对照报告.html`（BLOB，经 `/files/<task_file_id>/`
+临时 scratch。每条资料一份独立自包含的 `对照报告.html`（BLOB，经 `/files/<file_id>/`
 白名单路由访问），每次上传各自独立、互不覆盖；页面与报告资产（`web/`）只有一份。
 支持**多页 PDF 逐页解析 + 报告翻页切换 + 跨页表格拼接**（页码留空 = 全部页）。
 `weekly/week-02/` 的代码与产物**完全不改动**，本目录自包含。
-存储为任务化命名、无外键（表 `c1_*` 前缀）；**复用事实与验证方法**见
-[docs/progress-handoff.md](./docs/progress-handoff.md)，找代码顺着本文件目录树即可。
+
+**存储模型（2026-11-24 重构）**：一条资料记录 = 一次运行（单文件），以 `c1_doc_file.id`
+（`file_id`）为唯一运行主键；已删除 `c1_task` / `c1_task_file` 两表，运行态并入资料行。
+任务不在导航中——**资料清单（`/sources`）是唯一功能入口**，数据预览 / 解析保留为二级页。
+无外键（表 `c1_*` 前缀）；设计取舍见
+[docs/design-file-centric-refactor.md](./docs/design-file-centric-refactor.md)，
+复用事实与验证方法见 [docs/progress-handoff.md](./docs/progress-handoff.md)。
 
 ## 启动
 
@@ -24,10 +29,12 @@ uvicorn c1_structure.app:app --host 0.0.0.0 --port 8765 --workers 1
 ```
 
 - **平台库必选**：DSN 配在 `config.PLATFORM_DB`（形如 `mysql://user:pass@host:3306/db`，
-  环境变量 `C1_STRUCTURE_DB` 优先，方便部署覆盖）。**建表/升级人工执行**
-  `store/migrations/001_baseline.sql`（无自动迁移器，2026-11-21 裁决删除；
-  脚本全 IF NOT EXISTS＋INSERT IGNORE，重跑无副作用）。DB 不可达：上传 503 不建任务、
-  运行中写失败整任务 failed、读端点 503，不降级。
+  环境变量 `C1_STRUCTURE_DB` 优先，方便部署覆盖）。**建表人工执行**
+  `store/migrations/001_file_baseline.sql`（全新空库基线，12 张表；无自动迁移器，
+  2026-11-21 裁决删除；脚本全 IF NOT EXISTS＋INSERT IGNORE，重跑无副作用）。
+  旧库（含 `c1_task` / `c1_task_file`）需按设计稿清库后重建；配置表可用
+  `python -m store.migrations.copy_config --src ... --dst ...` 迁移（抽取规则＋入库规则）。
+  DB 不可达：上传 503、运行中写失败整条资料 failed、读端点 503，不降级。
 - 加载大模型的服务建议 **workers=1**：多 worker 会各自加载一份模型，内存翻倍；要扩容应横向起多实例，前面挂 Nginx 反代。
 - 内置 `GET /healthz` 健康检查；配置（端口、模型、阈值、路径）集中在 `config.py`。
 
@@ -44,9 +51,10 @@ python -m pip install -r requirements.txt
 # 2) 配置平台库（二选一）
 #    改 config.PLATFORM_DB 默认值，或 环境变量 C1_STRUCTURE_DB=mysql://...
 
-# 2.5) 人工建表（无自动迁移器）：对平台库执行 store/migrations/001_baseline.sql
-#      mysql -h <host> -u <user> -p <db> < store/migrations/001_baseline.sql
-#      脚本全 IF NOT EXISTS＋INSERT IGNORE，已建库重跑无副作用；升级改表 likewise 人工执行
+# 2.5) 人工建表（无自动迁移器）：对**空库**执行 001_file_baseline.sql
+#      mysql -h <host> -u <user> -p <db> < store/migrations/001_file_baseline.sql
+#      脚本全 IF NOT EXISTS＋INSERT IGNORE，重跑无副作用；旧库须先清库再建新表
+#      配置表迁移：python -m store.migrations.copy_config --src <旧库DSN> --dst <新库DSN>
 
 # 3) 装完自检（只读、不加载模型，秒级）
 python check_env.py
@@ -104,30 +112,29 @@ c1_structure/
 ├── check_env.py               部署自检：缺包 / 目录 / 模型缓存 / 平台库
 ├── config.py                  唯一配置源：模型 / DPI / 阈值 / 路径 / 环境变量
 ├── params.py                  调试参数 schema（顺序=优先级）+ 校验 + 快照
-├── tasklog.py                 结构化运行日志（service.STATE + logs/task_<id>.log）
+├── tasklog.py                 结构化运行日志（service.STATE + logs/file_<id>.log）
 ├── app.py                     FastAPI 路由 + 请求校验 + 包自举 + 异常处理器
 ├── service.py                 运行引擎：STATE/LOCK + launch + launch_load/run_load（入库）
 ├── __init__.py                支持 uvicorn c1_structure.app:app 包方式启动
-├── accept_records_db.py       records 入库七项验收（临时服务 8799/8797，含 P2b 入库链路）
+├── accept_records_db.py       records 入库七项验收（临时服务 8799/8797，含入库全链）
 ├── accept_artifacts_db.py     产物入库六项验收（两套脚本严禁并行）
 ├── export_artifacts.py        DB → 磁盘树按需导出（file:// 直开 / 审计 / 迁移）
 ├── store/                     存储层（DB 唯一事实源）
-│   ├── db.py                  驱动接缝 + conn_ref 解析（纯连接，不建表）
+│   ├── db.py                  驱动接缝 + DSN 解析（纯连接，不建表）
 │   ├── errors.py              类型化业务异常（StoreError/BadRequest/NotFound/Conflict→HTTP 码）
-│   ├── migrations/            001_baseline.sql 人工安装脚本（新库）＋ 002 存量库升级脚本
-│   │                          （无自动迁移器，部署/改表时手动对库跑）
+│   ├── migrations/            001_file_baseline.sql 空库基线（12 表）＋ init_db.py 执行器
+│   │                          ＋ copy_config.py 配置表迁移（无自动迁移器，人工对库跑）
 │   ├── catalog/               目录元数据 repo，按业务域拆分（__init__ 全量重导出，
 │   │   │                      调用方 catalog.xxx() 不感知边界）
-│   │   ├── files.py           源文件域（c1_doc_file ＋ content 原件字节）
+│   │   ├── files.py           资料域（c1_doc_file ＝ 原件字节 ＋ 运行状态 ＋ 隔离区）
 │   │   ├── rules.py           抽取规则域（c1_extract_rule / c1_extract_rule_version）
-│   │   ├── tasks.py           任务域（c1_task / c1_task_file / c1_load_quarantine）
 │   │   └── load.py            入库域（c1_load_datasource / c1_load_table(+field) / c1_load_log）
 │   ├── content.py             内容门面（parse 经 artifact，records 直委托 content_db）
 │   ├── content_db.py          staging 三表：get/save/patch/set_review/query_fields
 │   ├── loader.py              入库引擎接缝：数据源直连 / introspection / 字段契约
 │   │                          / transform（trim·number）/ write_record（应用层 upsert）
 │   ├── artifact.py            附件门面（kind/mime 推断）
-│   └── artifact_db.py         c1_parse_artifact BLOB（键＝task_file_id，应用层级联删）
+│   └── artifact_db.py         c1_parse_artifact BLOB（键＝file_id，应用层级联删）
 ├── adapter/                   解析信封 → 抽取记录（字段集）的适配层（base.py hydrate 派生视图）
 ├── pipeline/                  解析层
 │   ├── engines.py             模型单例（懒加载；表格模型按 doc_unwarp 分槽缓存）
@@ -140,40 +147,44 @@ c1_structure/
 │   └── runner.py              parse_one() 统一入口：逐页解析 + pages 信封编排
 ├── parse_report/              对照报告生成器（纯 Python＋Jinja2，不含页面资产）
 │   ├── cards.py               数据准备 + 选 Jinja 模板（坐标 rect / 行 / 文档块 / data URI）
-│   ├── builder.py             组装对照报告（内联 web/ 资产，每 task_file 一份）
+│   ├── builder.py             组装对照报告（内联 web/ 资产，每资料一份）
 │   └── templates/             Jinja2 HTML 模板（autoescape，结构与逻辑分离）
 ├── web/                       全部前端资产（/static 挂载于此）
-│   ├── <page>.html/js/css     七页：home / parse(解析) / sources / extract(抽取规则) /
-│   │                          review(校验) / rules(入库规则) / tasks
+│   ├── <page>.html/js/css     八页：home / sources(资料·唯一入口) / parse(解析) /
+│   │                          preview(预览) / review(校验) / extract / rules / dashboard
 │   ├── shell.css/js           全局壳＋列表页共用小件＋回执抽屉
 │   ├── stage.css/js           舞台共用件（校验台＋报告）
 │   ├── wizard.css/js          四步入库向导
 │   ├── hint.css/js            「?」悬浮说明（解析页＋报告）
 │   └── report.css/js · lightbox.html   报告专用（生成时内联进 BLOB）
 ├── data/                      backup/（迁移前整库备份；DSN 已入 config.py，无 secrets.json）
-├── logs/                      任务日志（运行时生成，每任务一个 task_<id>.log）
+├── logs/                      运行日志（运行时生成，每条资料一个 file_<id>.log）
 └── docs/                      progress-handoff.md（环境事实与验证方法）
 ```
 
-### 存储模型：task / task_file id，无批次戳、无外键
+### 存储模型：file_id 单键，无批次戳、无外键
 
-一次上传 = 一个 **task**（`c1_task` 行），批内每个文件 = 一个 **task_file**。
-没有批次时间戳、没有持久 input/output 目录：
+一次上传 = 一条**资料记录**（`c1_doc_file` 行）= 一次运行（单文件）。
+没有 task 层、没有批次时间戳、没有持久 input/output 目录：
 
-- 原件字节进 `c1_doc_file.content`（sha256 去重，重复上传不重复入库）。
-- 产物附件进 `c1_parse_artifact`（键＝task_file_id + 相对名，LONGBLOB，应用层级联删）。
-- 暂存记录进 staging 三表（record / field / lineage，field 是查询投影）。
-- **校验台**（`/review`）：双击格改值→edited，✓ 确认 / ✗ 拒绝（review_state），
-  状态筛选＋批量确认待审；改值格琥珀标记（title 显原值），original 永不覆盖；
-  loaded 任务只读（前端横幅＋后端 409）。无 task 参数时渲染**任务级校验台账**
-  （`/api/staging/ledger`：每任务汇总记录数＋待校验/已修改/已确认/已拒绝计数，
-  点任务行展开其文件子行，点文件行进入）。
+- `c1_doc_file` 既是资料登记（原件字节 `content`）也是运行态载体
+  （`state` / `error` / `rule_version_id` / `params_json` / 入库绑定）。
+- **sha256 不去重**：每次上传插新行，同一字节允许多条独立运行；`sha256` 仅作检索/ETag
+  （普通索引 `idx_file_sha`，无唯一约束）。重复上传产生新资料行，不覆盖历史。
+- 产物附件进 `c1_parse_artifact`（键＝file_id + 相对名，LONGBLOB，应用层级联删）。
+- 暂存记录进 staging 三表（record 带 file_id / field / lineage，field 是查询投影）。
+- **校验**（`/preview?file=<资料ID>`）：双击格改值→edited，✓ 确认 / ✗ 拒绝（review_state），
+  状态 chips＋批量确认待审；改值格琥珀标记（title 显原值），original 永不覆盖；
+  loaded 资料只读（前端横幅＋后端 409）。**资料清单（`/sources`）是唯一功能入口**，
+  无 `file` 参数直接跳资料清单；`/api/staging/ledger` 仍提供扁平台账供工作台卡片取数。
 - 解析期间的工作目录与输入副本都是 tempfile scratch（`tmp/input/in_*` / `tmp/work/case_*`），跑完即清。
-- URL 全用 id：`/review?task=<task_id>&file=<task_file_id>`、`/files/<task_file_id>/<产物>`、
-  `/srcfiles/<file_id>`。`GET /parse-report` 重定向到最新 task_file 的报告真实地址。
-- 重复上传同一文件不覆盖历史：新 task 新 task_file 新附件，旧 task 完整可回溯。
-  批内重名文件加 `-2` 区分。task id 在上传响应与 `/api/status` 的 `task_id` 字段可见。
-- **无外键约束**：引用完整性归应用层（delete_file 引用守卫；重跑覆盖显式先删子表）。
+- URL 全用 file_id：`/preview?file=<file_id>&index=<记录序>`、`/files/<file_id>/<产物>`、
+  `/srcfiles/<file_id>`。`GET /parse-report` 重定向到最新资料的报告真实地址。
+- 流程 API 全收敛在 `/api/sources/{file_id}/...`（gate / staging / extract / reparse /
+  load / load-preview / load-log / quarantine / parse / pipeline）。
+- **重放解析**：原地覆盖该资料行——暂存、产物、回执、隔离与规则绑定全清（D4 裁决），
+  state 回 pending 后重跑；与"重新上传同文件 = 新建一行"语义不同。
+- **无外键约束**：引用完整性归应用层（运行中/已入库资料禁删；重跑覆盖显式先删子表）。
 
 ### 入库链路（数据源 × 入库规则）
 
@@ -185,38 +196,41 @@ c1_structure/
   ＋write_mode（upsert/insert/update），字段行＝抽取规则字段→目标列＋业务键勾选。
   只写已有表（不自动建表）；同物理表可被不同抽取规则各建一行（UNIQUE 三元组）。
 - **审计守卫**：数据源被映射引用后 host/port/库名锁定（409，账号密码可改，换目标＝新建）；
-  映射被任务引用后只读（PATCH/DELETE 409，回执语义）。
-- **流程（单一解析入口，入库时绑定）**：上传只选文件＋抽取规则（不携带入库目标，旧契约键 400）
-  → 校验（门禁：全部 confirmed 才可入库，否则 409 带计数）→ 任务详情/校验台「入库…」
-  抽屉选数据源＋映射（按 数据源×任务抽取规则 双过滤）→ **校验/门禁/预检全过才绑定目标并写入**
-  （失败不留绑定，可另选；已绑定任务重试沿用原目标，带新目标 409）→ 逐条回执
-  （`c1_load_log`，唯一键幂等，重跑跳过）＋数据级隔离（`c1_load_quarantine` stage=load，
-  重试无回执记录）。transform（trim/number）只在入库时消费，暂存原值永不改。
-  loaded/partial 任务记录只读。
+  映射被资料引用后只读（PATCH/DELETE 409，回执语义）。
+- **流程（入库时绑定目标）**：上传只选文件（不携带入库目标，旧契约键 400；也不选规则，
+  在「执行抽取」时选）→ 校验（门禁：全部 confirmed 才可入库，否则 409 带计数）
+  → 资料清单/数据预览「入库」打开四步向导（wizard.js，选目标→字段对齐→dry-run 过目→执行；
+  按 数据源×资料抽取规则 双过滤）→ **校验/门禁/预检全过才绑定目标并写入**
+  （失败不留绑定，可另选；已绑定资料重试沿用原目标，带新目标 409）→ 逐条回执
+  （`c1_load_log`，唯一键 `(file_id, record_index, datasource_id, target_table)` 幂等）
+  ＋数据级隔离（`c1_load_quarantine` stage=load，重试无回执记录）。
+  transform（trim/number）只在入库时消费，暂存原值永不改。loaded 资料记录只读。
+- 业务表**溯源列由两列组成**：`file_id` + `record_id`（平台禁止自动 DDL，须业务系统预建；
+  旧版三列 `task_id/task_file_id/record_id` 中的前两列新代码不再写）。
 - **/rules 入库规则页**：左数据源列表（试连/编辑/删除）右入库规则列表（字段行抽屉编辑）；
-  入库在任务侧发起：四步入库向导（wizard.js，选目标→字段对齐→dry-run 过目→执行）。
+  入库在资料侧发起。
 
 **按需导出**（file:// 直开 / 审计 / 迁移出口）：
 
 ```bash
 D:\miniforge3\envs\paddle\python.exe c1_structure/export_artifacts.py --out D:/tmp/c1_export
-# 可选 --task <id> 只导一次任务
+# 可选 --file <id> 只导一条资料
 ```
 
 ```
-<out>/output/task_<id>/<源文件名>/…   产物 BLOB 原字节（对照报告.html 在树内，file:// 直开）
-<out>/output/task_<id>/records.json   DB 三表重建的任务级信封
+<out>/output/file_<id>/<源文件名>/…   产物 BLOB 原字节（对照报告.html 在树内，file:// 直开）
+<out>/output/file_<id>/records.json   DB 三表重建的资料级信封
 <out>/sources/<源文件名>              原件字节（重名加 _<id> 区分）
 ```
 
 **源码模块化，产物自包含**：`builder.py` 生成报告时会把 `hint.css` / `stage.css` / `report.css` /
 `hint.js` / `stage.js` / `report.js` / `lightbox.html` 内联进 HTML（stage 件与校验台共享，先于页面件），
 图片 / parse.json / CSV 链接一律**相对路径**，
-所以报告经 `/files/<task_file_id>/` 访问时资源全部成立；导出后**双击用 `file://` 直接打开也能正常显示图片与全部交互**；
+所以报告经 `/files/<file_id>/` 访问时资源全部成立；导出后**双击用 `file://` 直接打开也能正常显示图片与全部交互**；
 整份信封 JSON 以紧凑 `<script type="application/json">` 嵌在报告里（全报告仅一份，首次打开 tab 才美化），
 不依赖在线 fetch。解析页是线上页面，走 `/static/` 外链资源。
-**多文件批次**：解析页报告区顶部出现**文件页签**（单文件不显示），点击在下方 iframe 切换各文件自己的报告；
-`GET /parse-report` 重定向到最新 task_file 报告的 `/files/` 真实地址（相对路径资源需在该 task_file URL 下解析）。
+**单文件**：上传一次只解析一份文件，无文件页签；`GET /parse-report` 重定向到最新资料的 `/files/` 真实地址
+（相对路径资源需在该资料 URL 下解析）。
 
 HTML 结构全部在 `parse_report/templates/*.html`（Jinja2，**autoescape 默认开启**，
 不再手写转义），CSS / JS 在 web/ 独立文件，Python 只做数据准备与抽取规则选择——
@@ -232,7 +246,7 @@ IDE 高亮、改结构 / 样式不必碰 Python 逻辑。迁移经「重构前�
 | PDF 无文本层 | 同图片路线（逐页单次推理） | 同上 |
 | CSV / TXT / MD | 纯文本直读，不跑 OCR | `source.<ext>`、`table_N.csv`（CSV） |
 
-每个 task_file 固定有一份 `parse.json` 附件（**紧凑 JSON**），统一为**文件信封**：
+每条资料固定有一份 `parse.json` 附件（**紧凑 JSON**），统一为**文件信封**：
 `file/kind/encoding/params_snapshot/page_count` + `pages:[pageRec…]` + `stitched_tables`。
 单页文件也是 `pages:[1]`（无双形态、无兼容 shim）。每页 `pageRec` 只存三样：官方 `parsing`（裁掉代码不读的死字段）+ `structured_tables`（加工后的表 + 单元格坐标）+ 该页元信息/诊断。
 文字投影 `texts/scores/boxes`、版面 `layout`、行数/均值**不落盘**，由 `adapter.base.hydrate()` 在渲染期**逐页**从 `parsing` 现算（官方 JSON 为唯一事实源，派生视图不重复存储）；raw 表中间态已删。
@@ -303,10 +317,10 @@ IDE 高亮、改结构 / 样式不必碰 Python 逻辑。迁移经「重构前�
   （例：`+90640ms` 落在表格模型那条 = 首次加载十来个子模型）。
 - 记录了过去看不到的内部决策：载体判定、预筛横竖线数、模型加载开关、
   表格策略命中、坐标空间、OCR 行数/置信度、每张表行列数与填充率。
-- 日志同时落盘到 `logs/task_<id>.log`（每任务各一份，历史可查），
-  页面「下载日志」或 `GET /api/logs` 可取当前任务纯文本。
+- 日志同时落盘到 `logs/file_<id>.log`（每条资料各一份，历史可查），
+  页面「下载日志」或 `GET /api/logs` 可取当前资料纯文本。
 
-实现在 `tasklog.py`：一个 `TaskLog` 实例对应一次任务，同时写 `service.STATE['logs']`
+实现在 `tasklog.py`：一个 `TaskLog` 实例对应一次运行，同时写 `service.STATE['logs']`
 （页面轮询 `/api/status` 拿结构化数组）、`logs/task_<id>.log` 和控制台（同格式实时打印）。**pipeline 只认一个
 `emit(level, stage, msg)` 回调**，由 service 注入，解析层不 import Web 层，保持分层干净。
 
@@ -404,15 +418,19 @@ D:\miniforge3\envs\paddle\python.exe -u c1_structure/accept_records_db.py
 D:\miniforge3\envs\paddle\python.exe -u c1_structure/accept_artifacts_db.py
 ```
 
-各六项契约：records＝连接零副作用+投影往返 / 重跑级联 / patch / 跨任务查询 /
-真链路（8799）/ 断库 503（8797 不可达 DSN）；artifacts＝连接零副作用+sha 自洽 /
-真链路无持久磁盘+BLOB / /files mime+ETag 304+raw 403 / tasks+报告+暂存全查库 /
-导出逐字节一致+records 重建 / 断库 503。破坏性操作只落合成 task，验完按 id 清理
-（应用层级联：先子表后父表）；真实 task/file 只读；用户的 8765 全程不动。
+records 七项：连接零副作用+投影往返 / 重跑级联 / patch / 跨资料查询 /
+真链路（8799，含 PATCH/POST 校验路由）/ 断库 503（8797 不可达 DSN）/
+入库全链（合成目标表＋规则/数据源/映射，预检门禁、loaded、回执幂等、基线守恒）。
+artifacts 六项：连接零副作用+sha 自洽 / 真链路无持久磁盘+BLOB /
+/files mime+ETag 304+raw 403 / 资料 API+报告+暂存全查库 /
+导出逐字节一致+records 重建 / 断库 503。
+合成资料 id 从 900 万起，验完按 id 清理（应用层级联：先子表后父表）并 DROP 合成目标表；
+真实资料/规则只读；用户的 8765 全程不动。清库后无真实 PDF 时验收脚本会自造最小 PDF。
 
 ## 已知限制 / 下一步
 
-- 单任务串行、无鉴权、默认仅监听 `127.0.0.1`（可用 `C1_STRUCTURE_HOST=0.0.0.0` 放开）；上传用 base64 JSON，单文件上限 20MB。**平台库必选**（`C1_STRUCTURE_DB`），断库显式 503 不降级。
+- 单条资料串行、一次只上传**单文件**、无鉴权、默认仅监听 `127.0.0.1`（可用 `C1_STRUCTURE_HOST=0.0.0.0` 放开）；上传用 base64 JSON，单文件上限 20MB。**平台库必选**（`C1_STRUCTURE_DB`），断库显式 503 不降级。
+- 同一字节文件可多次登记（无 sha 去重）；重放解析会清空该资料的暂存/产物/回执/隔离，不可撤销。任务概念已移除，`/tasks` 路径 404。
 - 首次运行需联网下载 PaddleX 官方模型（数百 MB）；离线部署要预置缓存，见「独立部署」。
 - 多页 PDF 默认（页码留空）**逐页全量解析 + 报告翻页切换 + 跨页续表拼接**（2026-11-19）；填页码只解析该页。拼接两条通路：重复表头（相邻页 + 同列 + 列对齐 + 表头相同）与无表头续页（列位置子集对齐 + 续页贴顶 + 首行像数据，2026-11-20）；判据保守，宁可不拼不误拼，版式差异大的续表保持各页独立。
 - 参数面板现覆盖 9 项（第一梯队 8 项 + `doc_unwarp`）+ 参数快照 + 运行日志；识别模型 mobile/server 仍未放（换模型要改 `config.py`，属实验模式）。

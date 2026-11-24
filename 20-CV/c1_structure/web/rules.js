@@ -294,7 +294,7 @@ function loadTplFields(){
 }
 function openMap(lt){
   editLt=lt||null;
-  ltLocked=!!(lt&&lt.task_refs>0);
+  ltLocked=!!(lt&&lt.file_refs>0);
   var d=dsById(curDs);
   document.getElementById('mptitle').textContent=lt?'编辑入库规则':'新建入库规则';
   document.getElementById('mpds').value=d?(d.name+' · '+d.host+':'+d.port+'/'+d.db_name):'';

@@ -1,15 +1,15 @@
-/* web/preview.js — 任务数据预览（P1）：DB 暂存记录表 + 编辑/确认/拒绝
+/* web/preview.js — 资料数据预览（P1）：DB 暂存记录表 + 编辑/确认/拒绝
    + 源图血缘回溯。右侧舞台忠实复刻对照报告（report.js 舞台逻辑移植）：默认零框，
    悬停/点击揭示单格，点图走 hitCell 命中测试可定位任意记录行/格（不限选中行），
    窗口式翻页（全页预渲染、切页只切显隐，与报告同架构）、原图/矫正图切换、
    叠加框开关、光标跟随提示、全屏浮层、左右方向键翻页。
    匹配键用 data-i（记录序）/data-key（字段）。单击=血缘钉住，双击=改值（P1）。
-   数据经 /api/tasks/<id>/staging|parse 读 DB；图片经 /files/<task_file_id>/…。 */
-var task=new URLSearchParams(location.search).get('task')||'';
-var curFile=new URLSearchParams(location.search).get('file')||'';
+   数据经 /api/sources/<id>/staging|parse 读 DB；图片经 /files/<file_id>/…。 */
+var file=new URLSearchParams(location.search).get('file')||'';
+var curFile=file;
 var traceRecord=new URLSearchParams(location.search).get('index')||'';
 var embedMode=new URLSearchParams(location.search).get('embed')==='1';
-var taskDoc=null, records=[], keys=[], selIdx=-1, selKey=null, stateFilter='';
+var fileDoc=null, records=[], keys=[], selIdx=-1, selKey=null, stateFilter='';
 var srcMap={};
 var pageMap={}, allAnchors=[], pagesPresent=[], curPage=null, curView=null, allOn=false;
 
@@ -22,25 +22,8 @@ function imgUrl(rel){
     String(rel).split('/').map(encodeURIComponent).join('/');
 }
 function renderTabs(){
-  var tabs=document.getElementById('filetabs');
-  var files=(taskDoc&&taskDoc.files||[]).filter(function(f){return f.task_file_id;});
-  if(files.length<2){ tabs.hidden=true; return; }
-  tabs.hidden=false;
-  tabs.innerHTML=files.map(function(f){
-    return '<button type="button" class="ftab'+(String(f.task_file_id)===curFile?' on':'')+
-      '" data-rf="'+f.task_file_id+'" title="'+escHtml(f.name)+'">'+
-      escHtml(shortName(f.name))+'</button>';
-  }).join('');
+  document.getElementById('filetabs').hidden=true;
 }
-document.getElementById('filetabs').addEventListener('click',function(e){
-  var b=e.target.closest?e.target.closest('[data-rf]'):null;
-  if(!b) return;
-  curFile=b.getAttribute('data-rf');
-  history.replaceState(null,'','/preview?task='+encodeURIComponent(task)+
-    '&file='+encodeURIComponent(curFile));
-  renderTabs(); loadStaging();
-});
-
 function collectKeys(){
   var seen={}, out=[];
   records.forEach(function(r){
@@ -51,7 +34,7 @@ function collectKeys(){
   return out;
 }
 function readOnly(){
-  return !!(taskDoc&&['loading','loaded'].indexOf(taskDoc.state)>=0);
+  return !!(fileDoc&&['loading','loaded'].indexOf(fileDoc.state)>=0);
 }
 function recState(r){ return (r.review||{}).state||'pending'; }
 /* 记录级徽标：pending 是「待校验」（与筛选 chips 一致），区别于任务级「待处理」 */
@@ -426,7 +409,7 @@ function startEdit(td){
   inp.addEventListener('click',function(ev){ ev.stopPropagation(); });
 }
 function reviewBase(){
-  return '/api/tasks/'+encodeURIComponent(task)+'/staging/'+encodeURIComponent(curFile);
+  return '/api/sources/'+encodeURIComponent(file)+'/staging';
 }
 function patchCell(i,key,val){
   var body={values:{}}; body.values[key]=val;
@@ -439,7 +422,7 @@ function patchCell(i,key,val){
     else{
       records[i]=o.j.record;
       toast('已保存，记录转为「已修改」，请重新确认');
-      if(o.j.task_state&&taskDoc) taskDoc.state=o.j.task_state;
+      if(o.j.file_state&&fileDoc) fileDoc.state=o.j.file_state;
       updateLoadButtons();
     }
     renderTable(); applySelection();
@@ -458,7 +441,7 @@ function reviewRows(idxs,state){
     idxs.forEach(function(i){
       records[i].review={state:state,at:(records[i].review||{}).at};
     });
-    if(o.j.task_state&&taskDoc) taskDoc.state=o.j.task_state;
+    if(o.j.file_state&&fileDoc) fileDoc.state=o.j.file_state;
     updateLoadButtons();
     renderTable(); applySelection();
     toast((state==='confirmed'?'已确认 ':'已拒绝 ')+o.j.updated+' 条');
@@ -687,13 +670,13 @@ views.addEventListener('click',function(e){
 function loadStaging(){
   document.getElementById('err').hidden=true;
   var mb=document.getElementById('modebanner');
-  var st=taskDoc&&taskDoc.state;
+  var st=fileDoc&&fileDoc.state;
   if(st==='loading'){
     mb.className='banner info';
     mb.textContent='入库进行中 · 记录只读（完成后自动刷新）';
-  }else if(st==='to_load'&&taskDoc&&taskDoc.error){
+  }else if(st==='to_load'&&fileDoc&&fileDoc.error){
     mb.className='banner warn';
-    mb.textContent='上次入库未完成：'+taskDoc.error+' · 可点击「重新入库」重试';
+    mb.textContent='上次入库未完成：'+fileDoc.error+' · 可点击「重新入库」重试';
   }else if(readOnly()){
     mb.className='banner warn';
     mb.textContent='任务已入库 · 记录只读，修改、确认、拒绝操作已锁定';
@@ -703,10 +686,8 @@ function loadStaging(){
   }
   updateLoadButtons();
   updateExButton();
-  var u='/api/tasks/'+encodeURIComponent(task)+'/staging'+
-    (curFile?('?file='+encodeURIComponent(curFile)):'');
-  var eu='/api/tasks/'+encodeURIComponent(task)+'/parse'+
-    (curFile?('?file='+encodeURIComponent(curFile)):'');
+  var u='/api/sources/'+encodeURIComponent(file)+'/staging';
+  var eu='/api/sources/'+encodeURIComponent(file)+'/parse';
   Promise.all([
     fetch(u).then(function(r){
       if(!r.ok) return r.json().then(function(j){throw new Error(j.error||('HTTP '+r.status));});
@@ -724,11 +705,10 @@ function loadStaging(){
     if(traceRecord){
       var ti=records.findIndex(function(r){return String(r.index)===String(traceRecord);});
       if(ti>=0) selectRecord(ti);
-      else toast('该 record_id 不在当前文件中（可能属于同一任务的其他文件）');
+      else toast('该 record_id 不在当前资料中');
       traceRecord='';
       history.replaceState(null,'',location.pathname+
-        '?task='+encodeURIComponent(task)+
-        '&file='+encodeURIComponent(curFile));
+        '?file='+encodeURIComponent(file));
     }
     var links=document.getElementById('filelinks');
     if(curFile){
@@ -750,7 +730,7 @@ function loadStaging(){
 var loadPoll=null;
 function updateLoadButtons(){
   var lb=document.getElementById('loadbtn'), rb=document.getElementById('rcbtn');
-  var t=taskDoc||{}, hasLoad=!!t.load;
+  var t=fileDoc||{}, hasLoad=!!t.load;
   lb.hidden=!(t.state==='to_load');
   lb.textContent=t.error?'重新入库':'入库';
   rb.hidden=!(hasLoad&&(t.state==='loaded'||t.state==='to_load'));
@@ -759,8 +739,8 @@ function updateLoadButtons(){
 /* ---- 抽取入口（数据预览页）：to_extract=执行抽取；to_review/to_load=
    重新抽取（先删后插覆盖校验结论，须确认）。按钮只作用当前文件页签。 ---- */
 function fileState(){
-  var f=(taskDoc&&taskDoc.files||[]).find(function(x){
-    return String(x.task_file_id)===curFile;});
+  var f=(fileDoc&&fileDoc.files||[]).find(function(x){
+    return String(x.file_id)===curFile;});
   return f&&f.state;
 }
 function updateExButton(){
@@ -772,13 +752,13 @@ function updateExButton(){
   renderExRule();
 }
 /* 抽取规则版本下拉（方案A）：默认＝任务已绑规则（未绑=原始透传）；
-   选其他版本则本次抽取时后端改绑任务（set_task_rule）。 */
+   选其他版本则本次抽取时后端改绑任务（set_rule）。 */
 var rulesList=null, rulesLoading=false;
 function renderExRule(hide){
   var sel=document.getElementById('exrule');
   if(hide){ sel.hidden=true; return; }
   sel.hidden=false;
-  var bound=String((taskDoc&&taskDoc.rule||{}).version_id||'');
+  var bound=String((fileDoc&&fileDoc.rule||{}).version_id||'');
   if(!rulesList){
     if(!rulesLoading){ rulesLoading=true;
       fetch('/api/extract-rules').then(function(r){return r.json();})
@@ -800,9 +780,9 @@ document.getElementById('exbtn').onclick=function(){
   var b=this, st=fileState(), rv=document.getElementById('exrule').value;
   if(st!=='to_extract'&&!confirm('重新抽取将按所选抽取规则覆盖该文件全部暂存记录，已做的校验确认会清零。继续？'))return;
   b.disabled=true;
-  fetch('/api/tasks/'+encodeURIComponent(task)+'/extract',{
+  fetch('/api/sources/'+encodeURIComponent(file)+'/extract',{
     method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({task_file_ids:[Number(curFile)],
+    body:JSON.stringify({
                          force:st!=='to_extract',
                          rule_version_id:rv?Number(rv):null})
   }).then(function(r){
@@ -811,23 +791,23 @@ document.getElementById('exbtn').onclick=function(){
   }).then(function(j){
     var n=(j.files||[]).reduce(function(s,f){return s+(f.records_n||0);},0);
     toast('抽取完成：生成 '+n+' 条记录');
-    return fetch('/api/tasks/'+encodeURIComponent(task)).then(function(r){
+    return fetch('/api/sources/'+encodeURIComponent(file)).then(function(r){
       return r.json();});
   }).then(function(j){
-    taskDoc=j.task; renderTabs(); loadStaging();
+    fileDoc=j.file; loadStaging();
   }).catch(function(e){ showErr('抽取失败：'+e.message); })
   .then(function(){ b.disabled=false; });
 };
 document.getElementById('loadbtn').onclick=function(){
-  var t=taskDoc||{};
+  var t=fileDoc||{};
   if(!t.load){
-    openLoadWizard({taskId:task, ruleId:(t.rule||{}).rule_id,
+    openLoadWizard({fileId:file, ruleId:(t.rule||{}).rule_id,
       getSample:function(){ return Promise.resolve(records.slice(0,3)); },
       onDone:function(){ loadStaging(); }});
     return;
   }
   var lb=this; lb.disabled=true;
-  fetch('/api/tasks/'+encodeURIComponent(task)+'/load',{method:'POST'})
+  fetch('/api/sources/'+encodeURIComponent(file)+'/load',{method:'POST'})
     .then(function(r){
       return r.json().catch(function(){return {};}).then(function(j){
         return {s:r.status,j:j};
@@ -839,15 +819,15 @@ document.getElementById('loadbtn').onclick=function(){
       var mb=document.getElementById('modebanner');
       mb.className='banner info';
       mb.textContent='入库进行中 · 记录只读（完成后自动刷新）';
-      taskDoc.state='loading'; renderTable(); updateLoadButtons();
+      fileDoc.state='loading'; renderTable(); updateLoadButtons();
       clearInterval(loadPoll);
       loadPoll=setInterval(function(){
-        fetch('/api/tasks/'+encodeURIComponent(task)).then(function(r){
+        fetch('/api/sources/'+encodeURIComponent(file)).then(function(r){
           return r.json();
         }).then(function(j){
-          if(!j.task) return;
-          taskDoc=j.task;
-          if(taskDoc.state!=='loading'){
+          if(!j.file) return;
+          fileDoc=j.file;
+          if(fileDoc.state!=='loading'){
             clearInterval(loadPoll); loadPoll=null;
             loadStaging();
           }
@@ -855,132 +835,31 @@ document.getElementById('loadbtn').onclick=function(){
       },1500);
     }).catch(function(){ lb.disabled=false; showErr('入库请求失败：平台库不可用'); });
 };
-document.getElementById('rcbtn').onclick=function(){ openReceiptDrawer(task); };
+document.getElementById('rcbtn').onclick=function(){ openReceiptDrawer(file); };
 
-/* ---- 任务级台账（无 task 入口）：客户端搜索/筛选，与资料/任务页工具栏同构 ---- */
-var ledgerItems=[], lq='',
-    lprog=new URLSearchParams(location.search).get('prog')||'',
-    ledPage=1, ledSize=getListPer();
-var pgLed=bindPager(document.getElementById('ledpager'),function(d){
-  ledPage+=d; renderLedger();
-},function(n){ ledSize=n; ledPage=1; renderLedger(); });
-function ledCnt(r){
-  return '<td class="num">'+r.records_n+'</td>'+
-    '<td class="num">'+r.pending_n+'</td>'+
-    '<td class="num'+(r.edited_n?' led-edited':'')+'">'+r.edited_n+'</td>'+
-    '<td class="num">'+r.confirmed_n+'</td>'+
-    '<td class="num">'+r.rejected_n+'</td>';
-}
-function ledMatch(r){
-  if(lprog==='todo'&&!(r.pending_n>0)) return false;
-  if(lprog==='edited'&&!(r.edited_n>0)) return false;
-  if(lprog==='done'&&r.pending_n>0) return false;
-  if(lq){
-    var tpl=r.rule||{};
-    var hay=(r.task_id+' '+(tpl.name||'')+' '+
-      (r.files||[]).map(function(f){return f.name;}).join(' ')).toLowerCase();
-    if(hay.indexOf(lq)<0) return false;
-  }
-  return true;
-}
-function renderLedger(){
-  var list=ledgerItems.filter(ledMatch);
-  var info=pageSlice(list,ledPage,ledSize);
-  ledPage=info.page;
-  document.getElementById('ledger').hidden=!list.length;
-  var empty=document.getElementById('ledgerempty');
-  empty.hidden=list.length>0;
-  if(!list.length){
-    empty.innerHTML=ledgerItems.length?
-      '<b>无匹配任务</b>请调整搜索关键词或筛选条件。':
-      '<b>暂无可校验的记录</b>请先到「解析」页上传文件。';
-  }
-  document.getElementById('ledgerrows').innerHTML=info.rows.map(function(r,i){
-    var tpl=r.rule||{};
-    var main='<tr class="led-task" data-task="'+r.task_id+'" title="点击展开/收起文件子行">'+
-      '<td class="seq">'+seqNo(info,i)+'</td>'+
-      '<td class="mono"><span class="led-caret">▸</span>#'+r.task_id+'</td>'+
-      '<td>'+r.files.length+' 个资料</td>'+
-      '<td>'+escHtml((tpl.name||'原始透传')+' v'+(tpl.version||1))+'</td>'+
-      ledCnt(r)+
-      '<td>'+stateBadge(r.task_state)+'</td>'+
-      '<td class="num">'+fmtTime(r.created_at)+'</td></tr>';
-    var subs=r.files.map(function(f){
-      return '<tr class="led-file" data-task="'+r.task_id+'" data-file="'+
-        f.task_file_id+'" hidden>'+
-        '<td></td>'+
-        '<td class="mono" title="资料ID（与入库回执中的「资料ID」一致）">资料 #'+f.task_file_id+'</td>'+
-        '<td><span class="nm led-subname" title="'+escHtml(f.name)+'">'+
-        escHtml(shortName(f.name))+'</span></td>'+
-        '<td></td>'+ledCnt(f)+'<td></td><td></td></tr>';
-    }).join('');
-    return main+subs;
-  }).join('');
-  pgLed.render(info);
-}
-
-var tasktag=document.getElementById('tasktag');
-tasktag.textContent=task?('任务 #'+task):'';
-tasktag.hidden=!task;
-document.getElementById('tasklink').href=task?('/tasks?task='+encodeURIComponent(task)):'/tasks';
+var filetag=document.getElementById('filetag');
+filetag.textContent=file?('资料 #'+file):'';
+filetag.hidden=!file;
+document.getElementById('filelink').href='/sources';
 /* 默认收起成细竖条：表格撑满全宽，点数据自动弹出（用户裁决）。
    embed=1（数据看板右侧血缘）：只留血缘面板、强制展开，不显示台账入口。 */
 if(embedMode){
   document.body.classList.add('embed-lineage');
   setCollapsed(false);
 }else setCollapsed(true);
-if(embedMode&&!task){
+if(embedMode&&!file){
   document.getElementById('err').hidden=false;
-  document.getElementById('err').textContent='缺少 task/file 参数';
-}else if(!task){
-  /* 无任务参数＝台账入口：页头与资料/任务同构（标题＋右对齐工具栏，无返回），
-     面板内直接表格。任务行汇总校验进度，点任务行展开文件子行，点子行进数据预览。 */
-  document.getElementById('modebanner').hidden=true;
-  document.querySelector('.stgwrap').hidden=true;
-  document.getElementById('summary').hidden=true;
-  document.getElementById('taskpick').hidden=false;
-  document.getElementById('tasklink').hidden=true;
-  document.getElementById('filelinks').hidden=true;
-  document.getElementById('tplbadge').hidden=true;
-  document.getElementById('ledgerbar').hidden=false;
-  document.querySelector('.pagehead h1').textContent='任务台账';
-  document.getElementById('lq').addEventListener('input',function(){
-    lq=this.value.trim().toLowerCase(); ledPage=1; renderLedger();
-  });
-  document.getElementById('lprog').onchange=function(){ lprog=this.value; ledPage=1; renderLedger(); };
-  if(lprog) document.getElementById('lprog').value=lprog;   // ?prog=todo 深链（工作台）
-  fetch('/api/staging/ledger').then(function(r){
-    if(!r.ok) return r.json().then(function(j){throw new Error(j.error||('HTTP '+r.status));});
-    return r.json();
-  }).then(function(j){
-    ledgerItems=j.items||[]; renderLedger();
-  }).catch(function(e){ showErr('读取任务台账失败：'+e.message); });
+  document.getElementById('err').textContent='缺少 file 参数';
+}else if(!file){
+  /* 无 file 参数：台账已迁到资料清单，直接跳转 */
+  location.replace('/sources');
 }else{
-  fetch('/api/tasks/'+encodeURIComponent(task)).then(function(r){
-    if(!r.ok) throw new Error('任务不存在');
+  fetch('/api/sources/'+encodeURIComponent(file)).then(function(r){
+    if(!r.ok) throw new Error('资料不存在');
     return r.json();
   }).then(function(j){
-    taskDoc=j.task;
-    if(!curFile){
-      var f=(taskDoc.files||[]).find(function(x){return x.task_file_id;});
-      curFile=f?String(f.task_file_id):'';
-    }
-    renderTabs(); loadStaging();
+    fileDoc=j.file;
+    loadStaging();
   }).catch(function(e){ showErr(e.message); });
 }
 
-/* 台账：点任务行展开/收起其文件子行；点文件子行进入该文件的数据预览 */
-document.getElementById('ledgerrows').addEventListener('click',function(e){
-  var tr=e.target.closest?e.target.closest('tr[data-task]'):null;
-  if(!tr) return;
-  if(tr.classList.contains('led-file')){
-    location.href='/preview?task='+tr.getAttribute('data-task')+
-      '&file='+tr.getAttribute('data-file');
-    return;
-  }
-  var open=tr.classList.toggle('open');
-  var n=tr.nextElementSibling;
-  while(n&&n.classList.contains('led-file')){
-    n.hidden=!open; n=n.nextElementSibling;
-  }
-});

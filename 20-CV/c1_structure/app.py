@@ -8,20 +8,22 @@ c1_structure/app.py — Web 工具入口（FastAPI + uvicorn）。只负责 HTTP
 
 路由（页面地址＝产品名词，与 web/ 文件一一对应）：
     GET  /              工作台首页（web/home.html）
-    GET  /parse         解析页（parse.html） · /sources 资料 · /extract 抽取规则
-    GET  /preview       任务数据预览（preview.html）
-    GET  /review        校验壳页（review_home.html，自动化校验待实现） · /rules 入库规则（rules.html）
-    GET  /tasks         任务页 · GET /healthz 健康检查
-    POST /api/upload    上传（base64 JSON，不依赖 python-multipart）
+    GET  /sources       资料清单（唯一功能入口） · /parse 解析 · /extract 抽取规则
+    GET  /preview       资料数据预览（preview.html，二级页）
+    GET  /review        校验壳页 · /rules 入库规则 · /dashboard 数据看板
+    GET  /healthz       健康检查
+    POST /api/upload    上传解析（base64 JSON；单文件）
     GET  /api/status    处理进度
-    GET  /parse-report   对照报告（重定向到最新 task_file 的报告真实地址）
-    /files/<task_file_id>/<path>   产物（DB BLOB，白名单，raw 403）
-    /srcfiles/<file_id>            原件（c1_doc_file.content BLOB）
+    GET  /parse-report   对照报告（重定向到最新资料的报告真实地址）
+    /files/<file_id>/<path>   产物（DB BLOB，白名单，raw 403）
+    /srcfiles/<file_id>       原件（c1_doc_file.content BLOB）
     /static/<path>      页面 css / js
 
-存储契约：DB 唯一事实源——目录/记录/血缘关系表，
-原件字节 c1_doc_file.content，产物字节 c1_parse_artifact（task_file 粒度）；
-磁盘仅 tmp/ 运行期 scratch。DB 不可用显式 503/failed，不降级。
+模型：一条资料记录 = 一次运行（单文件，file_id 为唯一主键）；无 task 概念。
+全部流程 API 收敛在 /api/sources/{file_id}/... 下；配置 API 见 /api/extract-rules
+与 /api/load/*。存储契约：DB 唯一事实源，原件字节 c1_doc_file.content，
+产物字节 c1_parse_artifact（file_id 粒度）；磁盘仅 tmp/ 运行期 scratch。
+DB 不可用显式 503/failed，不降级。
 审计/file:// 用 export_artifacts.py。解析逻辑在 pipeline/，报告在 parse_report/。
 """
 import base64
@@ -138,7 +140,7 @@ def _blob_response(data, mime, sha, request):
 
 @app.get('/files/{path:path}')
 def files_db(path: str, request: Request):
-    """/files/<task_file_id>/<产物相对路径>：白名单 + raw 403。"""
+    """/files/<file_id>/<产物相对路径>：白名单 + raw 403。"""
     norm = unquote(path).replace('\\', '/')
     parts = [p for p in norm.split('/') if p not in ('', '.')]
     if not parts or '..' in parts:
@@ -209,11 +211,6 @@ def sources_page():
     return HTMLResponse(asset('sources.html'))
 
 
-@app.get('/tasks', response_class=HTMLResponse)
-def tasks_page():
-    return HTMLResponse(asset('tasks.html'))
-
-
 @app.get('/preview', response_class=HTMLResponse)
 def preview_page():
     return HTMLResponse(asset('preview.html'))
@@ -274,7 +271,7 @@ async def _json_body(request):
 
 def _reject_retired_load_keys(body):
     """P2c：上传不再携带入库目标。旧契约键显式 400（防旧浏览器缓存静默错行），
-    目标改在 POST /api/tasks/{id}/load 时选择。"""
+    目标改在 POST /api/sources/{id}/load 时选择。"""
     if any(k in body for k in ('mode', 'load_datasource_id', 'load_table_id')):
         raise store_errors.BadRequest(
             '上传不再携带入库目标，请在任务入库时选择')
@@ -294,6 +291,9 @@ async def upload(request: Request):
     files = body.get('files') or []
     if not files:
         return JSONResponse({'ok': False, 'error': '未收到文件'},
+                            status_code=400)
+    if len(files) > 1:
+        return JSONResponse({'ok': False, 'error': '一次只能解析一个文件'},
                             status_code=400)
     # 调试参数：校验一次，非法值回退默认并把警告带回页面（不让整批失败）
     params, warns = params_mod.normalize(body.get('params'))
@@ -352,21 +352,20 @@ def api_logs():
     if not path or not os.path.isfile(path):
         return JSONResponse({'ok': False, 'error': '暂无日志'}, status_code=404)
     return FileResponse(path, media_type='text/plain; charset=utf-8',
-                        filename='task_{}.log'.format(
-                            service.STATE.get('task_id')))
+                        filename='file_{}.log'.format(
+                            service.STATE.get('file_id')))
 
 
 @app.get('/parse-report')
 def parse_report():
-    """对照报告：重定向到最新 task_file 的 对照报告.html 真实地址。
-    报告内资源全是相对路径，必须落在该 task_file 的 URL 下才能解析；
+    """对照报告：重定向到最新资料的 对照报告.html 真实地址。
+    报告内资源全是相对路径，必须落在该资料的 URL 下才能解析；
     file:// 直开用 export_artifacts.py 按需导出。"""
     from urllib.parse import quote
-    tf = _load('store.artifact_db').latest_task_file_with(
-        config.PARSE_REPORT_NAME)
-    if tf is not None:
+    fid = _load('store.artifact').latest_file_with(config.PARSE_REPORT_NAME)
+    if fid is not None:
         return RedirectResponse('/files/{}/{}'.format(
-            tf, quote(config.PARSE_REPORT_NAME, safe='')))
+            fid, quote(config.PARSE_REPORT_NAME, safe='')))
     return HTMLResponse(
         '<h3>还没有对照报告</h3><p><a href="/">返回工作台</a>先上传文件发起解析。</p>')
 
@@ -374,14 +373,14 @@ def parse_report():
 # ---- 数据链路 API（P0：资料库 / 抽取规则 / 任务 / 预生成内容读取）----
 # 全部经 catalog / content / artifact repo 查 DB。错误分类归异常处理器：
 # StoreError→对应码，DB 故障→503，编程错误→500。任务以 task id 为键；
-# 文件以 task_file_id 为键；原件以 file_id 为键。
+# 资料/产物/记录/回执一律以 file_id 为键（一资料=一次运行）。
 
 
 @app.get('/api/sources')
 def api_sources(q: str = None, kind: str = None, tag: str = None,
-                page: int = 1, size: int = 20):
+                state: str = None, page: int = 1, size: int = 20):
     return _load('store.catalog').list_files(
-        q, kind, tag, page, per_page=max(1, min(size, 200)))
+        q, kind, tag, page, per_page=max(1, min(size, 200)), state=state)
 
 
 @app.post('/api/sources')
@@ -414,12 +413,46 @@ def api_sources_del(file_id: int):
 
 @app.get('/api/sources/{file_id}/pipeline')
 def api_sources_pipeline(file_id: int):
-    """资料文件流程追踪：按 file_id 聚合关联 task 的四节点状态与产物入口。"""
-    f = _load('store.catalog').get_file(file_id)
+    """资料流程追踪：单链路（一资料=一次运行）四节点状态与产物入口。"""
+    catalog = _load('store.catalog')
+    f = catalog.get_file(file_id)
     if f is None:
         raise store_errors.NotFound('资料文件不存在')
+    content_db = _load('store.content_db')
+    arts = [a['name'] for a in _load('store.artifact').list(file_id)]
+    gate = content_db.gate_counts(file_id)
+    logs = catalog.list_load_logs(file_id)
+    actions = {}
+    for l in logs:
+        actions[l['action']] = actions.get(l['action'], 0) + 1
+    rule = None
+    if f.get('rule_version_id'):
+        tv = catalog.get_rule_version(version_id=f['rule_version_id'])
+        if tv:
+            rule = {'name': tv['name'], 'version': tv['version'],
+                    'rule_id': tv['rule_id'], 'version_id': tv['id']}
+    load = None
+    if f.get('load_table_id'):
+        lt = catalog.get_load_table(f['load_table_id'])
+        ds = catalog.get_datasource(f['load_datasource_id']) \
+            if f.get('load_datasource_id') else None
+        if lt:
+            load = {'target_table': lt['target_table'],
+                    'write_mode': lt['write_mode'],
+                    'datasource_id': f['load_datasource_id'],
+                    'datasource_name': ds['name'] if ds else None,
+                    'db_name': ds['db_name'] if ds else None}
     return {'ok': True, 'file': f,
-            'tasks': _load('store.catalog').file_pipeline(file_id)}
+            'pipeline': {
+                'file_id': file_id,
+                'state': f['state'],
+                'rule': rule,
+                'parse_artifacts': arts,
+                'review_counts': {k: gate[k] for k in
+                                  ('confirmed', 'edited', 'rejected', 'pending')},
+                'load': load,
+                'load_actions': actions,
+            }}
 
 
 @app.get('/api/extract-rules')
@@ -612,24 +645,76 @@ def api_load_table_del(lt_id: int):
     return {'ok': True}
 
 
-@app.get('/api/tasks/{task_id}/gate')
-def api_task_gate(task_id: int):
-    """门禁四态计数（轻量）：任务详情/入库目标抽屉用，不拉记录内容。"""
-    counts = _load('store.content_db').gate_counts(task_id)
-    return dict(counts, ok=True)
+# ---- 资料流程 API：全部以 file_id 为键，一条资料 = 一次运行 ----
+
+def _file_or_404(file_id):
+    f = _load('store.catalog').get_file(file_id)
+    if f is None:
+        raise store_errors.NotFound('资料不存在')
+    return f
 
 
-@app.get('/api/tasks/{task_id}/load-log')
-def api_task_load_log(task_id: int):
-    if _load('store.catalog').get_task(task_id) is None:
-        raise store_errors.NotFound('任务不存在')
-    return {'ok': True, 'items': _load('store.catalog').list_load_logs(task_id)}
+@app.get('/api/sources/state')
+def api_sources_state(state: str = None):
+    """工作台/筛选：资料带运行状态列表（替代原 /api/tasks）。"""
+    return {'items': _load('store.catalog').list_files(
+        state=state, per_page=200)['items']}
 
 
-@app.post('/api/tasks/{task_id}/load')
-async def api_task_load(task_id: int, request: Request):
-    """手动入库闸门（P2c）：未绑定任务带 {load_datasource_id, load_table_id}
-    入库时绑定；已绑定任务空体沿用原绑定。门禁/预检在 service.launch_load。"""
+@app.get('/api/sources/ledger')
+def api_sources_ledger():
+    """校验台账：按资料聚合记录数与校验进度。"""
+    return {'ok': True, 'items': _load('store.content_db').ledger()}
+
+
+@app.get('/api/sources/{file_id}')
+def api_source_detail(file_id: int):
+    """资料详情（替代原 task 投影）：状态/规则/入库绑定/记录数。"""
+    f = _file_or_404(file_id)
+    rule = None
+    if f.get('rule_version_id'):
+        tv = _load('store.catalog').get_rule_version(
+            version_id=f['rule_version_id'])
+        if tv:
+            rule = {'name': tv['name'], 'version': tv['version'],
+                    'version_id': tv['id'], 'rule_id': tv['rule_id']}
+    gate = _load('store.content_db').gate_counts(file_id)
+    load = None
+    if f.get('load_table_id'):
+        lt = _load('store.catalog').get_load_table(f['load_table_id'])
+        if lt:
+            load = {'datasource_id': f['load_datasource_id'],
+                    'load_table_id': f['load_table_id'],
+                    'target_table': lt['target_table'],
+                    'write_mode': lt['write_mode']}
+    return {'file': {'file_id': file_id, 'state': f['state'],
+                     'error': f['error'], 'rule': rule, 'load': load,
+                     'params': f.get('params_json') or {},
+                     'created_at': str(f['created_at']),
+                     'name': f['name'],
+                     'records_n': gate['records_n'],
+                     'files': [{'file_id': file_id, 'name': f['name'],
+                                'state': f['state'],
+                                'records_n': gate['records_n']}]}}
+
+
+@app.get('/api/sources/{file_id}/gate')
+def api_file_gate(file_id: int):
+    """门禁四态计数（轻量）：入库前检查，不拉记录内容。"""
+    _file_or_404(file_id)
+    return dict(_load('store.content_db').gate_counts(file_id), ok=True)
+
+
+@app.get('/api/sources/{file_id}/load-log')
+def api_file_load_log(file_id: int):
+    _file_or_404(file_id)
+    return {'ok': True, 'items': _load('store.catalog').list_load_logs(file_id)}
+
+
+@app.post('/api/sources/{file_id}/load')
+async def api_file_load(file_id: int, request: Request):
+    """手动入库闸门：未绑定带 {load_datasource_id, load_table_id}；
+    已绑定空体沿用原绑定。门禁/预检在 service.launch_load。"""
     raw = await request.body()
     body = await _json_body(request) if raw else {}
     target = None
@@ -639,113 +724,61 @@ async def api_task_load(task_id: int, request: Request):
                       'load_table_id': int(body.get('load_table_id'))}
         except (TypeError, ValueError):
             raise store_errors.BadRequest('入库目标须为业务库/入库规则 id')
-    return service.launch_load(task_id, target)
+    return service.launch_load(file_id, target)
 
 
-@app.post('/api/tasks/{task_id}/extract')
-async def api_task_run_extract(task_id: int, request: Request):
-    """执行抽取（与解析解耦）：{task_file_ids?, force?, rule_version_id?}；
-    空体=全部待抽取文件＋任务已绑规则（未绑则默认原始透传）。
+@app.post('/api/sources/{file_id}/extract')
+async def api_file_run_extract(file_id: int, request: Request):
+    """执行抽取：{force?, rule_version_id?}；空体=资料已绑规则（未绑默认透传）。
     parse.json 纯投影、同步毫秒级；重抽覆盖校验结论须 force=true。"""
     raw = await request.body()
     body = await _json_body(request) if raw else {}
-    ids = body.get('task_file_ids')
-    if ids is not None and (not isinstance(ids, list)
-                            or not all(isinstance(i, int) for i in ids)):
-        raise store_errors.BadRequest('task_file_ids 须为整数数组')
     rv = body.get('rule_version_id')
     if rv is not None and not isinstance(rv, int):
         raise store_errors.BadRequest('rule_version_id 须为整数')
-    # collect+parse.json 解析是 CPU 密集（上传后 warmup 还在抢 GIL）：
-    # 放线程池执行，事件循环保持可响应
-    return await run_in_threadpool(service.run_extract, task_id,
-                                   task_file_ids=ids,
+    return await run_in_threadpool(service.run_extract, file_id,
                                    force=bool(body.get('force')),
                                    rule_version_id=rv)
 
 
-@app.post('/api/tasks/{task_id}/reparse')
-def api_task_reparse(task_id: int):
-    """原地重放解析：同一批原件＋任务参数重跑；暂存记录/校验结论清空，
-    产物覆盖，回执日志保留。解析中/入库中/已入库回 409。"""
-    return service.reparse(task_id)
+@app.post('/api/sources/{file_id}/reparse')
+def api_file_reparse(file_id: int):
+    """原地重放解析：原件回捞重跑；暂存/产物/回执/隔离全清（D4）。
+    解析中/入库中/已入库回 409。"""
+    return service.reparse(file_id)
 
 
-@app.post('/api/tasks/{task_id}/load-preview')
-async def api_task_load_preview(task_id: int, request: Request):
-    """入库向导 dry-run（只读）：{load_table_id} 或 {draft:{datasource_id,
-    target_table,write_mode,fields}}；已绑定任务可空体。返回 新增/覆盖/跳过/隔离 计数。"""
+@app.post('/api/sources/{file_id}/load-preview')
+async def api_file_load_preview(file_id: int, request: Request):
+    """入库向导 dry-run（只读）：{load_table_id} 或 {draft:{...}}。"""
     body = await _json_body(request)
     draft = body.get('draft')
     table_id = body.get('load_table_id')
-    return service.preview_load(task_id,
+    return service.preview_load(file_id,
                                 table_id=None if draft else table_id,
                                 draft=draft if isinstance(draft, dict) else None)
 
 
-@app.get('/api/tasks/{task_id}/quarantine')
-def api_task_quarantine(task_id: int):
-    """隔离区只读展示（本轮无解决 UI）：任务内全部隔离条目。"""
-    if _load('store.catalog').get_task(task_id) is None:
-        raise store_errors.NotFound('任务不存在')
+@app.get('/api/sources/{file_id}/quarantine')
+def api_file_quarantine(file_id: int):
+    """隔离区只读展示：该资料的隔离条目。"""
+    _file_or_404(file_id)
     return {'ok': True,
-            'items': _load('store.catalog').list_quarantine(task_id=task_id)}
+            'items': _load('store.catalog').list_quarantine(file_id=file_id)}
 
 
-@app.get('/api/tasks')
-def api_tasks():
-    """任务列表：task/task_file/file 表投影（无 run.json 附件）。"""
-    return {'items': _load('store.catalog').list_tasks()}
-
-
-@app.get('/api/tasks/{task_id}')
-def api_task_detail(task_id: int):
-    doc = _load('store.catalog').get_task(task_id)
-    if doc is None:
-        return JSONResponse({'ok': False, 'error': '任务不存在'},
-                            status_code=404)
-    live = None
-    with service.LOCK:
-        if service.STATE.get('task_id') == task_id:
-            live = {'running': service.STATE['running'],
-                    'progress': service.STATE['progress'],
-                    'stage': service.STATE['stage'],
-                    'error': service.STATE['error']}
-    return {'task': doc, 'live': live}
-
-
-def _tf_of(task_id, file):
-    """任务内选 task_file：file 指定则校验归属，否则取第一个。"""
-    tfs = _load('store.catalog').task_file_ids(task_id)
-    if not tfs:
-        return None
-    if file:
-        try:
-            fid = int(file)
-        except ValueError:
-            raise store_errors.BadRequest('file 须为 task_file_id')
-        return fid if fid in tfs else None
-    return tfs[0]
-
-
-@app.get('/api/tasks/{task_id}/parse')
-def api_task_extract(task_id: int, file: str = None):
-    tf = _tf_of(task_id, file)
-    doc = _load('store.content').get_extract(tf) if tf else None
+@app.get('/api/sources/{file_id}/parse')
+def api_file_extract(file_id: int):
+    doc = _load('store.content').get_extract(file_id)
     if doc is None:
         return JSONResponse({'ok': False, 'error': 'parse.json 不存在'},
                             status_code=404)
     return doc
 
 
-@app.get('/api/tasks/{task_id}/staging')
-def api_task_staging(task_id: int, file: str = None):
-    doc = _load('store.content').get_records(task_id)
-    if doc and file:
-        doc['files'] = [f for f in doc['files']
-                        if f['task_file_id'] == int(file)]
-        if not doc['files']:
-            doc = None
+@app.get('/api/sources/{file_id}/staging')
+def api_file_staging(file_id: int):
+    doc = _load('store.content').get_records(file_id)
     if doc is None:
         return JSONResponse({'ok': False, 'error': '暂存记录不存在'},
                             status_code=404)
@@ -755,20 +788,14 @@ def api_task_staging(task_id: int, file: str = None):
 @app.get('/api/staging/query')
 def api_staging_query(field: str = None, q: str = None,
                       task: str = None, state: str = None):
-    """跨任务暂存查询：DB 直查 field 投影；DB down → 503。"""
+    """跨资料暂存查询：DB 直查 field 投影；DB down → 503。task 参数按资料 ID 过滤。"""
     rows = _load('store.content_db').query_fields(field, q, task, state)
     return {'ok': True, 'items': rows}
 
 
-@app.get('/api/staging/ledger')
-def api_staging_ledger():
-    """校验台账：按 task_file 聚合记录数与校验进度；DB down → 503。"""
-    return {'ok': True, 'items': _load('store.content_db').ledger()}
-
-
 @app.get('/api/staging/locate/{record_id}')
 def api_staging_locate(record_id: int):
-    """按 record_id 反查 (task_id, task_file_id)，用于数据看板血缘跳转。"""
+    """按 record_id 反查 file_id，用于数据看板血缘跳转。"""
     hit = _load('store.content_db').locate_record(record_id)
     if hit is None:
         return JSONResponse({'ok': False, 'error': '暂存记录不存在'},
@@ -776,46 +803,33 @@ def api_staging_locate(record_id: int):
     return {'ok': True, **hit}
 
 
-def _review_target(task_id, task_file_id):
-    """校验台写操作公共守卫：返回 file_index。
-
-    task 不存在 / 文件不属于 task → NotFound；入库中/已入库 → Conflict。
-    files 序与 content_db._task_files 的 ORDER BY tf.id 一致。
-    """
-    t = _load('store.catalog').get_task(task_id)
-    if t is None:
-        raise store_errors.NotFound('任务不存在')
-    if t['state'] in ('loading', 'loaded'):
+def _review_guard(file_id):
+    """校验写操作公共守卫：入库中/已入库记录只读。"""
+    f = _file_or_404(file_id)
+    if f['state'] in ('loading', 'loaded'):
         raise store_errors.Conflict(
             {'loading': '入库进行中，记录只读',
-             'loaded': '任务已入库，记录只读'}[t['state']])
-    fi = next((i for i, f in enumerate(t['files'])
-               if f['task_file_id'] == task_file_id), None)
-    if fi is None:
-        raise store_errors.NotFound('文件不属于该任务')
-    return fi
+             'loaded': '资料已入库，记录只读'}[f['state']])
 
 
-@app.patch('/api/tasks/{task_id}/staging/{task_file_id}/{index}')
-async def api_staging_patch(task_id: int, task_file_id: int, index: int,
-                            request: Request):
+@app.patch('/api/sources/{file_id}/staging/{index}')
+async def api_staging_patch(file_id: int, index: int, request: Request):
     """校验改值：values 差量合并→edited，original 永不覆盖。"""
-    fi = _review_target(task_id, task_file_id)
+    _review_guard(file_id)
     body = await _json_body(request)
     values = body.get('values')
     if not isinstance(values, dict) or not values:
         return JSONResponse({'ok': False, 'error': 'values 须为非空对象'},
                             status_code=400)
-    rec = _load('store.content').patch_record(task_id, fi, index, values)
+    rec = _load('store.content').patch_record(file_id, index, values)
     return {'ok': True, 'record': rec,
-            'task_state': service.derive_review_state(task_id)}
+            'file_state': service.derive_review_state(file_id)}
 
 
-@app.post('/api/tasks/{task_id}/staging/{task_file_id}/review')
-async def api_staging_review(task_id: int, task_file_id: int,
-                             request: Request):
+@app.post('/api/sources/{file_id}/staging/review')
+async def api_staging_review(file_id: int, request: Request):
     """批量确认/拒绝：indexes（记录内下标）＋ state。"""
-    fi = _review_target(task_id, task_file_id)
+    _review_guard(file_id)
     body = await _json_body(request)
     indexes = body.get('indexes')
     state = body.get('state')
@@ -828,50 +842,38 @@ async def api_staging_review(task_id: int, task_file_id: int,
         return JSONResponse(
             {'ok': False, 'error': 'state 仅支持 confirmed/rejected'},
             status_code=400)
-    n = _load('store.content').set_review(task_id, fi, indexes, state)
+    n = _load('store.content').set_review(file_id, indexes, state)
     return {'ok': True, 'updated': n,
-            'task_state': service.derive_review_state(task_id)}
+            'file_state': service.derive_review_state(file_id)}
 
 
-@app.post('/api/tasks')
-async def api_tasks_create(request: Request):
-    """从资料库选文件发起任务（复用上传编排；字节直读 c1_doc_file.content）。"""
+@app.post('/api/sources/{file_id}/parse')
+async def api_sources_parse(file_id: int, request: Request):
+    """从资料库选一条资料发起解析（字节直读 c1_doc_file.content）。"""
     if service.STATE['running']:
-        return JSONResponse({'ok': False, 'error': '已有任务正在处理'},
+        return JSONResponse({'ok': False, 'error': '已有资料正在解析'},
                             status_code=409)
     body = await _json_body(request)
     _reject_retired_load_keys(body)
-    ids = body.get('file_ids') or []
-    if not ids:
-        return JSONResponse({'ok': False, 'error': '未选择文件'},
-                            status_code=400)
     catalog = _load('store.catalog')
-    rows = [catalog.get_file(int(i)) for i in ids]
-    if any(r is None for r in rows):
-        return JSONResponse({'ok': False, 'error': '存在未登记的文件 id'},
-                            status_code=400)
+    row = catalog.get_file(file_id)
+    if row is None:
+        raise store_errors.NotFound('资料不存在')
+    s = catalog.get_file_content(file_id)
+    if s is None:
+        return JSONResponse({'ok': False, 'error': '原件内容缺失'},
+                            status_code=409)
     params, warns = params_mod.normalize(body.get('params'))
     in_dir = tempfile.mkdtemp(prefix='in_', dir=config.TMP_INPUT)
     launched = False
     try:
-        paths, used, ctx = [], set(), []
-        for row in rows:
-            name = _dedup_name(row['name'], used)
-            used.add(name)
-            s = catalog.get_file_content(row['id'])
-            if s is None:
-                return JSONResponse(
-                    {'ok': False,
-                     'error': '原件内容缺失：file {}'.format(row['id'])},
-                    status_code=409)
-            path = os.path.join(in_dir, name)
-            with open(path, 'wb') as fo:
-                fo.write(s['data'])
-            paths.append(path)
-            ctx.append({'name': name, 'path': path,
-                        'file_id': row['id'], 'sha256': row['sha256'],
-                        'dedup': True})
-        result = service.launch(paths, params, warns, ctx)
+        name = service.safe_name(row['name'])
+        path = os.path.join(in_dir, name)
+        with open(path, 'wb') as fo:
+            fo.write(s['data'])
+        ctx = [{'name': name, 'path': path, 'file_id': file_id,
+                'sha256': row['sha256'], 'dedup': False}]
+        result = service.launch([path], params, warns, ctx)
         launched = True
         return result
     finally:

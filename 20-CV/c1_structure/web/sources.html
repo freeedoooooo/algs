@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>资料文件 · 结构化平台</title>
 <link rel="stylesheet" href="/static/shell.css">
+<link rel="stylesheet" href="/static/wizard.css">
 <link rel="stylesheet" href="/static/sources.css">
 </head>
 <body>
@@ -16,7 +17,6 @@
   <a href="/extract">抽取</a>
   <a href="/review">校验</a>
   <a href="/rules">入库</a>
-  <a href="/tasks">任务</a>
   <span class="spacer"></span>
   <span class="navnote">原件归档与检索</span>
 </nav>
@@ -32,8 +32,19 @@
         <option value="pdf">PDF</option>
         <option value="text">文本</option>
       </select>
+      <select id="fstate">
+        <option value="">全部状态</option>
+        <option value="pending">待处理</option>
+        <option value="parsing">解析中</option>
+        <option value="to_extract">待抽取</option>
+        <option value="to_review">待校验</option>
+        <option value="to_load">待入库</option>
+        <option value="loading">入库中</option>
+        <option value="loaded">已入库</option>
+        <option value="failed">失败</option>
+      </select>
       <button type="button" class="btn" id="upbtn">上传登记</button>
-      <input type="file" id="picker" multiple hidden
+      <input type="file" id="picker" hidden
         accept=".png,.jpg,.jpeg,.bmp,.webp,.tif,.tiff,.pdf,.csv,.txt,.md">
     </div>
   </div>
@@ -44,8 +55,8 @@
   <div class="panel">
     <table class="list">
       <thead><tr>
-        <th class="seq">序号</th><th>资料ID</th><th>文件名</th><th>类型</th><th>大小</th><th>sha256</th>
-        <th>标签</th><th>上传时间</th><th>操作</th>
+        <th class="seq">序号</th><th>资料ID</th><th>文件名</th><th>类型</th><th>大小</th>
+        <th>状态</th><th>抽取规则</th><th>sha256</th><th>标签</th><th>上传时间</th><th>操作</th>
       </tr></thead>
       <tbody id="rows"></tbody>
     </table>
@@ -64,6 +75,16 @@
   <button type="button" class="lbclose">关闭 (Esc)</button>
   <img alt="预览">
 </div>
+<div class="drawer" id="receipt" hidden>
+  <div class="dpanel">
+    <div class="dhead">
+      <h2 id="rctitle">入库回执</h2>
+      <span class="spacer"></span>
+      <button type="button" class="dclose" id="rcclose">关闭 (Esc)</button>
+    </div>
+    <div class="dbody" id="rcbody"></div>
+  </div>
+</div>
 <div class="drawer" id="pipe" hidden>
   <div class="dpanel pipe-panel">
     <div class="dhead">
@@ -75,6 +96,7 @@
   </div>
 </div>
 <script src="/static/shell.js"></script>
+<script src="/static/wizard.js"></script>
 <script src="/static/sources.js"></script>
 </body>
 </html>

@@ -274,9 +274,9 @@ function poll(){
     if(s.ready){
       msg.textContent='解析完成。可调整参数后，用同一批文件重新解析。';
       go.disabled=false;
-      showStgLink(s.task_id);
+      showStgLink(s.file_id);
       showResult(s.cases);
-      loadHistory(s.task_id,true);
+      loadHistory(s.file_id,true);
     }
   }).catch(function(){timer=setTimeout(poll,1200);});
 }
@@ -291,9 +291,9 @@ var reportFrame=document.getElementById('reportFrame'),
     reportcol=document.querySelector('.reportcol'),
     stglink=document.getElementById('stglink');
 /* 完成提示：跳数据预览（task id 键） */
-function showStgLink(taskId){
-  if(!taskId) return;
-  stglink.href='/preview?task='+taskId;
+function showStgLink(fileId){
+  if(!fileId) return;
+  stglink.href='/preview?file='+fileId;
   stglink.hidden=false;
 }
 /* 右侧报告区三态：idle 占位 / 任务进度 / done 报告（+「查看日志」浮钮） */
@@ -308,35 +308,14 @@ function rightState(st){
   reportcol.classList.toggle('has-hist',st==='done');
   if(st!=='done'){ filetabs.hidden=true; reportcol.classList.remove('hastabs'); }
 }
-/* 每个文件一份独立报告（各自 task_file 命名空间）。多文件任务顶部给文件页签，
-   点击在下方 iframe 切换；单文件直接看报告，不显示页签。 */
-function reportUrl(rf){
-  return '/files/'+rf+'/'+encodeURIComponent('对照报告.html');
+/* 单文件报告：直接落该资料命名空间，无文件页签 */
+function reportUrl(fid){
+  return '/files/'+fid+'/'+encodeURIComponent('对照报告.html');
 }
 function showResult(cases){
   rightState('done');
   cases=cases||[];
-  filetabs.innerHTML='';
-  if(cases.length>1){
-    reportcol.classList.add('hastabs');
-    filetabs.hidden=false;
-    cases.forEach(function(c,i){
-      var b=document.createElement('button');
-      b.type='button'; b.className='ftab'+(i===0?' on':'');
-      b.textContent=c.file; b.title=c.file;
-      b.onclick=function(){
-        filetabs.querySelectorAll('.ftab').forEach(function(x){
-          x.classList.toggle('on',x===b);
-        });
-        reportFrame.src=reportUrl(c.task_file_id)+'?t='+Date.now();
-      };
-      filetabs.appendChild(b);
-    });
-    reportFrame.src=reportUrl(cases[0].task_file_id)+'?t='+Date.now();
-  }else{
-    /* 单文件：直接落该 task_file 报告；cases 未知才走最新报告重定向 */
-    reportFrame.src=(cases.length?reportUrl(cases[0].task_file_id):'/parse-report')+'?t='+Date.now();
-  }
+  reportFrame.src=(cases.length?reportUrl(cases[0].file_id):'/parse-report')+'?t='+Date.now();
 }
 /* 完成后点「查看日志」：进度卡作为抽屉叠加在报告上，「关闭」收回 */
 logbtn.onclick=function(){
@@ -350,40 +329,35 @@ logclose.onclick=function(){
   logclose.hidden=true;
 };
 
-/* ---- 历史报告：默认最新有报告的任务，下拉切换历史任务 ---- */
+/* ---- 历史报告：最新有产物的资料，下拉切换 ---- */
 var histItems=[];
-function histLabel(t){
-  var names=(t.files||[]).map(function(f){return f.name;}).join('、');
-  return '#'+t.task_id+' · '+shortName(names)+' · '+fmtTime(t.created_at);
+function histLabel(f){
+  return '#'+f.id+' · '+shortName(f.name)+' · '+fmtTime(f.created_at);
 }
-function showTaskReport(t){
-  showResult((t.files||[]).filter(function(f){return f.task_file_id;})
-    .map(function(f){return {file:f.name,task_file_id:f.task_file_id};}));
+function showTaskReport(f){
+  showResult([{file:f.name,file_id:f.id}]);
 }
-/* skipRender=true：只刷新下拉选项并选中（报告已由完成流渲染，避免重复加载） */
 function loadHistory(selectId,skipRender){
-  fetch('/api/tasks').then(function(r){return r.ok?r.json():null;}).then(function(j){
-    histItems=((j&&j.items)||[]).filter(function(t){
-      return (t.files||[]).some(function(f){return f.task_file_id&&
-        ['to_extract','to_review','to_load','loading','loaded']
-          .indexOf(f.state)>=0;});
-    });
-    histsel.innerHTML=histItems.map(function(t){
-      return '<option value="'+t.task_id+'">'+escHtml(histLabel(t))+'</option>';
+  fetch('/api/sources/state').then(function(r){return r.ok?r.json():null;}).then(function(j){
+    histItems=((j&&j.items)||[]).filter(function(f){
+      return ['to_extract','to_review','to_load','loading','loaded']
+        .indexOf(f.state)>=0;});
+    histsel.innerHTML=histItems.map(function(f){
+      return '<option value="'+f.id+'">'+escHtml(histLabel(f))+'</option>';
     }).join('');
     if(!histItems.length) return;
     var pick=null;
     for(var i=0;i<histItems.length;i++){
-      if(String(histItems[i].task_id)===String(selectId)){pick=histItems[i];break;}
+      if(String(histItems[i].id)===String(selectId)){pick=histItems[i];break;}
     }
     pick=pick||histItems[0];
-    histsel.value=String(pick.task_id);
+    histsel.value=String(pick.id);
     if(!skipRender) showTaskReport(pick);
   }).catch(function(){});
 }
 histsel.addEventListener('change',function(){
   for(var i=0;i<histItems.length;i++){
-    if(String(histItems[i].task_id)===histsel.value){ showTaskReport(histItems[i]); return; }
+    if(String(histItems[i].id)===histsel.value){ showTaskReport(histItems[i]); return; }
   }
 });
 
@@ -424,13 +398,13 @@ fetch('/api/status').then(function(r){return r.json();}).then(function(s){
   if(s.running){ rightState('run'); say(s.logs,s.steps); progress(s); poll(); }
   else if(s.ready){
     /* 刷新页面直接进完成态：日志/进度也要补渲染，否则「查看日志」抽屉是空的 */
-    say(s.logs,s.steps); progress(s); showStgLink(s.task_id); showResult(s.cases);
-    loadHistory(s.task_id,true);
+    say(s.logs,s.steps); progress(s); showStgLink(s.file_id); showResult(s.cases);
+    loadHistory(s.file_id,true);
   }
   else loadHistory();
 });
 
-/* ---- 从资料库选择：抽屉多选已登记文件 → POST /api/tasks（不再收 base64） ---- */var srcdrawer=document.getElementById('srcdrawer'),
+/* ---- 从资料库选择：抽屉多选已登记文件 → POST /api/sources（不再收 base64） ---- */var srcdrawer=document.getElementById('srcdrawer'),
     srclist=document.getElementById('srclist'),
     srcgo=document.getElementById('srcgo'),
     srcSel={}, srcQ='', srcTimer=null;
@@ -498,10 +472,10 @@ srcgo.onclick=async function(){
   srcgo.disabled=true;
   try{
     saveParams(collectParams());
-    var res=await fetch('/api/tasks',{
+    var res=await fetch('/api/sources/'+ids[0]+'/parse',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({file_ids:ids,params:collectParams()})
+      body:JSON.stringify({params:collectParams()})
     });
     var j=await res.json();
     if(!j.ok) throw new Error(j.error||'发起失败');

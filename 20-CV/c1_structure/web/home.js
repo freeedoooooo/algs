@@ -1,12 +1,12 @@
 /* web/home.js — 工作台首页：快速解析条 + 四张状态卡 + 待办列表。
    计数纯前端拼装
-   （/api/tasks ＋ /api/staging/ledger），无新端点、无状态落库。 */
+   （/api/sources/state ＋ /api/staging/ledger），无新端点、无状态落库。 */
 var hpicked=[];
 var hdrop=document.getElementById('hdrop'), hpick=document.getElementById('hpick');
 var hlist=document.getElementById('hlist'), hgo=document.getElementById('hgo');
 var hmsg=document.getElementById('hmsg');
 var items=[], led=[], tplCount=0;
-var pollT=null, loopT=null, lastTaskId=null;
+var pollT=null, loopT=null, lastFileId=null;
 var todoPage=1, todoSize=getListPer();
 var pgTodo=bindPager(document.getElementById('todopg'),
   function(d){ todoPage+=d; render(); },
@@ -83,11 +83,11 @@ function pollStatus(){
     clearTimeout(pollT); pollT=null;
     if(s.error){
       sayHtml('解析失败，未生成暂存：'+escHtml(s.error)+
-        '　<a class="linkbtn" href="/tasks">查看详情</a>','err'); refresh(); return; }
-    if(s.ready&&s.task_id){
-      lastTaskId=s.task_id;
-      sayHtml('解析完成，任务 #'+s.task_id+
-        '　<a class="linkbtn" href="/preview?task='+s.task_id+'">预览数据</a>','ok');
+        '　<a class="linkbtn" href="/sources">查看详情</a>','err'); refresh(); return; }
+    if(s.ready&&s.file_id){
+      lastFileId=s.file_id;
+      sayHtml('解析完成，资料 #'+s.file_id+
+        '　<a class="linkbtn" href="/preview?file='+s.file_id+'">预览数据</a>','ok');
       hpicked=[]; renderPicked(); refresh();
     }
   }).catch(function(){ pollT=setTimeout(pollStatus,1500); });
@@ -99,17 +99,13 @@ function nums(){
     return t.state==='parsing'||t.state==='pending';
   });
   var toExtract=items.filter(function(t){return t.state==='to_extract';});
-  var reviewFiles=0, reviewTasks={}, loadTasks=[];
+  var reviewFiles=0, loadTasks=[];
   led.forEach(function(t){
-    if(t.task_state==='to_load'){ loadTasks.push(t); return; }
-    if(t.task_state!=='to_review') return;
-    (t.files||[]).forEach(function(f){
-      if(f.pending_n+f.edited_n>0){ reviewFiles++; reviewTasks[t.task_id]=1; }
-    });
+    if(t.file_state==='to_load'){ loadTasks.push(t); return; }
+    if(t.file_state==='to_review'&&t.pending_n+t.edited_n>0) reviewFiles++;
   });
   var failed=items.filter(function(t){return t.state==='failed';});
   return {busy:busy, toExtract:toExtract, reviewFiles:reviewFiles,
-    reviewTasks:Object.keys(reviewTasks).length,
     loadTasks:loadTasks, failed:failed};
 }
 function setCard(id,n,sub,zero){
@@ -120,7 +116,7 @@ function setCard(id,n,sub,zero){
 function renderCards(){
   var v=nums();
   setCard(1, v.busy.length,
-    v.busy.length?('任务 '+v.busy.map(function(t){return '#'+t.task_id;}).join('、')):'暂无进行中的解析任务',
+    v.busy.length?('任务 '+v.busy.map(function(t){return '#'+t.id;}).join('、')):'暂无进行中的解析任务',
     !v.busy.length);
   setCard(2, v.toExtract.length,
     v.toExtract.length? '解析完成，等待执行抽取（规则 '+tplCount+' 条）'
@@ -135,19 +131,16 @@ function renderCards(){
   /* H1：只有 1 个待入库 → 点卡直接弹向导 */
   var l4=document.getElementById('l4');
   if(v.loadTasks.length===1){
-    l4.textContent='立即入库 #'+v.loadTasks[0].task_id+' →';
-    l4.onclick=function(e){ e.preventDefault(); startLoad(v.loadTasks[0].task_id); };
+    l4.textContent='立即入库 #'+v.loadTasks[0].file_id+' →';
+    l4.onclick=function(e){ e.preventDefault(); startLoad(v.loadTasks[0].file_id); };
   }else{ l4.textContent='前往入库 →'; l4.onclick=null; }
   return v;
 }
 
 /* ---- 待办列表：需要你动手的，新在前，共用分页组件 ---- */
-function fileNames(t){
-  return (t.files||[]).map(function(f){return f.name;}).join('、');
-}
-function todoRow(seq,taskId,name,what,act,href,warn){
+function todoRow(seq,fileId,name,what,act,href,warn){
   return '<tr><td class="seq">'+seq+'</td>'+
-    '<td class="mono">#'+taskId+'</td>'+
+    '<td class="mono">#'+fileId+'</td>'+
     '<td><span class="desc" title="'+escHtml(name)+'">'+escHtml(name||'—')+'</span></td>'+
     '<td class="'+(warn?'warn':'')+'">'+escHtml(what)+'</td>'+
     '<td style="white-space:nowrap">'+act+'</td></tr>';
@@ -155,33 +148,30 @@ function todoRow(seq,taskId,name,what,act,href,warn){
 function renderTodo(v){
   var rows=[];
   v.toExtract.forEach(function(t){
-    rows.push({id:t.task_id,name:fileNames(t),
-      what:'② 解析完成，待抽取',
-      act:'<a class="linkbtn" href="/preview?task='+t.task_id+
-        '">执行抽取</a>',t:t.created_at});
+    rows.push({id:t.id,name:t.name,what:'② 解析完成，待抽取',
+      act:'<a class="linkbtn" href="/preview?file='+t.id+'">执行抽取</a>',
+      t:t.created_at});
   });
   led.forEach(function(t){
-    if(t.task_state!=='to_review') return;
-    var pend=0;
-    (t.files||[]).forEach(function(f){ pend+=f.pending_n+f.edited_n; });
-    if(pend>0) rows.push({id:t.task_id,name:fileNames(t),
-      what:'③ 尚有 '+pend+' 条记录待校验',act:'<a class="linkbtn" href="/preview?task='+
-        t.task_id+'">前往校验</a>',t:t.created_at});
+    if(t.file_state!=='to_review') return;
+    var pend=t.pending_n+t.edited_n;
+    if(pend>0) rows.push({id:t.file_id,name:t.name,
+      what:'③ 尚有 '+pend+' 条记录待校验',
+      act:'<a class="linkbtn" href="/preview?file='+t.file_id+'">前往校验</a>',
+      t:t.created_at});
   });
   v.loadTasks.forEach(function(t){
-    rows.push({id:t.task_id,name:fileNames(t),
-      what:'④ 校验完成，待入库',
-      act:'<button type="button" class="linkbtn" data-load="'+t.task_id+'">前往入库</button>',
+    rows.push({id:t.file_id,name:t.name,what:'④ 校验完成，待入库',
+      act:'<button type="button" class="linkbtn" data-load="'+t.file_id+'">前往入库</button>',
       t:t.created_at});
   });
   v.busy.forEach(function(t){
-    rows.push({id:t.task_id,name:fileNames(t),what:'① 解析中…',
+    rows.push({id:t.id,name:t.name,what:'① 解析中…',
       act:'<a class="linkbtn" href="/parse">查看进度</a>',t:t.created_at});
   });
   v.failed.forEach(function(t){
-    rows.push({id:t.task_id,name:fileNames(t),
-      what:'① 解析失败',
-      act:'<a class="linkbtn" href="/tasks">查看详情</a>',t:t.created_at});
+    rows.push({id:t.id,name:t.name,what:'① 解析失败',
+      act:'<a class="linkbtn" href="/sources">查看详情</a>',t:t.created_at});
   });
   rows.sort(function(a,b){ return (a.t<b.t?1:(a.t>b.t?-1:0)); });
   var info=pageSlice(rows,todoPage,todoSize); todoPage=info.page;
@@ -199,10 +189,8 @@ document.getElementById('todorows').addEventListener('click',function(e){
 });
 
 /* ---- 去入库＝四步向导（wizard.js 全站挂载，红线：④前不落库） ---- */
-function startLoad(taskId){
-  var t=items.filter(function(x){return x.task_id===taskId;})[0];
-  openLoadWizard({taskId:taskId,
-    ruleId:(t&&t.rule)?t.rule.rule_id:null,
+function startLoad(fileId){
+  openLoadWizard({fileId:fileId, ruleId:null,
     onDone:function(){ refresh(); }});
 }
 
@@ -213,7 +201,7 @@ function render(){
 }
 function refresh(){
   Promise.all([
-    fetch('/api/tasks').then(function(r){return r.json();}),
+    fetch('/api/sources/state').then(function(r){return r.json();}),
     fetch('/api/staging/ledger').then(function(r){return r.json();})
   ]).then(function(res){
     items=res[0].items||[]; led=res[1].items||[];

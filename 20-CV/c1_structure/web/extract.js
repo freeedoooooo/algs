@@ -410,17 +410,13 @@ document.getElementById('addfield').onclick=function(){addRow('',null);};
 /* ---- 参考文件 ---- */
 function loadRefs(){
   refsel.innerHTML='<option value="">不使用参考（手动填写源表）</option>';
-  api('GET','/api/tasks').then(function(j){
-    (j.items||[]).forEach(function(t){
-      (t.files||[]).forEach(function(f){
-        if(!f.task_file_id) return;
-        if(['to_review','to_load','loading','loaded'].indexOf(f.state)<0)
-          return;
-        var o=document.createElement('option');
-        o.value=t.task_id+':'+f.task_file_id;
-        o.textContent='#'+t.task_id+' · '+f.name;
-        refsel.appendChild(o);
-      });
+  api('GET','/api/sources/state').then(function(j){
+    (j.items||[]).forEach(function(f){
+      if(['to_review','to_load','loading','loaded'].indexOf(f.state)<0) return;
+      var o=document.createElement('option');
+      o.value=String(f.id);
+      o.textContent='#'+f.id+' · '+f.name;
+      refsel.appendChild(o);
     });
   }).catch(function(){
     refhint.textContent='参考列表暂不可用（平台库未连接），可手动填写源表。';
@@ -438,7 +434,7 @@ refsel.onchange=function(){
   if(!v){manualMode();return;}
   var p=v.split(':');
   refhint.textContent='正在加载参考…';
-  api('GET','/api/tasks/'+p[0]+'/parse?file='+p[1]).then(function(doc){
+  api('GET','/api/sources/'+p[0]+'/parse').then(function(doc){
     cands=candidates(doc);
     if(!cands.length){manualMode('该文件未解析出表格，请手动填写源表。');return;}
     tblsel.innerHTML=cands.map(function(c,i){

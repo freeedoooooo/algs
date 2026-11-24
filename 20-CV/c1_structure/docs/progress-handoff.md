@@ -31,7 +31,10 @@
   模块 `parse_report/`（Jinja2）；前端资产 `web/parse|extract|preview|rules.*` ＋ `web/review_home.html`。
 - 平台库表 `c1_*` 前缀（`c1_extract_rule` / `c1_extract_rule_version` ＝抽取规则，`c1_task.rule_version_id`
   等）；无外键，级联归应用层；API JSON 键 `rule` / `rule_id` / `rule_version_id`。
-- 安装脚本：新库跑 `store/migrations/001_baseline.sql`（全 IF NOT EXISTS＋INSERT IGNORE，
+- ⚠️ **2026-11-24 起模型已重构**：删除 `c1_task`/`c1_task_file`，以 `file_id` 为唯一运行主键；
+  下表结构描述为**历史快照**。当前建表脚本为 `store/migrations/001_file_baseline.sql`，
+  详见 `docs/design-file-centric-refactor.md`。以下安装说明保留作历史记录。
+- 安装脚本（历史）：新库跑 `store/migrations/001_baseline.sql`（全 IF NOT EXISTS＋INSERT IGNORE，
   可重跑；state 列注释含新枚举）；存量库升级人工执行编号脚本（002＝命名收敛；
   003＝状态机迁移，2026-11-23 已对 c1_structure_dev 执行，备份
   `data/backup/c1_dev_pre003_20261123_135019.sql`；

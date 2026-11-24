@@ -4,10 +4,11 @@ c1_structure/export_artifacts.py — 从 DB 按需导出完整磁盘树
 
 用法（从 20-CV 目录）：
     D:/miniforge3/envs/paddle/python.exe c1_structure/export_artifacts.py --out D:/tmp/c1_export
-    可选 --task <id> 只导一次任务。
+    可选 --file <id> 只导一条资料（一次运行）。
 
-导出布局：<out>/output/task_<id>/<源文件名>/…（产物 BLOB 原字节）
-          <out>/output/task_<id>/records.json（DB 三表重建，任务级信封）
+模型：一条资料 = 一次运行（file_id 为键）。
+导出布局：<out>/output/file_<id>/<源文件名>/…（产物 BLOB 原字节）
+          <out>/output/file_<id>/records.json（DB 三表重建，资料级信封）
           <out>/sources/<源文件名>（原件字节，重名加 _<id> 区分）
 报告内相对路径原样成立，file:// 直开 对照报告.html 可用。
 """
@@ -38,21 +39,20 @@ def _write(path, data):
     os.replace(tmp, path)
 
 
-def export_task(task, out_root):
-    base = os.path.join(out_root, 'output', 'task_{}'.format(task['task_id']))
+def export_file(f, out_root):
+    base = os.path.join(out_root, 'output', 'file_{}'.format(f['id']))
     n = 0
-    for f in task['files']:
-        fdir = os.path.join(base, f['name'])
-        for meta in artifact_db.list(f['task_file_id']):
-            a = artifact_db.get(f['task_file_id'], meta['name'])
-            _write(os.path.join(fdir, meta['name'].replace('/', os.sep)),
-                   a['data'])
-            n += 1
+    fdir = os.path.join(base, f['name'])
+    for meta in artifact_db.list(f['id']):
+        a = artifact_db.get(f['id'], meta['name'])
+        _write(os.path.join(fdir, meta['name'].replace('/', os.sep)),
+               a['data'])
+        n += 1
     try:
-        doc = content_db.get_records(task['task_id'])
+        doc = content_db.get_records(f['id'])
     except Exception as e:
-        print('  WARN    task {} · records 重建失败（{}），跳过 records.json'
-              .format(task['task_id'], e))
+        print('  WARN    file {} · records 重建失败（{}），跳过 records.json'
+              .format(f['id'], e))
         doc = None
     if doc is not None:
         _write(os.path.join(base, config.RECORDS_JSON),
@@ -65,38 +65,47 @@ def export_task(task, out_root):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--out', required=True, help='导出根目录（绝对路径）')
-    ap.add_argument('--task', type=int, help='只导指定 task id')
+    ap.add_argument('--file', type=int, help='只导指定资料 id')
     args = ap.parse_args()
     out_root = os.path.abspath(args.out)
     print('产物导出 ← {} → {}'.format(
         db.safe_detail(config.PLATFORM_DB), out_root))
-    tasks = ([catalog.get_task(args.task)] if args.task
-             else catalog.list_tasks())
-    tasks = [t for t in tasks if t]
+    if args.file:
+        f = catalog.get_file(args.file)
+        files = [f] if f else []
+    else:
+        files, seen = [], set()
+        page = 1
+        while True:
+            batch = catalog.list_files(page=page, per_page=100)
+            for row in batch['items']:
+                files.append(row)
+                seen.add(row['id'])
+            if page * 100 >= batch['total']:
+                break
+            page += 1
     total = 0
-    for t in tasks:
-        n = export_task(t, out_root)
+    for f in files:
+        if not f:
+            continue
+        n = export_file(f, out_root)
         total += n
-        print('  OK      task_{} · {} 个文件'.format(t['task_id'], n))
+        print('  OK      file_{} · {} 个文件'.format(f['id'], n))
     n, used = 0, set()
-    page = 1
-    while True:
-        batch = catalog.list_files(page=page, per_page=100)
-        for row in batch['items']:
-            s = catalog.get_file_content(row['id'])
-            name = row['name']
-            if name in used:
-                stem, e = os.path.splitext(name)
-                name = '{}_{}{}'.format(stem, row['id'], e)
-            used.add(name)
-            _write(os.path.join(out_root, 'sources', name), s['data'])
-            n += 1
-        if page * 100 >= batch['total']:
-            break
-        page += 1
+    for f in files:
+        if not f:
+            continue
+        s = catalog.get_file_content(f['id'])
+        name = f['name']
+        if name in used:
+            stem, e = os.path.splitext(name)
+            name = '{}_{}{}'.format(stem, f['id'], e)
+        used.add(name)
+        _write(os.path.join(out_root, 'sources', name), s['data'])
+        n += 1
     total += n
     print('  OK      sources · {} 个文件'.format(n))
-    print('完成，共导出 {} 个文件。file:// 直开 output/task_<id>/<源名>/对照报告.html'
+    print('完成，共导出 {} 个文件。file:// 直开 output/file_<id>/<源名>/对照报告.html'
           .format(total))
 
 

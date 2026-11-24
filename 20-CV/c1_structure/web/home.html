@@ -17,7 +17,6 @@
   <a href="/extract">抽取</a>
   <a href="/review">校验</a>
   <a href="/rules">入库</a>
-  <a href="/tasks">任务</a>
   <span class="spacer"></span>
   <span class="navnote">本地文档入库工作台</span>
 </nav>
@@ -55,27 +54,27 @@
       <div class="ctitle">② 抽取<span>配置字段抽取规则</span></div>
       <div class="cnum" id="n2">—</div>
       <div class="csub" id="s2"></div>
-      <a class="clink" href="/tasks?state=to_extract">前往抽取 →</a>
+      <a class="clink" href="/sources?state=to_extract">前往抽取 →</a>
     </div>
     <div class="card" id="card3">
       <div class="ctitle">③ 校验<span>逐条核对并确认</span></div>
       <div class="cnum" id="n3">—</div>
       <div class="csub" id="s3"></div>
-      <a class="clink" href="/tasks?state=to_review">前往校验 →</a>
+      <a class="clink" href="/sources?state=to_review">前往校验 →</a>
     </div>
     <div class="card" id="card4">
       <div class="ctitle">④ 入库<span>写入业务库</span></div>
       <div class="cnum" id="n4">—</div>
       <div class="csub" id="s4"></div>
-      <a class="clink" href="/tasks?state=to_load" id="l4">前往入库 →</a>
+      <a class="clink" href="/sources?state=to_load" id="l4">前往入库 →</a>
     </div>
   </section>
 
   <section class="panel" id="todo">
     <div class="thead"><b>需要处理的事</b><span class="spacer"></span>
-      <a class="clink" href="/tasks">全部任务 →</a></div>
+      <a class="clink" href="/sources">全部资料 →</a></div>
     <table class="list" id="todotable" hidden>
-      <thead><tr><th class="seq">序号</th><th>任务ID</th><th>资料</th>
+      <thead><tr><th class="seq">序号</th><th>资料ID</th><th>文件名</th>
         <th>事项</th><th>操作</th></tr></thead>
       <tbody id="todorows"></tbody>
     </table>

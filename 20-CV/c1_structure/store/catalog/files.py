@@ -92,7 +92,7 @@ def get_file_content(file_id):
 
 
 def delete_file(file_id):
-    """运行中有产物/暂存时禁删（保血缘）；否则字节随行删除。"""
+    """运行中有产物/暂存时禁删（保血缘）；否则应用层级联清子表后删行。"""
     conn = db.connect()
     try:
         with conn.cursor() as cur:
@@ -100,6 +100,16 @@ def delete_file(file_id):
             row = cur.fetchone()
             if row and row[0] in ('parsing', 'loading', 'loaded'):
                 raise Conflict('该资料正在处理或已入库，为保证血缘可追溯，不可删除')
+            # 无外键：先显式清子表，避免留孤儿产物/记录
+            cur.execute('DELETE FROM c1_staging_field WHERE record_id IN'
+                        ' (SELECT id FROM c1_staging_record WHERE file_id=%s)',
+                        (file_id,))
+            cur.execute('DELETE FROM c1_staging_lineage WHERE record_id IN'
+                        ' (SELECT id FROM c1_staging_record WHERE file_id=%s)',
+                        (file_id,))
+            for t in ('c1_staging_record', 'c1_parse_artifact',
+                      'c1_load_log', 'c1_load_quarantine'):
+                cur.execute('DELETE FROM ' + t + ' WHERE file_id=%s', (file_id,))
             cur.execute('DELETE FROM c1_doc_file WHERE id=%s', (file_id,))
             conn.commit()
     finally:

@@ -6,8 +6,10 @@ store/db.py — 薄驱动接缝（JDBC 式）+ DSN 解析。
 首个实现 PyMySQL（锁版本见 requirements）；MySQL 8 caching_sha2_password
 非 SSL 首次认证需 cryptography（已锁）。
 
-建表/升级不自动执行：migrations/001_baseline.sql 是人工安装脚本，
-部署或改表结构时由人对着库跑（2026-11-21 裁决：删自动迁移门禁）。
+建表不自动执行：migrations/001_file_baseline.sql 是空库人工安装脚本，
+部署时由人对着库跑（2026-11-21 裁决：删自动迁移门禁）。
+2026-11-24 模型重构：删 c1_task/c1_task_file，以 file_id 为唯一运行主键；
+旧库须清库重建，配置表可用 migrations/copy_config.py 迁移。
 
 DSN 来源：config.PLATFORM_DB（环境变量 C1_STRUCTURE_DB 优先，默认值直接写在
 config.py，2026-11-23 裁决：退役 secrets.json 引用制）。

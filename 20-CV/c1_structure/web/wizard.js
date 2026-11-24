@@ -1,4 +1,4 @@
-/* web/wizard.js — 四步入库向导（任务/校验页共用）：
+/* web/wizard.js — 四步入库向导（资料清单/数据预览共用）：
    ① 选目标（已有规则直达③／新建＝业务库＋表）→ ② 字段对齐（自动匹配，仅新建）
    → ③ 过目（前 3 条样例＋load-preview dry-run 计数）→ ④ 执行。
    红线：④ 前不落库；新建规则在执行瞬间 POST /api/load/tables 落库，
@@ -50,7 +50,7 @@ function wzUi(){
   return m;
 }
 function openLoadWizard(opts){
-  wz={taskId:opts.taskId, ruleId:opts.ruleId,
+  wz={fileId:opts.fileId, ruleId:opts.ruleId,
       onDone:opts.onDone, getSample:opts.getSample||null,
       step:1, mode:'', ds1:'', rule1:'', ds2:'', table2:'',
       dsList:null, ruleList:null, tables2:null,
@@ -58,7 +58,7 @@ function openLoadWizard(opts){
       wm:'upsert', busy:false, createdRule:null, previewErr:''};
   var m=wzUi();
   document.getElementById('wztitle').textContent=
-    '任务 #'+opts.taskId+' · 入库向导';
+    '资料 #'+opts.fileId+' · 入库向导';
   m.hidden=false;
   wzRender(true);
 }
@@ -345,7 +345,7 @@ function wzStep3(b){
   var body=wz.mode==='exist'?{load_table_id:Number(wz.rule1)}:
     {draft:{datasource_id:wz.dsId,target_table:wz.table,
             write_mode:wz.wm,fields:wz.fields}};
-  wzApi('POST','/api/tasks/'+wz.taskId+'/load-preview',body).then(function(j){
+  wzApi('POST','/api/sources/'+wz.fileId+'/load-preview',body).then(function(j){
     if(!wz||wz.step!==3) return;
     document.getElementById('wzcnt').innerHTML=
       '<span class="wzb ok">总 '+j.total+'</span>'+
@@ -361,7 +361,7 @@ function wzStep3(b){
     wzFooter();
   });
   var sp=wz.getSample?wz.getSample():
-    wzApi('GET','/api/tasks/'+wz.taskId+'/staging').then(function(d){
+    wzApi('GET','/api/sources/'+wz.fileId+'/staging').then(function(d){
       var out=[];
       (d.files||[]).forEach(function(f){
         (f.records||[]).forEach(function(r){ if(out.length<3) out.push(r); });});
@@ -400,7 +400,7 @@ function wzExecute(){
   }
   p.then(function(){
     var r=wz.mode==='exist'?wzRule():null;
-    return wzApi('POST','/api/tasks/'+wz.taskId+'/load',{
+    return wzApi('POST','/api/sources/'+wz.fileId+'/load',{
       load_datasource_id:r?r.datasource_id:wz.dsId,
       load_table_id:r?Number(r.id):wz.createdRule
     });
