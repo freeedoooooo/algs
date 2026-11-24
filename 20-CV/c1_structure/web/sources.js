@@ -1,5 +1,5 @@
 /* web/sources.js — 资料清单（唯一功能入口）：列表/筛选/分页 + 上传登记 +
-   解析/重放/预览/入库/回执/删除 + 文件流程追踪弹窗。
+   详情/配置/下载/删除 + 资料详情弹窗（各节点执行按钮）。
    模型：一条资料 = 一次运行（file_id 为键）。 */
 var page=1, total=0, q='', kind='', fstate='', size=getListPer(), qTimer=null;
 var itemsCache=[];
@@ -15,9 +15,6 @@ function render(items){
     var sha=String(r.sha256||'');
     var st=stateBadge(r.state);
     var rule=r.rule_version_id?'已绑定 v'+escHtml(r.current_version||''):'—';
-    var canReview=['to_review','to_load','loaded'].indexOf(r.state)>=0;
-    var canLoad=r.state==='to_load';
-    var canReplay=['to_extract','to_review','to_load','failed'].indexOf(r.state)>=0;
     return '<tr data-id="'+r.id+'">'+
       '<td class="seq">'+((page-1)*size+i+1)+'</td>'+
       '<td class="mono">'+r.id+'</td>'+
@@ -35,24 +32,10 @@ function render(items){
       '<td class="num">'+fmtTime(r.created_at)+'</td>'+
       '<td style="white-space:nowrap">'+
         '<button type="button" class="linkbtn" data-pipe="'+r.id+
-        '" data-name="'+escHtml(r.name)+'" title="查看流程">流程</button>'+
+        '" data-name="'+escHtml(r.name)+'" title="查看详情">详情</button>'+
+        '<button type="button" class="linkbtn" data-config="'+r.id+
+        '" data-name="'+escHtml(r.name)+'" title="配置解析/抽取/校验/入库">配置</button>'+
         '<a class="linkbtn" href="'+srcUrl(r)+'?download=1">下载</a>'+
-        (r.state==='pending'||r.state==='failed'
-          ? '<button type="button" class="linkbtn" data-parse="'+r.id+'">解析</button>'
-          : '')+
-        (canReplay
-          ? '<button type="button" class="linkbtn" data-replay="'+r.id+
-            '" data-name="'+escHtml(r.name)+'">重放</button>'
-          : '')+
-        (canReview
-          ? '<a class="linkbtn" href="/preview?file='+r.id+'">预览</a>'
-          : '')+
-        (canLoad
-          ? '<button type="button" class="linkbtn" data-load="'+r.id+'">入库</button>'
-          : '')+
-        (r.state==='loaded'||r.state==='to_load'
-          ? '<button type="button" class="linkbtn" data-rc="'+r.id+'">回执</button>'
-          : '')+
         '<button type="button" class="linkbtn danger" data-del="'+r.id+
         '" data-name="'+escHtml(r.name)+'">删除</button>'+
       '</td></tr>';
@@ -60,6 +43,16 @@ function render(items){
   empty.hidden=items.length>0;
   pg.render({page:page,pages:Math.max(1,Math.ceil(total/size)),total:total,per:size});
 }
+function doSearch(){
+  q=document.getElementById('q').value.trim();
+  kind=document.getElementById('kind').value;
+  fstate=document.getElementById('fstate').value;
+  page=1; load();
+}
+document.getElementById('qbtn').onclick=doSearch;
+document.getElementById('q').addEventListener('keydown',function(e){
+  if(e.key==='Enter'){ e.preventDefault(); clearTimeout(qTimer); doSearch(); }
+});
 document.getElementById('q').addEventListener('input',function(){
   var v=this.value.trim(); clearTimeout(qTimer);
   qTimer=setTimeout(function(){ q=v; page=1; load(); },300);
@@ -78,6 +71,9 @@ rows.addEventListener('click',function(e){
   var t=e.target.closest?e.target.closest('[data-pipe]'):null;
   if(t){ e.preventDefault(); openPipe(+t.getAttribute('data-pipe'),
     t.getAttribute('data-name')||t.textContent); return; }
+  var cfg=e.target.closest?e.target.closest('[data-config]'):null;
+  if(cfg){ e.preventDefault(); openConfig(+cfg.getAttribute('data-config'),
+    cfg.getAttribute('data-name')||cfg.textContent); return; }
   var b=e.target.closest?e.target.closest('[data-del]'):null;
   if(b){
     var id=b.getAttribute('data-del'),name=b.getAttribute('data-name');
@@ -89,33 +85,6 @@ rows.addEventListener('click',function(e){
     }).catch(function(){ alert('删除失败：平台库不可用'); });
     return;
   }
-  var p=e.target.closest?e.target.closest('[data-parse]'):null;
-  if(p){
-    var pid=p.getAttribute('data-parse');
-    api('POST','/api/sources/'+pid+'/parse',{}).then(function(o){
-      if(o.s===200&&o.j.ok) load();
-      else alert('解析失败：'+(o.j.error||o.s));
-    }).catch(function(){ alert('解析失败：平台库不可用'); });
-    return;
-  }
-  var rp=e.target.closest?e.target.closest('[data-replay]'):null;
-  if(rp){
-    var rid=rp.getAttribute('data-replay'),rname=rp.getAttribute('data-name');
-    if(!confirm('确认重放解析「'+rname+'」？\n将清空该资料的暂存、产物、回执与校验结论，原地重新解析。')) return;
-    api('POST','/api/sources/'+rid+'/reparse',{}).then(function(o){
-      if(o.s===200&&o.j.ok) load();
-      else alert('重放失败：'+(o.j.error||o.s));
-    }).catch(function(){ alert('重放失败：平台库不可用'); });
-    return;
-  }
-  var ld=e.target.closest?e.target.closest('[data-load]'):null;
-  if(ld){
-    var lid=+ld.getAttribute('data-load');
-    openLoadWizard({fileId:lid, ruleId:null, getSample:function(){return null;}});
-    return;
-  }
-  var rc=e.target.closest?e.target.closest('[data-rc]'):null;
-  if(rc){ openReceiptDrawer(+rc.getAttribute('data-rc')); return; }
 });
 function load(){
   var u='/api/sources?page='+page+'&size='+size+'&q='+encodeURIComponent(q)+
@@ -133,7 +102,8 @@ function load(){
 /* 上传 = 只登记不解析（不去重，每次新行）；单文件 */
 document.getElementById('upbtn').onclick=function(){ document.getElementById('picker').click(); };
 document.getElementById('picker').onchange=async function(){
-  var fs=this.files; this.value='';
+  // 先做数组快照再清空 input：this.files 是 FileList 引用，直接 value='' 会把它清空
+  var fs=Array.prototype.slice.call(this.files||[]); this.value='';
   if(!fs.length) return;
   var msg=document.getElementById('upmsg');
   msg.hidden=false; msg.textContent='正在登记…';
@@ -158,8 +128,8 @@ document.getElementById('picker').onchange=async function(){
   page=1; load();
 };
 
-/* ---- 文件流程追踪弹窗：一资料=单链路，四节点，点节点左列表右详情 ---- */
-var pipeData=null, pipeNode='parse', pipeSel=0;
+/* ---- 资料详情弹窗：一资料=单链路，四节点，点节点左列表右详情 ---- */
+var pipeData=null, pipeNode='parse';
 var NODES=[['parse','解析'],['extract','抽取'],['review','校验'],['load','入库']];
 
 function nodeState(st,key){
@@ -234,8 +204,79 @@ function pipeDetail(key,item,p){
   }
   return h;
 }
+/* 节点操作区：每个节点下都有「执行X」按钮，说明走 ? tips，按状态控制可用 */
+function nodeActionHtml(key,p){
+  var st=String(p.state||''), fid=p.file_id;
+  var btn=function(id,label,dis,tip){
+    return '<button type="button" class="btn mini" id="'+id+'" data-fid="'+fid+'"'+
+      (dis?' disabled':'')+'>'+label+'</button>'+
+      '<span class="hint" tabindex="0" data-tip="'+escHtml(tip||'')+'">?</span>';
+  };
+  var busy=st==='parsing'||st==='loading';
+  if(key==='parse'){
+    var can=!busy&&st!=='loaded';
+    return btn('actParse','执行解析',!can,
+      busy?'正在解析中，请稍候。':(st==='loaded'
+        ?'资料已入库，记录只读，不能重新解析。'
+        :'清空该资料的暂存、产物、回执与校验结论，按当前配置原地重新解析。'));
+  }
+  if(key==='extract'){
+    var canE=st==='to_extract'||st==='to_review'||st==='to_load';
+    return btn('actExtract','执行抽取',!canE||busy,
+      st==='to_extract'?'按已配置的抽取规则，从解析产物生成暂存记录。'
+        :(canE?'已有暂存记录，重新抽取将覆盖校验结论。':'请先执行解析，生成解析产物。'));
+  }
+  if(key==='review'){
+    var canR=st==='to_review'||st==='to_load';
+    var c=p.review_counts||{}, pend=(c.pending||0)+(c.edited||0);
+    return btn('actReview','执行校验',!canR||busy||!pend,
+      canR?(pend?('将全部 '+pend+' 条待审记录设为通过。'
+        +(c.rejected?'另有 '+c.rejected+' 条已拒绝记录需人工处理。':'')):'暂无待审记录。')
+        :'请先执行抽取，生成暂存记录。');
+  }
+  var canL=st==='to_load' && !!(p.load&&p.load.load_table_id);
+  return btn('actLoad','执行入库',!canL||busy,
+    st!=='to_load'?'请先完成校验，全部记录通过后才能入库。'
+      :(p.load&&p.load.load_table_id
+        ?('按已配置的入库规则写入 '+escHtml(p.load.target_table||'')+'。')
+        :'请先在「配置」里绑定入库规则。'));
+}
+function bindNodeActions(p){
+  var fid=p&&p.file_id;
+  if(!fid) return;
+  var refresh=function(){ load(); openPipe(+fid, pipeData.name||('资料 '+fid)); };
+  var bind=function(id,fn){
+    var b=document.getElementById(id);
+    if(b) b.onclick=function(){
+      var btn=this; btn.disabled=true;
+      Promise.resolve(fn()).then(function(o){
+        if(o&&o.cancel){ btn.disabled=false; return; }   // 用户取消确认框，静默
+        if(!(o&&o.s===200&&o.j&&o.j.ok)){ alert('操作失败：'+((o&&o.j&&o.j.error)||(o&&o.s)||'未知')); btn.disabled=false; return; }
+        refresh();
+      }).catch(function(e){ alert('操作失败：'+(e&&e.message)||'平台库不可用'); btn.disabled=false; });
+    };
+  };
+  bind('actParse',function(){
+    if(!confirm('确认执行解析？\n将清空暂存、产物、回执与校验结论，原地重新解析。')) return {cancel:true};
+    return api('POST','/api/sources/'+fid+'/reparse',{});
+  });
+  bind('actExtract',function(){
+    var force=(String(p.state||'')==='to_review'||String(p.state||'')==='to_load');
+    if(force&&!confirm('已有暂存记录，重新抽取将覆盖校验结论。确认继续？')) return {cancel:true};
+    return api('POST','/api/sources/'+fid+'/extract',force?{force:true}:{});
+  });
+  bind('actReview',function(){
+    if(!confirm('确认将全部待审记录设为通过？')) return {cancel:true};
+    return api('POST','/api/sources/'+fid+'/approve-all',{});
+  });
+  bind('actLoad',function(){
+    if(!confirm('确认按已配置的入库规则执行入库？')) return {cancel:true};
+    return api('POST','/api/sources/'+fid+'/load',{});
+  });
+}
 function renderPipeDetail(){
   var p=pipeData||{}, items=pipeItems(pipeNode,p);
+  var action='<div class="pipe-actions"><div>'+nodeActionHtml(pipeNode,p)+'</div></div>';
   if(pipeNode==='parse'){
     var arts=p.parse_artifacts||[];
     var card=function(title,desc,name){
@@ -247,25 +288,25 @@ function renderPipeDetail(){
           '<span class="msg">暂无产物</span>')+'</div>';
     };
     document.getElementById('pipeDetailBox').innerHTML=
-      '<div class="pipe-view parse-pair">'+
-        card('解析报告','页面图与结构化结果逐项对照','对照报告.html')+
-        card('parse.json','标准契约完整产物','parse.json')+
+      '<div class="pipe-view">'+
+        action+
+        '<div class="parse-pair">'+
+          card('解析报告','页面图与结构化结果逐项对照','对照报告.html')+
+          card('parse.json','标准契约完整产物','parse.json')+
+        '</div>'+
       '</div>';
+    bindNodeActions(p);
     return;
   }
-  if(pipeSel>=items.length) pipeSel=0;
-  var listHtml=items.length?items.map(function(x,i){
-    return '<div class="pl-item'+(i===pipeSel?' on':'')+'" data-psi="'+i+'">'+
-      escHtml(x.label)+'</div>';
-  }).join(''):'<div class="pl-item">暂无条目</div>';
+  // 其他节点：与解析节点同构——操作条在上，下面用卡片承载内容
+  var cards=items.length
+    ? '<div class="parse-pair">'+items.map(function(it){
+        return '<div class="parse-card">'+pipeDetail(pipeNode,it,p)+'</div>';
+      }).join('')+'</div>'
+    : '<div class="empty">暂无内容</div>';
   document.getElementById('pipeDetailBox').innerHTML=
-    '<div class="pipe-list" id="pipeList">'+listHtml+'</div>'+
-    '<div class="pipe-view" id="pipeViewIn">'+pipeDetail(pipeNode,items[pipeSel],p)+'</div>';
-  document.getElementById('pipeList').onclick=function(e){
-    var d=e.target.closest?e.target.closest('[data-psi]'):null;
-    if(!d) return;
-    pipeSel=+d.getAttribute('data-psi'); renderPipeDetail();
-  };
+    '<div class="pipe-view">'+action+cards+'</div>';
+  bindNodeActions(p);
 }
 function renderPipe(){
   var p=pipeData||{};
@@ -280,13 +321,13 @@ function renderPipe(){
   document.getElementById('pipeFlow').onclick=function(e){
     var b=e.target.closest?e.target.closest('[data-pn]'):null;
     if(!b) return;
-    pipeNode=b.getAttribute('data-pn'); pipeSel=0; renderPipe();
+    pipeNode=b.getAttribute('data-pn'); renderPipe();
   };
   renderPipeDetail();
 }
 function openPipe(fileId,name){
   var d=document.getElementById('pipe');
-  document.getElementById('pipeTitle').textContent='文件流程追踪 · '+name;
+  document.getElementById('pipeTitle').textContent='资料详情 · '+name;
   document.getElementById('pipeBody').innerHTML='<div class="empty">加载中…</div>';
   d.hidden=false;
   fetch('/api/sources/'+fileId+'/pipeline').then(function(r){
@@ -297,7 +338,7 @@ function openPipe(fileId,name){
         '<div class="empty">读取失败：'+escHtml((o.j&&o.j.error)||'平台库不可用')+'</div>';
       return;
     }
-    pipeData=o.j.pipeline||{}; pipeNode='parse'; pipeSel=0;
+    pipeData=o.j.pipeline||{}; pipeData.name=name; pipeNode='parse';
     document.getElementById('pipeBody').innerHTML=
       '<div class="pipe-flow" id="pipeFlow"></div>'+
       '<div class="pipe-detail" id="pipeDetailBox"></div>';
@@ -310,8 +351,195 @@ function openPipe(fileId,name){
 document.getElementById('pipeClose').onclick=function(){ document.getElementById('pipe').hidden=true; };
 document.getElementById('pipe').addEventListener('click',function(e){ if(e.target===this) this.hidden=true; });
 document.addEventListener('keydown',function(e){
-  if(e.key==='Escape') document.getElementById('pipe').hidden=true;
+  if(e.key==='Escape'){
+    document.getElementById('pipe').hidden=true;
+    document.getElementById('cfg').hidden=true;
+  }
 });
+
+/* ---- 资料配置弹窗：四节点（解析参数/抽取规则/校验规则/入库规则）---- */
+var CFG_NODES=[['params','解析参数'],['extract','抽取规则'],
+               ['review','校验规则'],['load','入库规则']];
+var cfgData=null, cfgFileId=null, cfgNode='params', cfgDirty=false, cfgPending={};
+
+function cfgMsg(t,bad){
+  var e=document.getElementById('cfgMsg');
+  e.textContent=t||''; e.className='msg'+(bad?' err':'');
+}
+function openConfig(fileId,name){
+  cfgFileId=fileId; cfgNode='params'; cfgDirty=false; cfgPending={};
+  document.getElementById('cfgTitle').textContent='资料配置 · '+name;
+  document.getElementById('cfgBody').innerHTML='<div class="empty">加载中…</div>';
+  document.getElementById('cfgSave').hidden=true;
+  cfgMsg('');
+  document.getElementById('cfg').hidden=false;
+  fetch('/api/sources/'+fileId+'/config').then(function(r){
+    return r.json().then(function(j){return {ok:r.ok,j:j};});
+  }).then(function(o){
+    if(!o.ok||!o.j.ok){
+      document.getElementById('cfgBody').innerHTML=
+        '<div class="empty">读取失败：'+escHtml((o.j&&o.j.error)||'平台库不可用')+'</div>';
+      return;
+    }
+    cfgData=o.j;
+    document.getElementById('cfgBody').innerHTML=
+      '<div class="pipe-flow" id="cfgFlow"></div>'+
+      '<div class="pipe-detail" id="cfgDetail"></div>';
+    document.getElementById('cfgSave').hidden=false;
+    renderCfg();
+  }).catch(function(e){
+    document.getElementById('cfgBody').innerHTML=
+      '<div class="empty">读取失败：'+escHtml(String(e))+'</div>';
+  });
+}
+function collectCfgNode(){
+  if(!cfgData) return;
+  if(cfgNode==='params'){
+    var pv={};
+    document.querySelectorAll('#cfgDetail [data-cp]').forEach(function(el){
+      var key=el.getAttribute('data-cp'), v=el.value;
+      var s=(cfgData.schema||[]).filter(function(p){return p.key===key;})[0]||{};
+      if(s.type==='int') v=parseInt(v,10);
+      else if(s.type==='float') v=parseFloat(v);
+      else if(s.type==='bool') v=v==='1';
+      pv[key]=v;
+    });
+    cfgPending.params=pv;
+  }else if(cfgNode==='extract'){
+    var rv=document.getElementById('cfgRule');
+    if(rv) cfgPending.rule_version_id=rv.value?parseInt(rv.value,10):null;
+  }else if(cfgNode==='load'){
+    var ds=document.getElementById('cfgDs'),lt=document.getElementById('cfgLt');
+    if(ds&&lt) cfgPending.load=(ds.value&&lt.value)
+      ?{datasource_id:parseInt(ds.value,10),load_table_id:parseInt(lt.value,10)}
+      :{datasource_id:null,load_table_id:null};
+  }
+}
+function renderCfg(){
+  if(!cfgData) return;
+  // 节点条（复用 pipe-node 样式）
+  var done={params:!!(cfgData.schema&&cfgData.schema.length),
+            extract:!!cfgData.rule_version_id, review:false,
+            load:!!(cfgData.load&&cfgData.load.load_table_id)};
+  document.getElementById('cfgFlow').innerHTML=CFG_NODES.map(function(n){
+    var d=done[n[0]]?' done':'';
+    return '<button type="button" class="pipe-node '+d+(cfgNode===n[0]?' on':'')+
+      '" data-cn="'+n[0]+'"><div class="pn-t"><span class="dot"></span>'+
+      n[1]+'</div><div class="pn-d">'+(d?'已配置':'未配置')+'</div></button>';
+  }).join('');
+  document.getElementById('cfgFlow').onclick=function(e){
+    var b=e.target.closest?e.target.closest('[data-cn]'):null;
+    if(!b||b.getAttribute('data-cn')===cfgNode) return;
+    collectCfgNode();                 // 切节点前先收集当前节点的编辑
+    cfgNode=b.getAttribute('data-cn'); renderCfg();
+  };
+  var box=document.getElementById('cfgDetail'), h='<div class="pipe-view">';
+  // tips 小图标（复用页面已引入的 hint 组件）
+  var tip=function(t){ return '<span class="hint" tabindex="0" data-tip="'+
+    escHtml(t||'')+'">?</span>'; };
+  var spacer='<span class="hint-spacer"></span>';   // 无 tips 的行也占位，保证对齐
+  var head=function(title,t){ return '<h4>'+escHtml(title)+tip(t)+'</h4>'; };
+  if(cfgNode==='params'){
+    h+=head('解析参数','对本次资料生效，重放解析时使用。参数定义与默认值来自服务端 schema，保存时同样经服务端校验。');
+    (cfgData.schema||[]).forEach(function(p){
+      var key=p.key, label=p.label||key, val=cfgData.params[key];
+      if(val===undefined||val===null) val=p.default;
+      var desc=p.desc||p.help||'';
+      h+='<div class="cfg-row"><label>'+escHtml(label)+'</label>'+
+        (desc?tip(desc):spacer);
+      if(p.type==='bool'){
+        h+='<select data-cp="'+escHtml(key)+'">'+
+          '<option value="1"'+(val?' selected':'')+'>开</option>'+
+          '<option value="0"'+(!val?' selected':'')+'>关</option></select>';
+      }else if(p.options||p.choices){
+        var opts=p.options||p.choices;
+        h+='<select data-cp="'+escHtml(key)+'">';
+        opts.forEach(function(o){
+          var v=(typeof o==='object')?o.value:o, t=(typeof o==='object')?o.label||o.value:o;
+          h+='<option value="'+escHtml(v)+'"'+(String(v)===String(val)?' selected':'')+'>'+
+            escHtml(t)+'</option>';
+        });
+        h+='</select>';
+      }else{
+        h+='<input type="text" data-cp="'+escHtml(key)+'" value="'+escHtml(val)+'"'+
+          ' placeholder="'+escHtml(p.default!=null?String(p.default):'')+'">';
+      }
+      if(p.unit) h+='<span class="cfg-unit">'+escHtml(p.unit)+'</span>';
+      h+='</div>';
+    });
+  }else if(cfgNode==='extract'){
+    h+=head('抽取规则','在「执行抽取」时按此规则生成记录；改配置不会重抽已有记录。');
+    h+='<div class="cfg-row"><label>规则版本</label>'+spacer+
+      '<select id="cfgRule"><option value="">（不绑定 · 执行抽取时用默认原始透传）</option>';
+    (cfgData.rules||[]).forEach(function(v){
+      h+='<option value="'+v.version_id+'"'+
+        (cfgData.rule_version_id===v.version_id?' selected':'')+'>'+
+        escHtml(v.name+' v'+v.version+(v.current?'（当前）':''))+'</option>';
+    });
+    h+='</select></div>';
+  }else if(cfgNode==='review'){
+    h+=head('校验规则','当前校验为逐条人工改值 / 确认 / 拒绝；详情的「执行校验」可一键将全部待审记录设为通过。');
+    h+='<div class="empty" style="padding:20px"><b>自动化校验规则：待实现</b></div>';
+  }else{
+    h+=head('入库规则','目标在「执行入库」时消费；入库规则须与资料的抽取规则匹配，配置仅登记目标，真正写入在执行入库时。');
+    h+='<div class="cfg-row"><label>业务库</label>'+spacer+'<select id="cfgDs">'+
+      '<option value="">（未选择）</option>';
+    (cfgData.datasources||[]).forEach(function(d){
+      h+='<option value="'+d.id+'"'+
+        (cfgData.load&&cfgData.load.datasource_id===d.id?' selected':'')+'>'+
+        escHtml(d.name+' · '+d.host+'/'+d.db_name)+'</option>';
+    });
+    h+='</select></div>'+
+      '<div class="cfg-row"><label>入库规则</label>'+spacer+'<select id="cfgLt">'+
+      '<option value="">（未选择）</option>';
+    (cfgData.load_tables||[]).forEach(function(t){
+      h+='<option value="'+t.id+'" data-ds="'+t.datasource_id+'"'+
+        (cfgData.load&&cfgData.load.load_table_id===t.id?' selected':'')+'>'+
+        escHtml(t.target_table+' · '+t.write_mode)+'</option>';
+    });
+    h+='</select></div>';
+  }
+  h+='</div>';
+  box.innerHTML=h;
+  // 数据源变化时过滤入库规则
+  var ds=document.getElementById('cfgDs'), lt=document.getElementById('cfgLt');
+  if(ds&&lt){
+    ds.onchange=function(){
+      var did=this.value;
+      Array.prototype.forEach.call(lt.options,function(o){
+        if(!o.value) return;
+        o.hidden=!!did&&o.getAttribute('data-ds')!==did;
+      });
+      lt.value='';
+    };
+    if(cfgData.load&&cfgData.load.datasource_id) ds.onchange();
+  }
+  document.querySelectorAll('#cfgDetail [data-cp]').forEach(function(el){
+    el.onchange=function(){ cfgDirty=true; cfgMsg('有未保存的修改'); };
+  });
+  ['cfgRule','cfgDs','cfgLt'].forEach(function(id){
+    var el=document.getElementById(id);
+    if(el) el.onchange=function(){ cfgDirty=true; cfgMsg('有未保存的修改'); };
+  });
+}
+document.getElementById('cfgSave').onclick=function(){
+  if(!cfgData){ return; }
+  collectCfgNode();                       // 收集当前节点
+  var body=cfgPending;
+  if(!Object.keys(body).length){ cfgMsg('没有需要保存的修改'); return; }
+  var btn=this; btn.disabled=true; cfgMsg('保存中…');
+  api('POST','/api/sources/'+cfgFileId+'/config',body).then(function(o){
+    btn.disabled=false;
+    if(!(o.s===200&&o.j.ok)){ cfgMsg('保存失败：'+((o.j&&o.j.error)||o.s),true); return; }
+    cfgDirty=false; cfgPending={}; cfgMsg('已保存',false);
+    // 重新拉配置刷新节点状态
+    fetch('/api/sources/'+cfgFileId+'/config').then(function(r){return r.json();}).then(function(j){
+      cfgData=j; renderCfg(); load();
+    });
+  }).catch(function(){ btn.disabled=false; cfgMsg('保存失败：平台库不可用',true); });
+};
+document.getElementById('cfgClose').onclick=function(){ document.getElementById('cfg').hidden=true; };
+document.getElementById('cfg').addEventListener('click',function(e){ if(e.target===this) this.hidden=true; });
 
 /* 深链 ?state= 过滤（工作台卡片跳转） */
 var qs=new URLSearchParams(location.search);

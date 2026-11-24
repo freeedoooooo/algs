@@ -443,6 +443,7 @@ def api_sources_pipeline(file_id: int):
         if lt:
             load = {'target_table': lt['target_table'],
                     'write_mode': lt['write_mode'],
+                    'load_table_id': f['load_table_id'],
                     'datasource_id': f['load_datasource_id'],
                     'datasource_name': ds['name'] if ds else None,
                     'db_name': ds['db_name'] if ds else None}
@@ -700,6 +701,78 @@ def api_source_detail(file_id: int):
                      'files': [{'file_id': file_id, 'name': f['name'],
                                 'state': f['state'],
                                 'records_n': gate['records_n']}]}}
+
+
+@app.get('/api/sources/{file_id}/config')
+def api_file_config_get(file_id: int):
+    """资料配置（四节点）：当前生效参数/抽取规则/入库规则 + 可选项 + 参数 schema。"""
+    catalog = _load('store.catalog')
+    f = _file_or_404(file_id)
+    rule_versions = []
+    for r in catalog.list_rules():
+        for v in catalog.list_versions(r['id']):
+            rule_versions.append({'version_id': v['id'], 'rule_id': r['id'],
+                                  'name': r['name'], 'version': v['version'],
+                                  'current': r['current_version'] == v['version']})
+    return {
+        'ok': True, 'file_id': file_id,
+        'params': f.get('params_json') or {},
+        'rule_version_id': f.get('rule_version_id'),
+        'load': {'datasource_id': f.get('load_datasource_id'),
+                 'load_table_id': f.get('load_table_id')},
+        'schema': params_mod.public_schema(),
+        'rules': rule_versions,
+        'datasources': catalog.list_datasources(),
+        'load_tables': catalog.list_load_tables(),
+    }
+
+
+@app.post('/api/sources/{file_id}/config')
+async def api_file_config_set(file_id: int, request: Request):
+    """写资料配置（部分更新）：params / rule_version_id / load。
+    params 经 normalize 校验；规则版本/入库规则校验归属；运行中/已入库禁改。"""
+    catalog = _load('store.catalog')
+    f = _file_or_404(file_id)
+    if f['state'] in ('parsing', 'loading', 'loaded'):
+        raise store_errors.Conflict('资料处理中/已入库，配置只读')
+    body = await _json_body(request)
+    changed = []
+    if 'params' in body:
+        params, warns = params_mod.normalize(body.get('params'))
+        catalog.set_params(file_id, params)
+        changed.append('params')
+    if 'rule_version_id' in body:
+        rv = body.get('rule_version_id')
+        if rv is not None:
+            if not isinstance(rv, int):
+                raise store_errors.BadRequest('rule_version_id 须为整数')
+            tv = catalog.get_rule_version(version_id=rv)
+            if tv is None:
+                raise store_errors.NotFound('抽取规则版本不存在')
+            catalog.set_rule(file_id, rv)
+        else:
+            catalog.set_rule(file_id, None)
+        changed.append('rule_version_id')
+    if 'load' in body and isinstance(body.get('load'), dict):
+        load = body['load']
+        ds_id, lt_id = load.get('datasource_id'), load.get('load_table_id')
+        if ds_id is None or lt_id is None:
+            catalog.set_load(file_id, None, None)
+        else:
+            lt = catalog.get_load_table(int(lt_id))
+            if lt is None:
+                raise store_errors.NotFound('入库规则不存在')
+            if lt['datasource_id'] != int(ds_id):
+                raise store_errors.BadRequest('入库规则不属于所选业务库')
+            catalog.set_load(file_id, int(ds_id), int(lt_id))
+        changed.append('load')
+    return {'ok': True, 'file_id': file_id, 'changed': changed}
+
+
+@app.post('/api/sources/{file_id}/approve-all')
+def api_file_approve_all(file_id: int):
+    """执行校验（全部通过）：批量确认该资料全部待审记录，推进到 to_load。"""
+    return service.approve_all(file_id)
 
 
 @app.get('/api/sources/{file_id}/gate')

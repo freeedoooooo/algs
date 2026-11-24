@@ -24,7 +24,7 @@
   <aside class="console">
     <div id="drop">
       <b>点击或拖拽文件到此处</b>
-      支持 pdf / csv / png / jpg / bmp / webp / txt / md，可多选，单个文件不超过 20MB。
+      支持 pdf / csv / png / jpg / bmp / webp / txt / md，一次解析一个文件，不超过 20MB。
     </div>
     <input type="file" id="picker"
       accept=".png,.jpg,.jpeg,.bmp,.webp,.tif,.tiff,.pdf,.csv,.txt,.md">
@@ -35,10 +35,6 @@
     <ul class="files" id="filelist"></ul>
     <div class="filebar" id="filebar" hidden>
       <span id="filecount"></span>
-      <button type="button" class="mini" id="clearfiles">清空列表</button>
-    </div>
-    <div class="tplrow">
-      <span class="hint" tabindex="0" data-tip="抽取规则定义文件的读取方式。&#10;固定字段规则：按预设字段抽取，产出规范记录，支持入库。&#10;原始透传：按原表逐行输出，表头作为字段名，&#10;仅支持预览，不支持入库。">?</span>
     </div>
     <div class="row">
       <button id="go" disabled>开始解析</button>

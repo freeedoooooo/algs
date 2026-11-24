@@ -1,4 +1,4 @@
-/* web/sources.css — 资料页：文件名可点 + 流程追踪弹窗 */
+/* web/sources.css — 资料页：文件名可点 + 资料详情弹窗 */
 .nm.pipe-link{cursor:pointer;color:#2563eb}
 .nm.pipe-link:hover{text-decoration:underline}
 .pipe-panel{width:min(920px,96vw)}
@@ -20,24 +20,32 @@
 .pipe-node.done .dot{background:#177245}
 .pipe-node.doing .dot{background:#2563eb}
 .pipe-node.fail .dot{background:#b42318}
-.pipe-detail{display:flex;gap:12px;min-height:200px;
-  border:1px solid #e2e7f0;border-radius:8px;overflow:hidden}
-.pipe-list{flex:0 0 240px;border-right:1px solid #e2e7f0;background:#f7f9fd;
-  max-height:360px;overflow:auto}
-.pipe-list .pl-item{padding:9px 12px;font-size:12px;color:#3b4a63;cursor:pointer;
-  border-bottom:1px solid #eef2f8}
-.pipe-list .pl-item:hover{background:#eef4fc}
-.pipe-list .pl-item.on{background:#e7f0ff;color:#2563eb;font-weight:500}
-.pipe-view{flex:1;min-width:0;padding:12px 14px;max-height:360px;overflow:auto;
+/* 详情弹窗：节点操作条在上 + 内容卡片在下（各节点统一结构） */
+.pipe-detail{min-height:200px}
+.pipe-view{min-width:0;max-height:60vh;overflow:auto;
   font-size:12px;color:#3b4a63;line-height:1.7}
 .pipe-view h4{margin:0 0 8px;font-size:13px;color:#25324a}
 .pipe-view .kv{margin:2px 0}
 .pipe-view .kv b{color:#6b7688;font-weight:400;display:inline-block;min-width:74px}
 .pipe-view code{word-break:break-all}
 .pipe-view .empty{padding:30px 10px}
-/* 解析节点：左侧解析报告、右侧 parse.json 并排 */
-.parse-pair{display:flex;gap:12px;padding:14px}
-.parse-card{flex:1;min-width:0;padding:12px 14px;border:1px solid #e2e7f0;
+.pipe-actions{padding:9px 14px;border:1px solid #e2e7f0;
+  border-radius:8px;background:#f7f9fd}
+.pipe-actions>div{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.pipe-actions .hint{width:15px;height:15px;font-size:10px}
+/* 节点内容卡片（解析报告 / 规则版本 / 校验统计 / 入库表），并排自适应 */
+.parse-pair{display:flex;gap:12px;margin-top:12px;flex-wrap:wrap}
+.parse-card{flex:1 1 220px;min-width:0;padding:12px 14px;border:1px solid #e2e7f0;
   border-radius:8px;background:#fff}
 .parse-card h4{margin:0 0 6px;font-size:13px;color:#25324a}
 .parse-card .linkbtn{margin-top:6px}
+.parse-card .msg{color:#8a94a6;font-size:12px}
+/* 配置弹窗：三列对齐（标签 / tips占位 / 控件 / 单位） */
+.pipe-view h4{display:flex;align-items:center;gap:6px}
+.cfg-row{display:flex;align-items:center;gap:8px;margin:10px 0;font-size:12px}
+.cfg-row>label{width:120px;flex:none;color:#25324a;text-align:right}
+.cfg-row>.hint,.cfg-row>.hint-spacer{width:16px;flex:none}
+.cfg-row input[type=text],.cfg-row select{flex:1;min-width:0;font:inherit;font-size:12px;
+  padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#1f2738}
+.cfg-row select[hidden]{display:none}
+.cfg-unit{flex:none;min-width:40px;color:#8a94a6}

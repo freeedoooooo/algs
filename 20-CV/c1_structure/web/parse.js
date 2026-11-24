@@ -150,11 +150,6 @@ list.addEventListener('click',function(e){
   render();                       // 先移除 DOM 里的 <img>，再释放 blob，避免引用已失效 URL
   if(f&&f._url) URL.revokeObjectURL(f._url);
 });
-document.getElementById('clearfiles').onclick=function(){
-  var urls=picked.map(function(f){return f._url;});
-  picked=[]; render();
-  urls.forEach(function(u){ if(u) URL.revokeObjectURL(u); });
-};
 /* ---- 上传页取 x 坐标：解析前在原图预览上量列边界，直接填进 column_lines ----
    坐标=原图像素，与 doc_unwarp=off 的重切空间一致；on 的矫正图坐标需解析后在报告页取。 */
 var SVGNS='http://www.w3.org/2000/svg';

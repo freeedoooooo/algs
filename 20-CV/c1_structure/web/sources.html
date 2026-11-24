@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>资料文件 · 结构化平台</title>
 <link rel="stylesheet" href="/static/shell.css">
+<link rel="stylesheet" href="/static/hint.css">
 <link rel="stylesheet" href="/static/wizard.css">
 <link rel="stylesheet" href="/static/sources.css">
 </head>
@@ -26,6 +27,7 @@
     <span class="spacer"></span>
     <div class="toolbar">
       <input type="search" id="q" placeholder="搜索文件名…">
+      <button type="button" class="btn mini" id="qbtn">查询</button>
       <select id="kind">
         <option value="">全部类型</option>
         <option value="image">图片</option>
@@ -85,10 +87,22 @@
     <div class="dbody" id="rcbody"></div>
   </div>
 </div>
+<div class="drawer" id="cfg" hidden>
+  <div class="dpanel pipe-panel">
+    <div class="dhead">
+      <h2 id="cfgTitle">资料配置</h2>
+      <span class="spacer"></span>
+      <span class="msg" id="cfgMsg"></span>
+      <button type="button" class="btn mini" id="cfgSave" hidden>保存配置</button>
+      <button type="button" class="dclose" id="cfgClose">关闭 (Esc)</button>
+    </div>
+    <div class="dbody" id="cfgBody"></div>
+  </div>
+</div>
 <div class="drawer" id="pipe" hidden>
   <div class="dpanel pipe-panel">
     <div class="dhead">
-      <h2 id="pipeTitle">文件流程追踪</h2>
+      <h2 id="pipeTitle">资料详情</h2>
       <span class="spacer"></span>
       <button type="button" class="dclose" id="pipeClose">关闭 (Esc)</button>
     </div>
@@ -96,6 +110,7 @@
   </div>
 </div>
 <script src="/static/shell.js"></script>
+<script src="/static/hint.js"></script>
 <script src="/static/wizard.js"></script>
 <script src="/static/sources.js"></script>
 </body>

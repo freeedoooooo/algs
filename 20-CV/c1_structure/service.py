@@ -353,6 +353,28 @@ def derive_review_state(file_id):
     return target
 
 
+def approve_all(file_id):
+    """执行校验（全部通过）：把该资料所有待审(pending/edited)记录批量
+    设为 confirmed，推进到 to_load；拒绝的记录不动（须人工处理），
+    有 rejected 时保持 to_review。仅 to_review/to_load 可执行。"""
+    catalog = _load('store.catalog')
+    content = _load('store.content')
+    errors = _load('store.errors')
+    f = catalog.get_file(file_id)
+    if f is None:
+        raise errors.NotFound('资料不存在')
+    if f['state'] not in ('to_review', 'to_load'):
+        raise errors.Conflict('资料状态为 {}，无待校验记录'.format(f['state']))
+    doc = _load('store.content_db').get_records(file_id)
+    recs = (doc or {}).get('files', [{}])[0].get('records', [])
+    idxs = [r['index'] for r in recs
+            if (r.get('review') or {}).get('state') in ('pending', 'edited')]
+    n = content.set_review(file_id, idxs, 'confirmed') if idxs else 0
+    new_state = derive_review_state(file_id)
+    return {'ok': True, 'file_id': file_id, 'updated': n,
+            'file_state': new_state}
+
+
 def reparse(file_id, params=None):
     """原地重放解析：原件字节从 c1_doc_file 回捞，按资料生效参数重跑。
     状态重置 pending→parsing；旧产物、暂存、校验结论、隔离行与回执
