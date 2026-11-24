@@ -230,9 +230,10 @@ def get_load_table(lt_id):
                 return None
             r = rows[0]
             r['created_at'] = str(r['created_at'])
-            cur.execute('SELECT COUNT(*) FROM c1_task'
+            cur.execute('SELECT COUNT(*) FROM c1_doc_file'
                         ' WHERE load_table_id=%s', (lt_id,))
-            r['task_refs'] = cur.fetchone()[0]
+            r['file_refs'] = cur.fetchone()[0]
+            r['task_refs'] = r['file_refs']
             cur.execute('SELECT rule_field, target_column,'
                         ' is_business_key, sort_order'
                         ' FROM c1_load_table_field WHERE load_table_id=%s'
@@ -318,10 +319,10 @@ def update_load_table(lt_id, write_mode=None, fields=None):
             row = cur.fetchone()
             if not row:
                 raise NotFound('入库规则不存在')
-            cur.execute('SELECT COUNT(*) FROM c1_task'
+            cur.execute('SELECT COUNT(*) FROM c1_doc_file'
                         ' WHERE load_table_id=%s', (lt_id,))
             if cur.fetchone()[0]:
-                raise Conflict('该入库规则已被任务引用，只读且不可删除')
+                raise Conflict('该入库规则已被资料引用，只读且不可删除')
             wm = write_mode if write_mode is not None else row[1]
             fs = fields
             if fs is None:
@@ -351,10 +352,10 @@ def delete_load_table(lt_id):
                         (lt_id,))
             if not cur.fetchone():
                 raise NotFound('入库规则不存在')
-            cur.execute('SELECT COUNT(*) FROM c1_task'
+            cur.execute('SELECT COUNT(*) FROM c1_doc_file'
                         ' WHERE load_table_id=%s', (lt_id,))
             if cur.fetchone()[0]:
-                raise Conflict('该入库规则已被任务引用，禁止删除')
+                raise Conflict('该入库规则已被资料引用，禁止删除')
             cur.execute('DELETE FROM c1_load_table_field'
                         ' WHERE load_table_id=%s', (lt_id,))
             cur.execute('DELETE FROM c1_load_table WHERE id=%s', (lt_id,))
@@ -363,36 +364,23 @@ def delete_load_table(lt_id):
         conn.close()
 
 
-def set_task_load(task_id, datasource_id, load_table_id):
-    conn = db.connect()
-    try:
-        with conn.cursor() as cur:
-            cur.execute('UPDATE c1_task SET load_datasource_id=%s,'
-                        ' load_table_id=%s WHERE id=%s',
-                        (datasource_id, load_table_id, task_id))
-            conn.commit()
-    finally:
-        conn.close()
-
-
-def add_load_log(task_id, task_file_id, record_index, datasource_id,
+def add_load_log(file_id, record_index, datasource_id,
                  target_table, target_pk, action):
-    """幂等回执：唯一键已存在→跳过返回 False（单任务串行，先查后插无竞态）。"""
+    """幂等回执：唯一键已存在→跳过返回 False（单资料串行，先查后插无竞态）。"""
     conn = db.connect()
     try:
         with conn.cursor() as cur:
             cur.execute('SELECT id FROM c1_load_log'
-                        ' WHERE task_file_id=%s AND record_index=%s'
+                        ' WHERE file_id=%s AND record_index=%s'
                         ' AND datasource_id=%s AND target_table=%s',
-                        (task_file_id, record_index, datasource_id,
-                         target_table))
+                        (file_id, record_index, datasource_id, target_table))
             if cur.fetchone():
                 return False
             cur.execute(
-                'INSERT INTO c1_load_log (task_id, task_file_id,'
-                ' record_index, datasource_id, target_table, target_pk, action)'
-                ' VALUES (%s,%s,%s,%s,%s,%s,%s)',
-                (task_id, task_file_id, record_index, datasource_id,
+                'INSERT INTO c1_load_log (file_id, record_index,'
+                ' datasource_id, target_table, target_pk, action)'
+                ' VALUES (%s,%s,%s,%s,%s,%s)',
+                (file_id, record_index, datasource_id,
                  target_table, str(target_pk)[:255], action))
             conn.commit()
             return True
@@ -400,22 +388,35 @@ def add_load_log(task_id, task_file_id, record_index, datasource_id,
         conn.close()
 
 
-def list_load_logs(task_id):
+def list_load_logs(file_id):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT l.id, l.task_file_id, l.record_index,'
+            cur.execute('SELECT l.id, l.file_id, l.record_index,'
                         ' l.datasource_id, d.name AS datasource_name,'
                         ' d.db_name, l.target_table, l.target_pk, l.action,'
                         ' l.loaded_at'
                         ' FROM c1_load_log l'
                         ' LEFT JOIN c1_load_datasource d'
                         ' ON d.id=l.datasource_id'
-                        ' WHERE l.task_id=%s'
-                        ' ORDER BY l.task_file_id, l.record_index', (task_id,))
+                        ' WHERE l.file_id=%s'
+                        ' ORDER BY l.file_id, l.record_index', (file_id,))
             rows = _rows(cur)
         for r in rows:
             r['loaded_at'] = str(r['loaded_at'])
         return rows
+    finally:
+        conn.close()
+
+
+def clear_load_logs(file_id):
+    """重放解析前置（D4）：清该资料全部入库回执。"""
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            n = cur.execute('DELETE FROM c1_load_log WHERE file_id=%s',
+                            (file_id,))
+            conn.commit()
+        return n
     finally:
         conn.close()

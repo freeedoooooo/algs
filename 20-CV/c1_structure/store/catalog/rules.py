@@ -192,12 +192,12 @@ def delete_rule(rule_id):
     try:
         with conn.cursor() as cur:
             _tpl_exists(cur, rule_id)
-            cur.execute('SELECT COUNT(*) FROM c1_task WHERE'
+            cur.execute('SELECT COUNT(*) FROM c1_doc_file WHERE'
                         ' rule_version_id IN (SELECT id FROM'
                         ' c1_extract_rule_version WHERE rule_id=%s)',
                         (rule_id,))
             if cur.fetchone()[0]:
-                raise Conflict('该抽取规则已被任务引用，禁止删除')
+                raise Conflict('该抽取规则已被资料引用，禁止删除')
             cur.execute('DELETE FROM c1_extract_rule_version'
                         ' WHERE rule_id=%s', (rule_id,))
             cur.execute('DELETE FROM c1_extract_rule WHERE id=%s',

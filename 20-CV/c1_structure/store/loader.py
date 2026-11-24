@@ -108,11 +108,11 @@ def fields_to_map(field_rows):
     return cm, bk
 
 
-TRACE_COLS = ('task_id', 'task_file_id', 'record_id')
+TRACE_COLS = ('file_id', 'record_id')
 
 
 def validate_trace_columns(cols, field_rows=None):
-    """溯源列预检：目标表须预建 task_id/task_file_id/record_id 三列
+    """溯源列预检：目标表须预建 file_id/record_id 两列
     （平台禁止自动 DDL）；规则字段不得占用这些列名。"""
     missing = [c for c in TRACE_COLS if c not in cols]
     if missing:
@@ -190,7 +190,7 @@ def write_record(cur, table, column_map, values, write_mode, business_key,
     """单条写入→(action, target_pk)。应用层 upsert：SELECT 业务键→
     UPDATE/INSERT，不依赖目标表唯一索引（单任务串行无竞态）。
     update 目标行不存在→LoadRecordError（调用方隔离）。
-    extra_values＝溯源列（task_id/task_file_id/record_id），非业务键，
+    extra_values＝溯源列（file_id/record_id），非业务键，
     upsert 时随其余非键列一起覆盖为最近写入者。"""
     mapped = {column_map[k]: v for k, v in values.items() if k in column_map}
     mapped.update(extra_values or {})

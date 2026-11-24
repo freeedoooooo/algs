@@ -1,25 +1,23 @@
-"""目录库 · 源文件域（c1_doc_file ＋ content 原件字节）。
+"""目录库 · 资料域（c1_doc_file ＋ content 原件字节 ＋ 运行状态）。
 
-哈希去重登记；content LONGBLOB 只在 get_file_content 里取，
-列表/元数据查询一律排除该列，避免把字节拖进列表接口。
+一条资料记录 = 一次运行（单文件）。哈希不去重：每次上传插新行，
+同字节文件允许多条独立运行（D2 裁决）；sha256 仅作检索/ETag。
+content LONGBLOB 只在 get_file_content 里取，列表/元数据查询一律排除该列。
 """
 from .. import db
 from ..errors import Conflict
-from ._common import _rows
+from ._common import _rows, _j
 
-_FILE_COLS = ('id, name, sha256, kind, size_bytes, tags, note, created_at')
+_FILE_COLS = ('id, name, sha256, kind, size_bytes, tags, note, created_at,'
+              ' state, error, rule_version_id, params_json,'
+              ' load_datasource_id, load_table_id, updated_at')
 
 
 def register_file(name, kind, size_bytes, sha256, content):
-    """哈希去重登记：已存在回已有 id（dedup=True），字节不重复入库。"""
+    """登记新行（不去重，恒返回 (new_id, False) 兼容旧 dedup 契约）。"""
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT id FROM c1_doc_file WHERE sha256=%s',
-                        (sha256,))
-            row = cur.fetchone()
-            if row:
-                return row[0], True
             cur.execute(
                 'INSERT INTO c1_doc_file (name, sha256, kind,'
                 ' size_bytes, content) VALUES (%s,%s,%s,%s,%s)',
@@ -30,7 +28,7 @@ def register_file(name, kind, size_bytes, sha256, content):
         conn.close()
 
 
-def list_files(q=None, kind=None, tag=None, page=1, per_page=20):
+def list_files(q=None, kind=None, tag=None, page=1, per_page=20, state=None):
     conn = db.connect()
     try:
         where, args = [], []
@@ -43,6 +41,9 @@ def list_files(q=None, kind=None, tag=None, page=1, per_page=20):
         if tag:
             where.append('tags LIKE %s')
             args.append('%{}%'.format(tag))
+        if state:
+            where.append('state=%s')
+            args.append(state)
         w = ('WHERE ' + ' AND '.join(where)) if where else ''
         with conn.cursor() as cur:
             cur.execute('SELECT COUNT(*) FROM c1_doc_file ' + w, args)
@@ -54,6 +55,8 @@ def list_files(q=None, kind=None, tag=None, page=1, per_page=20):
             items = _rows(cur)
         for it in items:
             it['created_at'] = str(it['created_at'])
+            it['updated_at'] = str(it['updated_at'])
+            it['params_json'] = _j(it.get('params_json')) or {}
         return {'items': items, 'total': total}
     finally:
         conn.close()
@@ -66,6 +69,8 @@ def get_file(file_id):
             cur.execute('SELECT {} FROM c1_doc_file WHERE id=%s'
                         .format(_FILE_COLS), (file_id,))
             rows = _rows(cur)
+        if rows:
+            rows[0]['params_json'] = _j(rows[0].get('params_json')) or {}
         return rows[0] if rows else None
     finally:
         conn.close()
@@ -87,14 +92,14 @@ def get_file_content(file_id):
 
 
 def delete_file(file_id):
-    """被任务引用禁删（血缘完整）抛 Conflict；字节随行删除。"""
+    """运行中有产物/暂存时禁删（保血缘）；否则字节随行删除。"""
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT COUNT(*) FROM c1_task_file'
-                        ' WHERE file_id=%s', (file_id,))
-            if cur.fetchone()[0]:
-                raise Conflict('该文件已被任务引用，为保证血缘可追溯，不可删除')
+            cur.execute('SELECT state FROM c1_doc_file WHERE id=%s', (file_id,))
+            row = cur.fetchone()
+            if row and row[0] in ('parsing', 'loading', 'loaded'):
+                raise Conflict('该资料正在处理或已入库，为保证血缘可追溯，不可删除')
             cur.execute('DELETE FROM c1_doc_file WHERE id=%s', (file_id,))
             conn.commit()
     finally:
@@ -108,5 +113,114 @@ def update_file_meta(file_id, tags=None, note=None):
             cur.execute('UPDATE c1_doc_file SET tags=%s, note=%s'
                         ' WHERE id=%s', (tags, note, file_id))
             conn.commit()
+    finally:
+        conn.close()
+
+
+# ---- 运行状态（原 c1_task / c1_task_file 的职责，落到资料行）----
+
+def set_state(file_id, state, error=None):
+    """更新运行状态；error=None 表示不动该列（重放复位须显式传空串）。"""
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            if error is None:
+                cur.execute('UPDATE c1_doc_file SET state=%s WHERE id=%s',
+                            (state, file_id))
+            else:
+                cur.execute('UPDATE c1_doc_file SET state=%s, error=%s'
+                            ' WHERE id=%s', (state, error, file_id))
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def set_rule(file_id, version_id):
+    """执行抽取时绑定/换绑规则版本（抽取时刻生效）。"""
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('UPDATE c1_doc_file SET rule_version_id=%s'
+                        ' WHERE id=%s', (version_id, file_id))
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def set_load(file_id, datasource_id, load_table_id):
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('UPDATE c1_doc_file SET load_datasource_id=%s,'
+                        ' load_table_id=%s WHERE id=%s',
+                        (datasource_id, load_table_id, file_id))
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def set_params(file_id, params):
+    import json
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('UPDATE c1_doc_file SET params_json=%s WHERE id=%s',
+                        (json.dumps(params or {}, ensure_ascii=False), file_id))
+            conn.commit()
+    finally:
+        conn.close()
+
+
+# ---- 隔离区（原 catalog/tasks.py 迁入，键改 file_id）----
+
+def add_quarantine(file_id, record_index, stage, reason, payload):
+    import json
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'INSERT INTO c1_load_quarantine (file_id, record_index,'
+                ' stage, reason, payload_json) VALUES (%s,%s,%s,%s,%s)',
+                (file_id, record_index, stage, reason,
+                 json.dumps(payload, ensure_ascii=False)))
+            conn.commit()
+            return cur.lastrowid
+    finally:
+        conn.close()
+
+
+def clear_quarantine(file_id):
+    """重放解析前置：清该资料隔离行（回执按 D4 另由调用方清）。"""
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            n = cur.execute('DELETE FROM c1_load_quarantine WHERE file_id=%s',
+                            (file_id,))
+            conn.commit()
+        return n
+    finally:
+        conn.close()
+
+
+def list_quarantine(file_id=None, state=None):
+    import json
+    conn = db.connect()
+    try:
+        where, args = [], []
+        if file_id is not None:
+            where.append('file_id=%s')
+            args.append(file_id)
+        if state:
+            where.append('state=%s')
+            args.append(state)
+        w = ('WHERE ' + ' AND '.join(where)) if where else ''
+        with conn.cursor() as cur:
+            cur.execute('SELECT * FROM c1_load_quarantine {} ORDER BY id DESC'
+                        .format(w), args)
+            rows = _rows(cur)
+        for r in rows:
+            r['payload_json'] = json.loads(r['payload_json'])
+            r['created_at'] = str(r['created_at'])
+        return rows
     finally:
         conn.close()
