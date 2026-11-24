@@ -5,7 +5,7 @@ var hpicked=[];
 var hdrop=document.getElementById('hdrop'), hpick=document.getElementById('hpick');
 var hlist=document.getElementById('hlist'), hgo=document.getElementById('hgo');
 var hmsg=document.getElementById('hmsg');
-var items=[], led=[], tplCount=0;
+var items=[], led=[];
 var pollT=null, loopT=null, lastFileId=null;
 var todoPage=1, todoSize=getListPer();
 var pgTodo=bindPager(document.getElementById('todopg'),
@@ -14,11 +14,6 @@ var pgTodo=bindPager(document.getElementById('todopg'),
 
 function say(t,cls){ hmsg.textContent=t; hmsg.className='qmsg'+(cls?' '+cls:''); }
 function sayHtml(html,cls){ hmsg.innerHTML=html; hmsg.className='qmsg'+(cls?' '+cls:''); }
-
-/* ---- 抽取规则计数（卡片②副文案）；规则在数据预览页「执行抽取」时选 ---- */
-fetch('/api/extract-rules').then(function(r){return r.json();}).then(function(j){
-  tplCount=(j.items||[]).length; renderCards();
-}).catch(function(){});
 
 /* ---- 快速解析：选文件 → 就地提交（复用 /api/upload 通道） ---- */
 var ALLOWED=['png','jpg','jpeg','bmp','webp','tif','tiff','pdf','csv','txt','md'];
@@ -98,35 +93,28 @@ function nums(){
     return t.state==='parsing'||t.state==='pending';
   });
   var toExtract=items.filter(function(t){return t.state==='to_extract';});
-  var reviewFiles=0, loadTasks=[];
+  var reviewFiles=0, reviewTasks=0, loadTasks=[];
   led.forEach(function(t){
     if(t.file_state==='to_load'){ loadTasks.push(t); return; }
-    if(t.file_state==='to_review'&&t.pending_n+t.edited_n>0) reviewFiles++;
+    if(t.file_state==='to_review'&&t.pending_n+t.edited_n>0){
+      reviewFiles++; reviewTasks++;
+    }
   });
   var failed=items.filter(function(t){return t.state==='failed';});
   return {busy:busy, toExtract:toExtract, reviewFiles:reviewFiles,
-    loadTasks:loadTasks, failed:failed};
+    reviewTasks:reviewTasks, loadTasks:loadTasks, failed:failed};
 }
-function setCard(id,n,sub,zero){
-  document.getElementById('n'+id).textContent=n;
-  document.getElementById('s'+id).textContent=sub;
+function setCard(id,n,zero){
+  var num=(typeof n==='number'&&isFinite(n))?n:0;
+  document.getElementById('n'+id).textContent=num;
   document.getElementById('card'+id).classList.toggle('zero',!!zero);
 }
 function renderCards(){
   var v=nums();
-  setCard(1, v.busy.length,
-    v.busy.length?('任务 '+v.busy.map(function(t){return '#'+t.id;}).join('、')):'暂无进行中的解析任务',
-    !v.busy.length);
-  setCard(2, v.toExtract.length,
-    v.toExtract.length? '解析完成，等待执行抽取（规则 '+tplCount+' 条）'
-      : (tplCount? '暂无待抽取 · 已配置 '+tplCount+' 条抽取规则'
-                 : '暂无待抽取 · 未配置规则，默认原始透传'),
-    !v.toExtract.length);
-  setCard(3, v.reviewTasks,
-    v.reviewFiles? '共 '+v.reviewFiles+' 个资料待逐条核对':'暂无待校验记录', !v.reviewFiles);
-  setCard(4, v.loadTasks.length,
-    v.loadTasks.length? '校验完成，等待入库':'暂无待入库任务',
-    !v.loadTasks.length);
+  setCard(1, v.busy.length, !v.busy.length);
+  setCard(2, v.toExtract.length, !v.toExtract.length);
+  setCard(3, v.reviewTasks, !v.reviewFiles);
+  setCard(4, v.loadTasks.length, !v.loadTasks.length);
   /* H1：只有 1 个待入库 → 点卡直接弹向导 */
   var l4=document.getElementById('l4');
   if(v.loadTasks.length===1){

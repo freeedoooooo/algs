@@ -83,7 +83,7 @@ async def lifespan(_app):
     yield
 
 
-app = FastAPI(title='结构化平台', version='0.1', lifespan=lifespan)
+app = FastAPI(title='结构化工具', version='0.1', lifespan=lifespan)
 # 响应压缩（2026-11-21 性能轮）：报告 HTML 均值 530KB/最大 1.9MB、
 # 记录 JSON ~150KB，远端访问下文本 1KB 起压可省 ~85% 传输。
 app.add_middleware(GZipMiddleware, minimum_size=1024)
@@ -961,7 +961,7 @@ async def api_sources_parse(file_id: int, request: Request):
 if __name__ == '__main__':
     import uvicorn
 
-    print('>> 结构化平台 地址： http://{}:{}'.format(config.HOST, config.PORT))
-    print('>> 结构化平台 存储： {}'.format(
+    print('>> 结构化工具 地址： http://{}:{}'.format(config.HOST, config.PORT))
+    print('>> 结构化工具 存储： {}'.format(
         _load('store.db').safe_detail(config.PLATFORM_DB)))
     uvicorn.run(app, host=config.HOST, port=config.PORT, log_level='warning')

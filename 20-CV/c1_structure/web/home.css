@@ -29,11 +29,10 @@
   padding:12px 14px;min-width:220px}
 .card.zero{opacity:.6}
 .card.alert{border-color:#e4a4a0}
-.ctitle{display:flex;align-items:baseline;gap:8px;font-size:14px;font-weight:600}
-.ctitle span{font-weight:400;font-size:11px;color:#8a94a6}
-.cnum{font-size:26px;font-weight:700;color:#2563eb;margin:6px 0 2px}
+.ctitle{font-size:14px;font-weight:600}
+.cnum{font-size:26px;font-weight:700;color:#2563eb;margin:6px 0 8px;
+  height:32px;line-height:32px}
 .card.zero .cnum{color:#8a94a6}
-.csub{font-size:12px;color:#6b7688;min-height:16px;margin-bottom:6px}
 .clink{font-size:12px;color:#2563eb;text-decoration:none}
 .clink:hover{text-decoration:underline}
 

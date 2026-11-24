@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>工作台 · 结构化平台</title>
+<title>工作台 · 结构化工具</title>
 <link rel="stylesheet" href="/static/shell.css">
 <link rel="stylesheet" href="/static/wizard.css">
 <link rel="stylesheet" href="/static/home.css">
 </head>
 <body>
 <nav class="topnav">
-  <a class="brand" href="/">结构化平台</a>
+  <a class="brand" href="/">结构化工具</a>
   <a href="/" class="on">工作台</a>
   <a href="/sources">资料</a>
   <a href="/parse">解析</a>
@@ -36,7 +36,7 @@
     </div>
     <div id="hdrop">
       <b>点击或拖拽文件到此处</b>
-      <span class="sub">支持 pdf / csv / png / jpg / bmp / webp / txt / md，一次解析一个文件（同时选多个时只取第一个），不超过 20MB。</span>
+      <span class="sub">支持 pdf / csv / png / jpg / bmp / webp / txt / md，单个文件不超过 20MB。</span>
     </div>
     <input type="file" id="hpick" hidden
            accept=".png,.jpg,.jpeg,.bmp,.webp,.tif,.tiff,.pdf,.csv,.txt,.md">
@@ -45,27 +45,23 @@
 
   <section class="cards">
     <div class="card" id="card1">
-      <div class="ctitle">① 解析<span>将文件解析为结构化数据</span></div>
+      <div class="ctitle">① 解析</div>
       <div class="cnum" id="n1">—</div>
-      <div class="csub" id="s1"></div>
       <a class="clink" href="/parse">前往解析 →</a>
     </div>
     <div class="card" id="card2">
-      <div class="ctitle">② 抽取<span>配置字段抽取规则</span></div>
+      <div class="ctitle">② 抽取</div>
       <div class="cnum" id="n2">—</div>
-      <div class="csub" id="s2"></div>
       <a class="clink" href="/sources?state=to_extract">前往抽取 →</a>
     </div>
     <div class="card" id="card3">
-      <div class="ctitle">③ 校验<span>逐条核对并确认</span></div>
+      <div class="ctitle">③ 校验</div>
       <div class="cnum" id="n3">—</div>
-      <div class="csub" id="s3"></div>
       <a class="clink" href="/sources?state=to_review">前往校验 →</a>
     </div>
     <div class="card" id="card4">
-      <div class="ctitle">④ 入库<span>写入业务库</span></div>
+      <div class="ctitle">④ 入库</div>
       <div class="cnum" id="n4">—</div>
-      <div class="csub" id="s4"></div>
       <a class="clink" href="/sources?state=to_load" id="l4">前往入库 →</a>
     </div>
   </section>
