@@ -133,15 +133,16 @@ function showLineage(rid,tr,col){
     }
     fieldMap=o.j.field_map||{};
     var key=o.j.field||col;
-    /* data-src 只记录 file+index：同一行换单元格不改 URL、不刷新 iframe */
-    var baseSrc='/preview?embed=1&file='+encodeURIComponent(o.j.file_id)+
-      '&index='+encodeURIComponent(o.j.record_index);
+    /* data-src 只记 file：同一资料内换任何行/单元格都不重建 iframe，
+       只发消息让预览切到对应 record_index 并钉住格子 */
+    var baseSrc='/preview?embed=1&file='+encodeURIComponent(o.j.file_id);
     if(frame.getAttribute('data-src')===baseSrc&&!frame.hidden){
       if(frame.contentWindow) frame.contentWindow.postMessage(
         {c1TraceKey:{key:key,index:o.j.record_index}},'*');
     }else{
       frame.setAttribute('data-src',baseSrc);
-      frame.src=baseSrc+(key?('&key='+encodeURIComponent(key)):'');
+      frame.src=baseSrc+'&index='+encodeURIComponent(o.j.record_index)+
+        (key?('&key='+encodeURIComponent(key)):'');
       frame.hidden=false;
     }
   }).catch(function(e){
