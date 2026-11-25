@@ -104,7 +104,10 @@ body.embed-lineage #taskpick,
 body.embed-lineage #lightbox,
 body.embed-lineage #receipt,
 body.embed-lineage #summary{display:none !important}
-body.embed-lineage .pagebody{padding:12px 0;max-width:none}
+/* 嵌入态去掉 pagebody 顶部内边距：否则 iframe 内血缘头部比宿主左侧表格低 12px */
+body.embed-lineage .pagebody{padding:0;max-width:none}
+/* 嵌入看板/处理页时头部与宿主白底齐平，避免顶部出现灰边 */
+body.embed-lineage .lhead{background:#fff}
 body.embed-lineage .stgwrap{display:flex;justify-content:center;align-items:flex-start}
 /* 血缘面板保持预览页宽屏原生外观（560px 侧栏、内容高度、圆角边框、头部、舞台）。
    关键：iframe 仅 600px 宽会触发上方 max-width:1000px 媒体查询把面板压成 100%，

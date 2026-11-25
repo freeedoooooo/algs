@@ -5,7 +5,9 @@
 .dashlineage { position:relative; flex:0 0 680px; min-width:640px;
   display:flex; flex-direction:column; overflow:hidden;
   height:calc(100vh - 180px); min-height:420px;
-  background:#fff; border:1px solid #e2e8f0; border-radius:12px;
+  background:#fff; border:0; border-left:1px solid #e2e8f0;
+  border-right:1px solid #e2e8f0; border-bottom:1px solid #e2e8f0;
+  border-radius:0 0 12px 12px;
   transition:flex-basis .15s, min-width .15s; }
 .dashlineage[hidden] { display:none; }
 .dashlineage.collapsed { flex:0 0 40px; min-width:40px; }

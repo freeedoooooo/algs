@@ -3,6 +3,7 @@
 var pfId=null, pfName='', pfNode='parse', pfData=null, pfCfg=null, pfRecords=[];
 var pfPending={}, pfCfgOpen=false, pfPreResult=null, pfPreError='', pfRuleDetail=null, pfRows=null;
 var pfFileNames={};
+var pfLineageOpen=true, pfLinRidByIndex={}, pfLinFieldMap={};
 var PF_NODES=[['parse','解析'],['extract','抽取'],['review','校验'],['load','入库']];
 var PF_TITLE={parse:'解析参数',extract:'抽取规则',review:'校验规则',load:'入库映射'};
 var PF_PRODUCT={parse:'解析报告',extract:'数据记录',review:'校验记录',load:'入库表'};
@@ -67,6 +68,7 @@ function pfInit(){
       '<div class="empty">缺少资料 ID。请从<a href="/sources">资料台账</a>点击「处理」进入。</div>';
     return;
   }
+  window.addEventListener('message',pfOnLinMessage);
   pfLoad();
 }
 function pfLoad(){
@@ -76,7 +78,8 @@ function pfLoad(){
     pfApi('GET','/api/sources/'+pfId+'/pipeline'),
     pfApi('GET','/api/sources/'+pfId+'/config'),
     pfApi('GET','/api/sources/'+pfId+'/staging'),
-    pfApi('GET','/api/sources/state')
+    pfApi('GET','/api/sources/state'),
+    pfApi('GET','/api/sources/'+pfId+'/record-ids')
   ]).then(function(rs){
     if(!(rs[0].s===200&&rs[0].j&&rs[0].j.ok))
       throw new Error((rs[0].j&&rs[0].j.error)||('HTTP '+rs[0].s));
@@ -89,6 +92,10 @@ function pfLoad(){
     pfRecords=((doc&&doc.files||[])[0]||{}).records||[];
     pfFileNames={};
     ((rs[3].j||{}).items||[]).forEach(function(f){ pfFileNames[f.id]=f.name; });
+    pfLinRidByIndex={};
+    ((rs[4].j||{}).items||[]).forEach(function(x){
+      pfLinRidByIndex[x.index]=x.record_id;
+    });
     document.getElementById('procBody').innerHTML=
       '<div class="proc-layout">'+
         '<aside class="proc-side"><div class="proc-side-t">处理流程</div>'+
@@ -365,6 +372,91 @@ function pfPreviewUrl(){
     ? '/preview?file='+pfId+'&view=review'
     : '/preview?file='+pfId;
 }
+/* ---- 产物区内联血缘回溯 ---- */
+function pfLinBaseSrc(){ return '/preview?embed=1&file='+pfId; }
+function pfLinClear(){
+  document.querySelectorAll('#procResult tr.pf-sel').forEach(function(tr){
+    tr.classList.remove('pf-sel');});
+  document.querySelectorAll('#procResult td.cell.pf-pin').forEach(function(td){
+    td.classList.remove('pf-pin');});
+}
+function pfLinHighlight(key,index,rid,col){
+  pfLinClear();
+  var tr=null, td=null, i;
+  if(index!=null){
+    for(i=0;i<document.querySelectorAll('#procResult tr[data-index]').length;i++){
+      var x=document.querySelectorAll('#procResult tr[data-index]')[i];
+      if(String(x.getAttribute('data-index'))===String(index)){ tr=x; break; }
+    }
+    if(tr) for(i=0;i<tr.querySelectorAll('td.cell[data-key]').length;i++){
+      var y=tr.querySelectorAll('td.cell[data-key]')[i];
+      if(y.getAttribute('data-key')===key){ td=y; break; }
+    }
+  }
+  if(!tr&&rid!=null){
+    for(i=0;i<document.querySelectorAll('#procResult tr[data-rid]').length;i++){
+      var x2=document.querySelectorAll('#procResult tr[data-rid]')[i];
+      if(String(x2.getAttribute('data-rid'))===String(rid)){ tr=x2; break; }
+    }
+    if(tr) Array.prototype.forEach.call(tr.querySelectorAll('td.cell[data-col]'),function(y){
+      var c=y.getAttribute('data-col');
+      if((col&&c===col)||(!col&&(pfLinFieldMap[c]||c)===key)) td=y;
+    });
+  }
+  if(tr) tr.classList.add('pf-sel');
+  if(td) td.classList.add('pf-pin');
+}
+function pfLinSelect(key,index,rid,col){
+  var wasOpen=pfLineageOpen;
+  if(!wasOpen){ pfLineageOpen=true; pfRenderResult(); }
+  var frame=document.getElementById('pfLinFrame');
+  if(!frame) return;
+  var base=pfLinBaseSrc();
+  var first=base+'&index='+encodeURIComponent(index)+
+    '&key='+encodeURIComponent(key);
+  if(!wasOpen){
+    /* 首次展开：iframe 刚创建，直接带定位参数加载，不能发空窗口消息 */
+    frame.src=first;
+  }else if(frame.getAttribute('data-src')===base){
+    if(frame.contentWindow) frame.contentWindow.postMessage(
+      {c1TraceKey:{key:key,index:index}},'*');
+  }else{
+    frame.setAttribute('data-src',base);
+    frame.src=first;
+  }
+  pfLinHighlight(key,index,rid,col);
+}
+function pfBindLinCells(){
+  document.querySelectorAll('#procResult tr[data-index] td.cell[data-key]').forEach(function(td){
+    td.onclick=function(){
+      var tr=td.closest('tr[data-index]');
+      pfLinSelect(td.getAttribute('data-key'),tr.getAttribute('data-index'),null,null);
+    };
+  });
+  document.querySelectorAll('#procResult tr[data-rid] td.cell[data-col]').forEach(function(td){
+    td.onclick=function(){
+      var tr=td.closest('tr[data-rid]'), rid=tr.getAttribute('data-rid');
+      var col=td.getAttribute('data-col');
+      pfApi('GET','/api/staging/locate/'+encodeURIComponent(rid)+
+        '?key='+encodeURIComponent(col)).then(function(o){
+        if(!(o.s===200&&o.j&&o.j.ok)) return;
+        pfLinFieldMap=o.j.field_map||{};
+        pfLinSelect(o.j.field||col,o.j.record_index,rid,col);
+      });
+    };
+  });
+}
+function pfOnLinMessage(e){
+  if(!e.data) return;
+  if(typeof e.data.c1LineageCollapsed==='boolean'){
+    var panel=document.getElementById('pfLineage');
+    if(panel) panel.classList.toggle('collapsed',e.data.c1LineageCollapsed);
+    return;
+  }
+  if(!e.data.c1PinField||!pfLineageOpen) return;
+  var key=e.data.c1PinField.key, idx=e.data.c1PinField.record_index;
+  pfLinHighlight(key,idx,pfLinRidByIndex[idx],null);
+}
 function pfRecordsHtml(){
   var recs=(pfRecords||[]).slice();
   if(pfNode==='review'){
@@ -387,11 +479,13 @@ function pfRecordsHtml(){
     keys.map(function(k){ return '<th>'+escHtml(k)+'</th>'; }).join('')+'</tr></thead><tbody>';
   recs.forEach(function(r){
     var st=(r.review||{}).state||'pending';
-    h+='<tr><td class="seq">'+((r.index||0)+1)+'</td>'+
+    h+='<tr data-index="'+escHtml(r.index)+'">'+
+      '<td class="seq">'+((r.index||0)+1)+'</td>'+
       (withState?'<td>'+escHtml(PF_STATE[st]||st)+'</td>':'')+
       keys.map(function(k){
         var v=(r.values||{})[k];
-        return '<td>'+escHtml(v==null?'':String(v))+'</td>';
+        return '<td class="cell" data-key="'+escHtml(k)+'">'+
+          escHtml(v==null?'':String(v))+'</td>';
       }).join('')+'</tr>';
   });
   return h+'</tbody></table>';
@@ -460,10 +554,21 @@ function pfRenderResult(){
       body='<div class="empty">尚未绑定入库映射</div>';
     }
   }
+  var linPanel=pfNode==='parse'?'':
+    '<div class="proc-lineage" id="pfLineage"'+(pfLineageOpen?'':' hidden')+'>'+
+      '<iframe id="pfLinFrame" title="血缘回溯" loading="lazy"></iframe></div>';
   box.innerHTML='<div class="proc-bar"><div class="proc-bar-l">'+
     '<b>产物</b>'+pfTip(PF_RES_TIP[pfNode])+openLink+'</div><div class="proc-bar-r">'+
-    tools+pfActionHtml()+'</div></div><div class="proc-result-body">'+
-    '<div class="msg" id="pfActMsg"></div>'+body+'</div>';
+    tools+pfActionHtml()+'</div></div><div class="proc-result-split">'+
+    '<div class="proc-result-body">'+
+    '<div class="msg" id="pfActMsg"></div>'+body+'</div>'+linPanel+'</div>';
+  if(pfLineageOpen){
+    var lf=document.getElementById('pfLinFrame');
+    if(lf&&!lf.getAttribute('data-src')){
+      lf.setAttribute('data-src',pfLinBaseSrc());
+      lf.src=pfLinBaseSrc();
+    }
+  }
   if(pfNode==='parse'){
     var fr=document.getElementById('pfReport');
     if(fr) fr.onload=function(){
@@ -483,13 +588,14 @@ function pfRenderResult(){
     if(rb) rb.onclick=function(){ openReceiptDrawer(pfId); };
     if((pfData.load||{}).target_table) pfLoadRows();
   }
+  pfBindLinCells();
 }
 function pfLoadRows(){
   var box=document.getElementById('pfRowsBox');
   if(!box) return;
   var l=pfData.load||{};
   if(pfRows){
-    box.innerHTML=pfRowsHtml(); return;
+    box.innerHTML=pfRowsHtml(); pfBindLinCells(); return;
   }
   var url='/api/load/datasources/'+l.datasource_id+'/rows?table='+
     encodeURIComponent(l.target_table)+'&page=1&per_page=20&file_id='+pfId;
@@ -499,7 +605,7 @@ function pfLoadRows(){
         escHtml((o.j&&o.j.error)||('读取失败 '+o.s))+'</div>';
       return;
     }
-    pfRows=o.j; box.innerHTML=pfRowsHtml();
+    pfRows=o.j; box.innerHTML=pfRowsHtml(); pfBindLinCells();
   }).catch(function(e){
     box.innerHTML='<div class="msg err">读取失败：'+escHtml(e&&e.message||e)+'</div>';
   });
@@ -513,10 +619,12 @@ function pfRowsHtml(){
   h+='<table class="list proc-records"><thead><tr><th class="seq">序号</th>'+
     cols.map(function(c){return '<th>'+escHtml(c)+'</th>';}).join('')+'</tr></thead><tbody>';
   items.forEach(function(r,i){
-    h+='<tr><td class="seq">'+(i+1)+'</td>'+cols.map(function(c){
-      var v=r[c];
-      return '<td>'+escHtml(v==null?'':String(v))+'</td>';
-    }).join('')+'</tr>';
+    h+='<tr data-rid="'+escHtml(r.record_id)+'"><td class="seq">'+(i+1)+'</td>'+
+      cols.map(function(c){
+        var v=r[c];
+        return '<td class="cell" data-col="'+escHtml(c)+'">'+
+          escHtml(v==null?'':String(v))+'</td>';
+      }).join('')+'</tr>';
   });
   return h+'</tbody></table>';
 }
