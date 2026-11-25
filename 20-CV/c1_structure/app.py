@@ -819,13 +819,16 @@ async def api_file_load(file_id: int, request: Request):
 
 @app.post('/api/sources/{file_id}/extract')
 async def api_file_run_extract(file_id: int, request: Request):
-    """执行抽取：{force?, rule_version_id?}；空体=资料已绑规则（未绑默认透传）。
+    """执行抽取：{force?, rule_version_id?}；空体/显式 null=默认原始透传；
+    正整数=指定版本（资料处理页会显式带当前配置的规则）。
     parse.json 纯投影、同步毫秒级；重抽覆盖校验结论须 force=true。"""
     raw = await request.body()
     body = await _json_body(request) if raw else {}
     rv = body.get('rule_version_id')
     if rv is not None and not isinstance(rv, int):
         raise store_errors.BadRequest('rule_version_id 须为整数')
+    if 'rule_version_id' in body and rv is None:
+        rv = 0   # 显式空选择 → 服务层强制内存默认透传，不回退已绑规则
     return await run_in_threadpool(service.run_extract, file_id,
                                    force=bool(body.get('force')),
                                    rule_version_id=rv)

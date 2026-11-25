@@ -565,8 +565,13 @@ function pfBindAction(){
     btn.disabled=true;
     var req;
     if(pfNode==='parse') req=pfApi('POST','/api/sources/'+pfId+'/reparse',{});
-    else if(pfNode==='extract') req=pfApi('POST','/api/sources/'+pfId+'/extract',
-      (st==='to_review'||st==='to_load')?{force:true}:{});
+    else if(pfNode==='extract'){
+      var body=(st==='to_review'||st==='to_load')?{force:true}:{};
+      var rv=document.getElementById('pfRule');
+      /* 配置由 UI 显式传；空体在服务端恒为原始透传 */
+      if(rv&&rv.value) body.rule_version_id=parseInt(rv.value,10);
+      req=pfApi('POST','/api/sources/'+pfId+'/extract',body);
+    }
     else if(pfNode==='review') req=pfApi('POST','/api/sources/'+pfId+'/approve-all',{});
     else req=pfApi('POST','/api/sources/'+pfId+'/load',{});
     var m=document.getElementById('pfActMsg');

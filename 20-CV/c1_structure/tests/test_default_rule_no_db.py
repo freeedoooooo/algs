@@ -26,6 +26,13 @@ class TestDefaultRuleNoDb(unittest.TestCase):
         self.assertIsNone(tpl['version_id'])
         self.assertEqual(tpl['mapping_json'], {})
 
+    def test_default_ignores_db_rules(self):
+        def boom(*a, **k):
+            raise AssertionError('默认规则不应查库')
+        with patch.object(service, '_load', side_effect=boom):
+            tpl = service.resolve_rule()
+        self.assertEqual(tpl['name'], '原始透传')
+
     def test_explicit_missing_still_errors(self):
         with patch.object(service, '_load', return_value=_EmptyCatalog()):
             with self.assertRaises(RuntimeError):

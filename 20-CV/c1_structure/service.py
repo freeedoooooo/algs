@@ -82,8 +82,8 @@ def register_file(name, data):
 
 
 def _passthrough_rule():
-    """库内零规则时的内存默认：原始透传（空 mapping → collect.passthrough）。
-    不落库、不占 id；仅用于未指定/未绑定规则的抽取与解析日志。"""
+    """内存默认：原始透传（空 mapping → collect.passthrough）。
+    不落库、不占 id；未指定/未绑定规则时恒用它，不受库内其他规则影响。"""
     return {'name': '原始透传', 'version': 1,
             'version_id': None, 'rule_id': None,
             'schema_json': {'fields': []},
@@ -91,14 +91,14 @@ def _passthrough_rule():
 
 
 def resolve_rule(version_id=None):
-    """抽取规则版本解析；未指定且库内无规则时用内存默认透传。
+    """抽取规则版本解析；未指定版本恒用内存默认「原始透传」，
+    不再从库里取第一条（避免用户新建规则后悄悄变成默认）。
     显式指定 version_id 找不到仍报错，避免静默替换用户选择。"""
+    if version_id is None:
+        return _passthrough_rule()
     catalog = _load('store.catalog')
-    tv = (catalog.get_rule_version(version_id=version_id)
-          if version_id else catalog.get_rule_version())
+    tv = catalog.get_rule_version(version_id=version_id)
     if not tv:
-        if version_id is None:
-            return _passthrough_rule()
         raise RuntimeError('抽取规则版本不存在')
     return {'name': tv['name'], 'version': tv['version'],
             'version_id': tv['id'], 'rule_id': tv['rule_id'],
@@ -302,8 +302,9 @@ def task_batch(paths, params=None, log=None, task_ctx=None):
 def run_extract(file_id, force=False, rule_version_id=None):
     """执行抽取：回读 parse.json → 规则分流 → save_records。
     spec_version 缺省/1/2 走 collect.build（纯函数）；=3 走 smart_extract。
-    规则优先级：本次显式选择 > 资料已绑定 > 默认「原始透传」；
-    抽取成功即把版本回写资料行。
+    rule_version_id=None/0：本次走内存默认「原始透传」；正整数按版本 id 解析。
+    资料已配置 rule_version_id 不参与本次抽取（由 UI 显式传值），
+    抽取也不回写资料配置，避免 API 透传调用抹掉用户配置。
 
     仅处理 to_extract；已有暂存记录（to_review/to_load）须 force=true——
     重抽先删后插，校验结论清零。loading/loaded 拒绝；缺 parse.json 拒绝。"""
@@ -323,11 +324,8 @@ def run_extract(file_id, force=False, rule_version_id=None):
         raise errors.Conflict('资料状态为 {}，无解析产物可抽取'.format(state))
     if state != 'to_extract' and not force:
         raise errors.Conflict('资料已有暂存记录，重新抽取将覆盖校验结论（须显式确认）')
-    bound = f.get('rule_version_id')
-    vid = rule_version_id or bound
+    vid = None if rule_version_id in (None, 0) else rule_version_id
     tpl = resolve_rule(vid)
-    if tpl['version_id'] != bound:
-        catalog.set_rule(file_id, tpl['version_id'])
     doc = content.get_extract(file_id)
     if doc is None:
         raise errors.Conflict('资料缺少解析产物，请重新解析')
