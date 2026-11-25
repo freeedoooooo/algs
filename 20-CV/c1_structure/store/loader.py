@@ -11,6 +11,7 @@ store/loader.py — 目标业务库写入（）。
 预检时 information_schema 存在性白名单双重防御。
 """
 import json
+import time
 
 from . import db
 from .errors import BadRequest
@@ -35,7 +36,33 @@ def connect_datasource(ds):
         'password': ds['password'], 'database': ds['db_name']})
 
 
+_INTROSPECT_CACHE = {}
+_CACHE_TTL = {'tables': 15.0, 'columns': 30.0}
+
+
+def _cache_key(ds):
+    return (ds.get('id'), ds.get('host'), ds.get('port'),
+            ds.get('user'), ds.get('db_name'))
+
+
+def _cached(key, kind):
+    ttl_key = kind[0] if isinstance(kind, tuple) else kind
+    hit = _INTROSPECT_CACHE.get((key, kind))
+    if hit and time.monotonic() - hit[0] < _CACHE_TTL[ttl_key]:
+        return hit[1]
+    return None
+
+
+def clear_introspection_cache():
+    """业务库连接参数变更时调用，避免短暂沿用旧表结构。"""
+    _INTROSPECT_CACHE.clear()
+
+
 def list_tables(ds):
+    key, kind = _cache_key(ds), 'tables'
+    hit = _cached(key, kind)
+    if hit is not None:
+        return list(hit)
     conn = connect_datasource(ds)
     try:
         with conn.cursor() as cur:
@@ -43,12 +70,18 @@ def list_tables(ds):
                 'SELECT table_name FROM information_schema.tables'
                 " WHERE table_schema=%s AND table_type='BASE TABLE'"
                 ' ORDER BY table_name', (ds['db_name'],))
-            return [r[0] for r in cur.fetchall()]
+            out = [r[0] for r in cur.fetchall()]
     finally:
         conn.close()
+    _INTROSPECT_CACHE[(key, kind)] = (time.monotonic(), out)
+    return list(out)
 
 
 def list_columns(ds, table):
+    key, kind = _cache_key(ds), ('columns', table)
+    hit = _cached(key, kind)
+    if hit is not None:
+        return [dict(c) for c in hit]
     conn = connect_datasource(ds)
     try:
         with conn.cursor() as cur:
@@ -56,9 +89,11 @@ def list_columns(ds, table):
                 'SELECT column_name, data_type FROM information_schema.columns'
                 ' WHERE table_schema=%s AND table_name=%s'
                 ' ORDER BY ordinal_position', (ds['db_name'], table))
-            return [{'name': r[0], 'type': r[1]} for r in cur.fetchall()]
+            out = [{'name': r[0], 'type': r[1]} for r in cur.fetchall()]
     finally:
         conn.close()
+    _INTROSPECT_CACHE[(key, kind)] = (time.monotonic(), out)
+    return [dict(c) for c in out]
 
 
 def validate_fields(fields, field_rows, write_mode='upsert', columns=None):
@@ -219,12 +254,13 @@ def write_record(cur, table, column_map, values, write_mode, business_key,
     return 'insert', pk
 
 
-def query_rows(ds, table, page=1, per_page=100, trace_cols=None):
+def query_rows(ds, table, page=1, per_page=100, trace_cols=None, file_id=None):
     """只读分页查询目标业务表（数据看板）。
 
     表名经 information_schema 白名单校验，列名经 list_columns 白名单＋
     _ident 转义，值/分页参数一律参数化；绝不拼接用户输入进 SQL 标识符。
     trace_cols＝溯源列白名单（默认 TRACE_COLS），查询时优先置顶。
+    file_id＝按平台溯源列 file_id 精确过滤（值参数化），避免多文件数据混杂。
     返回 {'items':[dict], 'total':int, 'columns':[str], 'page', 'per_page'}。
     """
     if table not in list_tables(ds):
@@ -234,18 +270,29 @@ def query_rows(ds, table, page=1, per_page=100, trace_cols=None):
         raise BadRequest('目标表不存在或无列：{}'.format(table))
     trace = [c for c in (trace_cols or TRACE_COLS) if c in cols]
     ordered = trace + [c for c in cols if c not in trace]
+    where, args = '', []
+    if file_id not in (None, ''):
+        if 'file_id' not in cols:
+            raise BadRequest('该业务表没有 file_id 列，无法按资料ID筛选')
+        try:
+            fid = int(file_id)
+        except (TypeError, ValueError):
+            raise BadRequest('资料ID须为整数')
+        where = ' WHERE {}=%s'.format(_ident('file_id'))
+        args = [fid]
     per_page = max(1, min(200, int(per_page or 100)))
     page = max(1, int(page or 1))
     conn = connect_datasource(ds)
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT COUNT(*) FROM {}'.format(_ident(table)))
+            cur.execute('SELECT COUNT(*) FROM {}{}'.format(
+                _ident(table), where), args)
             total = cur.fetchone()[0]
             sel = ','.join(_ident(c) for c in ordered)
             cur.execute(
-                'SELECT {} FROM {} LIMIT %s OFFSET %s'.format(
-                    sel, _ident(table)),
-                (per_page, (page - 1) * per_page))
+                'SELECT {} FROM {}{} LIMIT %s OFFSET %s'.format(
+                    sel, _ident(table), where),
+                args + [per_page, (page - 1) * per_page])
             rows = cur.fetchall()
         items = [dict(zip(ordered, r)) for r in rows]
         for it in items:
@@ -255,7 +302,7 @@ def query_rows(ds, table, page=1, per_page=100, trace_cols=None):
                 elif isinstance(v, bytes):
                     it[k] = '<binary {} bytes>'.format(len(v))
         return {'items': items, 'total': total, 'columns': ordered,
-                'page': page, 'per_page': per_page,
+                'page': page, 'per_page': per_page, 'file_id': args[0] if args else None,
                 'has_trace': bool(trace)}
     finally:
         conn.close()

@@ -600,13 +600,14 @@ def api_load_datasource_columns(ds_id: int, table: str = None):
 
 @app.get('/api/load/datasources/{ds_id}/rows')
 def api_load_datasource_rows(ds_id: int, table: str = None,
-                             page: int = 1, per_page: int = 100):
+                             page: int = 1, per_page: int = 100,
+                             file_id: str = None):
     """数据看板：只读分页查询业务表（表名白名单＋列白名单＋参数化）。"""
     ds = _ds_or_404(ds_id)
     if not table:
         raise store_errors.BadRequest('table 参数必填')
     return {'ok': True, **_load('store.loader').query_rows(
-        ds, table, page=page, per_page=per_page)}
+        ds, table, page=page, per_page=per_page, file_id=file_id)}
 
 
 @app.get('/api/load/tables')

@@ -197,6 +197,8 @@ function pipeDetail(key,item,p){
       '<div class="kv"><b>新增/覆盖</b>'+(acts.insert||0)+' / '+(acts.update||0)+'</div>'+
       '<a class="linkbtn" href="/dashboard?ds='+encodeURIComponent(item.load.datasource_id||'')+
       '&table='+encodeURIComponent(item.label)+
+      '&file='+encodeURIComponent(p.file_id||'')+
+      '&lt='+encodeURIComponent(item.load.load_table_id||'')+
       '" target="_blank" rel="noopener">查看数据看板 →</a>';
   }else{
     h='<h4>'+escHtml(item.label)+'</h4>'+

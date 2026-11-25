@@ -135,6 +135,7 @@ def update_datasource(ds_id, name=None, host=None, port=None, user=None,
                 cur.execute('UPDATE c1_load_datasource SET ' + sets +
                             ' WHERE id=%s', list(target.values()) + [ds_id])
             conn.commit()
+            loader.clear_introspection_cache()
     finally:
         conn.close()
 
@@ -155,6 +156,7 @@ def delete_datasource(ds_id):
             cur.execute('DELETE FROM c1_load_datasource WHERE id=%s',
                         (ds_id,))
             conn.commit()
+            loader.clear_introspection_cache()
     finally:
         conn.close()
 

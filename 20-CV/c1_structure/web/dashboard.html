@@ -14,7 +14,7 @@
   <a href="/sources">资料</a>
   <a href="/parse">解析</a>
   <a href="/extract">抽取</a>
-  <a href="/review">校验</a>
+  <a href="/review">校验规则</a>
   <a href="/rules" class="on">入库</a>
   <span class="spacer"></span>
   <span class="navnote">业务表数据 · 血缘回溯</span>
@@ -26,14 +26,14 @@
     <span class="spacer"></span>
     <a class="btn ghost mini" id="backlink" href="/rules">返回入库映射</a>
   </div>
-  <div class="banner info" id="hint">分页查看业务表数据；点击任意一行，在右侧查看该记录的血缘回溯。无溯源信息或反查失败会明确提示。</div>
+  <div class="banner info" id="hint">默认按资料文件筛选，只显示所选资料写入的数据；选择「全部资料」查看整张表。点击任意一行，在右侧查看该记录的血缘回溯。</div>
   <div class="banner err" id="err" hidden></div>
   <div class="dashsplit">
   <div class="panel dashmain">
     <div class="toolbar">
-      <label class="flab" for="perpage">每页</label>
-      <select class="tin" id="perpage" style="width:auto">
-        <option>50</option><option selected>100</option><option>200</option>
+      <label class="flab" for="filesel">资料文件</label>
+      <select class="tin" id="filesel" style="width:auto;max-width:280px">
+        <option value="">全部资料</option>
       </select>
       <span class="spacer"></span>
       <span class="mono" id="total"></span>
@@ -46,9 +46,9 @@
       <div class="empty" id="empty" hidden><b>该表暂无数据</b></div>
     </div>
     <div class="pager" id="pager" hidden>
-      <button type="button" class="pgprev" id="pgprev">上一页</button>
-      <span class="pginfo" id="pginfo"></span>
-      <button type="button" class="pgnext" id="pgnext">下一页</button>
+      <span class="pginfo"></span>
+      <button type="button" class="pgprev">上一页</button>
+      <button type="button" class="pgnext">下一页</button>
     </div>
   </div>
   <aside class="dashlineage" id="lineagepanel" hidden>
