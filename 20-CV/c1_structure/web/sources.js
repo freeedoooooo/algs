@@ -1,5 +1,5 @@
 /* web/sources.js — 资料清单（唯一功能入口）：列表/筛选/分页 + 上传登记 +
-   详情/配置/下载/删除 + 资料详情弹窗（各节点执行按钮）。
+   处理/下载/删除。处理入口跳转到独立页 /static/process.html?file=<id>。
    模型：一条资料 = 一次运行（file_id 为键）。 */
 var page=1, total=0, q='', kind='', fstate='', size=getListPer(), qTimer=null;
 var itemsCache=[];
@@ -22,8 +22,8 @@ function render(items){
       '<td class="seq">'+((page-1)*size+i+1)+'</td>'+
       '<td class="mono">'+r.id+'</td>'+
       '<td><div class="namecell">'+thumbHtml(r.name,srcUrl(r))+
-        '<a class="nm pipe-link" href="#" data-pipe="'+r.id+
-        '" data-name="'+escHtml(r.name)+'" title="查看该文件流程">'+
+        '<a class="nm pipe-link" href="/static/process.html?file='+r.id+
+        '" data-name="'+escHtml(r.name)+'" title="打开资料处理页">'+
         escHtml(r.name)+'</a></div></td>'+
       '<td>'+(KIND_LABEL[r.kind]||escHtml(r.kind))+'</td>'+
       '<td class="num">'+fmtSize(r.size_bytes)+'</td>'+
@@ -31,10 +31,8 @@ function render(items){
       '<td class="left">'+rule+'</td>'+
       '<td class="num">'+fmtTime(r.created_at)+'</td>'+
       '<td class="col-act" style="white-space:nowrap">'+
-        '<button type="button" class="linkbtn" data-pipe="'+r.id+
-        '" data-name="'+escHtml(r.name)+'" title="查看详情">详情</button>'+
-        '<button type="button" class="linkbtn" data-config="'+r.id+
-        '" data-name="'+escHtml(r.name)+'" title="配置解析/抽取/校验/入库">配置</button>'+
+        '<a class="linkbtn" href="/static/process.html?file='+r.id+
+        '" title="配置并重新执行解析/抽取/校验/入库">处理</a>'+
         '<a class="linkbtn" href="'+srcUrl(r)+'?download=1">下载</a>'+
         '<button type="button" class="linkbtn danger" data-del="'+r.id+
         '" data-name="'+escHtml(r.name)+'">删除</button>'+
@@ -68,12 +66,6 @@ function api(method,path,body){
 }
 
 rows.addEventListener('click',function(e){
-  var t=e.target.closest?e.target.closest('[data-pipe]'):null;
-  if(t){ e.preventDefault(); openPipe(+t.getAttribute('data-pipe'),
-    t.getAttribute('data-name')||t.textContent); return; }
-  var cfg=e.target.closest?e.target.closest('[data-config]'):null;
-  if(cfg){ e.preventDefault(); openConfig(+cfg.getAttribute('data-config'),
-    cfg.getAttribute('data-name')||cfg.textContent); return; }
   var b=e.target.closest?e.target.closest('[data-del]'):null;
   if(b){
     var id=b.getAttribute('data-del'),name=b.getAttribute('data-name');

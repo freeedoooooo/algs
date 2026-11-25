@@ -9,6 +9,7 @@ var file=new URLSearchParams(location.search).get('file')||'';
 var curFile=file;
 var traceRecord=new URLSearchParams(location.search).get('index')||'';
 var embedMode=new URLSearchParams(location.search).get('embed')==='1';
+var reviewView=new URLSearchParams(location.search).get('view')==='review';
 var fileDoc=null, records=[], keys=[], selIdx=-1, selKey=null, stateFilter='';
 var srcMap={};
 var pageMap={}, allAnchors=[], pagesPresent=[], curPage=null, curView=null, allOn=false;
@@ -701,6 +702,12 @@ function loadStaging(){
     var f=(doc.files||[])[0]||{};
     records=f.records||[];
     srcMap=(doc.rule||{}).field_sources||{};
+    if(reviewView&&!stateFilter){
+      var rc={pending:0,edited:0,rejected:0};
+      records.forEach(function(r){ var s=recState(r); if(rc[s]!=null) rc[s]++; });
+      stateFilter=rc.pending?'pending':(rc.edited?'edited':(rc.rejected?'rejected':''));
+      reviewView=false;   // 只做初始定位；后续由用户自由切筛选
+    }
     renderTable(); buildAnchors(); initViewer();
     if(traceRecord){
       var ti=records.findIndex(function(r){return String(r.index)===String(traceRecord);});
