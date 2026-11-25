@@ -13,11 +13,6 @@ function srcUrl(row){ return '/srcfiles/'+row.id; }
 function render(items){
   rows.innerHTML=items.map(function(r,i){
     var st=stateBadge(r.state);
-    var rule='—';
-    if(r.rule_version_id){
-      var rn=escHtml(r.rule_name||'抽取规则'), rv=r.rule_version;
-      rule=rn+(rv!=null?' <span class="rver">v'+escHtml(rv)+'</span>':'');
-    }
     return '<tr data-id="'+r.id+'">'+
       '<td class="seq">'+((page-1)*size+i+1)+'</td>'+
       '<td class="mono">'+r.id+'</td>'+
@@ -27,7 +22,6 @@ function render(items){
       '<td>'+(KIND_LABEL[r.kind]||escHtml(r.kind))+'</td>'+
       '<td class="num">'+fmtSize(r.size_bytes)+'</td>'+
       '<td>'+st+'</td>'+
-      '<td class="left">'+rule+'</td>'+
       '<td class="num">'+fmtTime(r.created_at)+'</td>'+
       '<td class="col-act" style="white-space:nowrap">'+
         '<a class="linkbtn" href="/static/process.html?file='+r.id+
