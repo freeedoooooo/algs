@@ -883,6 +883,15 @@ def api_staging_query(field: str = None, q: str = None,
     return {'ok': True, 'items': rows}
 
 
+@app.get('/api/sources/{file_id}/record-ids')
+def api_source_record_ids(file_id: int):
+    """(file_id, record_index) → staging record_id 映射，供看板反向定位。"""
+    m = _load('store.content_db').record_id_map(file_id)
+    return {'ok': True, 'items': [
+        {'index': idx, 'record_id': rid}
+        for (_fid, idx), rid in sorted(m.items(), key=lambda kv: kv[0][1])]}
+
+
 @app.get('/api/staging/locate/{record_id}')
 def api_staging_locate(record_id: int, key: str = None):
     """按 record_id 反查 file_id，用于数据看板血缘跳转。

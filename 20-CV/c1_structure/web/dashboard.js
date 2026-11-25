@@ -3,7 +3,7 @@ var qs=new URLSearchParams(location.search);
 var ds=qs.get('ds')||'', table=qs.get('table')||'',
     fileId=qs.get('file')||'', lt=qs.get('lt')||'';
 var page=1, perPage=getListPer(), lastData=null, selRid=null, selCol=null,
-    fieldMap={}, pg=null;
+    fieldMap={}, ridByIndex={}, pg=null;
 
 function showErr(t){
   var e=document.getElementById('err');
@@ -51,6 +51,11 @@ function load(){
   if(!ds||!table){ showErr('缺少业务库或表名参数，请从资料详情的「查看数据看板」进入'); return; }
   document.getElementById('err').hidden=true;
   closeLineage();
+  ridByIndex={};
+  if(fileId) fetch('/api/sources/'+encodeURIComponent(fileId)+'/record-ids')
+    .then(function(r){return r.json();}).then(function(j){
+      (j.items||[]).forEach(function(x){ ridByIndex[x.index]=x.record_id; });
+    }).catch(function(){});
   var url='/api/load/datasources/'+encodeURIComponent(ds)+
     '/rows?table='+encodeURIComponent(table)+
     '&page='+page+'&per_page='+perPage;
@@ -91,23 +96,30 @@ function closeLineage(){
   panel.hidden=true; panel.classList.remove('collapsed');
   frame.hidden=true; frame.removeAttribute('src'); frame.removeAttribute('data-src');
   selRid=null; selCol=null; fieldMap={};
-  document.querySelectorAll('#rowbody tr.sel').forEach(function(tr){tr.classList.remove('sel');});
-  document.querySelectorAll('#rowbody td.sel-cell').forEach(function(td){td.classList.remove('sel-cell');});
+  document.querySelectorAll('#rowbody tr.sel').forEach(function(tr){
+    tr.classList.remove('sel'); tr.classList.remove('pin');});
+  document.querySelectorAll('#rowbody td.sel-cell').forEach(function(td){
+    td.classList.remove('sel-cell'); td.classList.remove('pin');});
 }
 
 function showLineage(rid,tr,col){
   var panel=document.getElementById('lineagepanel');
   var frame=document.getElementById('linframe');
   var msg=document.getElementById('linemsg');
-  panel.hidden=false; msg.hidden=true; frame.hidden=true;
+  panel.hidden=false; msg.hidden=true;
   panel.classList.remove('collapsed');
   selRid=String(rid); selCol=col||null;
-  document.querySelectorAll('#rowbody tr.sel').forEach(function(x){x.classList.remove('sel');});
-  document.querySelectorAll('#rowbody td.sel-cell').forEach(function(x){x.classList.remove('sel-cell');});
-  if(tr) tr.classList.add('sel');
+  document.querySelectorAll('#rowbody tr.sel').forEach(function(x){
+    x.classList.remove('sel'); x.classList.remove('pin');});
+  document.querySelectorAll('#rowbody td.sel-cell').forEach(function(x){
+    x.classList.remove('sel-cell'); x.classList.remove('pin');});
+  if(tr){ tr.classList.add('sel'); tr.classList.add('pin'); }
   if(col&&tr){
-    var td=tr.querySelector('td.cell[data-col="'+CSS.escape(col)+'"]');
-    if(td) td.classList.add('sel-cell');
+    Array.prototype.forEach.call(tr.querySelectorAll('td.cell[data-col]'),function(td){
+      if(td.getAttribute('data-col')===col){
+        td.classList.add('sel-cell'); td.classList.add('pin');
+      }
+    });
   }
   var url='/api/staging/locate/'+encodeURIComponent(rid)+
     (col?('?key='+encodeURIComponent(col)):'');
@@ -121,18 +133,17 @@ function showLineage(rid,tr,col){
     }
     fieldMap=o.j.field_map||{};
     var key=o.j.field||col;
-    var src='/preview?embed=1&file='+encodeURIComponent(o.j.file_id)+
-      '&index='+encodeURIComponent(o.j.record_index)+
-      (key?('&key='+encodeURIComponent(key)):'');
-    if(frame.getAttribute('data-src')===src&&!frame.hidden){
-      /* 同一行换单元格：不重建 iframe，只通知预览重新钉格 */
+    /* data-src 只记录 file+index：同一行换单元格不改 URL、不刷新 iframe */
+    var baseSrc='/preview?embed=1&file='+encodeURIComponent(o.j.file_id)+
+      '&index='+encodeURIComponent(o.j.record_index);
+    if(frame.getAttribute('data-src')===baseSrc&&!frame.hidden){
       if(frame.contentWindow) frame.contentWindow.postMessage(
         {c1TraceKey:{key:key,index:o.j.record_index}},'*');
     }else{
-      frame.setAttribute('data-src',src);
-      frame.src=src;
+      frame.setAttribute('data-src',baseSrc);
+      frame.src=baseSrc+(key?('&key='+encodeURIComponent(key)):'');
+      frame.hidden=false;
     }
-    frame.hidden=false;
   }).catch(function(e){
     msg.hidden=false; msg.textContent='溯源查询失败：'+e;
   });
@@ -153,16 +164,30 @@ window.addEventListener('message',function(e){
     return;
   }
   if(e.data.c1PinField){
-    /* 原图格子 → 左侧业务表：按入库映射的 rule_field 反查业务列并高亮 */
+    /* 原图格子 → 左侧业务表：按 record_index 找真实行，不再依赖之前选中的行 */
     var key=e.data.c1PinField.key;
+    var idx=e.data.c1PinField.record_index;
+    var rid=ridByIndex[idx]!=null?ridByIndex[idx]:selRid;
     document.querySelectorAll('#rowbody td.sel-cell').forEach(function(td){
-      td.classList.remove('sel-cell');
+      td.classList.remove('sel-cell'); td.classList.remove('pin');
     });
-    var tr=document.querySelector('#rowbody tr[data-rid="'+CSS.escape(selRid)+'"]');
-    Object.keys(fieldMap).concat((lastData&&lastData.columns)||[]).forEach(function(col){
-      if(fieldMap[col]!==key&&col!==key) return;
-      var td=tr&&tr.querySelector('td.cell[data-col="'+CSS.escape(col)+'"]');
-      if(td) td.classList.add('sel-cell');
+    document.querySelectorAll('#rowbody tr.sel').forEach(function(x){
+      x.classList.remove('sel'); x.classList.remove('pin');
+    });
+    var tr=null;
+    Array.prototype.some.call(document.querySelectorAll('#rowbody tr[data-rid]'),function(x){
+      if(String(x.getAttribute('data-rid'))===String(rid)){ tr=x; return true; }
+      return false;
+    });
+    if(!tr) return;
+    selRid=String(rid);
+    tr.classList.add('sel'); tr.classList.add('pin');
+    var cols=Object.keys(fieldMap).concat((lastData&&lastData.columns)||[]);
+    Array.prototype.forEach.call(tr.querySelectorAll('td.cell[data-col]'),function(td){
+      var col=td.getAttribute('data-col');
+      if(cols.some(function(c){return (fieldMap[c]||c)===key&&c===col;})){
+        td.classList.add('sel-cell'); td.classList.add('pin');
+      }
     });
   }
 });

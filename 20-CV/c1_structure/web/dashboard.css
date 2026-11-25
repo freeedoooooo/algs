@@ -21,10 +21,15 @@
   background:#f7f9fd; }
 .listwrap table.list tbody tr:nth-child(even) { background:#fbfcfe; }
 .listwrap table.list tbody tr[data-rid] { cursor:pointer; }
-.listwrap table.list tbody td.cell { cursor:crosshair; }
-.listwrap table.list tbody td.sel-cell { background:#dbeafe !important;
-  box-shadow:inset 0 0 0 1px #2563eb; }
+.listwrap table.list tbody td.cell,th.cell { cursor:crosshair; }
 .listwrap table.list tbody tr:hover { background:#eef4fc; }
-.listwrap table.list tbody tr.sel { outline:2px solid var(--c-accent, #2563eb);
-  outline-offset:-2px; }
+/* 与数据预览完全一致：选中行淡蓝、钉住格橙色，悬停格浅绿 */
+.listwrap table.list tbody td.cell:hover { background:#e3f7ee !important; }
+.listwrap table.list tbody tr.sel,
+.listwrap table.list tbody tr.pin { background:#e7f0ff !important; }
+.listwrap table.list tbody tr.sel:hover,
+.listwrap table.list tbody tr.pin:hover { background:#dbe8ff !important; }
+.listwrap table.list tbody td.sel-cell,
+.listwrap table.list tbody td.cell.pin { background:#fff0d9 !important;
+  outline:2px solid #d8610a; outline-offset:-2px; }
 .listwrap .empty { padding:28px 12px; }
