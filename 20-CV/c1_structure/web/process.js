@@ -245,16 +245,21 @@ function pfRenderConfig(){
   };
   var ds=document.getElementById('pfDs'), lt=document.getElementById('pfLt');
   if(ds&&lt){
-    ds.onchange=function(){
+    ds.onchange=function(keep){
       var did=this.value;
       Array.prototype.forEach.call(lt.options,function(o){
         if(!o.value) return;
         o.hidden=!!did&&o.getAttribute('data-ds')!==did;
       });
-      lt.value='';
+      /* 初始化时保留已绑定的入库映射；用户主动换业务库才清空 */
+      if(keep&&Array.prototype.some.call(lt.options,function(o){
+        return o.value===String(keep)&&!o.hidden;})) lt.value=String(keep);
+      else lt.value='';
     };
-    if(pfCfg.load&&pfCfg.load.datasource_id) ds.onchange();
+    if(pfCfg.load&&pfCfg.load.datasource_id)
+      ds.onchange(pfCfg.load.load_table_id);
   }
+  var dsFilter=ds&&ds.onchange;
   var mark=function(){ pfCfgMsg('有未保存的修改'); };
   document.querySelectorAll('#procConfig [data-cp]').forEach(function(el){ el.onchange=mark; });
   ['pfRule','pfDs','pfLt'].forEach(function(id){
@@ -263,6 +268,7 @@ function pfRenderConfig(){
     el.onchange=function(){
       mark();
       if(id==='pfRule') pfLoadRuleDetail();
+      else if(id==='pfDs'&&dsFilter) dsFilter();
     };
   });
   var save=document.getElementById('pfCfgSave');
