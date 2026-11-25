@@ -32,9 +32,10 @@ import os
 import sys
 import tempfile
 from contextlib import asynccontextmanager
-from starlette.concurrency import run_in_threadpool
 from fnmatch import fnmatch
 from urllib.parse import unquote
+
+from starlette.concurrency import run_in_threadpool
 
 # ★ 零 IDE 配置的关键：内部模块一律以「包」方式加载。
 # 静态分析器能直接解析包内相对导入（from .. import config），不需要标记
@@ -172,7 +173,7 @@ def srcfiles_db(file_id: int, request: Request, download: int = 0):
         from urllib.parse import quote
         resp = _blob_response(s['data'], mime, s['sha'], request)
         resp.headers['Content-Disposition'] = (
-            "attachment; filename*=UTF-8''" + quote(s['name']))
+                "attachment; filename*=UTF-8''" + quote(s['name']))
         return resp
     return _blob_response(s['data'], mime, s['sha'], request)
 
@@ -828,7 +829,7 @@ async def api_file_run_extract(file_id: int, request: Request):
     if rv is not None and not isinstance(rv, int):
         raise store_errors.BadRequest('rule_version_id 须为整数')
     if 'rule_version_id' in body and rv is None:
-        rv = 0   # 显式空选择 → 服务层强制内存默认透传，不回退已绑规则
+        rv = 0  # 显式空选择 → 服务层强制内存默认透传，不回退已绑规则
     return await run_in_threadpool(service.run_extract, file_id,
                                    force=bool(body.get('force')),
                                    rule_version_id=rv)
@@ -999,6 +1000,6 @@ if __name__ == '__main__':
     import uvicorn
 
     print('>> 结构化工具 地址： http://{}:{}'.format(config.HOST, config.PORT))
-    print('>> 结构化工具 存储： {}'.format(
-        _load('store.db').safe_detail(config.PLATFORM_DB)))
+    print('>> 结构化工具 地址： http://127.0.0.1:{}'.format(config.PORT))
+    print('>> 结构化工具 存储： {}'.format(_load('store.db').safe_detail(config.PLATFORM_DB)))
     uvicorn.run(app, host=config.HOST, port=config.PORT, log_level='warning')
