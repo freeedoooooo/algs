@@ -41,7 +41,7 @@ function render(){
 }
 
 function load(){
-  if(!ds||!table){ showErr('缺少业务库或表名参数，请从入库规则页的「目标表」链接进入'); return; }
+  if(!ds||!table){ showErr('缺少业务库或表名参数，请从入库映射页的「目标表」链接进入'); return; }
   document.getElementById('err').hidden=true;
   closeLineage();
   var url='/api/load/datasources/'+encodeURIComponent(ds)+

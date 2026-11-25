@@ -231,6 +231,103 @@ function bindPager(el,onGo,onSize){
     if(e.key==='Escape') closeReceiptDrawer();
   });
 })();
+/* ---- 台账列宽可拖动（所有 table.list 通用，2026-11-25）----
+   列宽存 localStorage，按「页面 pathname + 表序号」隔离；拖动表头右边缘改宽，
+   双击表格顶部空白处恢复默认。用 colgroup 控宽，table-layout:fixed 下最稳。 */
+(function initColResize(){
+  var KEY='c1.colwidth';
+  function store(){
+    try{ return JSON.parse(localStorage.getItem(KEY)||'{}'); }catch(e){ return {}; }
+  }
+  function save(o){ try{ localStorage.setItem(KEY,JSON.stringify(o)); }catch(e){} }
+  function tableKey(tbl){
+    var tables=Array.prototype.slice.call(document.querySelectorAll('table.list'));
+    return location.pathname+'#'+tables.indexOf(tbl);
+  }
+  function setup(tbl){
+    if(tbl.__colReady) return;
+    var heads=tbl.querySelectorAll('thead th');
+    if(!heads.length) return;
+    tbl.__colReady=true;
+    var n=heads.length;
+    var cg=tbl.querySelector('colgroup');
+    if(!cg){ cg=document.createElement('colgroup'); tbl.insertBefore(cg,tbl.firstChild); }
+    function fillCols(){
+      if(cg.children.length!==n){
+        cg.innerHTML='';
+        for(var i=0;i<n;i++) cg.appendChild(document.createElement('col'));
+      }
+    }
+    fillCols();
+    var k=tableKey(tbl), saved=store()[k]||[];
+    function apply(){
+      fillCols();
+      if(saved.length) tbl.style.tableLayout='fixed';
+      for(var i=0;i<n;i++){
+        var w=saved[i];
+        cg.children[i].style.width=w?w+'px':'';
+        heads[i].classList.add('col-resizable');
+        if(!heads[i].querySelector('.col-grip')){
+          var g=document.createElement('span'); g.className='col-grip';
+          heads[i].appendChild(g);
+        }
+      }
+    }
+    apply();
+    tbl.addEventListener('mousedown',function(e){
+      var grip=e.target.closest?e.target.closest('.col-grip'):null;
+      if(!grip) return;
+      var th=grip.parentNode, idx=Array.prototype.indexOf.call(heads,th);
+      if(idx<0) return;
+      e.preventDefault();
+      var startX=e.clientX;
+      var startW=th.getBoundingClientRect().width;
+      var min=Math.max(28,parseInt(getComputedStyle(th).paddingLeft,10)*2+24);
+      /* 冻结当前各列宽再切 fixed，避免 auto 布局下拖动抖动 */
+      for(var j=0;j<n;j++){
+        if(!cg.children[j].style.width)
+          cg.children[j].style.width=Math.round(heads[j].getBoundingClientRect().width)+'px';
+      }
+      tbl.style.tableLayout='fixed';
+      document.body.style.cursor='col-resize';
+      document.body.style.userSelect='none';
+      function move(ev){
+        var w=Math.max(min,Math.round(startW+(ev.clientX-startX)));
+        cg.children[idx].style.width=w+'px';
+      }
+      function up(){
+        document.removeEventListener('mousemove',move);
+        document.removeEventListener('mouseup',up);
+        document.body.style.cursor=''; document.body.style.userSelect='';
+        saved=cg.children.length?Array.prototype.map.call(cg.children,function(c){
+          return parseInt(c.style.width,10)||0; }):[];
+        var all=store(); all[k]=saved; save(all);
+      }
+      document.addEventListener('mousemove',move);
+      document.addEventListener('mouseup',up);
+    });
+    /* 双击表头恢复默认列宽 */
+    tbl.addEventListener('dblclick',function(e){
+      if(!e.target.closest||!e.target.closest('thead th')) return;
+      var all=store(); delete all[k]; save(all);
+      saved=[];
+      tbl.style.tableLayout='';
+      for(var i=0;i<n;i++) cg.children[i].style.width='';
+    });
+  }
+  function boot(){
+    document.querySelectorAll('table.list').forEach(setup);
+    /* 动态渲染的表格（thead 后生成）补绑定 */
+    var mo=new MutationObserver(function(){
+      document.querySelectorAll('table.list').forEach(setup);
+    });
+    mo.observe(document.body,{childList:true,subtree:true});
+  }
+  if(document.readyState==='loading')
+    document.addEventListener('DOMContentLoaded',boot);
+  else boot();
+})();
+
 /* ---- 流程条组件已移除（2026-11-22 用户确认入库页也不需要） ---- */
 /* 字段名规范化（自动对齐共用口径）：小写＋去空格/下划线 */
 function normKey(s){ return String(s==null?'':s).toLowerCase().replace(/[\s_]/g,''); }

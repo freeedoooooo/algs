@@ -221,8 +221,8 @@ function render(){
     return '<tr>'+
       '<td class="seq">'+seqNo(info,i)+'</td>'+
       '<td class="mono">'+r.id+'</td>'+
-      '<td>'+escHtml(r.name)+'</td>'+
-      '<td><span class="desc" title="'+escHtml(r.description||'')+'">'+
+      '<td class="left">'+escHtml(r.name)+'</td>'+
+      '<td class="left"><span class="desc" title="'+escHtml(r.description||'')+'">'+
         escHtml(r.description||'—')+'</span></td>'+
       '<td class="num">v'+r.current_version+'</td>'+
       '<td class="num">'+(r.version_count==null?'—':r.version_count)+'</td>'+
@@ -343,7 +343,7 @@ function addRow(target,col,fx){
   updateDestHints();
 }
 /* ---- 「这些字段去了哪」：编辑抽屉字段行尾部
-   显示该字段在入库规则里的目标列。本规则没有任何入库规则时**不显示**
+   显示该字段在入库映射里的目标列。本规则没有任何入库映射时**不显示**
    （避免逐行刷「未配置」噪音）；有规则时按字段显示 去向/未配去向。 ---- */
 var destMap=null;   // null=本规则未查/新建；{field:[{表.列}…]}=已加载
 var destHasRules=false;
@@ -380,17 +380,17 @@ function updateDestHints(){
     }
     if(!destHasRules){
       h.textContent='-';
-      h.title='本规则尚未配置入库规则；在「入库」页配置后，这里会显示每个字段写入哪张表哪一列';
+      h.title='本规则尚未配置入库映射；在「入库」页配置后，这里会显示每个字段写入哪张表哪一列';
       h.className='fdest'; return;
     }
     var d=destMap[f]||[];
     if(!d.length){
-      h.textContent='-'; h.title='该目标列名还没有出现在任何入库规则的目标列中';
+      h.textContent='-'; h.title='该目标列名还没有出现在任何入库映射的目标列中';
       h.className='fdest'; return;
     }
     var uniq=[], seen={};
     d.forEach(function(x){ if(!seen[x]){seen[x]=1;uniq.push(x);} });
-    h.textContent=uniq.join(' / '); h.title='入库规则中的目标列';
+    h.textContent=uniq.join(' / '); h.title='入库映射中的目标列';
     h.className='fdest has';
   });
 }

@@ -8,9 +8,19 @@ from .. import db
 from ..errors import Conflict
 from ._common import _rows, _j
 
-_FILE_COLS = ('id, name, sha256, kind, size_bytes, tags, note, created_at,'
-              ' state, error, rule_version_id, params_json,'
-              ' load_datasource_id, load_table_id, updated_at')
+_FILE_COLS = ('c1_doc_file.id, c1_doc_file.name, c1_doc_file.sha256,'
+              ' c1_doc_file.kind, c1_doc_file.size_bytes, c1_doc_file.tags,'
+              ' c1_doc_file.note, c1_doc_file.created_at, c1_doc_file.state,'
+              ' c1_doc_file.error, c1_doc_file.rule_version_id,'
+              ' c1_doc_file.params_json, c1_doc_file.load_datasource_id,'
+              ' c1_doc_file.load_table_id, c1_doc_file.updated_at')
+
+# 抽取规则名＋版本号（资料列表直接展示「规则名 vN」，避免只显示空版本号看不清）
+_RULE_JOIN = (
+    ' LEFT JOIN c1_extract_rule_version rv'
+    ' ON rv.id=c1_doc_file.rule_version_id'
+    ' LEFT JOIN c1_extract_rule er ON er.id=rv.rule_id')
+_RULE_COLS = ', er.name AS rule_name, rv.version AS rule_version'
 
 
 def register_file(name, kind, size_bytes, sha256, content):
@@ -33,24 +43,25 @@ def list_files(q=None, kind=None, tag=None, page=1, per_page=20, state=None):
     try:
         where, args = [], []
         if q:
-            where.append('name LIKE %s')
+            where.append('c1_doc_file.name LIKE %s')
             args.append('%{}%'.format(q))
         if kind:
-            where.append('kind=%s')
+            where.append('c1_doc_file.kind=%s')
             args.append(kind)
         if tag:
-            where.append('tags LIKE %s')
+            where.append('c1_doc_file.tags LIKE %s')
             args.append('%{}%'.format(tag))
         if state:
-            where.append('state=%s')
+            where.append('c1_doc_file.state=%s')
             args.append(state)
         w = ('WHERE ' + ' AND '.join(where)) if where else ''
         with conn.cursor() as cur:
             cur.execute('SELECT COUNT(*) FROM c1_doc_file ' + w, args)
             total = cur.fetchone()[0]
             cur.execute(
-                'SELECT {} FROM c1_doc_file {} ORDER BY id DESC'
-                ' LIMIT %s OFFSET %s'.format(_FILE_COLS, w),
+                'SELECT {}{} FROM c1_doc_file {} {} ORDER BY c1_doc_file.id DESC'
+                ' LIMIT %s OFFSET %s'.format(_FILE_COLS, _RULE_COLS,
+                                             _RULE_JOIN, w),
                 args + [per_page, (max(1, page) - 1) * per_page])
             items = _rows(cur)
         for it in items:

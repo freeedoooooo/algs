@@ -1,7 +1,7 @@
 /* web/wizard.js — 四步入库向导（资料清单/数据预览共用）：
    ① 选目标（已有规则直达③／新建＝业务库＋表）→ ② 字段对齐（自动匹配，仅新建）
    → ③ 过目（前 3 条样例＋load-preview dry-run 计数）→ ④ 执行。
-   红线：④ 前不落库；新建规则在执行瞬间 POST /api/load/tables 落库，
+   红线：④ 前不落库；新建映射在执行瞬间 POST /api/load/tables 落库，
    /load 失败则补偿 DELETE，不留孤儿；绑定/预检语义仍由服务端把关。 */
 var wz=null;
 function wzApi(method,url,body){
@@ -120,22 +120,22 @@ function wzStep1(b){
   var rules=wz.ruleList||[];
   var dsWithRules=wz.dsList.filter(function(d){
     return rules.some(function(m){return m.datasource_id===d.id;});});
-  var html='<div class="wzsec">用已有入库规则</div>';
+  var html='<div class="wzsec">用已有入库映射</div>';
   if(rules.length){
     html+='<div class="wzrow"><label>业务库</label><select id="wzds1">'+
       '<option value="">选择业务库</option>'+
       dsWithRules.map(wzDsOpt).join('')+'</select></div>'+
-      '<div class="wzrow"><label>入库规则</label><select id="wzrule1"></select></div>';
+      '<div class="wzrow"><label>入库映射</label><select id="wzrule1"></select></div>';
   }else{
-    html+='<div class="hint">该抽取规则还没有已配置的入库规则，请使用下方「新建入库规则」。</div>';
+    html+='<div class="hint">该抽取规则还没有已配置的入库映射，请使用下方「新建映射」。</div>';
   }
-  html+='<div class="wzsec">新建入库规则</div>'+
+  html+='<div class="wzsec">新建映射</div>'+
     '<div class="wzrow"><label>业务库</label><select id="wzds2">'+
     '<option value="">选择业务库</option>'+
     wz.dsList.map(wzDsOpt).join('')+'</select></div>'+
     '<div class="wzrow"><label>目标表</label><select id="wztable2" disabled>'+
     '<option value="">先选业务库</option></select></div>'+
-    '<div class="hint">如需新的业务库，请到 <a href="/rules" target="_blank">入库规则</a> '+
+    '<div class="hint">如需新的业务库，请到 <a href="/rules" target="_blank">入库映射</a> '+
     '页新建（在新窗口打开，不影响当前进度）。字段对齐将在下一步完成。</div>';
   b.innerHTML=html;
   var ds1=b.querySelector('#wzds1'), rule1=b.querySelector('#wzrule1');
@@ -206,13 +206,13 @@ function wzAdvance(){
       wz.tfields=null; wzGo(2); return;  /* step2 拉字段+列 */
     }
     if(wz.rule1){ wzMsg('规则与业务库不一致，请重新选择',true); return; }
-    wzMsg('请先选择一条已有规则，或选择业务库与目标表新建规则',true);
+    wzMsg('请先选择一条已有规则，或选择业务库与目标表新建映射',true);
     return;
   }
   if(wz.step===2){ if(wzCollect()) wzGo(3); return; }
   if(wz.step===3){ wzExecute(); return; }
 }
-/* ---- step2 字段对齐（新建规则草稿，复用自动匹配口径） ---- */
+/* ---- step2 字段对齐（新建映射草稿，复用自动匹配口径） ---- */
 function wzStep2(b){
   if(!wz.tfields){
     b.innerHTML='<div class="empty">加载规则字段与目标列…</div>';
@@ -324,7 +324,7 @@ function wzSummary(){
   var rows=[['业务库',wz.mode==='exist'?(wzDsName((wzRule()||{}).datasource_id)):wzDsName(wz.dsId)],
             ['目标表',wz.table],
             ['写入方式',modeLabel(wm||'')],
-            ['去重依据',wz.mode==='exist'?'（已在入库规则中配置）':(bkCols.join('、')||'—')]];
+            ['去重依据',wz.mode==='exist'?'（已在入库映射中配置）':(bkCols.join('、')||'—')]];
   return '<div class="wzsum">'+rows.map(function(r){
     return '<div class="wzsr"><span>'+escHtml(r[0])+'</span><b>'+escHtml(r[1]||'—')+'</b></div>';
   }).join('')+'</div>';
@@ -388,7 +388,7 @@ function wzStep3(b){
     document.getElementById('wzsamp').innerHTML='<div class="empty">样例加载失败</div>';
   });
 }
-/* ---- step4 执行（唯一落库点；失败补偿删除新建规则） ---- */
+/* ---- step4 执行（唯一落库点；失败补偿删除新建映射） ---- */
 function wzExecute(){
   wz.busy=true; wz.step=4; wzRender(); wzMsg('正在提交…');
   var p=Promise.resolve();

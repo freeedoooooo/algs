@@ -1,4 +1,4 @@
-/* web/rules.js — 入库规则：左业务库列表 · 右入库规则列表。
+/* web/rules.js — 入库映射：左业务库列表 · 右入库映射列表。
    一个业务库＝一个库（明文配置）；规则＝业务库×表×抽取规则绑定，字段行编辑。
    契约见 （用词改齐）。 */
 var dss=[], maps=[], tpls=[], cols=[];
@@ -61,10 +61,10 @@ function renderDs(){
   document.getElementById('dsempty').hidden=dss.length>0;
   pgDs.render(info);
 }
-/* ---- 右：所选业务库的入库规则列表 ---- */
+/* ---- 右：所选业务库的入库映射列表 ---- */
 function renderMaps(){
   var d=dsById(curDs);
-  document.getElementById('maptitle').textContent='入库规则';
+  document.getElementById('maptitle').textContent='业务表';
   document.getElementById('newmap').disabled=!d;
   var list=maps.filter(function(m){return m.datasource_id===curDs;});
   var info=pageSlice(list,mapPage,mapSize);
@@ -77,13 +77,13 @@ function renderMaps(){
     return '<tr>'+
       '<td class="seq">'+seqNo(info,i)+'</td>'+
       '<td class="mono">'+m.id+'</td>'+
-      '<td><a class="linkbtn" href="/dashboard?ds='+encodeURIComponent(m.datasource_id)+
+      '<td class="left"><a class="linkbtn" href="/dashboard?ds='+encodeURIComponent(m.datasource_id)+
         '&table='+encodeURIComponent(m.target_table)+
         '" title="查看该表业务数据">'+escHtml(m.target_table)+'</a></td>'+
-      '<td>'+escHtml(m.tpl_name||'—')+'</td>'+
+      '<td class="left">'+escHtml(m.tpl_name||'—')+'</td>'+
       '<td>'+escHtml(modeLabel(m.write_mode))+'</td>'+
       '<td class="num">'+m.field_count+'</td>'+
-      '<td><span class="mono">'+escHtml(bk.join(', ')||'—')+'</span></td>'+
+      '<td class="left"><span class="mono">'+escHtml(bk.join(', ')||'—')+'</span></td>'+
       '<td style="white-space:nowrap">'+
         '<button type="button" class="linkbtn" data-editmap="'+m.id+'">编辑</button>'+
         '<button type="button" class="linkbtn danger" data-delmap="'+m.id+
@@ -104,7 +104,7 @@ function loadAll(keepSel){
     document.getElementById('err').hidden=true;
   }).catch(function(e){
     dss=[]; maps=[]; tpls=[]; curDs=null; renderDs(); renderMaps();
-    showErr('平台库未连接：入库规则暂不可用（'+e.message+'）');
+    showErr('平台库未连接：入库映射暂不可用（'+e.message+'）');
   });
 }
 
@@ -178,7 +178,7 @@ document.getElementById('dssave').onclick=function(){
   }).catch(function(e){ dsmsg.textContent=e.message; });
 };
 
-/* ---- 入库规则抽屉 ---- */
+/* ---- 入库映射抽屉 ---- */
 /* 字段自动对齐（纯前端）：规范化全等自动选中，
    ✓=已对齐（灰底自动可改），？=待确认；只填当前为空的行，不动手动/预置值。 */
 function autoMatchRows(){
@@ -296,7 +296,7 @@ function openMap(lt){
   editLt=lt||null;
   ltLocked=!!(lt&&lt.file_refs>0);
   var d=dsById(curDs);
-  document.getElementById('mptitle').textContent=lt?'编辑入库规则':'新建入库规则';
+  document.getElementById('mptitle').textContent=lt?'编辑映射':'新建映射';
   document.getElementById('mpds').value=d?(d.name+' · '+d.host+':'+d.port+'/'+d.db_name):'';
   mptpl.innerHTML='<option value="">选择抽取规则</option>'+
     tpls.map(function(t){
@@ -374,7 +374,7 @@ document.getElementById('mpsave').onclick=function(){
          {datasource_id:curDs,rule_id:Number(mptpl.value),
           target_table:mptable.value,write_mode:mpmode.value,fields:fields});
   p.then(function(){
-    closeDmap(); showOk('已保存入库规则（'+(editLt?editLt.target_table:mptable.value)+
+    closeDmap(); showOk('已保存入库映射（'+(editLt?editLt.target_table:mptable.value)+
       ' · '+modeLabel(mpmode.value)+'）。');
     return loadAll(true);
   }).catch(function(e){ mpmsg.textContent=e.message; });
@@ -390,9 +390,9 @@ document.getElementById('maprows').addEventListener('click',function(e){
   var del=t.closest?t.closest('[data-delmap]'):null;
   if(!del) return;
   var id=del.getAttribute('data-delmap'), name=del.getAttribute('data-name');
-  if(!window.confirm('删除入库规则「'+name+'」？')) return;
+  if(!window.confirm('删除入库映射「'+name+'」？')) return;
   api('DELETE','/api/load/tables/'+id).then(function(){
-    showOk('已删除入库规则。'); loadAll(true);
+    showOk('已删除入库映射。'); loadAll(true);
   }).catch(function(e2){ showErr(e2.message); });
 });
 

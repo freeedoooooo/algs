@@ -126,7 +126,7 @@ def update_datasource(ds_id, name=None, host=None, port=None, user=None,
                 cur.execute('SELECT COUNT(*) FROM c1_load_table'
                             ' WHERE datasource_id=%s', (ds_id,))
                 if cur.fetchone()[0]:
-                    raise Conflict('该业务库已被入库规则引用，主机、端口、库名不可修改；'
+                    raise Conflict('该业务库已被入库映射引用，主机、端口、库名不可修改；'
                                    '账号与密码可以修改。如需更换目标库，请新建业务库')
                 sets = ', '.join('{}=%s'.format(k) for k in target)
                 cur.execute('UPDATE c1_load_datasource SET ' + sets +
@@ -148,7 +148,7 @@ def delete_datasource(ds_id):
             cur.execute('SELECT COUNT(*) FROM c1_load_table'
                         ' WHERE datasource_id=%s', (ds_id,))
             if cur.fetchone()[0]:
-                raise Conflict('该业务库已被入库规则引用，禁止删除')
+                raise Conflict('该业务库已被入库映射引用，禁止删除')
             cur.execute('DELETE FROM c1_load_datasource WHERE id=%s',
                         (ds_id,))
             conn.commit()
@@ -256,7 +256,7 @@ def _tpl_schema_fields(cur, rule_id):
               if isinstance(sj, dict) else [])
     fields = [f for f in fields if f]
     if not fields:
-        raise BadRequest('「原始透传」规则无固定字段，不支持配置入库规则')
+        raise BadRequest('「原始透传」规则无固定字段，不支持配置入库映射')
     return fields
 
 
@@ -295,7 +295,7 @@ def create_load_table(datasource_id, rule_id, target_table, write_mode,
                         ' AND target_table=%s',
                         (datasource_id, rule_id, target_table))
             if cur.fetchone():
-                raise Conflict('相同业务库、抽取规则与目标表的入库规则已存在')
+                raise Conflict('相同业务库、抽取规则与目标表的入库映射已存在')
             cur.execute(
                 'INSERT INTO c1_load_table (datasource_id, rule_id,'
                 ' target_table, write_mode) VALUES (%s,%s,%s,%s)',
@@ -318,11 +318,11 @@ def update_load_table(lt_id, write_mode=None, fields=None):
                         ' FROM c1_load_table WHERE id=%s', (lt_id,))
             row = cur.fetchone()
             if not row:
-                raise NotFound('入库规则不存在')
+                raise NotFound('入库映射不存在')
             cur.execute('SELECT COUNT(*) FROM c1_doc_file'
                         ' WHERE load_table_id=%s', (lt_id,))
             if cur.fetchone()[0]:
-                raise Conflict('该入库规则已被资料引用，只读且不可删除')
+                raise Conflict('该入库映射已被资料引用，只读且不可删除')
             wm = write_mode if write_mode is not None else row[1]
             fs = fields
             if fs is None:
@@ -351,11 +351,11 @@ def delete_load_table(lt_id):
             cur.execute('SELECT id FROM c1_load_table WHERE id=%s',
                         (lt_id,))
             if not cur.fetchone():
-                raise NotFound('入库规则不存在')
+                raise NotFound('入库映射不存在')
             cur.execute('SELECT COUNT(*) FROM c1_doc_file'
                         ' WHERE load_table_id=%s', (lt_id,))
             if cur.fetchone()[0]:
-                raise Conflict('该入库规则已被资料引用，禁止删除')
+                raise Conflict('该入库映射已被资料引用，禁止删除')
             cur.execute('DELETE FROM c1_load_table_field'
                         ' WHERE load_table_id=%s', (lt_id,))
             cur.execute('DELETE FROM c1_load_table WHERE id=%s', (lt_id,))

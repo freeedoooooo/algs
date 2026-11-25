@@ -10,7 +10,7 @@ c1_structure/app.py — Web 工具入口（FastAPI + uvicorn）。只负责 HTTP
     GET  /              工作台首页（web/home.html）
     GET  /sources       资料清单（唯一功能入口） · /parse 解析 · /extract 抽取规则
     GET  /preview       资料数据预览（preview.html，二级页）
-    GET  /review        校验壳页 · /rules 入库规则 · /dashboard 数据看板
+    GET  /review        校验壳页 · /rules 入库映射 · /dashboard 数据看板
     GET  /healthz       健康检查
     POST /api/upload    上传解析（base64 JSON；单文件）
     GET  /api/status    处理进度
@@ -632,7 +632,7 @@ async def api_load_table_add(request: Request):
 def api_load_table_get(lt_id: int):
     lt = _load('store.catalog').get_load_table(lt_id)
     if lt is None:
-        raise store_errors.NotFound('入库规则不存在')
+        raise store_errors.NotFound('入库映射不存在')
     return lt
 
 
@@ -705,7 +705,7 @@ def api_source_detail(file_id: int):
 
 @app.get('/api/sources/{file_id}/config')
 def api_file_config_get(file_id: int):
-    """资料配置（四节点）：当前生效参数/抽取规则/入库规则 + 可选项 + 参数 schema。"""
+    """资料配置（四节点）：当前生效参数/抽取规则/入库映射 + 可选项 + 参数 schema。"""
     catalog = _load('store.catalog')
     f = _file_or_404(file_id)
     rule_versions = []
@@ -730,7 +730,7 @@ def api_file_config_get(file_id: int):
 @app.post('/api/sources/{file_id}/config')
 async def api_file_config_set(file_id: int, request: Request):
     """写资料配置（部分更新）：params / rule_version_id / load。
-    params 经 normalize 校验；规则版本/入库规则校验归属；运行中/已入库禁改。"""
+    params 经 normalize 校验；规则版本/入库映射校验归属；运行中/已入库禁改。"""
     catalog = _load('store.catalog')
     f = _file_or_404(file_id)
     if f['state'] in ('parsing', 'loading', 'loaded'):
@@ -761,9 +761,9 @@ async def api_file_config_set(file_id: int, request: Request):
         else:
             lt = catalog.get_load_table(int(lt_id))
             if lt is None:
-                raise store_errors.NotFound('入库规则不存在')
+                raise store_errors.NotFound('入库映射不存在')
             if lt['datasource_id'] != int(ds_id):
-                raise store_errors.BadRequest('入库规则不属于所选业务库')
+                raise store_errors.BadRequest('入库映射不属于所选业务库')
             catalog.set_load(file_id, int(ds_id), int(lt_id))
         changed.append('load')
     return {'ok': True, 'file_id': file_id, 'changed': changed}
@@ -800,7 +800,7 @@ async def api_file_load(file_id: int, request: Request):
             target = {'datasource_id': int(body.get('load_datasource_id')),
                       'load_table_id': int(body.get('load_table_id'))}
         except (TypeError, ValueError):
-            raise store_errors.BadRequest('入库目标须为业务库/入库规则 id')
+            raise store_errors.BadRequest('入库目标须为业务库/入库映射 id')
     return service.launch_load(file_id, target)
 
 

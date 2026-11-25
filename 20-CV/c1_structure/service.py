@@ -466,22 +466,22 @@ def launch_load(file_id, target=None):
         ds_id, lt_id = bound
     else:
         if not target:
-            raise errors.BadRequest('请选择业务库与入库规则')
+            raise errors.BadRequest('请选择业务库与入库映射')
         ds_id, lt_id = target['datasource_id'], target['load_table_id']
     lt = catalog.get_load_table(lt_id)
     if lt is None:
-        raise errors.NotFound('入库规则不存在')
+        raise errors.NotFound('入库映射不存在')
     ds = catalog.get_datasource(ds_id)
     if ds is None:
         raise errors.NotFound('业务库不存在')
     if lt['datasource_id'] != ds_id:
-        raise errors.BadRequest('入库规则不属于所选业务库')
+        raise errors.BadRequest('入库映射不属于所选业务库')
     bound_rule = f.get('rule_version_id')
     if bound_rule is None:
         raise errors.BadRequest('资料尚未绑定抽取规则，请先执行抽取')
     tpl = resolve_rule(bound_rule)
     if lt['rule_id'] != tpl['rule_id']:
-        raise errors.BadRequest('入库规则与资料的抽取规则不匹配')
+        raise errors.BadRequest('入库映射与资料的抽取规则不匹配')
     sj = tpl.get('schema_json')
     fields = ([x.get('name') for x in sj.get('fields') or []]
               if isinstance(sj, dict) else [])
@@ -539,18 +539,18 @@ def preview_load(file_id, table_id=None, draft=None):
             raise errors.Conflict('资料已绑定入库目标，预览不再接受草稿')
         table_id = bound
     elif table_id is None and draft is None:
-        raise errors.BadRequest('请选择业务库与入库规则')
+        raise errors.BadRequest('请选择业务库与入库映射')
     if table_id is not None and draft is not None:
         raise errors.BadRequest('预览只认一种目标：规则 id 或草稿')
     if table_id is not None:
         lt = catalog.get_load_table(int(table_id))
         if lt is None:
-            raise errors.NotFound('入库规则不存在')
+            raise errors.NotFound('入库映射不存在')
         if f.get('rule_version_id') is None:
             raise errors.BadRequest('资料尚未绑定抽取规则')
         tpl = resolve_rule(f['rule_version_id'])
         if lt['rule_id'] != tpl['rule_id']:
-            raise errors.BadRequest('入库规则与资料的抽取规则不匹配')
+            raise errors.BadRequest('入库映射与资料的抽取规则不匹配')
         ds = catalog.get_datasource(lt['datasource_id'])
         field_rows, table, wm = lt['fields'], lt['target_table'], lt['write_mode']
     else:

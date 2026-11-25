@@ -128,8 +128,8 @@ function renderCards(){
 function todoRow(seq,fileId,name,what,act,href,warn){
   return '<tr><td class="seq">'+seq+'</td>'+
     '<td class="mono">#'+fileId+'</td>'+
-    '<td><span class="desc" title="'+escHtml(name)+'">'+escHtml(name||'—')+'</span></td>'+
-    '<td class="'+(warn?'warn':'')+'">'+escHtml(what)+'</td>'+
+    '<td class="left"><span class="desc" title="'+escHtml(name)+'">'+escHtml(name||'—')+'</span></td>'+
+    '<td class="left'+(warn?' warn':'')+'">'+escHtml(what)+'</td>'+
     '<td style="white-space:nowrap">'+act+'</td></tr>';
 }
 function renderTodo(v){

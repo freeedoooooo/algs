@@ -14,7 +14,11 @@ function render(items){
   rows.innerHTML=items.map(function(r,i){
     var sha=String(r.sha256||'');
     var st=stateBadge(r.state);
-    var rule=r.rule_version_id?'已绑定 v'+escHtml(r.current_version||''):'—';
+    var rule='—';
+    if(r.rule_version_id){
+      var rn=escHtml(r.rule_name||'抽取规则'), rv=r.rule_version;
+      rule=rn+(rv!=null?' <span class="rver">v'+escHtml(rv)+'</span>':'');
+    }
     return '<tr data-id="'+r.id+'">'+
       '<td class="seq">'+((page-1)*size+i+1)+'</td>'+
       '<td class="mono">'+r.id+'</td>'+
@@ -25,10 +29,10 @@ function render(items){
       '<td>'+(KIND_LABEL[r.kind]||escHtml(r.kind))+'</td>'+
       '<td class="num">'+fmtSize(r.size_bytes)+'</td>'+
       '<td>'+st+'</td>'+
-      '<td>'+rule+'</td>'+
+      '<td class="left">'+rule+'</td>'+
       '<td><code class="mono" title="'+escHtml(sha)+'">'+
         escHtml(sha.slice(0,8))+'</code></td>'+
-      '<td>'+escHtml(r.tags||'—')+'</td>'+
+      '<td class="left">'+escHtml(r.tags||'—')+'</td>'+
       '<td class="num">'+fmtTime(r.created_at)+'</td>'+
       '<td style="white-space:nowrap">'+
         '<button type="button" class="linkbtn" data-pipe="'+r.id+
@@ -238,8 +242,8 @@ function nodeActionHtml(key,p){
   return btn('actLoad','执行入库',!canL||busy,
     st!=='to_load'?'请先完成校验，全部记录通过后才能入库。'
       :(p.load&&p.load.load_table_id
-        ?('按已配置的入库规则写入 '+escHtml(p.load.target_table||'')+'。')
-        :'请先在「配置」里绑定入库规则。'));
+        ?('按已配置的入库映射写入 '+escHtml(p.load.target_table||'')+'。')
+        :'请先在「配置」里绑定入库映射。'));
 }
 function bindNodeActions(p){
   var fid=p&&p.file_id;
@@ -270,7 +274,7 @@ function bindNodeActions(p){
     return api('POST','/api/sources/'+fid+'/approve-all',{});
   });
   bind('actLoad',function(){
-    if(!confirm('确认按已配置的入库规则执行入库？')) return {cancel:true};
+    if(!confirm('确认按已配置的入库映射执行入库？')) return {cancel:true};
     return api('POST','/api/sources/'+fid+'/load',{});
   });
 }
@@ -357,9 +361,9 @@ document.addEventListener('keydown',function(e){
   }
 });
 
-/* ---- 资料配置弹窗：四节点（解析参数/抽取规则/校验规则/入库规则）---- */
+/* ---- 资料配置弹窗：四节点（解析参数/抽取规则/校验规则/入库映射）---- */
 var CFG_NODES=[['params','解析参数'],['extract','抽取规则'],
-               ['review','校验规则'],['load','入库规则']];
+               ['review','校验规则'],['load','入库映射']];
 var cfgData=null, cfgFileId=null, cfgNode='params', cfgDirty=false, cfgPending={};
 
 function cfgMsg(t,bad){
@@ -481,7 +485,7 @@ function renderCfg(){
     h+=head('校验规则','当前校验为逐条人工改值 / 确认 / 拒绝；详情的「执行校验」可一键将全部待审记录设为通过。');
     h+='<div class="empty" style="padding:20px"><b>自动化校验规则：待实现</b></div>';
   }else{
-    h+=head('入库规则','目标在「执行入库」时消费；入库规则须与资料的抽取规则匹配，配置仅登记目标，真正写入在执行入库时。');
+    h+=head('入库映射','目标在「执行入库」时消费；入库映射须与资料的抽取规则匹配，配置仅登记目标，真正写入在执行入库时。');
     h+='<div class="cfg-row"><label>业务库</label>'+spacer+'<select id="cfgDs">'+
       '<option value="">（未选择）</option>';
     (cfgData.datasources||[]).forEach(function(d){
@@ -490,7 +494,7 @@ function renderCfg(){
         escHtml(d.name+' · '+d.host+'/'+d.db_name)+'</option>';
     });
     h+='</select></div>'+
-      '<div class="cfg-row"><label>入库规则</label>'+spacer+'<select id="cfgLt">'+
+      '<div class="cfg-row"><label>入库映射</label>'+spacer+'<select id="cfgLt">'+
       '<option value="">（未选择）</option>';
     (cfgData.load_tables||[]).forEach(function(t){
       h+='<option value="'+t.id+'" data-ds="'+t.datasource_id+'"'+
@@ -501,7 +505,7 @@ function renderCfg(){
   }
   h+='</div>';
   box.innerHTML=h;
-  // 数据源变化时过滤入库规则
+  // 数据源变化时过滤入库映射
   var ds=document.getElementById('cfgDs'), lt=document.getElementById('cfgLt');
   if(ds&&lt){
     ds.onchange=function(){

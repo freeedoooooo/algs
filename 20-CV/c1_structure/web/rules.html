@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>入库规则 · 结构化工具</title>
+<title>入库映射 · 结构化工具</title>
 <link rel="stylesheet" href="/static/shell.css">
 <link rel="stylesheet" href="/static/extract.css">
 <link rel="stylesheet" href="/static/rules.css">
@@ -16,15 +16,15 @@
   <a href="/sources">资料</a>
   <a href="/parse">解析</a>
   <a href="/extract">抽取</a>
-  <a href="/review">校验</a>
+  <a href="/review">校验规则</a>
   <a href="/rules" class="on">入库</a>
   <span class="spacer"></span>
-  <span class="navnote">配置业务库与入库规则</span>
+  <span class="navnote">配置业务库与入库映射</span>
 </nav>
 <div class="pagebody">
   <div class="pagehead">
-    <h1>入库规则</h1>
-    <span class="hint" tabindex="0" data-tip="左侧选择业务库（一个业务库对应一个数据库），右侧配置入库规则。&#10;记录须先完成解析与校验，全部确认后手动入库。">?</span>
+    <h1>入库映射</h1>
+    <span class="hint" tabindex="0" data-tip="左侧选择业务库（一个业务库对应一个数据库），右侧配置入库映射。&#10;记录须先完成解析与校验，全部确认后手动入库。">?</span>
   </div>
   <div class="banner err" id="err" hidden></div>
   <div class="banner info" id="ok" hidden></div>
@@ -48,9 +48,9 @@
     </div>
     <div class="panel mapwrap">
       <div class="dshead">
-        <b id="maptitle">入库规则</b>
+        <b id="maptitle">业务表</b>
         <span class="spacer"></span>
-        <button type="button" class="btn mini" id="newmap" disabled>＋ 新建规则</button>
+        <button type="button" class="btn mini" id="newmap" disabled>＋ 新建映射</button>
       </div>
       <table class="list" id="maptable" hidden>
         <thead><tr>
@@ -60,12 +60,12 @@
         <tbody id="maprows"></tbody>
       </table>
       <div class="empty" id="mapempty" hidden>
-        <b>该业务库还没有入库规则</b>
+        <b>该业务库还没有入库映射</b>
         选择抽取规则与目标表，将规则字段逐一对应到目标列。系统仅写入已有表，不会自动建表。
       </div>
       <div class="empty" id="mapnone">
         <b>请先在左侧选择一个业务库</b>
-        点击业务库，查看其下已配置的入库规则。
+        点击业务库，查看其下已配置的入库映射。
       </div>
       <div class="pager" id="mappager" hidden>
         <span class="pginfo"></span>
@@ -113,7 +113,7 @@
         <input type="text" class="tin" value="mysql" disabled>
         <div class="sthint">当前版本仅支持 MySQL。</div>
       </div>
-      <div class="sthint" id="dslock" hidden>该业务库已被入库规则引用，主机、端口、库名不可修改（修改将改变目标库，导致历史回执无法追溯）；账号与密码可以修改。如需更换目标库，请新建业务库。</div>
+      <div class="sthint" id="dslock" hidden>该业务库已被入库映射引用，主机、端口、库名不可修改（修改将改变目标库，导致历史回执无法追溯）；账号与密码可以修改。如需更换目标库，请新建业务库。</div>
     </div>
     <div class="dfoot">
       <span class="msg" id="dsmsg"></span>
@@ -125,7 +125,7 @@
 <div class="drawer wide" id="dmap" hidden>
   <div class="dpanel">
     <div class="dhead">
-      <h2 id="mptitle">新建入库规则</h2>
+      <h2 id="mptitle">新建映射</h2>
       <span class="spacer"></span>
       <button type="button" class="dclose" id="mpclose">关闭 (Esc)</button>
     </div>
@@ -157,7 +157,7 @@
         <div id="mprows"></div>
         <div class="sthint">勾选「去重依据」的列用于判断记录是否已存在（如发票号）。系统按字段名自动对齐，无法匹配的需要手动选择。</div>
       </div>
-      <div class="sthint" id="mplock" hidden>该规则已被资料引用，为保证历史回执一致，不再允许修改；如需调整请新建规则。</div>
+      <div class="sthint" id="mplock" hidden>该映射已被资料引用，为保证历史回执一致，不再允许修改；如需调整请新建映射。</div>
     </div>
     <div class="dfoot">
       <span class="msg" id="mpmsg"></span>

@@ -52,18 +52,31 @@ button{font:inherit;cursor:pointer}
 /* ---- 数据表格 ---- */
 .panel{background:#fff;border:1px solid #e2e7f0;border-radius:10px;overflow:hidden}
 table.list{width:100%;border-collapse:collapse;font-size:13px}
-table.list th{font-size:12px;font-weight:500;color:#6b7688;text-align:left;
+/* 表头：竖分割线统一、末列去线；内容居中，列宽可拖动（见 bindColResize） */
+table.list th{font-size:12px;font-weight:500;color:#6b7688;text-align:center;
   padding:6px 10px;background:#f7f9fd;border-bottom:1px solid #e2e7f0;
-  white-space:nowrap}
-table.list td{padding:5px 10px;border-bottom:1px solid #eef2f8;vertical-align:middle}
+  border-right:1px solid #e2e7f0;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;position:relative;user-select:none}
+table.list th:last-child{border-right:0}
+table.list th.col-resizable{cursor:col-resize}
+table.list th.col-resizable:hover{background:#eef4fc;color:#2563eb}
+table.list th .col-grip{position:absolute;right:0;top:0;bottom:0;width:9px;
+  cursor:col-resize;z-index:3}
+table.list td{padding:5px 10px;border-bottom:1px solid #eef2f8;vertical-align:middle;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 table.list tr:last-child td{border-bottom:0}
 table.list tbody tr:hover{background:#f7f9fd}
-table.list .num{font-variant-numeric:tabular-nums;white-space:nowrap}
-table.list .seq{text-align:center;font-variant-numeric:tabular-nums;
-  white-space:nowrap;width:1%}
+/* 内容对齐统一：ID/数字/时间/状态/规则版本居中，名称/说明左对齐 */
+table.list td,table.list th{text-align:center}
+table.list .left,table.list .namecell{text-align:left}
+table.list td.mono{text-align:center}
+table.list .num{font-variant-numeric:tabular-nums;white-space:nowrap;text-align:center}
+table.list .seq{font-variant-numeric:tabular-nums;white-space:nowrap;width:52px}
 table.list .namecell{display:flex;align-items:center;gap:8px;min-width:0}
 table.list .namecell .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-  max-width:340px;color:#25324a}
+  max-width:100%;color:#25324a}
+table.list .rver{display:inline-block;margin-left:4px;padding:0 6px;border-radius:9px;
+  background:#e7f0ff;color:#2563eb;font-size:11px;line-height:16px}
 .empty{padding:24px 16px;text-align:center;color:#8a94a6;font-size:13px}
 .empty b{display:block;color:#5a6a85;font-weight:500;margin-bottom:6px}
 
