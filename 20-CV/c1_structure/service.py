@@ -81,13 +81,25 @@ def register_file(name, data):
     return {'file_id': fid, 'sha256': sha, 'dedup': dedup}
 
 
+def _passthrough_rule():
+    """库内零规则时的内存默认：原始透传（空 mapping → collect.passthrough）。
+    不落库、不占 id；仅用于未指定/未绑定规则的抽取与解析日志。"""
+    return {'name': '原始透传', 'version': 1,
+            'version_id': None, 'rule_id': None,
+            'schema_json': {'fields': []},
+            'mapping_json': {}, 'transform_json': None}
+
+
 def resolve_rule(version_id=None):
-    """抽取规则版本解析；DB 必选，失败上抛（调用方回 503）。"""
+    """抽取规则版本解析；未指定且库内无规则时用内存默认透传。
+    显式指定 version_id 找不到仍报错，避免静默替换用户选择。"""
     catalog = _load('store.catalog')
     tv = (catalog.get_rule_version(version_id=version_id)
           if version_id else catalog.get_rule_version())
     if not tv:
-        raise RuntimeError('平台库无可用抽取规则版本')
+        if version_id is None:
+            return _passthrough_rule()
+        raise RuntimeError('抽取规则版本不存在')
     return {'name': tv['name'], 'version': tv['version'],
             'version_id': tv['id'], 'rule_id': tv['rule_id'],
             'schema_json': tv['schema_json'],

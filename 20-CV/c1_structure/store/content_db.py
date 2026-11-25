@@ -135,6 +135,16 @@ def _field_sources(mapping_json):
         if not target:
             continue
         col = f.get('column') or {}
+        # v2 规则把列选择器放在 pipeline 的 cell 步骤里（v1 才是 f.column）
+        for step in f.get('pipeline') or []:
+            if not isinstance(step, dict) or step.get('op') != 'cell':
+                continue
+            sc = step.get('column') or {}
+            if sc.get('name') is not None:
+                col = sc
+                break
+            if not col and isinstance(sc.get('index'), int):
+                col = sc
         if col.get('name') is not None:
             out[target] = str(col['name'])
         elif isinstance(col.get('index'), int):

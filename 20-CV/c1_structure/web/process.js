@@ -2,6 +2,7 @@
    红线：保存配置只写配置，不自动重跑；执行动作必须显式点击并二次确认。 */
 var pfId=null, pfName='', pfNode='parse', pfData=null, pfCfg=null, pfRecords=[];
 var pfPending={}, pfCfgOpen=false, pfPreResult=null, pfPreError='', pfRuleDetail=null, pfRows=null;
+var pfFileNames={};
 var PF_NODES=[['parse','解析'],['extract','抽取'],['review','校验'],['load','入库']];
 var PF_TITLE={parse:'解析参数',extract:'抽取规则',review:'校验规则',load:'入库映射'};
 var PF_PRODUCT={parse:'解析报告',extract:'数据记录',review:'校验记录',load:'入库表'};
@@ -74,7 +75,8 @@ function pfLoad(){
   Promise.all([
     pfApi('GET','/api/sources/'+pfId+'/pipeline'),
     pfApi('GET','/api/sources/'+pfId+'/config'),
-    pfApi('GET','/api/sources/'+pfId+'/staging')
+    pfApi('GET','/api/sources/'+pfId+'/staging'),
+    pfApi('GET','/api/sources/state')
   ]).then(function(rs){
     if(!(rs[0].s===200&&rs[0].j&&rs[0].j.ok))
       throw new Error((rs[0].j&&rs[0].j.error)||('HTTP '+rs[0].s));
@@ -85,6 +87,8 @@ function pfLoad(){
     pfCfg=rs[1].j;
     var doc=rs[2].s===200?rs[2].j:{};
     pfRecords=((doc&&doc.files||[])[0]||{}).records||[];
+    pfFileNames={};
+    ((rs[3].j||{}).items||[]).forEach(function(f){ pfFileNames[f.id]=f.name; });
     document.getElementById('procBody').innerHTML=
       '<div class="proc-layout">'+
         '<aside class="proc-side"><div class="proc-side-t">处理流程</div>'+
@@ -307,14 +311,31 @@ function pfRenderRuleDetail(meta){
   var fields=(schema.fields||[]).map(function(f){
     return (f.name||'')+(f.type?'（'+f.type+'）':'');
   }).join('、')||'—';
+  var fxLabel={trim:'去空格',replace:'替换',number:'转数字',lower:'小写',upper:'大写'};
   var maps=(mapping.fields||[]).map(function(f){
-    var src=(f.column&&f.column.name)||'';
-    return (src?src+' → ':'')+(f.target||'');
-  }).join('、')||'—';
-  var tb=mapping.table||{};
+    var pipe=f.pipeline||[];
+    var cell=pipe.filter(function(x){return x.op==='cell';})[0]||{};
+    var src=(f.column&&f.column.name)||(cell.column&&cell.column.name)||
+      (cell.column&&cell.column.index!=null?('列'+(cell.column.index+1)):'');
+    var fx=pipe.filter(function(x){return x.op!=='cell';}).map(function(x){
+      return fxLabel[x.op]||x.op;
+    }).join('、');
+    return (src?'原始列「'+src+'」 → ':'')+'目标列「'+(f.target||'')+'」'+
+      (fx?'（'+fx+'）':'');
+  }).join('；')||'—';
+  var tb=(mapping.tables||[])[0]||mapping.table||{};
   var tbl=(tb.index!=null?('表 '+(Number(tb.index)+1)):'')+
     (tb.header_contains?('表头含 '+tb.header_contains):'')||'—';
   var trans=((d.transform_json||{}).fields||[]).length;
+  var refs=mapping.refs||{};
+  var refFile=refs.file_id?('#'+refs.file_id+
+    (pfFileNames[refs.file_id]?' · '+pfFileNames[refs.file_id]:'')):'—';
+  var ds=(pfCfg.datasources||[]).filter(function(x){
+    return x.id===refs.datasource_id;
+  })[0];
+  var refBiz=(refs.datasource_id||refs.table)
+    ?((ds?ds.name:('业务库 '+refs.datasource_id))+
+      (refs.table?' / '+refs.table:'')):'—';
   var row=function(label,value){
     return '<div class="cfg-row"><label>'+escHtml(label)+'</label>'+
       '<span class="hint-spacer"></span><span class="cfg-static">'+
@@ -326,6 +347,8 @@ function pfRenderRuleDetail(meta){
     row('规则名称',d.name||meta.name)+
     row('版本','v'+(d.version||meta.version))+
     row('规格',d.spec_version?('v'+d.spec_version):'v1（默认）')+
+    row('参考文件',refFile)+
+    row('参考业务表',refBiz)+
     row('表定位',tbl)+
     row('输出字段',fields)+
     row('字段映射',maps)+

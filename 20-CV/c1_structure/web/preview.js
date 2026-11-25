@@ -8,6 +8,8 @@
 var file=new URLSearchParams(location.search).get('file')||'';
 var curFile=file;
 var traceRecord=new URLSearchParams(location.search).get('index')||'';
+var traceKey=new URLSearchParams(location.search).get('key')||'';
+var pendingTrace=null;
 var embedMode=new URLSearchParams(location.search).get('embed')==='1';
 var reviewView=new URLSearchParams(location.search).get('view')==='review';
 var fileDoc=null, records=[], keys=[], selIdx=-1, selKey=null, stateFilter='';
@@ -327,6 +329,10 @@ function pinField(key,i){
     curView=wantViewOf(target.a.space); showPage(target.a.page);
   }else ensureViewFor(target.a.space);
   clearPin(); clearHover(); applySelection(); markLeft(); updateHead();
+  /* embed=1：原图格子 → 数据看板左侧业务表的反向定位 */
+  if(embedMode&&window.parent!==window){
+    try{ window.parent.postMessage({c1PinField:{key:key,record_index:i}},'*'); }catch(e){}
+  }
 }
 /* 点左侧行（非具体格）：加重该行全部框；若不在当前页则导航过去 */
 function selectRecord(i){
@@ -709,13 +715,29 @@ function loadStaging(){
       reviewView=false;   // 只做初始定位；后续由用户自由切筛选
     }
     renderTable(); buildAnchors(); initViewer();
+    var wantIndex=traceRecord;
     if(traceRecord){
       var ti=records.findIndex(function(r){return String(r.index)===String(traceRecord);});
       if(ti>=0) selectRecord(ti);
       else toast('该 record_id 不在当前资料中');
       traceRecord='';
       history.replaceState(null,'',location.pathname+
-        '?file='+encodeURIComponent(file));
+        '?file='+encodeURIComponent(file)+
+        (embedMode?'&embed=1':'')+
+        (reviewView?'&view=review':''));
+    }
+    if(traceKey){
+      var ki=records.findIndex(function(r){return String(r.index)===String(wantIndex);});
+      if(ki>=0) pinField(traceKey,ki);
+      else toast('该 record_id 不在当前资料中');
+      traceKey='';
+    }
+    if(pendingTrace){
+      var pi=records.findIndex(function(r){
+        return String(r.index)===String(pendingTrace.index);
+      });
+      if(pi>=0) pinField(pendingTrace.key,pi);
+      pendingTrace=null;
     }
     var links=document.getElementById('filelinks');
     if(curFile){
@@ -854,6 +876,15 @@ if(embedMode){
   document.body.classList.add('embed-lineage');
   setCollapsed(false);
 }else setCollapsed(true);
+/* 数据看板切单元格时不重建 iframe，只发消息让预览重新钉住对应格子 */
+window.addEventListener('message',function(e){
+  if(!e.data||!e.data.c1TraceKey) return;
+  if(!records.length){ pendingTrace=e.data.c1TraceKey; return; }
+  var ti=records.findIndex(function(r){
+    return String(r.index)===String(e.data.c1TraceKey.index);
+  });
+  if(ti>=0) pinField(e.data.c1TraceKey.key,ti);
+});
 if(embedMode&&!file){
   document.getElementById('err').hidden=false;
   document.getElementById('err').textContent='缺少 file 参数';

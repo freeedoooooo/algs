@@ -466,6 +466,16 @@ function autofillRows(){
 document.getElementById('addfield').onclick=function(){addRow('',null);};
 
 /* ---- 公共参考：参考文件（看候选表列）＋参考业务表（看物理列名） ---- */
+function collectRefs(){
+  return {file_id:refsel.value?Number(refsel.value):null,
+          datasource_id:bizds.value?Number(bizds.value):null,
+          table:biztable.value||null};
+}
+function hasOpt(sel,v){
+  return Array.prototype.some.call(sel.options,function(o){
+    return o.value===String(v);
+  });
+}
 function applyBizFieldOpts(){
   var opts=bizFieldOpts||[];
   bizopts.innerHTML=opts.map(function(n){
@@ -482,7 +492,7 @@ function loadRefs(){
   biztable.innerHTML='<option value="">—</option>';
   biztable.hidden=true; biztable.disabled=true;
   bizFieldOpts=null; applyBizFieldOpts();
-  api('GET','/api/sources/state').then(function(j){
+  var pFiles=api('GET','/api/sources/state').then(function(j){
     (j.items||[]).forEach(function(f){
       if(['to_review','to_load','loading','loaded'].indexOf(f.state)<0) return;
       var o=document.createElement('option');
@@ -493,7 +503,7 @@ function loadRefs(){
   }).catch(function(){
     emsg.textContent='参考文件列表暂不可用，可手动填写源表。';
   });
-  api('GET','/api/load/datasources').then(function(j){
+  var pDs=api('GET','/api/load/datasources').then(function(j){
     (j.items||[]).forEach(function(d){
       var o=document.createElement('option');
       o.value=String(d.id);
@@ -503,12 +513,13 @@ function loadRefs(){
   }).catch(function(){
     emsg.textContent='业务库列表暂不可用，可手动填写目标列名。';
   });
+  return Promise.all([pFiles,pDs]);
 }
 function loadBizTables(){
   biztable.innerHTML='<option value="">—</option>';
   bizFieldOpts=null; applyBizFieldOpts();
-  if(!bizds.value){biztable.hidden=true;biztable.disabled=true;return;}
-  api('GET','/api/load/datasources/'+encodeURIComponent(bizds.value)+'/tables')
+  if(!bizds.value){biztable.hidden=true;biztable.disabled=true;return Promise.resolve();}
+  return api('GET','/api/load/datasources/'+encodeURIComponent(bizds.value)+'/tables')
     .then(function(j){
       var ts=j.items||[];
       biztable.innerHTML='<option value="">—</option>'+ts.map(function(t){
@@ -536,20 +547,39 @@ function fillFromBiz(cols){
   filledBy='biz';
   return true;
 }
-function loadBizColumns(){
+function loadBizColumns(fill){
   bizFieldOpts=null; applyBizFieldOpts();
-  if(!biztable.value) return;
-  api('GET','/api/load/datasources/'+encodeURIComponent(bizds.value)+
+  if(!biztable.value) return Promise.resolve();
+  return api('GET','/api/load/datasources/'+encodeURIComponent(bizds.value)+
       '/columns?table='+encodeURIComponent(biztable.value))
     .then(function(j){
       var cs=j.items||[];
-      fillFromBiz(cs);
+      if(fill!==false) fillFromBiz(cs);
       bizFieldOpts=cs.map(function(c){return c.name;});
       applyBizFieldOpts();
     }).catch(function(e){emsg.textContent='列加载失败：'+e.message;});
 }
 bizds.onchange=loadBizTables;
 biztable.onchange=loadBizColumns;
+/* 回显已保存的参考选择：只恢复选择项与候选列，不用业务表覆盖已存字段 */
+function applyRefs(refs){
+  refs=refs||{};
+  var jobs=[];
+  if(refs.file_id&&hasOpt(refsel,refs.file_id)){
+    refsel.value=String(refs.file_id);
+    jobs.push(refsel.onchange());   // pendingTable 已在 openEditor 里设好，自动定位原表
+  }
+  if(refs.datasource_id&&hasOpt(bizds,refs.datasource_id)){
+    bizds.value=String(refs.datasource_id);
+    jobs.push(loadBizTables().then(function(){
+      if(refs.table&&hasOpt(biztable,refs.table)){
+        biztable.value=String(refs.table);
+        return loadBizColumns(false);   // 只恢复 datalist，不改字段
+      }
+    }));
+  }
+  return Promise.all(jobs);
+}
 function manualMode(hint){
   cands=null; tblsel.disabled=true;
   tblsel.innerHTML='<option value="">—</option>';
@@ -559,9 +589,9 @@ function manualMode(hint){
 }
 refsel.onchange=function(){
   var v=refsel.value;
-  if(!v){manualMode();return;}
+  if(!v){manualMode();return Promise.resolve();}
   var p=v.split(':');
-  api('GET','/api/sources/'+p[0]+'/parse').then(function(doc){
+  return api('GET','/api/sources/'+p[0]+'/parse').then(function(doc){
     cands=candidates(doc);
     if(!cands.length){manualMode('该文件未解析出表格，请手动填写源表。');return;}
     tblsel.innerHTML=cands.map(function(c,i){
@@ -688,7 +718,8 @@ function openEditor(id){
     document.getElementById('versec').hidden=false;
     loadVersions(id);
     loadDestHints(id);
-    edit.hidden=false; loadRefs();
+    edit.hidden=false;
+    return loadRefs().then(function(){ return applyRefs(mp.refs); });
   }).catch(function(e){showErr(e.message);});
 }
 
@@ -762,6 +793,7 @@ savebtn.onclick=function(){
     mapping=simpleToV2Spec(table,fields,xf);
     transform=null;
   }
+  mapping.refs=collectRefs();   // 参考文件 / 参考业务表随规则版本一起保存
   var desc=edesc.value.trim();
   savebtn.disabled=true;
   var p;

@@ -11,7 +11,7 @@
 .ftab:hover{border-color:#2563eb;color:#2563eb}
 .ftab.on{background:#2563eb;border-color:#2563eb;color:#fff}
 .stgwrap{display:flex;gap:12px;align-items:flex-start}
-.stgmain{flex:1;min-width:0;overflow:auto;max-height:calc(100vh - 210px)}
+.stgmain{flex:1;min-width:0;overflow:auto;max-height:calc(100vh - 150px)}
 .stgmain table.list th{position:sticky;top:0;z-index:2}
 .stgmain table.list td{max-width:260px;overflow:hidden;text-overflow:ellipsis;
   white-space:nowrap}
@@ -25,7 +25,7 @@
 #rechead th .srccap.none{color:#b45309}
 
 /* 右侧血缘侧栏容器（吸顶 + 限高），内部舞台用报告同款 .stage */
-.lineage{flex:none;width:560px;max-width:46vw;max-height:calc(100vh - 210px);
+.lineage{flex:none;width:640px;max-width:52vw;max-height:calc(100vh - 150px);
   display:flex;flex-direction:column;position:sticky;top:12px;overflow:auto}
 .lineage[hidden]{display:none}
 .lhead{display:flex;align-items:center;gap:8px;padding:7px 10px;
@@ -109,7 +109,7 @@ body.embed-lineage .stgwrap{display:flex;justify-content:center;align-items:flex
 /* 血缘面板保持预览页宽屏原生外观（560px 侧栏、内容高度、圆角边框、头部、舞台）。
    关键：iframe 仅 600px 宽会触发上方 max-width:1000px 媒体查询把面板压成 100%，
    故 embed 下用 !important 覆盖断点规则，还原宽屏展开态；折叠态还原为 34px 竖条。 */
-body.embed-lineage .lineage{width:560px !important;max-width:none !important;
+body.embed-lineage .lineage{width:640px !important;max-width:none !important;
   position:static !important;max-height:none !important}
 body.embed-lineage .lineage .stage{max-height:none !important}
 body.embed-lineage .lineage.collapsed{width:34px !important;max-width:34px !important}

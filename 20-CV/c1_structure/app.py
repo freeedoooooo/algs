@@ -884,13 +884,25 @@ def api_staging_query(field: str = None, q: str = None,
 
 
 @app.get('/api/staging/locate/{record_id}')
-def api_staging_locate(record_id: int):
-    """按 record_id 反查 file_id，用于数据看板血缘跳转。"""
+def api_staging_locate(record_id: int, key: str = None):
+    """按 record_id 反查 file_id，用于数据看板血缘跳转。
+    key=业务表列名时附带 field（暂存字段名）与完整 field_map，
+    供单元格级回溯与「原图→表格」反向定位。"""
+    catalog = _load('store.catalog')
     hit = _load('store.content_db').locate_record(record_id)
     if hit is None:
         return JSONResponse({'ok': False, 'error': '暂存记录不存在'},
                             status_code=404)
-    return {'ok': True, **hit}
+    field_map = {}
+    f = catalog.get_file(hit['file_id'])
+    if f and f.get('load_table_id'):
+        lt = catalog.get_load_table(f['load_table_id'])
+        for fr in (lt or {}).get('fields', []):
+            field_map[fr['target_column']] = fr['rule_field']
+    out = {'ok': True, **hit, 'field_map': field_map}
+    if key is not None:
+        out['field'] = field_map.get(key, key)
+    return out
 
 
 def _review_guard(file_id):

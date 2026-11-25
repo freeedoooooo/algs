@@ -2,7 +2,8 @@
 var qs=new URLSearchParams(location.search);
 var ds=qs.get('ds')||'', table=qs.get('table')||'',
     fileId=qs.get('file')||'', lt=qs.get('lt')||'';
-var page=1, perPage=getListPer(), lastData=null, selRid=null, pg=null;
+var page=1, perPage=getListPer(), lastData=null, selRid=null, selCol=null,
+    fieldMap={}, pg=null;
 
 function showErr(t){
   var e=document.getElementById('err');
@@ -29,7 +30,8 @@ function render(){
     var td=function(c){
       if(c==='__file_id__') return '<td class="num">'+
         (r.file_id==null?'-':escHtml(String(r.file_id)))+'</td>';
-      return '<td>'+escHtml(cellVal(r[c]))+'</td>';
+      return '<td class="cell" data-col="'+escHtml(c)+'">'+
+        escHtml(cellVal(r[c]))+'</td>';
     };
     return '<tr'+attrs+cls+'>'+
       '<td class="seq">'+((lastData.page-1)*lastData.per_page+i+1)+'</td>'+
@@ -87,21 +89,29 @@ function closeLineage(){
   var panel=document.getElementById('lineagepanel');
   var frame=document.getElementById('linframe');
   panel.hidden=true; panel.classList.remove('collapsed');
-  frame.hidden=true; frame.removeAttribute('src');
-  selRid=null;
+  frame.hidden=true; frame.removeAttribute('src'); frame.removeAttribute('data-src');
+  selRid=null; selCol=null; fieldMap={};
   document.querySelectorAll('#rowbody tr.sel').forEach(function(tr){tr.classList.remove('sel');});
+  document.querySelectorAll('#rowbody td.sel-cell').forEach(function(td){td.classList.remove('sel-cell');});
 }
 
-function showLineage(rid,tr){
+function showLineage(rid,tr,col){
   var panel=document.getElementById('lineagepanel');
   var frame=document.getElementById('linframe');
   var msg=document.getElementById('linemsg');
   panel.hidden=false; msg.hidden=true; frame.hidden=true;
   panel.classList.remove('collapsed');
-  selRid=String(rid);
+  selRid=String(rid); selCol=col||null;
   document.querySelectorAll('#rowbody tr.sel').forEach(function(x){x.classList.remove('sel');});
+  document.querySelectorAll('#rowbody td.sel-cell').forEach(function(x){x.classList.remove('sel-cell');});
   if(tr) tr.classList.add('sel');
-  fetch('/api/staging/locate/'+encodeURIComponent(rid)).then(function(r){
+  if(col&&tr){
+    var td=tr.querySelector('td.cell[data-col="'+CSS.escape(col)+'"]');
+    if(td) td.classList.add('sel-cell');
+  }
+  var url='/api/staging/locate/'+encodeURIComponent(rid)+
+    (col?('?key='+encodeURIComponent(col)):'');
+  fetch(url).then(function(r){
     return r.json().then(function(j){return {ok:r.ok,j:j};});
   }).then(function(o){
     if(!o.ok){
@@ -109,8 +119,19 @@ function showLineage(rid,tr){
       msg.textContent='该行无匹配暂存记录，无法溯源（可能非本平台入库、已被清理，或来自其他系统）。';
       return;
     }
-    frame.src='/preview?embed=1&file='+encodeURIComponent(o.j.file_id)+
-      '&index='+encodeURIComponent(o.j.record_index);
+    fieldMap=o.j.field_map||{};
+    var key=o.j.field||col;
+    var src='/preview?embed=1&file='+encodeURIComponent(o.j.file_id)+
+      '&index='+encodeURIComponent(o.j.record_index)+
+      (key?('&key='+encodeURIComponent(key)):'');
+    if(frame.getAttribute('data-src')===src&&!frame.hidden){
+      /* 同一行换单元格：不重建 iframe，只通知预览重新钉格 */
+      if(frame.contentWindow) frame.contentWindow.postMessage(
+        {c1TraceKey:{key:key,index:o.j.record_index}},'*');
+    }else{
+      frame.setAttribute('data-src',src);
+      frame.src=src;
+    }
     frame.hidden=false;
   }).catch(function(e){
     msg.hidden=false; msg.textContent='溯源查询失败：'+e;
@@ -118,14 +139,32 @@ function showLineage(rid,tr){
 }
 
 document.getElementById('rowbody').addEventListener('click',function(e){
+  var td=e.target.closest?e.target.closest('td.cell[data-col]'):null;
   var tr=e.target.closest?e.target.closest('tr[data-rid]'):null;
-  if(tr) showLineage(tr.getAttribute('data-rid'),tr);
+  if(!tr) return;
+  showLineage(tr.getAttribute('data-rid'),tr,td?td.getAttribute('data-col'):null);
 });
 window.addEventListener('message',function(e){
-  if(!e.data||typeof e.data.c1LineageCollapsed!=='boolean') return;
-  var panel=document.getElementById('lineagepanel');
-  if(panel.hidden) return;
-  panel.classList.toggle('collapsed',e.data.c1LineageCollapsed);
+  if(!e.data) return;
+  if(typeof e.data.c1LineageCollapsed==='boolean'){
+    var panel=document.getElementById('lineagepanel');
+    if(panel.hidden) return;
+    panel.classList.toggle('collapsed',e.data.c1LineageCollapsed);
+    return;
+  }
+  if(e.data.c1PinField){
+    /* 原图格子 → 左侧业务表：按入库映射的 rule_field 反查业务列并高亮 */
+    var key=e.data.c1PinField.key;
+    document.querySelectorAll('#rowbody td.sel-cell').forEach(function(td){
+      td.classList.remove('sel-cell');
+    });
+    var tr=document.querySelector('#rowbody tr[data-rid="'+CSS.escape(selRid)+'"]');
+    Object.keys(fieldMap).concat((lastData&&lastData.columns)||[]).forEach(function(col){
+      if(fieldMap[col]!==key&&col!==key) return;
+      var td=tr&&tr.querySelector('td.cell[data-col="'+CSS.escape(col)+'"]');
+      if(td) td.classList.add('sel-cell');
+    });
+  }
 });
 document.addEventListener('keydown',function(e){
   if(e.key==='Escape'){
