@@ -438,6 +438,16 @@ def reparse(file_id, params=None):
 
 # ---- P2 入库引擎：手动闸门 → 后台逐条写入＋幂等回执 ----
 
+def _snapshot_names(snap):
+    """运行时只读映射快照；快照缺失即拒绝，不再回查抽取规则做契约校验。"""
+    errors = _load('store.errors')
+    names = [f.get('name') for f in (snap or {}).get('fields') or []
+             if isinstance(f, dict) and f.get('name')]
+    if not names:
+        raise errors.BadRequest('入库映射缺少抽取输出快照，请重新保存映射')
+    return names
+
+
 def launch_load(file_id, target=None):
     """POST /api/sources/{id}/load 的编排：入库时绑定目标。
     未绑定须带 target={datasource_id,load_table_id}：归属/规则/预检/门禁
@@ -476,18 +486,9 @@ def launch_load(file_id, target=None):
         raise errors.NotFound('业务库不存在')
     if lt['datasource_id'] != ds_id:
         raise errors.BadRequest('入库映射不属于所选业务库')
-    bound_rule = f.get('rule_version_id')
-    if bound_rule is None:
-        raise errors.BadRequest('资料尚未绑定抽取规则，请先执行抽取')
-    tpl = resolve_rule(bound_rule)
-    if lt['rule_id'] != tpl['rule_id']:
-        raise errors.BadRequest('入库映射与资料的抽取规则不匹配')
-    sj = tpl.get('schema_json')
-    fields = ([x.get('name') for x in sj.get('fields') or []]
-              if isinstance(sj, dict) else [])
-    fields = [x for x in fields if x]
-    if not fields:
-        raise errors.BadRequest('「原始透传」规则无固定字段，不支持入库')
+    # 抽取规则仅作参考：契约来自映射快照；transform 仅存量 v1 规则仍需要
+    tpl = resolve_rule(f['rule_version_id']) if f.get('rule_version_id') else None
+    fields = _snapshot_names(lt.get('source_snapshot'))
     loader = _load('store.loader')
     loader.preflight(ds, lt['target_table'], lt['fields'],
                      lt['write_mode'], fields)
@@ -546,34 +547,29 @@ def preview_load(file_id, table_id=None, draft=None):
         lt = catalog.get_load_table(int(table_id))
         if lt is None:
             raise errors.NotFound('入库映射不存在')
-        if f.get('rule_version_id') is None:
-            raise errors.BadRequest('资料尚未绑定抽取规则')
-        tpl = resolve_rule(f['rule_version_id'])
-        if lt['rule_id'] != tpl['rule_id']:
-            raise errors.BadRequest('入库映射与资料的抽取规则不匹配')
         ds = catalog.get_datasource(lt['datasource_id'])
         field_rows, table, wm = lt['fields'], lt['target_table'], lt['write_mode']
+        fields = _snapshot_names(lt.get('source_snapshot'))
+        tpl = resolve_rule(f['rule_version_id']) if f.get('rule_version_id') else None
     else:
         ds = catalog.get_datasource(int(draft.get('datasource_id') or 0))
         field_rows = draft.get('fields') or []
         table = str(draft.get('target_table') or '')
         wm = str(draft.get('write_mode') or 'upsert')
-        tpl = resolve_rule(f.get('rule_version_id'))
+        tpl = resolve_rule(f.get('rule_version_id')) if f.get('rule_version_id') else None
+        fields = ([fr.get('rule_field') for fr in field_rows
+                   if isinstance(fr, dict) and fr.get('rule_field')])
+        if isinstance(draft.get('snapshot'), dict):
+            fields = _snapshot_names(draft['snapshot'])
     if ds is None:
         raise errors.NotFound('业务库不存在')
-    sj = tpl.get('schema_json')
-    fields = ([x.get('name') for x in sj.get('fields') or []]
-              if isinstance(sj, dict) else [])
-    fields = [x for x in fields if x]
-    if not fields:
-        raise errors.BadRequest('「原始透传」规则无固定字段，不可入库')
     loader.preflight(ds, table, field_rows, wm, fields)
     doc = _load('store.content').get_records(file_id)
     recs = [r for fs in (doc['files'] if doc else []) for r in fs['records']]
     if not recs:
         raise errors.Conflict('无暂存记录')
     cm, bk = loader.fields_to_map(field_rows)
-    transform = tpl.get('transform_json')
+    transform = (tpl or {}).get('transform_json')
     receipts = {(r['record_index']) for r in catalog.list_load_logs(file_id)}
     counts = {'insert': 0, 'update': 0, 'skip': 0, 'quarantine': 0}
     conn = loader.connect_datasource(ds)
@@ -620,7 +616,7 @@ def run_load(file_id, ds, lt, tpl, log):
     table = lt['target_table']
     cm, bk = loader.fields_to_map(lt['fields'])
     wm = lt['write_mode']
-    transform = tpl.get('transform_json')
+    transform = (tpl or {}).get('transform_json')
     try:
         catalog.set_state(file_id, 'loading', None)
         doc = content.get_records(file_id)

@@ -5,6 +5,9 @@ c1_load_log，P2b）。
 审计规则：数据源被映射引用后目标（host/port/db_name）锁定；
 映射被任务引用后只读。回执幂等（唯一键防重）。
 """
+import hashlib
+import json
+
 from ... import config
 from .. import db, loader
 from ..errors import BadRequest, Conflict, NotFound
@@ -185,12 +188,12 @@ def ensure_default_datasource():
 
 _LT_COLS = (
     ' lt.id, lt.datasource_id, d.name AS datasource_name, d.db_name,'
-    ' lt.rule_id, t.name AS tpl_name, lt.target_table,'
-    ' lt.write_mode, lt.created_at')
+    ' lt.rule_id, lt.rule_version_id, t.name AS tpl_name, lt.target_table,'
+    ' lt.write_mode, lt.source_snapshot_json, lt.created_at')
 _LT_JOIN = (
     ' FROM c1_load_table lt'
     ' JOIN c1_load_datasource d ON d.id=lt.datasource_id'
-    ' JOIN c1_extract_rule t ON t.id=lt.rule_id')
+    ' LEFT JOIN c1_extract_rule t ON t.id=lt.rule_id')
 
 
 def list_load_tables(datasource_id=None):
@@ -206,6 +209,7 @@ def list_load_tables(datasource_id=None):
             rows = _rows(cur)
             for r in rows:
                 r['created_at'] = str(r['created_at'])
+                r['source_snapshot'] = _j(r.pop('source_snapshot_json', None))
                 cur.execute(
                     'SELECT target_column, is_business_key'
                     ' FROM c1_load_table_field WHERE load_table_id=%s'
@@ -230,6 +234,7 @@ def get_load_table(lt_id):
                 return None
             r = rows[0]
             r['created_at'] = str(r['created_at'])
+            r['source_snapshot'] = _j(r.pop('source_snapshot_json', None))
             cur.execute('SELECT COUNT(*) FROM c1_doc_file'
                         ' WHERE load_table_id=%s', (lt_id,))
             r['file_refs'] = cur.fetchone()[0]
@@ -260,6 +265,65 @@ def _tpl_schema_fields(cur, rule_id):
     return fields
 
 
+def _snapshot_names(snapshot):
+    names = [f.get('name') for f in (snapshot or {}).get('fields') or []
+             if isinstance(f, dict) and f.get('name')]
+    if not names:
+        raise BadRequest('抽取输出快照没有字段，无法配置入库映射')
+    return names
+
+
+def _build_snapshot(cur, rule_id, rule_version_id=None):
+    """仅在用户选择参考抽取规则时生成快照；运行时不再依赖该规则。"""
+    sql = ('SELECT tv.id, tv.schema_json, tv.mapping_json, tv.version, t.name'
+           ' FROM c1_extract_rule_version tv'
+           ' JOIN c1_extract_rule t ON t.id=tv.rule_id'
+           ' WHERE tv.rule_id=%s')
+    args = [rule_id]
+    if rule_version_id:
+        sql += ' AND tv.id=%s'
+        args.append(rule_version_id)
+    else:
+        sql += ' AND tv.version=t.current_version'
+    cur.execute(sql, args)
+    row = cur.fetchone()
+    if not row:
+        raise NotFound('参考抽取规则版本不存在')
+    vid, sj, mj, ver, name = row
+    sj, mj = _j(sj), _j(mj)
+    fields = []
+    if isinstance(sj, dict):
+        fields = [{'name': f.get('name'), 'type': f.get('type') or 'text'}
+                  for f in sj.get('fields') or []
+                  if isinstance(f, dict) and f.get('name')]
+    if not fields and isinstance(mj, dict):
+        fields = [{'name': f.get('target'), 'type': f.get('type') or 'text'}
+                  for f in mj.get('fields') or []
+                  if isinstance(f, dict) and f.get('target')]
+    if not fields:
+        raise BadRequest('该抽取规则没有固定输出字段，不能作为参考')
+    snap = {'schema_version': 1, 'rule_id': rule_id, 'rule_version_id': vid,
+            'rule_name': name, 'rule_version': ver, 'fields': fields}
+    snap['hash'] = hashlib.sha256(json.dumps(
+        fields, sort_keys=True, ensure_ascii=False).encode('utf-8')
+    ).hexdigest()[:16]
+    return snap
+
+
+def _resolve_snapshot(cur, rule_id, rule_version_id, snapshot):
+    snap = snapshot if isinstance(snapshot, dict) else None
+    if snap:
+        _snapshot_names(snap)
+        if rule_id and not snap.get('rule_id'):
+            snap['rule_id'] = rule_id
+        if rule_version_id and not snap.get('rule_version_id'):
+            snap['rule_version_id'] = rule_version_id
+        return snap
+    if not rule_id:
+        raise BadRequest('请选择参考抽取规则，或提供抽取输出快照')
+    return _build_snapshot(cur, rule_id, rule_version_id)
+
+
 def _insert_fields(cur, lt_id, fields, schema_fields):
     order = {f: i for i, f in enumerate(schema_fields)}
     for f in fields:
@@ -273,10 +337,9 @@ def _insert_fields(cur, lt_id, fields, schema_fields):
 
 
 def create_load_table(datasource_id, rule_id, target_table, write_mode,
-                      fields):
-    """映射绑定：数据源×表×抽取规则。fields=[{rule_field,target_column,
-    is_business_key}]；契约校验在建时做，目标列存在性归预检。
-    UNIQUE(ds,tpl,table)→Conflict（同物理表可被不同抽取规则各建一行）。"""
+                      fields, rule_version_id=None, snapshot=None):
+    """映射绑定：业务库×目标表×抽取输出快照。抽取规则仅作配置期参考。
+    fields=[{rule_field,target_column,is_business_key}]；契约按快照校验。"""
     target_table = str(target_table or '').strip()
     if not target_table:
         raise BadRequest('目标表名不能为空')
@@ -287,19 +350,16 @@ def create_load_table(datasource_id, rule_id, target_table, write_mode,
                         (datasource_id,))
             if not cur.fetchone():
                 raise NotFound('业务库不存在')
-            _tpl_exists(cur, rule_id)
-            schema_fields = _tpl_schema_fields(cur, rule_id)
+            snap = _resolve_snapshot(cur, rule_id, rule_version_id, snapshot)
+            schema_fields = _snapshot_names(snap)
             loader.validate_fields(schema_fields, fields, write_mode)
-            cur.execute('SELECT id FROM c1_load_table'
-                        ' WHERE datasource_id=%s AND rule_id=%s'
-                        ' AND target_table=%s',
-                        (datasource_id, rule_id, target_table))
-            if cur.fetchone():
-                raise Conflict('相同业务库、抽取规则与目标表的入库映射已存在')
             cur.execute(
                 'INSERT INTO c1_load_table (datasource_id, rule_id,'
-                ' target_table, write_mode) VALUES (%s,%s,%s,%s)',
-                (datasource_id, rule_id, target_table, write_mode))
+                ' rule_version_id, target_table, write_mode,'
+                ' source_snapshot_json) VALUES (%s,%s,%s,%s,%s,%s)',
+                (datasource_id, rule_id, snap.get('rule_version_id'),
+                 target_table, write_mode,
+                 json.dumps(snap, ensure_ascii=False)))
             lt_id = cur.lastrowid
             _insert_fields(cur, lt_id, fields, schema_fields)
             conn.commit()
@@ -308,14 +368,15 @@ def create_load_table(datasource_id, rule_id, target_table, write_mode,
         conn.close()
 
 
-def update_load_table(lt_id, write_mode=None, fields=None):
-    """被任务引用→只读 Conflict（回执语义）；否则整体编辑 write_mode/字段行。
-    数据源/抽取规则/目标表不可改——改它们＝新绑定，走新建。"""
+def update_load_table(lt_id, write_mode=None, fields=None,
+                      rule_version_id=None, snapshot=None):
+    """被资料引用→只读 Conflict；否则整体编辑 write_mode/字段行/输出快照。"""
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT rule_id, write_mode'
-                        ' FROM c1_load_table WHERE id=%s', (lt_id,))
+            cur.execute('SELECT rule_id, rule_version_id, write_mode,'
+                        ' source_snapshot_json FROM c1_load_table WHERE id=%s',
+                        (lt_id,))
             row = cur.fetchone()
             if not row:
                 raise NotFound('入库映射不存在')
@@ -323,7 +384,7 @@ def update_load_table(lt_id, write_mode=None, fields=None):
                         ' WHERE load_table_id=%s', (lt_id,))
             if cur.fetchone()[0]:
                 raise Conflict('该入库映射已被资料引用，只读且不可删除')
-            wm = write_mode if write_mode is not None else row[1]
+            wm = write_mode if write_mode is not None else row[2]
             fs = fields
             if fs is None:
                 cur.execute('SELECT rule_field, target_column,'
@@ -331,10 +392,16 @@ def update_load_table(lt_id, write_mode=None, fields=None):
                             ' WHERE load_table_id=%s ORDER BY sort_order, id',
                             (lt_id,))
                 fs = _rows(cur)
-            schema_fields = _tpl_schema_fields(cur, row[0])
+            snap = _resolve_snapshot(cur, row[0],
+                                     rule_version_id or row[1],
+                                     snapshot or _j(row[3]))
+            schema_fields = _snapshot_names(snap)
             loader.validate_fields(schema_fields, fs, wm)
-            cur.execute('UPDATE c1_load_table SET write_mode=%s'
-                        ' WHERE id=%s', (wm, lt_id))
+            cur.execute('UPDATE c1_load_table SET write_mode=%s,'
+                        ' rule_version_id=%s, source_snapshot_json=%s'
+                        ' WHERE id=%s',
+                        (wm, snap.get('rule_version_id'),
+                         json.dumps(snap, ensure_ascii=False), lt_id))
             cur.execute('DELETE FROM c1_load_table_field'
                         ' WHERE load_table_id=%s', (lt_id,))
             _insert_fields(cur, lt_id, fs, schema_fields)

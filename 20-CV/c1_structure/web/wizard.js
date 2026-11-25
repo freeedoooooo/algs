@@ -344,7 +344,7 @@ function wzStep3(b){
   wzFooter();
   var body=wz.mode==='exist'?{load_table_id:Number(wz.rule1)}:
     {draft:{datasource_id:wz.dsId,target_table:wz.table,
-            write_mode:wz.wm,fields:wz.fields}};
+            write_mode:wz.wm,fields:wz.fields,snapshot:wzSnapshot()}};
   wzApi('POST','/api/sources/'+wz.fileId+'/load-preview',body).then(function(j){
     if(!wz||wz.step!==3) return;
     document.getElementById('wzcnt').innerHTML=
@@ -388,14 +388,20 @@ function wzStep3(b){
     document.getElementById('wzsamp').innerHTML='<div class="empty">样例加载失败</div>';
   });
 }
+function wzSnapshot(){
+  return {schema_version:1, rule_id:wz.ruleId||null,
+    fields:(wz.fields||[]).map(function(f){
+      return {name:f.rule_field,type:'text'};})};
+}
 /* ---- step4 执行（唯一落库点；失败补偿删除新建映射） ---- */
 function wzExecute(){
   wz.busy=true; wz.step=4; wzRender(); wzMsg('正在提交…');
   var p=Promise.resolve();
   if(wz.mode==='new'){
     p=wzApi('POST','/api/load/tables',{
-      datasource_id:wz.dsId, rule_id:wz.ruleId,
-      target_table:wz.table, write_mode:wz.wm, fields:wz.fields
+      datasource_id:wz.dsId, rule_id:wz.ruleId||null,
+      target_table:wz.table, write_mode:wz.wm, fields:wz.fields,
+      snapshot:wzSnapshot()
     }).then(function(j){ wz.createdRule=j.id; });
   }
   p.then(function(){

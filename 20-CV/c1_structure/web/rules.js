@@ -2,7 +2,7 @@
    一个业务库＝一个库（明文配置）；规则＝业务库×表×抽取规则绑定，字段行编辑。
    契约见 （用词改齐）。 */
 var dss=[], maps=[], tpls=[], cols=[];
-var curDs=null, editDs=null, editLt=null, ltLocked=false;
+var curDs=null, editDs=null, editLt=null, ltLocked=false, tplVersionId=null;
 var dsPage=1, mapPage=1, dsSize=getListPer(), mapSize=getListPer();
 var pgDs=bindPager(document.getElementById('dspager'),
   function(d){ dsPage+=d; renderDs(); },
@@ -232,14 +232,14 @@ function syncBk(){
     c.disabled=ins||ltLocked;
   });
 }
-function buildRows(names,preset){
+function buildRows(names,preset,editable){
   mprows.innerHTML='';
   names.forEach(function(f){
     var p=(preset||{})[f]||{};
     var div=document.createElement('div');
     div.className='frow';
-    div.innerHTML='<input type="text" class="tin fname" readonly value="'+
-      escHtml(f)+'">'+
+    div.innerHTML='<input type="text" class="tin fname"'+
+      (editable?'':' readonly')+' value="'+escHtml(f)+'">'+
       '<select class="tin fcol" data-col="'+escHtml(p.col||'')+'"></select>'+
       '<span class="mbadge"></span>'+
       '<label class="bklab"><input type="checkbox" class="fbk"'+
@@ -251,6 +251,22 @@ function buildRows(names,preset){
     i.disabled=ltLocked;
   });
 }
+function addManualRow(){
+  var div=document.createElement('div');
+  div.className='frow';
+  div.innerHTML='<input type="text" class="tin fname" placeholder="抽取输出字段名">'+
+    '<select class="tin fcol" data-col=""></select>'+
+    '<span class="mbadge"></span>'+
+    '<label class="bklab"><input type="checkbox" class="fbk">去重依据</label>';
+  mprows.appendChild(div);
+  fillCols(); syncBk();
+  div.querySelector('.fname').focus();
+}
+document.getElementById('mpaddfield').onclick=function(){
+  if(ltLocked) return;
+  if(!mptable.value){ mpmsg.textContent='请先选择目标表'; return; }
+  mpmsg.textContent=''; addManualRow();
+};
 function loadTables(){
   cols=[]; mptable.disabled=true;
   mptable.innerHTML='<option value="">加载中…</option>';
@@ -277,9 +293,13 @@ function loadColumns(table,after){
   });
 }
 function loadTplFields(){
-  mprows.innerHTML=''; recomputeMatchBar();
-  if(!mptpl.value) return;
+  mprows.innerHTML=''; recomputeMatchBar(); tplVersionId=null;
+  if(!mptpl.value){
+    document.getElementById('mpthint').textContent='未选择参考规则；可手动添加字段。';
+    return;
+  }
   api('GET','/api/extract-rules/'+mptpl.value).then(function(j){
+    tplVersionId=j.current_version_id||null;
     var sj=j.schema_json;
     var fs=(sj&&typeof sj==='object'&&!Array.isArray(sj)&&sj.fields)||[];
     var names=fs.map(function(f){return f.name;}).filter(Boolean);
@@ -298,7 +318,8 @@ function openMap(lt){
   var d=dsById(curDs);
   document.getElementById('mptitle').textContent=lt?'编辑映射':'新建映射';
   document.getElementById('mpds').value=d?(d.name+' · '+d.host+':'+d.port+'/'+d.db_name):'';
-  mptpl.innerHTML='<option value="">选择抽取规则</option>'+
+  tplVersionId=lt?(lt.rule_version_id||null):null;
+  mptpl.innerHTML='<option value="">不使用参考规则（手动配置）</option>'+
     tpls.map(function(t){
       return '<option value="'+t.id+'">'+escHtml(t.name)+' v'+t.current_version+'</option>';
     }).join('');
@@ -310,7 +331,7 @@ function openMap(lt){
   mpmsg.textContent=''; cols=[]; mprows.innerHTML=''; recomputeMatchBar();
   document.getElementById('mpthint').textContent='';
   if(lt){
-    mptpl.value=String(lt.rule_id);
+    mptpl.value=lt.rule_id?String(lt.rule_id):'';
     mptable.innerHTML='<option value="'+escHtml(lt.target_table)+'">'+
       escHtml(lt.target_table)+'</option>';
     mptable.disabled=true;
@@ -319,10 +340,10 @@ function openMap(lt){
       preset[f.rule_field]={col:f.target_column,bk:!!f.is_business_key};
     });
     var names=(lt.fields||[]).map(function(f){return f.rule_field;});
-    loadColumns(lt.target_table,function(){ buildRows(names,preset); });
+    loadColumns(lt.target_table,function(){ buildRows(names,preset,!ltLocked); });
   }else{
     mptable.innerHTML='<option value="">选择目标表</option>';
-    loadTables();
+    loadTables(); addManualRow();
   }
   dmap.hidden=false;
 }
@@ -348,15 +369,15 @@ mprows.addEventListener('change',function(e){
 
 document.getElementById('mpsave').onclick=function(){
   mpmsg.textContent='';
-  if(!editLt&&!mptpl.value){ mpmsg.textContent='请选择抽取规则'; return; }
   if(!editLt&&!mptable.value){ mpmsg.textContent='请选择目标表'; return; }
   var rows=mprows.querySelectorAll('.frow');
-  if(!rows.length){ mpmsg.textContent='该规则无固定目标字段，不可入库'; return; }
+  if(!rows.length){ mpmsg.textContent='请至少添加一个字段'; return; }
   var fields=[], seen={}, err=null;
   Array.prototype.forEach.call(rows,function(div){
     if(err) return;
-    var f=div.querySelector('.fname').value;
+    var f=div.querySelector('.fname').value.trim();
     var c=div.querySelector('.fcol').value;
+    if(!f){ err='请填写抽取输出字段名'; return; }
     if(!c){ err='字段「'+f+'」尚未选择目标列'; return; }
     if(seen[c]){ err='多个字段指向同一目标列：'+c; return; }
     seen[c]=1;
@@ -367,12 +388,19 @@ document.getElementById('mpsave').onclick=function(){
   if(mpmode.value!=='insert'&&!fields.some(function(f){return f.is_business_key;})){
     mpmsg.textContent='「'+modeLabel(mpmode.value)+'」须至少选一个去重依据'; return;
   }
+  var snapshot={schema_version:1,
+    rule_id:mptpl.value?Number(mptpl.value):null,
+    rule_version_id:tplVersionId||null,
+    fields:fields.map(function(f){return {name:f.rule_field,type:'text'};})};
   var p=editLt
     ?api('PATCH','/api/load/tables/'+editLt.id,
-         {write_mode:mpmode.value,fields:fields})
+         {write_mode:mpmode.value,fields:fields,
+          rule_version_id:tplVersionId||null,snapshot:snapshot})
     :api('POST','/api/load/tables',
-         {datasource_id:curDs,rule_id:Number(mptpl.value),
-          target_table:mptable.value,write_mode:mpmode.value,fields:fields});
+         {datasource_id:curDs,rule_id:mptpl.value?Number(mptpl.value):null,
+          rule_version_id:tplVersionId||null,
+          target_table:mptable.value,write_mode:mpmode.value,
+          fields:fields,snapshot:snapshot});
   p.then(function(){
     closeDmap(); showOk('已保存入库映射（'+(editLt?editLt.target_table:mptable.value)+
       ' · '+modeLabel(mpmode.value)+'）。');

@@ -619,12 +619,18 @@ async def api_load_table_add(request: Request):
     body = await _json_body(request)
     try:
         ds_id = int(body.get('datasource_id'))
-        tpl_id = int(body.get('rule_id'))
     except (TypeError, ValueError):
-        raise store_errors.BadRequest('须选择业务库与抽取规则')
+        raise store_errors.BadRequest('须选择业务库')
+    rid, vid = body.get('rule_id'), body.get('rule_version_id')
+    try:
+        rule_id = int(rid) if rid not in (None, '') else None
+        rule_version_id = int(vid) if vid not in (None, '') else None
+    except (TypeError, ValueError):
+        raise store_errors.BadRequest('参考抽取规则 id 非法')
     lt_id = _load('store.catalog').create_load_table(
-        ds_id, tpl_id, body.get('target_table'),
-        body.get('write_mode') or 'upsert', body.get('fields'))
+        ds_id, rule_id, body.get('target_table'),
+        body.get('write_mode') or 'upsert', body.get('fields'),
+        rule_version_id=rule_version_id, snapshot=body.get('snapshot'))
     return {'ok': True, 'id': lt_id}
 
 
@@ -639,8 +645,14 @@ def api_load_table_get(lt_id: int):
 @app.patch('/api/load/tables/{lt_id}')
 async def api_load_table_patch(lt_id: int, request: Request):
     body = await _json_body(request)
+    vid = body.get('rule_version_id')
+    try:
+        rule_version_id = int(vid) if vid not in (None, '') else None
+    except (TypeError, ValueError):
+        raise store_errors.BadRequest('参考抽取规则版本 id 非法')
     _load('store.catalog').update_load_table(
-        lt_id, write_mode=body.get('write_mode'), fields=body.get('fields'))
+        lt_id, write_mode=body.get('write_mode'), fields=body.get('fields'),
+        rule_version_id=rule_version_id, snapshot=body.get('snapshot'))
     return {'ok': True}
 
 

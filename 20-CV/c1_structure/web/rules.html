@@ -16,7 +16,7 @@
   <a href="/sources">资料</a>
   <a href="/parse">解析</a>
   <a href="/extract">抽取</a>
-  <a href="/review">校验规则</a>
+  <a href="/review">校验</a>
   <a href="/rules" class="on">入库</a>
   <span class="spacer"></span>
   <span class="navnote">配置业务库与入库映射</span>
@@ -135,7 +135,7 @@
         <input type="text" class="tin" id="mpds" disabled>
       </div>
       <div class="fsec">
-        <label class="flab" for="mptpl">抽取规则（须为固定字段规则；原始透传不支持入库）</label>
+        <label class="flab" for="mptpl">参考抽取规则（可选，用于预填字段；保存后映射独立生效）</label>
         <select class="tin" id="mptpl"></select>
       </div>
       <div class="fsec">
@@ -155,6 +155,7 @@
         <label class="flab">字段对齐（规则字段 → 目标列）</label>
         <div class="sthint" id="mpmatch"></div>
         <div id="mprows"></div>
+        <button type="button" class="btn mini ghost" id="mpaddfield" style="margin-top:4px">＋ 添加字段</button>
         <div class="sthint">勾选「去重依据」的列用于判断记录是否已存在（如发票号）。系统按字段名自动对齐，无法匹配的需要手动选择。</div>
       </div>
       <div class="sthint" id="mplock" hidden>该映射已被资料引用，为保证历史回执一致，不再允许修改；如需调整请新建映射。</div>
