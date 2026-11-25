@@ -1,5 +1,5 @@
 /* web/extract.js — 抽取规则管理：列表＋编辑抽屉（结构化字段行
-   表单＋参考文件预览辅助选表选列）＋版本历史。 */
+   表单＋公共参考文件／参考业务表辅助选表选列与命名字段）＋版本历史。 */
 var items=[], cur=null, origName='', origDesc='', cands=null, pendingTable=null,
     page=1, size=getListPer();
 var rows=document.getElementById('rows');
@@ -8,7 +8,11 @@ var pg=bindPager(document.getElementById('pager'),
   function(n){ size=n; page=1; render(); });
 var edit=document.getElementById('edit');
 var ename=document.getElementById('ename'), edesc=document.getElementById('edesc');
-var refsel=document.getElementById('refsel'), refhint=document.getElementById('refhint');
+var refsel=document.getElementById('refsel');
+var bizds=document.getElementById('bizds'), biztable=document.getElementById('biztable');
+var bizopts=document.getElementById('bizfieldopts');
+var bizFieldOpts=null;   // 参考业务表的列名候选；null=未提供
+var filledBy=null;   // 最近一次自动填充来源：null / 'file' / 'biz'
 var tblsel=document.getElementById('tblsel'), tmanual=document.getElementById('tmanual');
 var tindex=document.getElementById('tindex'), tkw=document.getElementById('tkw');
 var frows=document.getElementById('frows'), emsg=document.getElementById('emsg');
@@ -49,7 +53,7 @@ function colSel(mode,raw){
 function tableRow(){
   return '<div class="tplrow">'+
     '<input class="tin tk_col" placeholder="原始列名 / 列序号">'+
-    '<input class="tin tk_name" placeholder="目标字段名">'+
+    '<input class="tin tk_name" placeholder="目标列名">'+
     '<select class="tin tk_type" title="字段类型">'+
       '<option value="text">文本</option><option value="amount">金额</option>'+
     '</select>'+
@@ -74,10 +78,10 @@ function bindTableEvents(){
 }
 function smartRow(name,desc){
   return '<div class="tplrow">'+
-    '<input class="tin sm_name" placeholder="目标字段名" value="'+
-      escHtml(name||'')+'">'+
     '<input class="tin sm_desc" placeholder="字段说明（给模型看的提示）" value="'+
       escHtml(desc||'')+'">'+
+    '<input class="tin sm_name" placeholder="目标列名" value="'+
+      escHtml(name||'')+'">'+
     '<button type="button" class="linkbtn danger sm_del" title="删除该行">×</button>'+
   '</div>';
 }
@@ -103,7 +107,7 @@ var TPL={
         '<label>列匹配方式<select class="tin" id="tk_mode">'+
         '<option value="contains">表头包含</option><option value="exact">表头原名</option>'+
         '<option value="index">列序号</option></select></label>'+
-        '<div class="full tplhead"><span>原始列名</span><span>目标字段名</span>'+
+        '<div class="full tplhead"><span>原始列名</span><span>目标列名</span>'+
         '<span>类型<span class="hint" tabindex="0" data-tip="金额：自动追加 regex 与 number，去逗号并转数值。&#10;文本：只取原格文本。">?</span></span><span></span></div>'+
         '<div class="full" id="tk_rows">'+tableRow()+tableRow()+'</div>'+
         '<button type="button" class="btn mini ghost" id="tk_add">＋添加字段</button>';
@@ -130,7 +134,7 @@ var TPL={
   },
   kv:{
     render:function(){
-      return '<label class="full">目标字段名<input class="tin" id="kv_target" value="信用代码"></label>'+
+      return '<label class="full">目标列名<input class="tin" id="kv_target" value="信用代码"></label>'+
         '<label class="full">标签文本<input class="tin" id="kv_label" value="统一社会信用代码"></label>'+
         '<label>匹配方式<select class="tin" id="kv_match">'+
         '<option value="contains">包含</option><option value="exact">完全相同</option>'+
@@ -154,7 +158,7 @@ var TPL={
   },
   page:{
     render:function(){
-      return '<label class="full"><span class="lblrow">输出字段名'+
+      return '<label class="full"><span class="lblrow">目标列名'+
         '<span class="hint" tabindex="0" data-tip="该页正文写入 records 的这个键。&#10;固定行为：取该页 plain_text 全文，每页产出一条记录；不支持选列或正则。">?</span></span>'+
         '<input class="tin" id="pg_target" value="正文"></label>';
     },
@@ -319,20 +323,22 @@ function addRow(target,col,fx){
   div.className='frow';
   div.innerHTML='<select class="tin fcol"></select>'+
     '<input type="number" class="tin fidx" min="0" placeholder="列序号" hidden>'+
-    '<input type="text" class="tin fname" placeholder="目标字段名" value="'+
+    '<input type="text" class="tin fname" placeholder="目标列名" value="'+
     escHtml(target||'')+'">'+
     '<select class="tin fxform" title="入库时应用的转换（暂存值保持不变）">'+
       '<option value="">无转换</option>'+
       '<option value="trim">trim</option>'+
       '<option value="trim,number">trim+number</option>'+
     '</select>'+
-    '<span class="fdest"></span>'+
+    '<span class="fdest">-</span>'+
     '<button type="button" class="btn mini danger fdel">删</button>';
   frows.appendChild(div);
   fillCol(div,col);
   div.querySelector('.fxform').value=fx||'';
   div.querySelector('.fcol').onchange=function(){syncIdx(div);};
-  div.querySelector('.fname').addEventListener('input',updateDestHints);
+  var fnameEl=div.querySelector('.fname');
+  if(bizFieldOpts) fnameEl.setAttribute('list','bizfieldopts');
+  fnameEl.addEventListener('input',updateDestHints);
   div.querySelector('.fdel').onclick=function(){div.remove();};
   updateDestHints();
 }
@@ -368,15 +374,18 @@ function updateDestHints(){
     var h=div.querySelector('.fdest');
     if(!h) return;
     var f=(div.querySelector('.fname').value||'').trim();
-    if(!f){ h.textContent=''; h.title=''; return; }
+    if(!f){
+      h.textContent='-'; h.title='填写目标列名后显示入库去向';
+      h.className='fdest'; return;
+    }
     if(!destHasRules){
-      h.textContent='—';
+      h.textContent='-';
       h.title='本规则尚未配置入库规则；在「入库」页配置后，这里会显示每个字段写入哪张表哪一列';
       h.className='fdest'; return;
     }
     var d=destMap[f]||[];
     if(!d.length){
-      h.textContent='未配去向'; h.title='该字段还没有出现在任何入库规则的目标列中';
+      h.textContent='-'; h.title='该目标列名还没有出现在任何入库规则的目标列中';
       h.className='fdest'; return;
     }
     var uniq=[], seen={};
@@ -390,26 +399,43 @@ function refreshCols(){
     fillCol(div,readCol(div));
   });
 }
-/* 选定参考表后：字段行为空（或仅剩未填过的预置空行）时自动按源列整表
-   填充（列名＝字段名＝源列，用户删掉不要的、改名即可）；
-   任一行已填过内容时不覆盖手工工作。 */
-function autofillRows(){
-  var keys=currentKeys();
-  if(!keys.length) return;
-  var dirty=Array.prototype.some.call(frows.children,function(div){
+function rowsHaveContent(){
+  return Array.prototype.some.call(frows.children,function(div){
     return (div.querySelector('.fname').value||'').trim()!=='' ||
       readCol(div)!==null ||
       div.querySelector('.fxform').value!=='';
   });
-  if(dirty) return;
+}
+/* 参考文件选表：按源列整表填充（源列＝目标列名）。
+   已有配置且从未由参考来源填充时不覆盖；若此前由参考业务表填充，
+   本次覆盖生效——即「后选的来源覆盖先选的来源」。 */
+function autofillRows(){
+  var keys=currentKeys();
+  if(!keys.length) return;
+  if(!filledBy&&rowsHaveContent()) return;
   frows.innerHTML='';
   keys.forEach(function(k){ addRow(k,{name:k}); });
+  filledBy='file';
 }
 document.getElementById('addfield').onclick=function(){addRow('',null);};
 
-/* ---- 参考文件 ---- */
+/* ---- 公共参考：参考文件（看候选表列）＋参考业务表（看物理列名） ---- */
+function applyBizFieldOpts(){
+  var opts=bizFieldOpts||[];
+  bizopts.innerHTML=opts.map(function(n){
+    return '<option value="'+escHtml(n)+'"></option>';
+  }).join('');
+  Array.prototype.forEach.call(frows.querySelectorAll('.fname'),function(inp){
+    if(opts.length) inp.setAttribute('list','bizfieldopts');
+    else inp.removeAttribute('list');
+  });
+}
 function loadRefs(){
   refsel.innerHTML='<option value="">不使用参考（手动填写源表）</option>';
+  bizds.innerHTML='<option value="">不使用（手动填写目标列名）</option>';
+  biztable.innerHTML='<option value="">—</option>';
+  biztable.hidden=true; biztable.disabled=true;
+  bizFieldOpts=null; applyBizFieldOpts();
   api('GET','/api/sources/state').then(function(j){
     (j.items||[]).forEach(function(f){
       if(['to_review','to_load','loading','loaded'].indexOf(f.state)<0) return;
@@ -419,21 +445,76 @@ function loadRefs(){
       refsel.appendChild(o);
     });
   }).catch(function(){
-    refhint.textContent='参考列表暂不可用（平台库未连接），可手动填写源表。';
+    emsg.textContent='参考文件列表暂不可用，可手动填写源表。';
+  });
+  api('GET','/api/load/datasources').then(function(j){
+    (j.items||[]).forEach(function(d){
+      var o=document.createElement('option');
+      o.value=String(d.id);
+      o.textContent=(d.name||'业务库')+' · '+(d.db_name||'');
+      bizds.appendChild(o);
+    });
+  }).catch(function(){
+    emsg.textContent='业务库列表暂不可用，可手动填写目标列名。';
   });
 }
+function loadBizTables(){
+  biztable.innerHTML='<option value="">—</option>';
+  bizFieldOpts=null; applyBizFieldOpts();
+  if(!bizds.value){biztable.hidden=true;biztable.disabled=true;return;}
+  api('GET','/api/load/datasources/'+encodeURIComponent(bizds.value)+'/tables')
+    .then(function(j){
+      var ts=j.items||[];
+      biztable.innerHTML='<option value="">—</option>'+ts.map(function(t){
+        return '<option value="'+escHtml(t)+'">'+escHtml(t)+'</option>';
+      }).join('');
+      biztable.hidden=false; biztable.disabled=!ts.length;
+    }).catch(function(e){
+      biztable.hidden=true; biztable.disabled=true;
+      emsg.textContent='业务库表加载失败：'+e.message;
+    });
+}
+/* 参考业务表选表：只填目标列名（物理列名），不改写源列。
+   源列来自文档解析结果，业务表无法推断；若先选了参考文件，
+   其已选源列会被保留，仅目标列名被覆盖。 */
+function fillFromBiz(cols){
+  if(mode!=='simple'||!cols.length) return false;
+  if(!filledBy&&rowsHaveContent()) return false;
+  var names=cols.map(function(c){return c.name;});
+  while(frows.children.length<names.length) addRow('',null);
+  while(frows.children.length>names.length) frows.lastElementChild.remove();
+  Array.prototype.forEach.call(frows.children,function(div,i){
+    div.querySelector('.fname').value=names[i]||'';
+  });
+  updateDestHints();
+  filledBy='biz';
+  return true;
+}
+function loadBizColumns(){
+  bizFieldOpts=null; applyBizFieldOpts();
+  if(!biztable.value) return;
+  api('GET','/api/load/datasources/'+encodeURIComponent(bizds.value)+
+      '/columns?table='+encodeURIComponent(biztable.value))
+    .then(function(j){
+      var cs=j.items||[];
+      fillFromBiz(cs);
+      bizFieldOpts=cs.map(function(c){return c.name;});
+      applyBizFieldOpts();
+    }).catch(function(e){emsg.textContent='列加载失败：'+e.message;});
+}
+bizds.onchange=loadBizTables;
+biztable.onchange=loadBizColumns;
 function manualMode(hint){
   cands=null; tblsel.disabled=true;
   tblsel.innerHTML='<option value="">—</option>';
   tmanual.hidden=false;
-  refhint.textContent=hint||'';
+  emsg.textContent=hint||'';
   refreshCols();
 }
 refsel.onchange=function(){
   var v=refsel.value;
   if(!v){manualMode();return;}
   var p=v.split(':');
-  refhint.textContent='正在加载参考…';
   api('GET','/api/sources/'+p[0]+'/parse').then(function(doc){
     cands=candidates(doc);
     if(!cands.length){manualMode('该文件未解析出表格，请手动填写源表。');return;}
@@ -445,7 +526,6 @@ refsel.onchange=function(){
     tblsel.disabled=false; tmanual.hidden=true;
     var want=(pendingTable&&typeof pendingTable.index==='number')?pendingTable.index:0;
     tblsel.value=String(want>=0&&want<cands.length?want:0);
-    refhint.textContent='共 '+cands.length+' 张候选表。';
     autofillRows(); refreshCols();
   }).catch(function(e){
     manualMode('参考加载失败：'+e.message+'，可手动填写源表。');
@@ -492,7 +572,7 @@ document.getElementById('verlist').addEventListener('click',function(e){
 });
 
 function openEditor(id){
-  cur=id; cands=null; pendingTable=null;
+  cur=id; cands=null; pendingTable=null; filledBy=null;
   emsg.textContent=''; frows.innerHTML='';
   setMode('simple'); jsonspec.value='';
   smartRows.innerHTML=smartRow('',''); bindSmartEvents();
@@ -568,8 +648,8 @@ savebtn.onclick=function(){
     for(var si=0;si<srows.length;si++){
       var sn=srows[si].querySelector('.sm_name').value.trim();
       var sd=srows[si].querySelector('.sm_desc').value.trim();
-      if(!sn){serr='目标字段名不能为空';break;}
-      if(sseen[sn]){serr='字段名重复：'+sn;break;}
+      if(!sn){serr='目标列名不能为空';break;}
+      if(sseen[sn]){serr='目标列名重复：'+sn;break;}
       sseen[sn]=1; sfields.push({target:sn,description:sd});
     }
     if(serr){emsg.textContent=serr;return;}
@@ -604,8 +684,8 @@ savebtn.onclick=function(){
     Array.prototype.forEach.call(frows.children,function(div){
       if(err) return;
       var t=div.querySelector('.fname').value.trim();
-      if(!t){err='目标字段名不能为空';return;}
-      if(seen[t]){err='字段名重复：'+t;return;}
+      if(!t){err='目标列名不能为空';return;}
+      if(seen[t]){err='目标列名重复：'+t;return;}
       seen[t]=1;
       var col=readCol(div);
       if(!col){err='字段「'+t+'」未选源列';return;}

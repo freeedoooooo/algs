@@ -20,8 +20,30 @@ UNCLIP_DEFAULT = 1.5
 LIMIT_SIDE_DEFAULT = 64
 LIMIT_TYPE_DEFAULT = 'min'
 
+# ---- 识别模型档位（仅快照标签，不切换引擎）----
+# 引擎实际模型名仍由 config.DET_MODEL / config.REC_MODEL 决定（pipeline/engines.py）。
+# 这里给上传页一个可选档位，值只进参数快照与报告表头，便于追溯"本次按什么模型配置解析"。
+MODEL_OPTIONS = ['PP-OCRv4-mobile', 'PP-OCRv4-server',
+                 'PP-OCRv5-mobile', 'PP-OCRv5-server']
+
+
+def _default_model_tier():
+    """从当前服务配置推导默认档位，保证"默认=现在配置的模型"。"""
+    det = (config.DET_MODEL or '').lower()
+    ver = 'v5' if 'v5' in det else 'v4'
+    size = 'server' if 'server' in det else 'mobile'
+    tier = 'PP-{}-{}'.format(ver, size)
+    return tier if tier in MODEL_OPTIONS else MODEL_OPTIONS[0]
+
+
 # ---- 参数 schema：order 即页面优先级顺序 ----
 SCHEMA = [
+    dict(key='model', label='识别模型', type='select',
+         default=_default_model_tier(), options=MODEL_OPTIONS,
+         order=0, group='⓪ 模型',
+         help='记录本次使用的识别模型档位到报告参数快照，便于追溯。\n'
+              '默认档位跟随服务当前配置（PP-OCRv4-mobile）。\n'
+              '注意：实际识别引擎使用服务配置的模型，切换档位不会改变引擎行为。'),
     dict(key='page', label='PDF 页码', type='str', default='',
          order=1, group='① 页面范围',
          help='留空（默认）：解析全部页，多页 PDF 自动启用分页与跨页合并。\n'

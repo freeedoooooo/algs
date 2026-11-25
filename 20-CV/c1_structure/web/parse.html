@@ -28,10 +28,6 @@
     </div>
     <input type="file" id="picker"
       accept=".png,.jpg,.jpeg,.bmp,.webp,.tif,.tiff,.pdf,.csv,.txt,.md">
-    <div class="srcrow">
-      <button type="button" class="ghost mini" id="fromsrc">从资料库选择 ▸</button>
-      <span class="hint" tabindex="0" data-tip="从资料库已登记的文件中直接选择并发起解析，&#10;无需重复上传。">?</span>
-    </div>
     <ul class="files" id="filelist"></ul>
     <div class="filebar" id="filebar" hidden>
       <span id="filecount"></span>
@@ -41,7 +37,7 @@
       <span class="hint" tabindex="0" data-tip="首次加载模型约需 20~40 秒，后续任务复用模型，速度更快。">?</span>
       <span id="msg"></span>
     </div>
-    <details class="params" id="parampanel">
+    <details class="params" id="parampanel" open>
       <summary class="params-head">
         <span class="params-title">参数</span>
         <span class="pbadge" id="parambadge">默认</span>
@@ -76,37 +72,21 @@
       </div>
     </div>
     <div class="histbar" id="histbar" hidden>
-      <label for="histsel">历史报告</label>
+      <label for="histsel">资料选择</label>
       <select id="histsel"></select>
+    </div>
+    <div class="unparsed" id="unparsed" hidden>
+      <div class="up-inner">
+        <b>该资料尚未解析</b>
+        <span id="upDesc">此资料已登记，但还没有对照报告。点击下方按钮发起解析，完成后自动生成报告。</span>
+        <button type="button" id="upParse">解析此资料</button>
+        <span class="upmsg" id="upMsg"></span>
+      </div>
     </div>
     <div class="filetabs" id="filetabs" hidden></div>
     <iframe id="reportFrame" class="reportframe" hidden title="对照报告"></iframe>
     <button type="button" class="logbtn" id="logbtn" hidden>查看日志</button>
   </main>
-</div>
-<div class="drawer" id="srcdrawer" hidden>
-  <div class="dpanel">
-    <div class="dhead">
-      <h2>从资料库选择</h2>
-      <span class="spacer"></span>
-      <button type="button" class="dclose" id="srcclose">关闭 (Esc)</button>
-    </div>
-    <div class="dbody">
-      <div class="toolbar" style="margin-bottom:10px">
-        <input type="search" id="srcq" placeholder="搜索文件名…">
-      </div>
-      <div class="banner warn" id="srcdegraded" hidden>
-        平台库未连接，资料库暂不可用。可直接在左侧上传文件，系统会自动登记留档。
-      </div>
-      <ul class="srclist" id="srclist"></ul>
-      <div class="empty" id="srcempty" hidden><b>资料库暂无文件</b>可在左侧上传文件，或到「资料」页登记。</div>
-    </div>
-    <div class="dfoot">
-      <span id="srccount">已选 0 个</span>
-      <span class="spacer" style="flex:1"></span>
-      <button type="button" class="btn" id="srcgo" disabled>解析所选文件</button>
-    </div>
-  </div>
 </div>
 <div class="lightbox" id="lightbox" hidden>
   <div class="lbtop">

@@ -153,8 +153,12 @@ function renderTodo(v){
       t:t.created_at});
   });
   v.busy.forEach(function(t){
-    rows.push({id:t.id,name:t.name,what:'① 解析中…',
-      act:'<a class="linkbtn" href="/parse">查看进度</a>',t:t.created_at});
+    var pending=(t.state==='pending');
+    rows.push({id:t.id,name:t.name,what:(pending?'① 待解析':'① 解析中…'),
+      act:pending
+        ? '<a class="linkbtn" href="/parse?from_source='+t.id+'">前往解析</a>'
+        : '<a class="linkbtn" href="/parse">查看进度</a>',
+      t:t.created_at});
   });
   v.failed.forEach(function(t){
     rows.push({id:t.id,name:t.name,what:'① 解析失败',

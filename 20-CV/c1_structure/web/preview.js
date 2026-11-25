@@ -37,7 +37,7 @@ function readOnly(){
   return !!(fileDoc&&['loading','loaded'].indexOf(fileDoc.state)>=0);
 }
 function recState(r){ return (r.review||{}).state||'pending'; }
-/* 记录级徽标：pending 是「待校验」（与筛选 chips 一致），区别于任务级「待处理」 */
+/* 记录级徽标：pending 是「待校验」（与筛选 chips 一致），区别于资料级「待解析」 */
 function recBadge(st){
   var m={pending:['待校验','gray'],edited:['已修改','yellow'],
          confirmed:['已确认','green'],rejected:['已拒绝','red']};

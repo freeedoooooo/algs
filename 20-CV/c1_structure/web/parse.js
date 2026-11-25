@@ -38,17 +38,29 @@ function fieldHtml(p){
     '<span class="hint" tabindex="0" data-tip="'+escHtml(p.help)+'">?</span>'+
     '</span></div>';
 }
+var BASIC_KEYS=['model','page'];   /* 基础配置：默认展开；其余归高级配置（可收起） */
 function renderParams(schema){
   paramSchema=schema;
-  var groups={},order=[];
+  var groups={},order=[],basic=[];
   schema.forEach(function(p){
+    if(BASIC_KEYS.indexOf(p.key)>=0){ basic.push(p); return; }
     if(!groups[p.group]){groups[p.group]=[];order.push(p.group);}
     groups[p.group].push(p);
   });
-  paramgroups.innerHTML=order.map(function(g){
-    return '<div class="pgroup"><h4>'+g+'</h4>'+
-      groups[g].map(fieldHtml).join('')+'</div>';
-  }).join('');
+  var basicHtml='<div class="pgroup basic"><h4>基础配置</h4>'+
+    basic.map(fieldHtml).join('')+'</div>';
+  var advHtml='<details class="advanced" id="advancedParams">'+
+    '<summary class="advanced-head"><span>高级配置</span>'+
+    '<span class="hint" tabindex="0" onclick="event.preventDefault()" '+
+    'data-tip="展开可调整表格识别、文字识别、渲染精度等细节参数；&#10;'+
+    '通常保持默认即可，修改仅对本次解析生效。">?</span></summary>'+
+    '<div class="advanced-body">'+
+    order.map(function(g){
+      return '<div class="pgroup"><h4>'+escHtml(g)+'</h4>'+
+        groups[g].map(fieldHtml).join('')+'</div>';
+    }).join('')+
+    '</div></details>';
+  paramgroups.innerHTML=basicHtml+advHtml;
   var saved=loadSaved();
   schema.forEach(function(p){
     var el=document.getElementById('pf_'+p.key);
@@ -218,6 +230,7 @@ pickbar.addEventListener('click',function(e){
     var el=document.getElementById('pf_column_lines');
     if(el&&pickVals.length){
       document.getElementById('parampanel').open=true;
+      var adv=document.getElementById('advancedParams'); if(adv) adv.open=true;
       el.value=pickVals.join(',');
       el.dispatchEvent(new Event('input',{bubbles:true}));
       el.scrollIntoView({block:'nearest',behavior:'smooth'});
@@ -284,6 +297,7 @@ function poll(){
 }
 var reportFrame=document.getElementById('reportFrame'),
     reportempty=document.getElementById('reportempty'),
+    unparsed=document.getElementById('unparsed'),
     runpanel=document.getElementById('runpanel'),
     logbtn=document.getElementById('logbtn'),
     logclose=document.getElementById('logclose'),
@@ -298,16 +312,19 @@ function showStgLink(fileId){
   stglink.href='/preview?file='+fileId;
   stglink.hidden=false;
 }
-/* 右侧报告区三态：idle 占位 / 任务进度 / done 报告（+「查看日志」浮钮） */
+/* 右侧报告区四态：idle 占位 / 任务进度 / done 报告 / unparsed 未解析提示
+   （资料选择条在 done 与 unparsed 两态都显示，方便随时切换资料） */
 function rightState(st){
   reportempty.hidden=(st!=='idle');
+  unparsed.hidden=(st!=='unparsed');
   runpanel.hidden=(st!=='run');
   runpanel.classList.remove('drawer');
   logclose.hidden=true;
   reportFrame.hidden=(st!=='done');
   logbtn.hidden=(st!=='done');
-  histbar.hidden=(st!=='done');
-  reportcol.classList.toggle('has-hist',st==='done');
+  var showHist=(st==='done'||st==='unparsed');
+  histbar.hidden=!showHist;
+  reportcol.classList.toggle('has-hist',showHist);
   if(st!=='done'){ filetabs.hidden=true; reportcol.classList.remove('hastabs'); }
 }
 /* 单文件报告：直接落该资料命名空间，无文件页签 */
@@ -331,37 +348,74 @@ logclose.onclick=function(){
   logclose.hidden=true;
 };
 
-/* ---- 历史报告：最新有产物的资料，下拉切换 ---- */
-var histItems=[];
+/* ---- 资料选择：列出全部资料；已解析→报告，未解析→提示并提供解析按钮 ---- */
+var histItems=[], curHist=null;
+var PARSED_STATES=['to_extract','to_review','to_load','loading','loaded'];
+function isParsed(f){ return PARSED_STATES.indexOf(f.state)>=0; }
 function histLabel(f){
-  return '#'+f.id+' · '+shortName(f.name)+' · '+fmtTime(f.created_at);
+  return '#'+f.id+' · '+shortName(f.name)+' · '+fmtTime(f.created_at)+
+    (isParsed(f)?'':'（未解析）');
 }
-function showTaskReport(f){
-  showResult([{file:f.name,file_id:f.id}]);
+function showHistItem(f){
+  curHist=f;
+  if(isParsed(f)){
+    showResult([{file:f.name,file_id:f.id}]);
+  }else{
+    rightState('unparsed');
+    document.getElementById('upDesc').textContent=
+      '「'+f.name+'」尚未解析，暂无对照报告。点击下方按钮发起解析，完成后自动生成报告。';
+    var b=document.getElementById('upParse');
+    b.disabled=false; b.textContent='解析此资料';
+    document.getElementById('upMsg').textContent='';
+  }
 }
 function loadHistory(selectId,skipRender){
   fetch('/api/sources/state').then(function(r){return r.ok?r.json():null;}).then(function(j){
-    histItems=((j&&j.items)||[]).filter(function(f){
-      return ['to_extract','to_review','to_load','loading','loaded']
-        .indexOf(f.state)>=0;});
+    histItems=(j&&j.items)||[];
     histsel.innerHTML=histItems.map(function(f){
       return '<option value="'+f.id+'">'+escHtml(histLabel(f))+'</option>';
     }).join('');
-    if(!histItems.length) return;
+    if(!histItems.length){ if(!skipRender) rightState('idle'); return; }
     var pick=null;
     for(var i=0;i<histItems.length;i++){
       if(String(histItems[i].id)===String(selectId)){pick=histItems[i];break;}
     }
     pick=pick||histItems[0];
     histsel.value=String(pick.id);
-    if(!skipRender) showTaskReport(pick);
+    if(!skipRender) showHistItem(pick);
   }).catch(function(){});
 }
 histsel.addEventListener('change',function(){
   for(var i=0;i<histItems.length;i++){
-    if(String(histItems[i].id)===histsel.value){ showTaskReport(histItems[i]); return; }
+    if(String(histItems[i].id)===histsel.value){ showHistItem(histItems[i]); return; }
   }
 });
+/* 未解析资料的「解析此资料」按钮：复用 /api/sources/{id}/parse */
+document.getElementById('upParse').onclick=async function(){
+  if(!curHist) return;
+  var b=this, upMsg=document.getElementById('upMsg');
+  b.disabled=true; b.textContent='解析中…'; upMsg.textContent='正在发起解析…';
+  try{
+    saveParams(collectParams());
+    var res=await fetch('/api/sources/'+curHist.id+'/parse',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({params:collectParams()})
+    });
+    var j=await res.json();
+    if(!j.ok) throw new Error(j.error||'发起失败');
+    stglink.hidden=true;
+    rightState('run');
+    log.innerHTML='';
+    document.getElementById('runfill').style.width='0%';
+    document.getElementById('runpct').textContent='0%';
+    document.getElementById('runstage').textContent='准备中…';
+    msg.textContent='处理中…';
+    poll();
+  }catch(e){
+    upMsg.textContent='发起失败：'+e.message;
+    b.disabled=false; b.textContent='解析此资料';
+  }
+};
 
 go.onclick=async function(){
   go.disabled=true;msg.textContent='正在读取文件…';
@@ -396,6 +450,8 @@ go.onclick=async function(){
   }
 };
 
+/* 资料页「解析」跳转：/parse?from_source=<id> → 右侧资料选择里预选该资料 */
+var fromSrc=new URLSearchParams(location.search).get('from_source');
 fetch('/api/status').then(function(r){return r.json();}).then(function(s){
   if(s.running){ rightState('run'); say(s.logs,s.steps); progress(s); poll(); }
   else if(s.ready){
@@ -403,101 +459,8 @@ fetch('/api/status').then(function(r){return r.json();}).then(function(s){
     say(s.logs,s.steps); progress(s); showStgLink(s.file_id); showResult(s.cases);
     loadHistory(s.file_id,true);
   }
-  else loadHistory();
+  else loadHistory(fromSrc||undefined);
 });
-
-/* ---- 从资料库选择：抽屉多选已登记文件 → POST /api/sources（不再收 base64） ---- */var srcdrawer=document.getElementById('srcdrawer'),
-    srclist=document.getElementById('srclist'),
-    srcgo=document.getElementById('srcgo'),
-    srcSel={}, srcQ='', srcTimer=null;
-function srcCount(){
-  var n=Object.keys(srcSel).filter(function(k){return srcSel[k];}).length;
-  document.getElementById('srccount').textContent='已选 '+n+' 个';
-  srcgo.disabled=n===0;
-}
-function renderSrcList(items,preId){
-  srclist.innerHTML=items.map(function(r){
-    var url='/srcfiles/'+r.id;
-    var checked=srcSel[r.id]||(preId&&r.id===preId);
-    if(checked) srcSel[r.id]=true;
-    return '<li><label><input type="checkbox" data-id="'+r.id+'"'+
-      (checked?' checked':'')+'>'+thumbHtml(r.name,url)+
-      '<span class="nm" title="'+escHtml(r.name)+'">'+escHtml(r.name)+'</span>'+
-      '<span class="sz">'+fmtSize(r.size_bytes)+'</span></label></li>';
-  }).join('');
-  document.getElementById('srcempty').hidden=items.length>0;
-  srcCount();
-}
-function loadSrcList(preId){
-  fetch('/api/sources?page=1&q='+encodeURIComponent(srcQ)).then(function(r){
-    if(r.status===503){
-      document.getElementById('srcdegraded').hidden=false;
-      renderSrcList([]); return null;
-    }
-    document.getElementById('srcdegraded').hidden=true;
-    return r.json();
-  }).then(function(j){
-    if(j) renderSrcList(j.items||[],preId);
-  }).catch(function(){
-    document.getElementById('srcdegraded').hidden=false; renderSrcList([]);
-  });
-}
-function openSrcDrawer(preId){
-  srcdrawer.hidden=false;
-  loadSrcList(preId);
-}
-function closeSrcDrawer(){ srcdrawer.hidden=true; }
-document.getElementById('fromsrc').onclick=function(){ openSrcDrawer(); };
-document.getElementById('srcclose').onclick=closeSrcDrawer;
-srcdrawer.addEventListener('click',function(e){ if(e.target===srcdrawer) closeSrcDrawer(); });
-document.addEventListener('keydown',function(e){
-  if(!srcdrawer.hidden&&e.key==='Escape') closeSrcDrawer();
-});
-document.getElementById('srcq').addEventListener('input',function(){
-  var v=this.value.trim();
-  clearTimeout(srcTimer);
-  srcTimer=setTimeout(function(){ srcQ=v; loadSrcList(); },300);
-});
-srclist.addEventListener('change',function(e){
-  var c=e.target.closest?e.target.closest('input[data-id]'):null;
-  if(!c) return;
-  srcSel[c.getAttribute('data-id')]=c.checked;
-  srcCount();
-});
-srclist.addEventListener('click',function(e){
-  var t=e.target.closest?e.target.closest('img.thumb'):null;
-  if(t){ e.preventDefault(); openLb(t.getAttribute('data-full')); }
-});
-srcgo.onclick=async function(){
-  var ids=Object.keys(srcSel).filter(function(k){return srcSel[k];}).map(Number);
-  if(!ids.length) return;
-  srcgo.disabled=true;
-  try{
-    saveParams(collectParams());
-    var res=await fetch('/api/sources/'+ids[0]+'/parse',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({params:collectParams()})
-    });
-    var j=await res.json();
-    if(!j.ok) throw new Error(j.error||'发起失败');
-    closeSrcDrawer();
-    stglink.hidden=true;
-    rightState('run');
-    log.innerHTML='';
-    document.getElementById('runfill').style.width='0%';
-    document.getElementById('runpct').textContent='0%';
-    document.getElementById('runstage').textContent='准备中…';
-    msg.textContent='处理中…';
-    poll();
-  }catch(e){
-    msg.innerHTML='<span class="err">'+escHtml(e.message)+'</span>';
-    srcgo.disabled=false;
-  }
-};
-/* 资料页「解析」跳转：/parse?from_source=<id> → 打开抽屉并预选 */
-var fromSrc=new URLSearchParams(location.search).get('from_source');
-if(fromSrc) openSrcDrawer(+fromSrc);
 
 /* ---- 左栏宽度拖拽：gutter 拖动改 .console 宽，存 localStorage，双击复位 ----
    拖拽时把 iframe pointer-events 关掉，否则鼠标移进报告区事件被 iframe 吞掉。 */
