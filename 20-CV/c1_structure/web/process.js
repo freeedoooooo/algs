@@ -425,24 +425,27 @@ function pfActionHtml(){
 }
 function pfRenderResult(){
   var p=pfData||{}, box=document.getElementById('procResult');
-  var right='', body='';
+  var openLink='', tools='', body='';
   if(pfNode==='parse'){
     var has=(p.parse_artifacts||[]).indexOf('对照报告.html')>=0;
+    if(has) openLink='<a class="proc-open" target="_blank" rel="noopener" href="'+
+      '/files/'+pfId+'/'+encodeURIComponent('对照报告.html')+
+      '">打开对照报告 →</a>';
     body=has
       ? '<iframe id="pfReport" class="proc-report" src="/files/'+pfId+'/'+
         encodeURIComponent('对照报告.html')+'" loading="lazy" title="对照报告"></iframe>'
       : '<div class="empty">暂无对照报告</div>';
   }else if(pfNode==='extract'||pfNode==='review'){
-    right='<a class="linkbtn" target="_blank" rel="noopener" href="'+
+    openLink='<a class="proc-open" target="_blank" rel="noopener" href="'+
       pfPreviewUrl()+'">'+(pfNode==='review'?'打开校验视图':'打开数据预览')+' →</a>';
     body=pfRecordsHtml();
   }else{
     var l=p.load||{}, acts=p.load_actions||{};
     if(l.target_table){
-      right='<a class="linkbtn" target="_blank" rel="noopener" href="/dashboard?ds='+
+      openLink='<a class="proc-open" target="_blank" rel="noopener" href="/dashboard?ds='+
         encodeURIComponent(l.datasource_id||'')+'&table='+encodeURIComponent(l.target_table)+
-        '&file='+pfId+'">打开数据看板 →</a>'+
-        '<button type="button" class="btn mini" id="pfPreflight">预检</button>'+
+        '&file='+pfId+'">打开数据看板 →</a>';
+      tools='<button type="button" class="btn mini" id="pfPreflight">预检</button>'+
         '<button type="button" class="btn mini" id="pfReceipt">回执</button>';
       body='<div class="proc-kv"><span><b>目标表</b>'+escHtml(l.target_table)+'</span>'+
         '<span><b>写入</b>'+escHtml(l.write_mode||'—')+'</span>'+
@@ -458,8 +461,8 @@ function pfRenderResult(){
     }
   }
   box.innerHTML='<div class="proc-bar"><div class="proc-bar-l">'+
-    '<b>产物</b>'+pfTip(PF_RES_TIP[pfNode])+'</div><div class="proc-bar-r">'+
-    right+pfActionHtml()+'</div></div><div class="proc-result-body">'+
+    '<b>产物</b>'+pfTip(PF_RES_TIP[pfNode])+openLink+'</div><div class="proc-bar-r">'+
+    tools+pfActionHtml()+'</div></div><div class="proc-result-body">'+
     '<div class="msg" id="pfActMsg"></div>'+body+'</div>';
   if(pfNode==='parse'){
     var fr=document.getElementById('pfReport');

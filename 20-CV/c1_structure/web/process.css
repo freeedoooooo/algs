@@ -16,6 +16,10 @@
 .proc-bar-r{display:flex;align-items:center;gap:6px;flex:none}
 .proc-bar-r .btn,.proc-bar-r .linkbtn{font-size:12px}
 .proc-bar .msg{font-size:12px}
+.proc-open{display:inline-flex;align-items:center;font-size:12px;line-height:18px;
+  padding:1px 9px;margin-left:2px;border-radius:10px;text-decoration:none;
+  background:#eef4ff;border:1px solid #dbe7ff;color:#2563eb}
+.proc-open:hover{background:#dbe8ff;border-color:#b9d3ff;color:#1d4ed8}
 .proc-bar .hint{width:15px;height:15px;font-size:10px}
 .proc-toggle{position:absolute;left:50%;transform:translateX(-50%);
   border:0;background:transparent;cursor:pointer;color:#64748b;
