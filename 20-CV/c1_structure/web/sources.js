@@ -1,5 +1,5 @@
 /* web/sources.js — 资料清单（唯一功能入口）：列表/筛选/分页 + 上传登记 +
-   处理/下载/删除。处理入口跳转到独立页 /static/process.html?file=<id>。
+   处理/删除；文件名即下载原件。处理入口跳转 /static/process.html?file=<id>。
    模型：一条资料 = 一次运行（file_id 为键）。 */
 var page=1, total=0, q='', kind='', fstate='', size=getListPer(), qTimer=null;
 var itemsCache=[];
@@ -22,9 +22,8 @@ function render(items){
       '<td class="seq">'+((page-1)*size+i+1)+'</td>'+
       '<td class="mono">'+r.id+'</td>'+
       '<td><div class="namecell">'+thumbHtml(r.name,srcUrl(r))+
-        '<a class="nm pipe-link" href="/static/process.html?file='+r.id+
-        '" data-name="'+escHtml(r.name)+'" title="打开资料处理页">'+
-        escHtml(r.name)+'</a></div></td>'+
+        '<a class="nm pipe-link" href="'+srcUrl(r)+'?download=1"'+
+        ' title="下载原件">'+escHtml(r.name)+'</a></div></td>'+
       '<td>'+(KIND_LABEL[r.kind]||escHtml(r.kind))+'</td>'+
       '<td class="num">'+fmtSize(r.size_bytes)+'</td>'+
       '<td>'+st+'</td>'+
@@ -33,7 +32,6 @@ function render(items){
       '<td class="col-act" style="white-space:nowrap">'+
         '<a class="linkbtn" href="/static/process.html?file='+r.id+
         '" title="配置并重新执行解析/抽取/校验/入库">处理</a>'+
-        '<a class="linkbtn" href="'+srcUrl(r)+'?download=1">下载</a>'+
         '<button type="button" class="linkbtn danger" data-del="'+r.id+
         '" data-name="'+escHtml(r.name)+'">删除</button>'+
       '</td></tr>';

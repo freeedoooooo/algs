@@ -22,7 +22,7 @@ button{font:inherit;cursor:pointer}
 .topnav .navnote{font-size:11px;color:#5c6a82;white-space:nowrap}
 
 /* ---- 列表页主体 ---- */
-.pagebody{max-width:1180px;margin:0 auto;padding:14px 18px 28px}
+.pagebody{max-width:none;margin:0;padding:12px 16px 24px}
 .pagehead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
 .pagehead h1{font-size:16px;font-weight:600;margin:0;color:#25324a}
 .pagehead .spacer{flex:1}

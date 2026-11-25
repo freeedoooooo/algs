@@ -29,6 +29,9 @@ select.tin{width:auto;min-width:220px;max-width:100%}
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;box-sizing:border-box;
   padding:5px 9px;background:#f3f5f9;border:1px solid #cbd5e1;border-radius:6px}
 .frow .fdest.has{color:#177245;background:#fff;border-color:#e2e8f0}
+/* 表头与数据格共用 .fdest：表头必须跟随 .fhead 统一风格，不做禁用框外观 */
+.frow.fhead .fdest{background:none;border:0;padding:0;color:#64748b;
+  font-size:12px;font-weight:600;line-height:inherit}
 #addfield{margin-top:2px}
 .vrow{display:flex;align-items:center;gap:10px;padding:5px 0;font-size:13px;
   border-bottom:1px solid #eef2f8}

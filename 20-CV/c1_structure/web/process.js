@@ -1,10 +1,23 @@
-/* web/process.js — 资料处理独立页：四节点 + 当前节点配置 / 结果 / 显式执行
-   数据源：/api/sources/{id}/pipeline + /config（只读拉取）；写操作仍走原 API。
-   红线：保存配置只写配置，不自动重跑；执行动作必须用户显式点击。 */
-var pfId=null, pfName='', pfNode='parse', pfData=null, pfCfg=null, pfPending={};
-var pfPreResult=null, pfPreError='';
+/* web/process.js — 资料处理独立页：左侧纵向四节点，右侧「配置细条 + 产物」
+   红线：保存配置只写配置，不自动重跑；执行动作必须显式点击并二次确认。 */
+var pfId=null, pfName='', pfNode='parse', pfData=null, pfCfg=null, pfRecords=[];
+var pfPending={}, pfCfgOpen=false, pfPreResult=null, pfPreError='', pfRuleDetail=null, pfRows=null;
 var PF_NODES=[['parse','解析'],['extract','抽取'],['review','校验'],['load','入库']];
 var PF_TITLE={parse:'解析参数',extract:'抽取规则',review:'校验规则',load:'入库映射'};
+var PF_PRODUCT={parse:'解析报告',extract:'数据记录',review:'校验记录',load:'入库表'};
+var PF_CFG_TIP={
+  parse:'仅对本次资料的解析生效；保存后需显式点击「执行解析」才重放。',
+  extract:'执行抽取时按此规则生成暂存记录；保存配置不会重抽已有记录。',
+  review:'当前校验为逐条人工改值 / 确认 / 拒绝，暂无可调参数；自动化校验规则待实现。',
+  load:'入库映射在执行入库时消费，须与抽取规则匹配；保存配置不会执行入库。'
+};
+var PF_RES_TIP={
+  parse:'页面图与结构化结果逐项对照。',
+  extract:'暂存记录内联展示；编辑与确认请打开数据预览。',
+  review:'优先展示待审记录；校验与抽取共用同一份暂存记录。',
+  load:'预检只读；已有回执的记录在重新入库时自动跳过。'
+};
+var PF_STATE={pending:'待校验',edited:'已修改',confirmed:'已确认',rejected:'已拒绝'};
 
 function pfApi(method,path,body){
   return fetch(path,{method:method,
@@ -12,11 +25,13 @@ function pfApi(method,path,body){
     body:body===undefined?undefined:JSON.stringify(body)})
     .then(function(r){return r.json().then(function(j){return {s:r.status,j:j};});});
 }
-function pfMsg(t,bad){
+function pfCfgMsg(t,bad){
   var e=document.getElementById('pfCfgMsg');
   if(!e) return;
   e.textContent=t||''; e.className='msg'+(bad?' err':'');
 }
+function pfTip(t){ return '<span class="hint" tabindex="0" data-tip="'+
+  escHtml(t||'')+'">?</span>'; }
 function pfNodeState(st,key){
   st=String(st||'');
   if(st==='failed') return 'fail';
@@ -54,11 +69,12 @@ function pfInit(){
   pfLoad();
 }
 function pfLoad(){
-  pfPreResult=null; pfPreError='';
+  pfPreResult=null; pfPreError=''; pfCfgOpen=false; pfRows=null;
   document.getElementById('procBody').innerHTML='<div class="empty">加载中…</div>';
   Promise.all([
     pfApi('GET','/api/sources/'+pfId+'/pipeline'),
-    pfApi('GET','/api/sources/'+pfId+'/config')
+    pfApi('GET','/api/sources/'+pfId+'/config'),
+    pfApi('GET','/api/sources/'+pfId+'/staging')
   ]).then(function(rs){
     if(!(rs[0].s===200&&rs[0].j&&rs[0].j.ok))
       throw new Error((rs[0].j&&rs[0].j.error)||('HTTP '+rs[0].s));
@@ -67,12 +83,16 @@ function pfLoad(){
     pfData=rs[0].j.pipeline||{};
     pfName=(rs[0].j.file&&rs[0].j.file.name)||('资料 '+pfId);
     pfCfg=rs[1].j;
+    var doc=rs[2].s===200?rs[2].j:{};
+    pfRecords=((doc&&doc.files||[])[0]||{}).records||[];
     document.getElementById('procBody').innerHTML=
-      '<div class="proc-wrap">'+
-        '<div class="pipe-flow proc-flow" id="procFlow"></div>'+
-        '<div class="proc-sec" id="procConfig"></div>'+
-        '<div class="proc-sec proc-result" id="procResult"></div>'+
-        '<div class="proc-actions" id="procActions"></div>'+
+      '<div class="proc-layout">'+
+        '<aside class="proc-side"><div class="proc-side-t">处理流程</div>'+
+          '<div class="proc-flow-v" id="procFlow"></div></aside>'+
+        '<main class="proc-main">'+
+          '<div class="proc-sec" id="procConfig"></div>'+
+          '<div class="proc-sec" id="procResult"></div>'+
+        '</main>'+
       '</div>';
     pfRender();
   }).catch(function(e){
@@ -104,11 +124,11 @@ function pfRender(){
   };
   pfRenderConfig();
   pfRenderResult();
-  pfRenderActions();
+  pfBindAction();
 }
 function pfCollect(){
   if(!pfCfg) return;
-  if(pfNode==='params'){
+  if(pfNode==='parse'){
     var pv={};
     document.querySelectorAll('#procConfig [data-cp]').forEach(function(el){
       var key=el.getAttribute('data-cp'), v=el.value;
@@ -133,30 +153,22 @@ function pfRenderConfig(){
   var box=document.getElementById('procConfig');
   if(!pfCfg){ box.innerHTML=''; return; }
   var spacer='<span class="hint-spacer"></span>';
-  var tip=function(t){ return '<span class="hint" tabindex="0" data-tip="'+
-    escHtml(t||'')+'">?</span>'; };
-  var head=function(title,t){ return '<h4>'+escHtml(title)+tip(t)+'</h4>'; };
-  var ro=['parsing','loading','loaded'].indexOf(String((pfData||{}).state||''))>=0;
-  var dis=ro?' disabled':'';
-  var h='<div class="proc-sechd"><b>配置 · '+PF_TITLE[pfNode]+'</b>'+
-    '<span class="msg" id="pfCfgMsg">'+(ro?'当前状态配置只读':'')+'</span>'+
-    (pfNode==='review'||ro?'':'<button type="button" class="btn mini" id="pfCfgSave">保存配置</button>')+
-    '</div><details id="pfCfgFold" open><summary>配置内容（点击收起 / 展开）</summary>'+
-    '<div class="proc-cfgbody">';
-  if(pfNode==='params'){
-    h+=head('解析参数','对本次资料生效，重放解析时使用。保存只写配置，需显式点击「执行解析 / 重新解析」才会生效。');
-    (pfCfg.schema||[]).forEach(function(p){
+  var dis='';   // 配置一律可编辑；写入限制由服务端在保存时反馈
+  var fields='';
+  if(pfNode==='parse'){
+    var basic='', groups={}, order=[];
+    var row=function(p){
       var key=p.key, label=p.label||key, val=pfCfg.params[key];
       if(val===undefined||val===null) val=p.default;
       var desc=p.desc||p.help||'';
-      h+='<div class="cfg-row"><label>'+escHtml(label)+'</label>'+(desc?tip(desc):spacer);
+      var h='<div class="field"><label>'+escHtml(label)+'</label><span class="finput">';
       if(p.type==='bool'){
         h+='<select data-cp="'+escHtml(key)+'"'+dis+'>'+
           '<option value="1"'+(val?' selected':'')+'>开</option>'+
           '<option value="0"'+(!val?' selected':'')+'>关</option></select>';
       }else if(p.options||p.choices){
         var opts=p.options||p.choices;
-        h+='<select data-cp="'+escHtml(key)+'">';
+        h+='<select data-cp="'+escHtml(key)+'"'+dis+'>';
         opts.forEach(function(o){
           var v=(typeof o==='object')?o.value:o, t=(typeof o==='object')?o.label||o.value:o;
           h+='<option value="'+escHtml(v)+'"'+(String(v)===String(val)?' selected':'')+'>'+
@@ -168,42 +180,65 @@ function pfRenderConfig(){
           ' placeholder="'+escHtml(p.default!=null?String(p.default):'')+'"'+dis+'>';
       }
       if(p.unit) h+='<span class="cfg-unit">'+escHtml(p.unit)+'</span>';
-      h+='</div>';
+      return h+(desc?pfTip(desc):'')+'</span></div>';
+    };
+    (pfCfg.schema||[]).forEach(function(p){
+      if(['model','page'].indexOf(p.key)>=0){ basic+=row(p); return; }
+      if(!groups[p.group]){ groups[p.group]=[]; order.push(p.group); }
+      groups[p.group].push(row(p));
     });
+    var advBody=order.map(function(g){
+      return '<div class="proc-pgroup"><h4>'+escHtml(g)+'</h4>'+
+        groups[g].join('')+'</div>';
+    }).join('');
+    fields='<div class="proc-pgroup"><h4>基础配置</h4>'+basic+'</div>'+
+      '<details class="proc-advanced"><summary>高级配置</summary>'+
+      '<div class="proc-advanced-body">'+advBody+'</div></details>';
   }else if(pfNode==='extract'){
-    h+=head('抽取规则','在「执行抽取」时按此规则生成记录；保存配置不会重抽已有记录。');
-    h+='<div class="cfg-row"><label>抽取规则版本</label>'+spacer+
-      '<select id="pfRule"'+dis+'><option value="">（不绑定 · 执行抽取时用默认原始透传）</option>';
+    fields='<div class="cfg-row"><label>抽取规则</label>'+spacer+
+      '<select id="pfRule"'+dis+'><option value="">（不绑定 · 默认原始透传）</option>';
     (pfCfg.rules||[]).forEach(function(v){
-      h+='<option value="'+v.version_id+'"'+
+      fields+='<option value="'+v.version_id+'"'+
         (pfCfg.rule_version_id===v.version_id?' selected':'')+'>'+
         escHtml(v.name+' v'+v.version+(v.current?'（当前）':''))+'</option>';
     });
-    h+='</select></div>';
+    fields+='</select></div>'+
+      '<div class="proc-ruledetail" id="pfRuleDetail">加载规则详情…</div>';
   }else if(pfNode==='review'){
-    h+=head('校验规则','当前校验为逐条人工改值 / 确认 / 拒绝；「执行校验」可一键将全部待审记录设为通过。');
-    h+='<div class="empty" style="padding:20px"><b>自动化校验规则：待实现</b></div>';
+    fields='<div class="msg">自动化校验规则待实现（当前为逐条人工改值 / 确认 / 拒绝）</div>';
   }else{
-    h+=head('入库映射','目标在「执行入库」时消费；映射须与资料的抽取规则匹配，保存配置不会执行入库。');
-    h+='<div class="cfg-row"><label>业务库</label>'+spacer+'<select id="pfDs"'+dis+'>'+
+    fields='<div class="cfg-row"><label>业务库</label>'+spacer+'<select id="pfDs"'+dis+'>'+
       '<option value="">（未选择）</option>';
     (pfCfg.datasources||[]).forEach(function(d){
-      h+='<option value="'+d.id+'"'+
+      fields+='<option value="'+d.id+'"'+
         (pfCfg.load&&pfCfg.load.datasource_id===d.id?' selected':'')+'>'+
         escHtml(d.name+' · '+d.host+'/'+d.db_name)+'</option>';
     });
-    h+='</select></div>'+
+    fields+='</select></div>'+
       '<div class="cfg-row"><label>入库映射</label>'+spacer+'<select id="pfLt"'+dis+'>'+
       '<option value="">（未选择）</option>';
     (pfCfg.load_tables||[]).forEach(function(t){
-      h+='<option value="'+t.id+'" data-ds="'+t.datasource_id+'"'+
+      fields+='<option value="'+t.id+'" data-ds="'+t.datasource_id+'"'+
         (pfCfg.load&&pfCfg.load.load_table_id===t.id?' selected':'')+'>'+
         escHtml(t.target_table+' · '+t.write_mode)+'</option>';
     });
-    h+='</select></div>';
+    fields+='</select></div>';
   }
-  h+='</div></details>';
-  box.innerHTML=h;
+  box.innerHTML='<div class="proc-bar">'+
+    '<div class="proc-bar-l">'+
+      '<b>配置</b>'+pfTip(PF_CFG_TIP[pfNode])+
+      '<span class="msg" id="pfCfgMsg"></span>'+
+    '</div><div class="proc-bar-r">'+
+      '<button type="button" class="proc-toggle" id="pfCfgToggle" '+
+        'aria-label="展开或收起配置">'+(pfCfgOpen?'▾':'▸')+'</button>'+
+      (pfNode==='review'?'':'<button type="button" class="btn mini" id="pfCfgSave">保存配置</button>')+
+    '</div></div>'+
+    '<div class="proc-cfgbody" id="pfCfgBody"'+(pfCfgOpen?'':' hidden')+'>'+fields+'</div>';
+  document.getElementById('pfCfgToggle').onclick=function(){
+    pfCfgOpen=!pfCfgOpen;
+    document.getElementById('pfCfgBody').hidden=!pfCfgOpen;
+    this.textContent=pfCfgOpen?'▾':'▸';
+  };
   var ds=document.getElementById('pfDs'), lt=document.getElementById('pfLt');
   if(ds&&lt){
     ds.onchange=function(){
@@ -216,87 +251,242 @@ function pfRenderConfig(){
     };
     if(pfCfg.load&&pfCfg.load.datasource_id) ds.onchange();
   }
-  var mark=function(){ if(ro) return; pfMsg('有未保存的修改，需点击「保存配置」'); };
-  document.querySelectorAll('#procConfig [data-cp]').forEach(function(el){
-    el.onchange=mark;
-  });
+  var mark=function(){ pfCfgMsg('有未保存的修改'); };
+  document.querySelectorAll('#procConfig [data-cp]').forEach(function(el){ el.onchange=mark; });
   ['pfRule','pfDs','pfLt'].forEach(function(id){
     var el=document.getElementById(id);
-    if(el) el.onchange=mark;
+    if(!el) return;
+    el.onchange=function(){
+      mark();
+      if(id==='pfRule') pfLoadRuleDetail();
+    };
   });
   var save=document.getElementById('pfCfgSave');
   if(save) save.onclick=function(){
     pfCollect();
-    if(!Object.keys(pfPending).length){ pfMsg('没有需要保存的修改'); return; }
-    var btn=this; btn.disabled=true; pfMsg('保存中…');
+    if(!Object.keys(pfPending).length){ pfCfgMsg('没有需要保存的修改'); return; }
+    var btn=this; btn.disabled=true; pfCfgMsg('保存中…');
     pfApi('POST','/api/sources/'+pfId+'/config',pfPending).then(function(o){
       btn.disabled=false;
       if(!(o.s===200&&o.j&&o.j.ok)){
-        pfMsg('保存失败：'+((o.j&&o.j.error)||o.s),true); return;
+        pfCfgMsg('保存失败：'+((o.j&&o.j.error)||o.s),true); return;
       }
       pfPending={}; pfLoad();
-    }).catch(function(){ btn.disabled=false; pfMsg('保存失败：平台库不可用',true); });
+    }).catch(function(){ btn.disabled=false; pfCfgMsg('保存失败：平台库不可用',true); });
   };
+  if(pfNode==='extract') pfLoadRuleDetail();
 }
-function pfResultCard(title,desc,href,label){
-  return '<div class="parse-card"><h4>'+escHtml(title)+'</h4>'+
-    '<p class="msg">'+escHtml(desc)+'</p>'+
-    (href?'<a class="linkbtn" target="_blank" rel="noopener" href="'+escHtml(href)+
-      '">'+escHtml(label)+' →</a>':'<span class="msg">暂无产物</span>')+'</div>';
+function pfLoadRuleDetail(){
+  var sel=document.getElementById('pfRule');
+  if(!sel) return;
+  var vid=sel.value?parseInt(sel.value,10):null;
+  var meta=(pfCfg.rules||[]).filter(function(r){return r.version_id===vid;})[0]||null;
+  var box=document.getElementById('pfRuleDetail');
+  if(!box) return;
+  if(!meta){
+    pfRuleDetail=null;
+    box.innerHTML='<span class="msg">未绑定抽取规则（执行时使用默认原始透传）</span>';
+    return;
+  }
+  pfApi('GET','/api/extract-rules/'+meta.rule_id+'/versions/'+meta.version_id)
+    .then(function(o){
+      if(!(o.s===200&&o.j&&o.j.id)){
+        box.innerHTML='<span class="msg err">规则详情读取失败</span>';
+        return;
+      }
+      pfRuleDetail=o.j;
+      pfRenderRuleDetail(meta);
+    }).catch(function(){
+      box.innerHTML='<span class="msg err">规则详情读取失败</span>';
+    });
+}
+function pfRenderRuleDetail(meta){
+  var box=document.getElementById('pfRuleDetail');
+  if(!box) return;
+  var d=pfRuleDetail||{}, schema=d.schema_json||{}, mapping=d.mapping_json||{};
+  var fields=(schema.fields||[]).map(function(f){
+    return (f.name||'')+(f.type?'（'+f.type+'）':'');
+  }).join('、')||'—';
+  var maps=(mapping.fields||[]).map(function(f){
+    var src=(f.column&&f.column.name)||'';
+    return (src?src+' → ':'')+(f.target||'');
+  }).join('、')||'—';
+  var tb=mapping.table||{};
+  var tbl=(tb.index!=null?('表 '+(Number(tb.index)+1)):'')+
+    (tb.header_contains?('表头含 '+tb.header_contains):'')||'—';
+  var trans=((d.transform_json||{}).fields||[]).length;
+  var row=function(label,value){
+    return '<div class="cfg-row"><label>'+escHtml(label)+'</label>'+
+      '<span class="hint-spacer"></span><span class="cfg-static">'+
+      escHtml(value)+'</span></div>';
+  };
+  box.innerHTML='<div class="msg">只读展示 · '+
+    '<a class="linkbtn" target="_blank" rel="noopener" href="/extract?rule='+
+    meta.rule_id+'">打开详情编辑 →</a></div>'+
+    row('规则名称',d.name||meta.name)+
+    row('版本','v'+(d.version||meta.version))+
+    row('规格',d.spec_version?('v'+d.spec_version):'v1（默认）')+
+    row('表定位',tbl)+
+    row('输出字段',fields)+
+    row('字段映射',maps)+
+    row('转换字段',trans?String(trans)+' 项':'无');
+}
+function pfPreviewUrl(){
+  return pfNode==='review'
+    ? '/preview?file='+pfId+'&view=review'
+    : '/preview?file='+pfId;
+}
+function pfRecordsHtml(){
+  var recs=(pfRecords||[]).slice();
+  if(pfNode==='review'){
+    var pend=recs.filter(function(r){
+      return ((r.review||{}).state||'pending')!=='confirmed';
+    });
+    if(pend.length) recs=pend;
+  }
+  if(!recs.length) return '<div class="empty">暂无记录</div>';
+  recs=recs.slice(0,20);
+  var keys=[];
+  recs.forEach(function(r){
+    Object.keys(r.values||{}).forEach(function(k){
+      if(keys.indexOf(k)<0&&keys.length<8) keys.push(k);
+    });
+  });
+  var withState=pfNode==='review';
+  var h='<table class="list proc-records"><thead><tr><th class="seq">#</th>'+
+    (withState?'<th>状态</th>':'')+
+    keys.map(function(k){ return '<th>'+escHtml(k)+'</th>'; }).join('')+'</tr></thead><tbody>';
+  recs.forEach(function(r){
+    var st=(r.review||{}).state||'pending';
+    h+='<tr><td class="seq">'+((r.index||0)+1)+'</td>'+
+      (withState?'<td>'+escHtml(PF_STATE[st]||st)+'</td>':'')+
+      keys.map(function(k){
+        var v=(r.values||{})[k];
+        return '<td>'+escHtml(v==null?'':String(v))+'</td>';
+      }).join('')+'</tr>';
+  });
+  return h+'</tbody></table>';
+}
+function pfActionHtml(){
+  var p=pfData||{}, st=String(p.state||'');
+  var busy=st==='parsing'||st==='loading', label='', dis=false, tip='';
+  if(pfNode==='parse'){
+    label='执行解析'; dis=busy;
+    tip=busy?'正在处理中，请稍候。'
+      :'按当前解析参数执行解析；已有暂存、产物、回执与校验结论会被覆盖。';
+  }else if(pfNode==='extract'){
+    label='执行抽取'; dis=busy;
+    tip=busy?'正在处理中，请稍候。'
+      :'按当前抽取规则执行抽取；已有记录与校验结论会被覆盖。';
+  }else if(pfNode==='review'){
+    var c=p.review_counts||{}, pend=(c.pending||0)+(c.edited||0);
+    label='执行校验'; dis=busy;
+    tip=busy?'正在处理中，请稍候。'
+      :('将全部 '+pend+' 条待审记录设为通过。'+
+        (c.rejected?'另有 '+c.rejected+' 条已拒绝记录需人工处理。':''));
+  }else{
+    var bound=!!(p.load&&p.load.load_table_id);
+    label='执行入库'; dis=busy||!bound;
+    tip=busy?'正在处理中，请稍候。':(bound
+      ?('按已配置的入库映射写入 '+p.load.target_table+'。')
+      :'请先在配置里绑定入库映射。');
+  }
+  return '<button type="button" class="btn mini" id="pfAct"'+(dis?' disabled':'')+'>'+
+    label+'</button>';
 }
 function pfRenderResult(){
-  var p=pfData||{}, box=document.getElementById('procResult'), h='', extra='';
+  var p=pfData||{}, box=document.getElementById('procResult');
+  var right='', body='';
   if(pfNode==='parse'){
-    var arts=p.parse_artifacts||[], has=arts.indexOf('对照报告.html')>=0;
-    var reportUrl='/files/'+pfId+'/'+encodeURIComponent('对照报告.html');
-    h=pfResultCard('解析报告','页面图与结构化结果逐项对照',
-      has?reportUrl:'','打开解析报告');
-    h+=pfResultCard('parse.json','标准契约完整产物',
-      arts.indexOf('parse.json')>=0?'/files/'+pfId+'/parse.json':'','打开 parse.json');
-    extra=has
-      ? '<details id="pfReportFold" open><summary>内联查看对照报告（点击收起）</summary>'+
-        '<iframe class="proc-report" src="'+escHtml(reportUrl)+'" loading="lazy"'+
-        ' title="对照报告"></iframe></details>'
-      : '';
-  }else if(pfNode==='extract'){
-    var c=p.review_counts||{}, n=Object.keys(c).reduce(function(a,k){return a+c[k];},0);
-    h=pfResultCard('数据预览','暂存记录 '+n+' 条 · 规则 '+
-      (p.rule?(p.rule.name+' v'+p.rule.version):'未绑定'),'/preview?file='+pfId,'打开数据预览');
-    extra='<div class="msg">双击单元格改值 / ✓确认 / ✗拒绝；单击或悬停可回溯源图。'+
-      '校验结论会直接作用于这里的记录。</div>';
-  }else if(pfNode==='review'){
-    var r=p.review_counts||{};
-    h=pfResultCard('校验视图','待校验 '+(r.pending||0)+' · 已修改 '+(r.edited||0)+
-      ' · 已拒绝 '+(r.rejected||0)+' · 已确认 '+(r.confirmed||0),
-      '/preview?file='+pfId+'&view=review','打开校验视图');
-    extra='<div class="msg">进入校验视图后优先定位到待审记录；校验与抽取共用同一份暂存记录，无需切换页面。</div>';
+    var has=(p.parse_artifacts||[]).indexOf('对照报告.html')>=0;
+    body=has
+      ? '<iframe id="pfReport" class="proc-report" src="/files/'+pfId+'/'+
+        encodeURIComponent('对照报告.html')+'" loading="lazy" title="对照报告"></iframe>'
+      : '<div class="empty">暂无对照报告</div>';
+  }else if(pfNode==='extract'||pfNode==='review'){
+    right='<a class="linkbtn" target="_blank" rel="noopener" href="'+
+      pfPreviewUrl()+'">'+(pfNode==='review'?'打开校验视图':'打开数据预览')+' →</a>';
+    body=pfRecordsHtml();
   }else{
     var l=p.load||{}, acts=p.load_actions||{};
     if(l.target_table){
-      h=pfResultCard('数据看板','目标表 '+l.target_table+' · 新增 '+(acts.insert||0)+
-        ' / 覆盖 '+(acts.update||0),'/dashboard?ds='+encodeURIComponent(l.datasource_id||'')+
-        '&table='+encodeURIComponent(l.target_table),'打开数据看板');
+      right='<a class="linkbtn" target="_blank" rel="noopener" href="/dashboard?ds='+
+        encodeURIComponent(l.datasource_id||'')+'&table='+encodeURIComponent(l.target_table)+
+        '&file='+pfId+'">打开数据看板 →</a>'+
+        '<button type="button" class="btn mini" id="pfPreflight">预检</button>'+
+        '<button type="button" class="btn mini" id="pfReceipt">回执</button>';
+      body='<div class="proc-kv"><span><b>目标表</b>'+escHtml(l.target_table)+'</span>'+
+        '<span><b>写入</b>'+escHtml(l.write_mode||'—')+'</span>'+
+        '<span><b>新增</b>'+(acts.insert||0)+'</span>'+
+        '<span><b>覆盖</b>'+(acts.update||0)+'</span></div>'+
+        '<div class="msg" id="pfPreMsg">'+
+        escHtml(pfPreResult?('预检 '+pfPreResult.total+' 条 · 新增 '+pfPreResult.insert+
+          ' · 覆盖 '+pfPreResult.update+' · 跳过 '+pfPreResult.skip+
+          ' · 隔离 '+pfPreResult.quarantine):(pfPreError||''))+'</div>'+
+        '<div id="pfRowsBox">加载中…</div>';
     }else{
-      h='<div class="empty">尚未绑定入库映射。请在上方配置中选择业务库与映射，再显式执行入库。</div>';
+      body='<div class="empty">尚未绑定入库映射</div>';
     }
-    var pre=pfPreResult
-      ? ('预检：共 '+pfPreResult.total+' 条 · 新增 '+pfPreResult.insert+
-         ' · 覆盖 '+pfPreResult.update+' · 跳过 '+pfPreResult.skip+
-         ' · 隔离 '+pfPreResult.quarantine)
-      : (pfPreError||'预检只读，不写库、不绑定目标。');
-    extra='<div class="proc-toolrow">'+
-      '<button type="button" class="btn mini" id="pfPreflight">运行入库预检</button>'+
-      '<button type="button" class="btn mini" id="pfReceipt">回执 / 隔离</button>'+
-      '<span class="msg" id="pfPreMsg">'+escHtml(pre)+'</span></div>';
   }
-  box.innerHTML='<div class="proc-sechd"><b>结果 · '+PF_TITLE[pfNode]+
-    '</b></div><div class="parse-pair">'+h+'</div>'+extra;
+  box.innerHTML='<div class="proc-bar"><div class="proc-bar-l">'+
+    '<b>产物</b>'+pfTip(PF_RES_TIP[pfNode])+'</div><div class="proc-bar-r">'+
+    right+pfActionHtml()+'</div></div><div class="proc-result-body">'+
+    '<div class="msg" id="pfActMsg"></div>'+body+'</div>';
+  if(pfNode==='parse'){
+    var fr=document.getElementById('pfReport');
+    if(fr) fr.onload=function(){
+      try{
+        var d=fr.contentDocument;
+        if(!d||!d.head) return;
+        var s=d.createElement('style');
+        s.textContent='.imgwrap{max-width:100% !important}';
+        d.head.appendChild(s);
+      }catch(e){}
+    };
+  }
   if(pfNode==='load'){
     var pb=document.getElementById('pfPreflight');
     if(pb) pb.onclick=pfRunPreflight;
     var rb=document.getElementById('pfReceipt');
     if(rb) rb.onclick=function(){ openReceiptDrawer(pfId); };
+    if((pfData.load||{}).target_table) pfLoadRows();
   }
+}
+function pfLoadRows(){
+  var box=document.getElementById('pfRowsBox');
+  if(!box) return;
+  var l=pfData.load||{};
+  if(pfRows){
+    box.innerHTML=pfRowsHtml(); return;
+  }
+  var url='/api/load/datasources/'+l.datasource_id+'/rows?table='+
+    encodeURIComponent(l.target_table)+'&page=1&per_page=20&file_id='+pfId;
+  pfApi('GET',url).then(function(o){
+    if(!(o.s===200&&o.j&&o.j.ok)){
+      box.innerHTML='<div class="msg err">'+
+        escHtml((o.j&&o.j.error)||('读取失败 '+o.s))+'</div>';
+      return;
+    }
+    pfRows=o.j; box.innerHTML=pfRowsHtml();
+  }).catch(function(e){
+    box.innerHTML='<div class="msg err">读取失败：'+escHtml(e&&e.message||e)+'</div>';
+  });
+}
+function pfRowsHtml(){
+  var d=pfRows||{}, hide={file_id:1,record_id:1};
+  var cols=(d.columns||[]).filter(function(c){return !hide[c];}).slice(0,8);
+  var items=d.items||[];
+  var h='<div class="msg">目标表共 '+(d.total||0)+' 行 · 展示前 '+items.length+' 行</div>';
+  if(!items.length) return h+'<div class="empty">暂无数据</div>';
+  h+='<table class="list proc-records"><thead><tr><th class="seq">序号</th>'+
+    cols.map(function(c){return '<th>'+escHtml(c)+'</th>';}).join('')+'</tr></thead><tbody>';
+  items.forEach(function(r,i){
+    h+='<tr><td class="seq">'+(i+1)+'</td>'+cols.map(function(c){
+      var v=r[c];
+      return '<td>'+escHtml(v==null?'':String(v))+'</td>';
+    }).join('')+'</tr>';
+  });
+  return h+'</tbody></table>';
 }
 function pfRunPreflight(){
   var m=document.getElementById('pfPreMsg');
@@ -304,10 +494,7 @@ function pfRunPreflight(){
   var bound=pfData.load&&pfData.load.load_table_id;
   var tid=bound||(sel&&sel.value?parseInt(sel.value,10)
     :((pfCfg&&pfCfg.load&&pfCfg.load.load_table_id)||null));
-  if(!tid){
-    if(m) m.textContent='请先在上方配置中选择入库映射';
-    return;
-  }
+  if(!tid){ if(m) m.textContent='请先选择入库映射'; return; }
   var btn=document.getElementById('pfPreflight');
   if(btn) btn.disabled=true;
   if(m) m.textContent='预检中（只读'+(bound?' · 按已绑定目标':'')+'）…';
@@ -320,7 +507,7 @@ function pfRunPreflight(){
       return;
     }
     pfPreError=''; pfPreResult=o.j;
-    if(m) m.textContent='预检：共 '+o.j.total+' 条 · 新增 '+o.j.insert+
+    if(m) m.textContent='预检 '+o.j.total+' 条 · 新增 '+o.j.insert+
       ' · 覆盖 '+o.j.update+' · 跳过 '+o.j.skip+' · 隔离 '+o.j.quarantine;
   }).catch(function(e){
     if(btn) btn.disabled=false;
@@ -328,49 +515,14 @@ function pfRunPreflight(){
     if(m) m.textContent=pfPreError;
   });
 }
-function pfActionHtml(){
-  var p=pfData||{}, st=String(p.state||'');
-  var busy=st==='parsing'||st==='loading', label='', dis=false, tip='';
-  if(pfNode==='parse'){
-    var can=!busy&&st!=='loaded';
-    label=st==='pending'?'执行解析':'重新解析';
-    dis=!can;
-    tip=busy?'正在处理中，请稍候。':(st==='loaded'
-      ?'资料已入库，记录只读，不能重新解析。'
-      :'按当前解析参数原地重放；会清空暂存、产物、回执与校验结论。');
-  }else if(pfNode==='extract'){
-    var canE=st==='to_extract'||st==='to_review'||st==='to_load';
-    label='执行抽取'; dis=!canE||busy;
-    tip=st==='to_extract'?'按当前抽取规则生成暂存记录。'
-      :(canE?'已有暂存记录，重新抽取将覆盖校验结论。':'请先执行解析，生成解析产物。');
-  }else if(pfNode==='review'){
-    var c=p.review_counts||{}, pend=(c.pending||0)+(c.edited||0);
-    var canR=st==='to_review'||st==='to_load';
-    label='执行校验'; dis=!canR||busy||!pend;
-    tip=canR?(pend?('将全部 '+pend+' 条待审记录设为通过。'+
-      (c.rejected?'另有 '+c.rejected+' 条已拒绝记录需人工处理。':'')):'暂无待审记录。')
-      :'请先执行抽取，生成暂存记录。';
-  }else{
-    var canL=st==='to_load'&&!!(p.load&&p.load.load_table_id);
-    label='执行入库'; dis=!canL||busy;
-    tip=st!=='to_load'?'请先完成校验，全部记录通过后才能入库。'
-      :(p.load&&p.load.load_table_id
-        ?('按已配置的入库映射写入 '+(p.load.target_table||'')+'。')
-        :'请先在「配置」里绑定入库映射。');
-  }
-  return '<button type="button" class="btn" id="pfAct"'+(dis?' disabled':'')+'>'+
-    label+'</button><span class="hint" tabindex="0" data-tip="'+escHtml(tip)+'">?</span>'+
-    '<span class="msg" id="pfActMsg"></span>';
-}
-function pfRenderActions(){
-  document.getElementById('procActions').innerHTML=pfActionHtml();
+function pfBindAction(){
   var b=document.getElementById('pfAct');
   if(!b) return;
   var st=String((pfData||{}).state||'');
   b.onclick=function(){
     var btn=this, msg='';
     if(pfNode==='parse'){
-      msg='确认按当前解析参数重新解析？\n将清空暂存、产物、回执与校验结论。';
+      msg='确认按当前解析参数执行解析？\n将清空暂存、产物、回执与校验结论。';
     }else if(pfNode==='extract'){
       msg=(st==='to_review'||st==='to_load')
         ?'已有暂存记录，重新抽取将覆盖校验结论。确认继续？'

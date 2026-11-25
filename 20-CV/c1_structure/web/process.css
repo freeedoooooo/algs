@@ -1,22 +1,64 @@
-/* web/process.css — 资料处理独立页：四节点步骤 + 当前节点配置 / 结果 / 执行 */
+/* web/process.css — 资料处理独立页：左侧纵向流程 / 右侧配置细条 + 产物 */
 .proc-meta{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:#6b7688}
-.proc-wrap{max-width:1100px}
-.proc-flow{margin-bottom:14px}
+.proc-layout{display:grid;grid-template-columns:180px minmax(0,1fr);gap:12px;align-items:start}
+.proc-side{border:1px solid #e2e7f0;border-radius:8px;background:#fff;padding:12px}
+.proc-side-t{font-size:12px;color:#8a94a6;margin-bottom:10px}
+.proc-flow-v{display:flex;flex-direction:column;gap:6px}
+.proc-flow-v .pipe-node{width:100%;text-align:left}
+.proc-flow-v .pipe-node.on{background:#f7f9fd}
+.proc-main{min-width:0}
 .proc-sec{border:1px solid #e2e7f0;border-radius:8px;background:#fff;
-  margin-top:12px;padding:12px 14px}
-.proc-sechd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
-.proc-sechd b{font-size:13px;color:#25324a}
-.proc-sechd .msg{flex:1;min-width:80px}
-.proc-sec details>summary{cursor:pointer;font-size:12px;color:#6b7688;
-  padding:4px 0;list-style:none}
-.proc-sec details>summary::-webkit-details-marker{display:none}
-.proc-sec details>summary:before{content:'▸ ';font-size:11px}
-.proc-sec details[open]>summary:before{content:'▾ '}
-.proc-cfgbody{padding:6px 0 2px}
-.proc-actions{margin-top:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-  padding:9px 14px;border:1px solid #e2e7f0;border-radius:8px;background:#f7f9fd}
-.proc-actions .hint{width:15px;height:15px;font-size:10px}
-.proc-result{min-height:120px}
-.proc-report{width:100%;height:520px;border:1px solid #e2e7f0;border-radius:8px;
-  background:#fff;margin-top:10px}
-.proc-toolrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px}
+  margin-bottom:12px;overflow:hidden}
+.proc-bar{position:relative;display:flex;align-items:center;gap:8px;min-height:38px;
+  padding:6px 12px;background:#f7f9fd;border-bottom:1px solid #e2e7f0}
+.proc-bar-l{display:flex;align-items:center;gap:8px;min-width:0;flex:1;flex-wrap:wrap}
+.proc-bar-l b{font-size:13px;color:#25324a;font-weight:500}
+.proc-bar-r{display:flex;align-items:center;gap:6px;flex:none}
+.proc-bar-r .btn,.proc-bar-r .linkbtn{font-size:12px}
+.proc-bar .msg{font-size:12px}
+.proc-bar .hint{width:15px;height:15px;font-size:10px}
+.proc-toggle{position:absolute;left:50%;transform:translateX(-50%);
+  border:0;background:transparent;cursor:pointer;color:#64748b;
+  font-size:15px;padding:1px 10px;line-height:20px}
+.proc-toggle:hover{color:#2563eb;background:#e7f0ff;border-radius:10px}
+.proc-cfgbody{display:flex;align-items:center;gap:6px 20px;flex-wrap:wrap;
+  padding:8px 14px}
+.proc-cfgbody .cfg-row{margin:0}
+.proc-cfgbody .cfg-row>label{width:auto;min-width:72px}
+.proc-ruledetail{font-size:12px;color:#6b7688;flex-basis:100%;margin-top:6px}
+.proc-json{max-height:260px;overflow:auto;background:#f7f9fd;border:1px solid #e2e7f0;
+  border-radius:6px;padding:8px 10px;font-size:12px;line-height:1.5;margin:6px 0}
+.proc-cfgbody .field{display:flex;align-items:center;gap:8px;margin:5px 0;flex-basis:100%}
+.proc-cfgbody .field>label{flex:none;width:88px;font-size:12px;line-height:1.3;color:#25324a}
+.proc-cfgbody .finput{display:flex;align-items:center;gap:6px;flex:1;min-width:0}
+.proc-cfgbody .finput input,.proc-cfgbody .finput select{font:inherit;font-size:12px;
+  padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;
+  color:#1f2738;flex:1;min-width:0;width:auto}
+.proc-pgroup{flex-basis:100%;border-left:3px solid #2563eb;padding:1px 0 1px 10px;margin:8px 0}
+.proc-pgroup h4{margin:0 0 4px;font-size:12px;font-weight:500;color:#2563eb}
+.proc-advanced{flex-basis:100%;border:1px solid #e2e7f0;border-radius:8px;
+  margin-top:10px;background:#fff}
+.proc-advanced>summary{cursor:pointer;list-style:none;user-select:none;
+  display:flex;align-items:center;gap:6px;padding:6px 10px;
+  font-size:12px;font-weight:500;color:#5a6a85}
+.proc-advanced>summary::-webkit-details-marker{display:none}
+.proc-advanced>summary::before{content:'▸';color:#8a94a6;font-size:11px;flex:none;
+  transition:transform .15s}
+.proc-advanced[open]>summary::before{transform:rotate(90deg)}
+.proc-advanced-body{padding:0 10px 6px}
+.proc-advanced .proc-pgroup{border-left-color:#cbd5e1}
+.proc-advanced .proc-pgroup h4{color:#6b7688}
+.cfg-static{display:block;flex:1;min-width:0;background:#f7f9fd;border:1px solid #e2e7f0;
+  border-radius:6px;padding:5px 8px;font-size:12px;color:#3b4a63;line-height:1.5}
+.proc-cfgbody[hidden]{display:none}
+.proc-result-body{padding:12px 14px;min-height:140px}
+.proc-report{width:100%;height:calc(100vh - 150px);min-height:520px;
+  border:1px solid #e2e7f0;border-radius:8px;background:#fff}
+.proc-records{width:100%;font-size:12px}
+.proc-kv{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:#3b4a63}
+.proc-kv b{font-weight:400;color:#8a94a6;margin-right:4px}
+@media(max-width:760px){
+  .proc-layout{grid-template-columns:1fr}
+  .proc-flow-v{flex-direction:row;overflow-x:auto}
+  .proc-flow-v .pipe-node{min-width:110px}
+}

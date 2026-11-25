@@ -814,3 +814,6 @@ delbtn.onclick=function(){
 };
 
 load();
+/* 深链 ?rule=<id>：从资料处理页跳来时直接打开右侧编辑栏 */
+var deepRule=parseInt(new URLSearchParams(location.search).get('rule'),10);
+if(deepRule) openEditor(deepRule);
