@@ -5,7 +5,7 @@ P0：passthrough（无配置整表透传）——每表每行一条记录，键 
 （空表头 col_<n>，重名加下标），lineage 逐格（1:N 锚点数组形态）。
 被并入跨页合并表的逐页表跳过（避免重复计数）；合并表 cells 逐格带 page，
 血缘页码天然正确。P1b 选择器已实现（build/apply_mapping：单源表
-table{index|header_contains} × column{name|index}＋重命名）；transform 留 P2。
+table{index|header_contains} × column{name|index}＋重命名）；简单规则保存时把转换译为 v2 pipeline。
 spec_version=2 走 collect_logic.build_logic 新引擎（C1 分发占位，C2 实现）。
 """
 from .adapter.base import RECORDS_SCHEMA

@@ -94,9 +94,9 @@ def _finalize(records):
     return records
 
 
-def _iter_table_ctxs(doc, by_ref):
-    """按 passthrough 的候选表顺序逐行产出上下文。"""
-    cands = collect._candidate_tables(doc)
+def _iter_table_ctxs(doc, by_ref, cands=None):
+    """按 passthrough 的候选表顺序逐行产出上下文；cands 可限定表集合。"""
+    cands = cands if cands is not None else collect._candidate_tables(doc)
     pages = doc.get('pages') or []
     page0 = pages[0] if pages else {}
     for t, scope, ti, page_default in cands:
@@ -110,12 +110,31 @@ def _iter_table_ctxs(doc, by_ref):
                    'tables_by_ref': by_ref, 'values': {}, 'lineage': {}}
 
 
+def _restricted_cands(doc, spec):
+    """简单规则译为 v2 时限定仅所选表产出记录；旧 spec 无 restrict 不受影响。"""
+    for sel in spec.get('tables') or []:
+        if not isinstance(sel, dict) or not sel.get('restrict'):
+            continue
+        cands = collect._candidate_tables(doc)
+        idx = sel.get('index')
+        if isinstance(idx, int) and not isinstance(idx, bool):
+            return [cands[idx]] if 0 <= idx < len(cands) else []
+        kw = sel.get('header_contains')
+        if kw:
+            return [c for c in cands
+                    if str(kw) in ' '.join(str(h or '')
+                                           for h in (c[0].get('headers') or []))]
+        return cands
+    return None
+
+
 def _records_row(doc, spec, fields, by_ref):
     """默认策略：无 fields 时直接复用老 passthrough，逐字段完全相等。"""
     if not fields:
         return collect.passthrough(doc)
+    picked = _restricted_cands(doc, spec)
     return _finalize([_record_from_ctx(ctx, fields)
-                      for ctx in _iter_table_ctxs(doc, by_ref)])
+                      for ctx in _iter_table_ctxs(doc, by_ref, picked)])
 
 
 def _records_key_value(doc, spec, fields, by_ref):

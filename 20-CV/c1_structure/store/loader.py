@@ -139,7 +139,8 @@ def preflight(ds, target_table, field_rows, write_mode, fields):
 
 def apply_transform(values, transform_json):
     """入库时消费 transform（暂存 values 永不改）：返回 (副本, 错误列表)。
-    规则按序；number 失败→错误条目（值保留原样，调用方隔离跳过）。"""
+    规则按序；number 失败→错误条目（值保留原样，调用方隔离跳过）。
+    仅存量 v1 规则仍走此路径；新规则的转换已下沉到抽取阶段。"""
     out = dict(values)
     errors = []
     for rule in (transform_json or {}).get('fields') or []:

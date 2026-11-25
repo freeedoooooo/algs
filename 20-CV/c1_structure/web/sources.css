@@ -1,4 +1,5 @@
-/* web/sources.css — 资料页：文件名可点 + 资料详情弹窗 */
+/* web/sources.css — 资料页：文件名可点 + 资料详情弹窗
+   （台账滚动容器/操作列固定在 shell.css 统一定义，所有台账共用） */
 .nm.pipe-link{cursor:pointer;color:#2563eb}
 .nm.pipe-link:hover{text-decoration:underline}
 .pipe-panel{width:min(920px,96vw)}

@@ -248,6 +248,15 @@ function bindPager(el,onGo,onSize){
     if(tbl.__colReady) return;
     var heads=tbl.querySelectorAll('thead th');
     if(!heads.length) return;
+    /* 自动包裹滚动容器：所有台账表格宽于容器时出横向滚动条；
+       弹窗内小表（.dpanel/.pipe-panel）不包，已有 .tblscroll 的不重复包 */
+    if(!tbl.parentElement.classList.contains('tblscroll')
+       && !tbl.closest('.dpanel,.pipe-panel,.stgmain')){
+      var wrap=document.createElement('div');
+      wrap.className='tblscroll';
+      tbl.parentNode.insertBefore(wrap,tbl);
+      wrap.appendChild(tbl);
+    }
     tbl.__colReady=true;
     var n=heads.length;
     var cg=tbl.querySelector('colgroup');

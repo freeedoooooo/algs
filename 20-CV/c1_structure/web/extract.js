@@ -50,6 +50,52 @@ function colSel(mode,raw){
   if(mode==='exact') return {name:raw};
   return {header_contains:raw};
 }
+/* 简单规则译为 v2：转换下沉到抽取阶段；restrict 限定仅所选表产出记录。
+   旧规则不迁移，仍按原 mapping_json + transform_json 运行。 */
+function transformOps(apply){
+  var pipe=[];
+  (apply||[]).forEach(function(name){
+    if(name==='trim') pipe.push({op:'trim'});
+    else if(name==='number'){
+      pipe.push({op:'replace',pattern:'\\s+',repl:''});
+      pipe.push({op:'number',strip:','});
+    }
+  });
+  return pipe;
+}
+function simpleToV2Spec(table,fields,transforms){
+  var sel={ref:'main',restrict:true};
+  if(table&&typeof table.index==='number') sel.index=table.index;
+  else if(table&&table.header_contains) sel.header_contains=table.header_contains;
+  var fx={};
+  (transforms||[]).forEach(function(t){if(t&&t.target) fx[t.target]=t.apply||[];});
+  return {
+    spec_version:2,
+    origin:'simple',
+    tables:[sel],
+    records:{strategy:'row'},
+    fields:(fields||[]).map(function(f){
+      var pipe=[{op:'cell',source:'main',column:f.column||{}}];
+      return {target:f.target,pipeline:pipe.concat(transformOps(fx[f.target]))};
+    })
+  };
+}
+function v2ToSimpleForm(mp){
+  var sel=(mp.tables||[])[0]||{}, table={};
+  if(typeof sel.index==='number') table.index=sel.index;
+  else if(sel.header_contains) table.header_contains=sel.header_contains;
+  var fields=(mp.fields||[]).map(function(f){
+    var pipe=f.pipeline||[];
+    var cell=pipe.filter(function(s){return s&&s.op==='cell';})[0]||{};
+    var apply=[];
+    pipe.forEach(function(s){
+      if(s&&s.op==='trim') apply.push('trim');
+      else if(s&&s.op==='number') apply.push('number');
+    });
+    return {target:f.target,column:cell.column||null,fx:apply.join(',')};
+  });
+  return {table:table,fields:fields};
+}
 function tableRow(){
   return '<div class="tplrow">'+
     '<input class="tin tk_col" placeholder="原始列名 / 列序号">'+
@@ -613,7 +659,17 @@ function openEditor(id){
       var sm=mp.smart||{};
       smartPrompt.value=sm.prompt_template||''; smartModel.value=sm.model||'';
     }else if(mp.spec_version===2){
-      setMode('json'); jsonspec.value=JSON.stringify(mp,null,2);
+      if(mp.origin==='simple'){
+        setMode('simple');
+        var sf=v2ToSimpleForm(mp);
+        pendingTable=sf.table;
+        if(typeof pendingTable.index==='number') tindex.value=pendingTable.index;
+        if(pendingTable.header_contains) tkw.value=pendingTable.header_contains;
+        sf.fields.forEach(function(f){addRow(f.target,f.column,f.fx);});
+        if(!sf.fields.length) addRow('',null);
+      }else{
+        setMode('json'); jsonspec.value=JSON.stringify(mp,null,2);
+      }
     }else{
       pendingTable=mp.table||null;
       if(pendingTable){
@@ -703,8 +759,8 @@ savebtn.onclick=function(){
     else if(tkw.value.trim()) table={header_contains:tkw.value.trim()};
     else{emsg.textContent='请选择源表（选择参考文件，或手动填写序号 / 表头关键词）';return;}
     schema={fields:fields.map(function(f){return {name:f.target,type:'text'};})};
-    mapping={table:table,fields:fields};
-    transform=xf.length?{fields:xf}:null;
+    mapping=simpleToV2Spec(table,fields,xf);
+    transform=null;
   }
   var desc=edesc.value.trim();
   savebtn.disabled=true;
