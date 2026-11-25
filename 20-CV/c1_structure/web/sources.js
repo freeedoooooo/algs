@@ -12,7 +12,6 @@ function srcUrl(row){ return '/srcfiles/'+row.id; }
 
 function render(items){
   rows.innerHTML=items.map(function(r,i){
-    var sha=String(r.sha256||'');
     var st=stateBadge(r.state);
     var rule='—';
     if(r.rule_version_id){
@@ -30,11 +29,8 @@ function render(items){
       '<td class="num">'+fmtSize(r.size_bytes)+'</td>'+
       '<td>'+st+'</td>'+
       '<td class="left">'+rule+'</td>'+
-      '<td><code class="mono" title="'+escHtml(sha)+'">'+
-        escHtml(sha.slice(0,8))+'</code></td>'+
-      '<td class="left">'+escHtml(r.tags||'—')+'</td>'+
       '<td class="num">'+fmtTime(r.created_at)+'</td>'+
-      '<td style="white-space:nowrap">'+
+      '<td class="col-act" style="white-space:nowrap">'+
         '<button type="button" class="linkbtn" data-pipe="'+r.id+
         '" data-name="'+escHtml(r.name)+'" title="查看详情">详情</button>'+
         '<button type="button" class="linkbtn" data-config="'+r.id+
