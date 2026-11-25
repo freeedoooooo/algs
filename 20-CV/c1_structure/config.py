@@ -33,7 +33,7 @@ os.environ.setdefault('PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK', 'True')
 
 # ---- 服务（全部可用环境变量覆盖，方便容器 / 服务器部署）----
 #   C1_STRUCTURE_HOST=0.0.0.0 C1_STRUCTURE_PORT=9000 C1_STRUCTURE_WARMUP=1 python app.py
-HOST = os.getenv('C1_STRUCTURE_HOST', '127.0.0.1')
+HOST = os.getenv('C1_STRUCTURE_HOST', '0.0.0.0')
 PORT = int(os.getenv('C1_STRUCTURE_PORT', '8765'))
 MAX_FILE_MB = int(os.getenv('C1_STRUCTURE_MAX_FILE_MB', '20'))
 WARMUP_ON_START = os.getenv('C1_STRUCTURE_WARMUP', '0') == '1'
