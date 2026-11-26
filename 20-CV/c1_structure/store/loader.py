@@ -37,7 +37,7 @@ def connect_datasource(ds):
 
 
 _INTROSPECT_CACHE = {}
-_CACHE_TTL = {'tables': 15.0, 'columns': 30.0}
+_CACHE_TTL = {'tables': 15.0, 'columns': 30.0, 'table_comment': 30.0}
 
 
 def _cache_key(ds):
@@ -75,6 +75,26 @@ def list_tables(ds):
         conn.close()
     _INTROSPECT_CACHE[(key, kind)] = (time.monotonic(), out)
     return list(out)
+
+
+def table_comment(ds, table):
+    key, kind = _cache_key(ds), ('table_comment', table)
+    hit = _cached(key, kind)
+    if hit is not None:
+        return hit
+    conn = connect_datasource(ds)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT table_comment FROM information_schema.tables'
+                ' WHERE table_schema=%s AND table_name=%s',
+                (ds['db_name'], table))
+            row = cur.fetchone()
+            out = str(row[0] or '') if row else ''
+    finally:
+        conn.close()
+    _INTROSPECT_CACHE[(key, kind)] = (time.monotonic(), out)
+    return out
 
 
 def list_columns(ds, table):

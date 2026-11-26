@@ -3,6 +3,17 @@
   'use strict';
   var SCOPES=['document','source','index','rule','frame'];
   var LABEL={document:'文档',source:'数据',index:'指标',rule:'规则',frame:'框架'};
+  var SCOPE_ICON={
+    document:'<path d="M4 1.5h5l3 3v10H4zM9 1.5v3h3M6 8h4M6 10.5h4"/>',
+    source:'<ellipse cx="8" cy="3.5" rx="5.5" ry="2.2"/><path d="M2.5 3.5v4c0 1.2 2.5 2.2 5.5 2.2s5.5-1 5.5-2.2v-4M2.5 7.5v4c0 1.2 2.5 2.2 5.5 2.2s5.5-1 5.5-2.2v-4"/>',
+    index:'<path d="M2 13V8M6 13V3M10 13V6M14 13V1"/>',
+    rule:'<path d="M3 2h10M3 8h10M3 14h10"/><circle cx="6" cy="2" r="1.5" fill="currentColor" stroke="none"/><circle cx="10" cy="8" r="1.5" fill="currentColor" stroke="none"/><circle cx="6" cy="14" r="1.5" fill="currentColor" stroke="none"/>',
+    frame:'<path d="m8 2 6 3-6 3-6-3 6-3ZM2 8l6 3 6-3M2 12l6 3 6-3"/>'
+  };
+  window.ComputeScopeIcon=function(scope,className){
+    return '<svg class="'+(className||'scope-icon')+'" viewBox="0 0 16 16" aria-hidden="true">'+
+      (SCOPE_ICON[scope]||SCOPE_ICON.index)+'</svg>';
+  };
 
   function Graph(canvas,callbacks,options){
     this.canvas=canvas;
@@ -102,7 +113,8 @@
     el.dataset.key=k;el.tabIndex=0;el.setAttribute('role','button');
     el.setAttribute('aria-label',LABEL[d._scope]+' '+d.name+(this.compact?'，双击查看详情':'，回车查看'));
     el.style.left=pos.x+'px';el.style.top=pos.y+'px';
-    var h='<div class="node-name"><b>'+escHtml(d.name)+'</b></div>';
+    var h='<div class="node-name">'+window.ComputeScopeIcon(d._scope,'scope-icon node-scope-icon')+
+      '<b>'+escHtml(d.name)+'</b></div>';
     if(this.compact){
       h+='<div class="node-detail" hidden>'+escHtml(this.detail(d))+'</div>'+
         '<button type="button" class="node-expand" data-tip="展开详情" aria-label="展开'+escHtml(d.name)+'详情" aria-expanded="false">⌄</button>';
@@ -120,7 +132,7 @@
     var more=el.querySelector('.node-more');
     if(more){
       more.addEventListener('pointerdown',function(e){e.stopPropagation();});
-      more.addEventListener('click',function(e){e.stopPropagation();if(self.cb.menu)self.cb.menu(d._scope,d.id,d._latest,more);});
+      more.addEventListener('click',function(e){if(self.cb.menu)self.cb.menu(d._scope,d.id,d._latest,more);});
     }
     var expand=el.querySelector('.node-expand');
     if(expand)expand.addEventListener('click',function(e){
@@ -143,8 +155,8 @@
   };
   Graph.prototype.detail=function(d){
     if(d._scope==='document')return '资料 #'+d.id+' · '+d.row_count+' 行业务数据';
-    if(d._scope==='source')return d.source_table+' · '+(d.index_ids||[]).length+' 个指标';
-    if(d._scope==='index')return d.source_table+(d.source_column?' · '+d.source_column:'')+' · '+d._agg;
+    if(d._scope==='source')return d.name+' · '+(d.index_ids||[]).length+' 个指标';
+    if(d._scope==='index')return (d.table_comment||d.source_table)+(d.source_column?' · '+d.source_column:'')+' · '+d._agg;
     if(d._scope==='rule')return (d.conditions_json||[]).length+' 个条件 · '+(d.combine==='all'?'全部满足':'任一满足');
     return d._combine+' · '+(d.rule_refs_json||[]).length+' 条规则';
   };

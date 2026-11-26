@@ -9,7 +9,7 @@
   var editing={index:null,rule:null,frame:null};
   var editingScope='index',layout={},layoutAvailable=true,saveTimer=null;
   var LOCAL_KEY='c1.compute.layout';
-  var lineageSeq=0,lineageState=null,sourceFiles={};
+  var lineageSeq=0,lineageState=null,sourceFiles={},tableComments={};
 
   function api(path,opt){
     return fetch(path,opt||{}).then(function(r){
@@ -24,6 +24,8 @@
       body:JSON.stringify(body||{})});
   }
   function esc(s){return escHtml(s);}
+  function tableLabel(datasourceId,table){return tableComments[datasourceId+':'+table]||table;}
+  function scopeIcon(scope){return window.ComputeScopeIcon(scope,'scope-icon asset-scope-icon');}
   function say(kind,msg){
     var e=$(kind==='err'?'err':'ok');
     e.textContent=msg;e.hidden=false;
@@ -86,10 +88,12 @@
     var t=$('i-table');
     t.innerHTML='<option value="">加载中…</option>';
     if(!ds){t.innerHTML='<option value="">先选业务库</option>';return Promise.resolve();}
-    return api('/api/load/datasources/'+ds+'/tables').then(function(j){
-      var names=(j.items||[]).map(function(x){return typeof x==='string'?x:x.name;});
-      t.innerHTML='<option value="">请选择</option>'+names.map(function(n){
-        return '<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join('');
+    return api('/api/load/datasources/'+ds+'/tables?include_comment=1').then(function(j){
+      var rows=j.items||[],names=rows.map(function(x){return typeof x==='string'?x:x.name;});
+      t.innerHTML='<option value="">请选择</option>'+rows.map(function(x){
+        var name=typeof x==='string'?x:x.name;
+        return '<option value="'+esc(name)+'">'+esc(typeof x==='string'?x:(x.table_comment||x.name))+'</option>';
+      }).join('');
       if(keep&&names.indexOf(keep)>=0)t.value=keep;
     }).catch(function(e){err(e.message);});
   }
@@ -310,7 +314,7 @@
     host.innerHTML=defs[scope].map(function(d){
       return '<article class="asset-item" data-key="'+scope+':'+d.id+'">'+
         '<button type="button" class="asset-main" data-id="'+d.id+'" title="'+esc(d.name)+'" aria-label="查看'+esc(d.name)+'">'+
-        '<b>'+esc(d.name)+'</b></button>'+
+        scopeIcon(scope)+'<b>'+esc(d.name)+'</b></button>'+
         '<button type="button" class="icon-btn mini asset-more" data-action-menu="compute-action-menu" '+
         'data-scope="'+scope+'" data-id="'+d.id+'" data-tip="更多操作" aria-haspopup="menu" aria-expanded="false" '+
         'aria-label="'+esc(d.name)+'更多操作">⋯</button></article>';
@@ -383,13 +387,13 @@
     $('view-title').textContent='查看'+LABEL[scope]+' · '+d.name;
     var h='<div class="view-grid">';
     if(scope==='source'){
-      h+='<div><span>业务库 ID</span><b>'+esc(d.datasource_id)+'</b></div><div><span>业务表</span><b>'+esc(d.source_table)+'</b></div>'+
+      h+='<div><span>业务库 ID</span><b>'+esc(d.datasource_id)+'</b></div><div><span>业务表</span><b>'+esc(d.name||d.source_table)+'</b></div>'+
         '<div><span>关联指标</span><b>'+esc((d.index_ids||[]).length)+'</b></div>';
     }else if(scope==='document'){
       h+='<div><span>资料 ID</span><b>'+esc(d.id)+'</b></div><div><span>匹配业务行</span><b>'+esc(d.row_count)+'</b></div>'+
-        '<div><span>来源业务表</span><b>'+esc((d.source_tables||[]).join('、')||'—')+'</b></div>';
+        '<div><span>来源业务表</span><b>'+esc((d.source_table_labels||d.source_tables||[]).join('、')||'—')+'</b></div>';
     }else if(scope==='index'){
-      h+='<div><span>业务库 ID</span><b>'+esc(d.datasource_id)+'</b></div><div><span>业务表</span><b>'+esc(d.source_table)+'</b></div>'+
+      h+='<div><span>业务库 ID</span><b>'+esc(d.datasource_id)+'</b></div><div><span>业务表</span><b>'+esc(tableLabel(d.datasource_id,d.source_table))+'</b></div>'+
         '<div><span>聚合列</span><b>'+esc(d.source_column||'整行')+'</b></div><div><span>运算</span><b>'+esc(aggLabel(d.aggregate))+'</b></div>';
     }else if(scope==='rule'){
       h+='<div><span>条件组合</span><b>'+esc(combineLabel(d.combine))+'</b></div><div><span>条件数</span><b>'+esc((d.conditions_json||[]).length)+'</b></div>';
@@ -491,7 +495,7 @@
     host.innerHTML=groups.map(function(g){
       var active=lineageState.activeIndexByTable[g.key]||g.indices[0].id;
       return '<section class="lineage-table-card" data-table="'+esc(g.key)+'">'+
-        '<div class="lineage-table-title">'+esc(g.table)+'<small>业务库 #'+esc(g.datasource_id)+'</small></div>'+
+        '<div class="lineage-table-title">'+esc(tableLabel(g.datasource_id,g.table))+'<small>业务库 #'+esc(g.datasource_id)+'</small></div>'+
         '<div class="lineage-index-row">'+g.indices.map(function(d){
           return '<button type="button" class="lineage-index'+(d.id===active?' on':'')+'" data-index="'+d.id+'">'+esc(d.name)+'</button>';
         }).join('')+'</div><div class="table-preview" data-preview><div class="lineage-empty">加载匹配数据…</div></div></section>';
@@ -512,14 +516,19 @@
   function renderSampleData(j,host){
     var canTrace=(j.trace_columns||[]).indexOf('file_id')>=0&&(j.trace_columns||[]).indexOf('record_id')>=0;
     var tableKey=host.closest('[data-table]')?host.closest('[data-table]').dataset.table:'';
+    var rawTable=tableKey.split(':').slice(1).join(':'),comment=j.source.table_comment||rawTable;
+    var title=host.closest('[data-table]')?host.closest('[data-table]').querySelector('.lineage-table-title'):null;
+    if(title)title.innerHTML=esc(comment)+'<small>业务库 #'+esc(j.source.datasource_id)+'</small>';
     var h='<div class="sample-summary"><span>匹配 <b>'+esc(j.total)+'</b> 行</span><span>展示 '+esc(j.items.length)+' 行</span>'+
       (j.has_more?'<span>仅样本</span>':'')+'</div>';
     if(!canTrace)h+='<div class="lineage-empty">业务表缺少 file_id / record_id，仅展示样本。</div>';
-    if(j.items.length)h+='<div class="sample-scroll"><table class="sample-table"><thead><tr>'+j.columns.map(function(c){return '<th>'+esc(c)+'</th>';}).join('')+
+    var columns=['表注释'].concat(j.columns||[]);
+    if(j.items.length)h+='<div class="sample-scroll"><table class="sample-table"><thead><tr>'+columns.map(function(c){
+      return '<th>'+esc(c)+'</th>';}).join('')+
       '</tr></thead><tbody>'+j.items.map(function(row,rowIndex){
-        return '<tr data-row="'+rowIndex+'">'+j.columns.map(function(c){
-          var value=row[c],text=value==null?'NULL':String(value);
-          return '<td>'+(canTrace&&row.record_id!=null&&c!=='file_id'&&c!=='record_id'&&value!=null?
+        return '<tr data-row="'+rowIndex+'">'+columns.map(function(c){
+          var value=c==='表注释'?comment:row[c],text=value==null?'NULL':String(value);
+          return '<td>'+(canTrace&&c!=='表注释'&&row.record_id!=null&&c!=='file_id'&&c!=='record_id'&&value!=null?
             '<button type="button" class="linkbtn source-cell" data-rid="'+esc(row.record_id)+'" data-col="'+esc(c)+'" data-row="'+rowIndex+'" data-table="'+esc(tableKey)+'" data-file="'+esc(row.file_id)+'" data-tip="定位原单元格">'+esc(text)+'</button>':esc(text))+'</td>';
         }).join('')+'</tr>';
       }).join('')+'</tbody></table></div>';
@@ -553,7 +562,7 @@
     docs.sort(function(a,b){return b.row_count-a.row_count||a.id-b.id;});
     $('lineage-documents').innerHTML=docs.map(function(d){
       return '<button type="button" class="lineage-document-chip'+(String(lineageState.activeFileId)===String(d.id)?' on':'')+'" data-file="'+esc(d.id)+'" title="'+esc(d.name)+'">'+
-        esc(sourceFiles[d.id]||d.name||('资料 #'+d.id))+' · '+esc(d.row_count)+' 行</button>';
+        window.ComputeScopeIcon('document','scope-icon document-chip-icon')+'<span>'+esc(sourceFiles[d.id]||d.name||('资料 #'+d.id))+' · '+esc(d.row_count)+' 行</span></button>';
     }).join('')||'<div class="lineage-empty">暂无资料文件</div>';
     Array.prototype.forEach.call($('lineage-documents').querySelectorAll('[data-file]'),function(btn){
       btn.onclick=function(){showLineageDocument(Number(btn.dataset.file),btn.title);};
@@ -611,8 +620,9 @@
     defs.index.forEach(function(d){
       var key=d.datasource_id+':'+d.source_table,source=sourceByKey[key];
       if(!source){
+        var comment=tableComments[d.datasource_id+':'+d.source_table]||'';
         source={id:d.id,datasource_id:d.datasource_id,source_table:d.source_table,
-          index_ids:[],source_columns:[],name:d.source_table,_scope:'source'};
+          table_comment:comment,index_ids:[],source_columns:[],name:comment||d.source_table,_scope:'source'};
         sourceByKey[key]=source;out.source.push(source);
       }
       if(source.index_ids.indexOf(d.id)<0)source.index_ids.push(d.id);
@@ -622,12 +632,14 @@
     documentLinks.forEach(function(link){
       var doc=out.document.filter(function(d){return d.id===link.file_id;})[0];
       if(!doc){
-        doc={id:link.file_id,file_id:link.file_id,name:link.file_name,index_ids:[],source_ids:[],source_tables:[],row_count:0,_scope:'document'};
+        doc={id:link.file_id,file_id:link.file_id,name:link.file_name,index_ids:[],source_ids:[],source_tables:[],source_table_labels:[],row_count:0,_scope:'document'};
         out.document.push(doc);
       }
       if(doc.index_ids.indexOf(link.index_id)<0)doc.index_ids.push(link.index_id);
       var sourceId=indexSource[link.index_id];
       if(sourceId!=null&&doc.source_ids.indexOf(sourceId)<0)doc.source_ids.push(sourceId);
+      var source=out.source.filter(function(item){return item.id===sourceId;})[0];
+      if(source&&doc.source_table_labels.indexOf(source.name)<0)doc.source_table_labels.push(source.name);
       if(doc.source_tables.indexOf(link.source_table)<0)doc.source_tables.push(link.source_table);
       doc.row_count=Math.max(doc.row_count,Number(link.row_count)||0);
     });
@@ -653,6 +665,9 @@
         return api('/api/compute/source-documents').catch(function(){return {items:[]};});
       }).then(function(j){
         documentLinks=j.items||[];
+        tableComments={};(j.tables||[]).forEach(function(t){
+          tableComments[t.datasource_id+':'+t.source_table]=t.table_comment||'';
+        });
         var next=graphDefs();defs.source=next.source;defs.document=next.document;
         ['source','index','rule','frame'].forEach(renderAssets);
         graph.setData(next,layout);

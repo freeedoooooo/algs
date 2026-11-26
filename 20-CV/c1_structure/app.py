@@ -624,10 +624,22 @@ async def api_compute_layout_save(request: Request):
 
 @app.get('/api/compute/source-documents')
 def api_compute_source_documents():
-    items, errors = [], []
+    items, errors, tables, seen_tables = [], [], [], set()
     catalog = _load('store.catalog')
+    loader = _load('store.loader')
+    catalog_load = _load('store.catalog.load')
     for definition in _load('store.index_repo').list_defs():
         try:
+            table_key = (definition['datasource_id'], definition['source_table'])
+            if table_key not in seen_tables:
+                ds = catalog_load.get_datasource(definition['datasource_id'])
+                tables.append({
+                    'datasource_id': definition['datasource_id'],
+                    'source_table': definition['source_table'],
+                    'table_comment': loader.table_comment(
+                        ds, definition['source_table']) if ds else '',
+                })
+                seen_tables.add(table_key)
             for doc in _load('compute').source_documents(definition):
                 file = catalog.get_file(doc['file_id']) or {}
                 items.append({'index_id': definition['id'],
@@ -637,7 +649,7 @@ def api_compute_source_documents():
                               'row_count': doc['row_count']})
         except Exception:
             errors.append({'index_id': definition['id'], 'error': '来源文档读取失败'})
-    return {'ok': True, 'items': items, 'errors': errors}
+    return {'ok': True, 'items': items, 'tables': tables, 'errors': errors}
 
 
 @app.get('/api/index')
@@ -686,7 +698,11 @@ def api_index_source_preview(index_id: int, limit: int = 50):
     d = _load('store.index_repo').get_def(index_id=index_id)
     if d is None:
         raise _load('store.errors').NotFound('指标定义不存在')
-    return {'ok': True, **_load('compute').source_preview(d, limit=limit)}
+    result = _load('compute').source_preview(d, limit=limit)
+    ds = _load('store.catalog.load').get_datasource(d['datasource_id'])
+    result['source']['table_comment'] = (
+        _load('store.loader').table_comment(ds, d['source_table']) if ds else '')
+    return {'ok': True, **result}
 
 
 @app.get('/api/index/value/{value_id}/lineage')
@@ -863,9 +879,15 @@ def api_load_datasource_test(ds_id: int):
 
 
 @app.get('/api/load/datasources/{ds_id}/tables')
-def api_load_datasource_tables(ds_id: int):
+def api_load_datasource_tables(ds_id: int, include_comment: bool = False):
     ds = _ds_or_404(ds_id)
-    return {'items': _load('store.loader').list_tables(ds)}
+    loader = _load('store.loader')
+    tables = loader.list_tables(ds)
+    if include_comment:
+        return {'items': [
+            {'name': table, 'table_comment': loader.table_comment(ds, table)}
+            for table in tables]}
+    return {'items': tables}
 
 
 @app.get('/api/load/datasources/{ds_id}/columns')
