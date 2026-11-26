@@ -133,8 +133,13 @@ c1_structure/
 │   ├── content_db.py          staging 三表：get/save/patch/set_review/query_fields
 │   ├── loader.py              入库引擎接缝：数据源直连 / introspection / 字段契约
 │   │                          / transform（trim·number）/ write_record（应用层 upsert）
+│   ├── index_repo.py          指标定义/结果 repo（c1_index_info / c1_index_value）
+│   ├── rule_repo.py           业务规则定义/结果 repo（c1_rule_info / c1_rule_value）
+│   ├── frame_repo.py          框架定义/结果 repo（c1_frame_info / c1_frame_value）
+│   ├── value_common.py        计算层共享：JSON 序列化 / 行投影（哈希工具已退役）
 │   ├── artifact.py            附件门面（kind/mime 推断）
 │   └── artifact_db.py         c1_parse_artifact BLOB（键＝file_id，应用层级联删）
+├── compute/                   计算层：index/rule/frame 引擎与编排（engine.py 纯算子 / orchestrate.py 编排+血缘+复现）
 ├── adapter/                   解析信封 → 抽取记录（字段集）的适配层（base.py hydrate 派生视图）
 ├── pipeline/                  解析层
 │   ├── engines.py             模型单例（懒加载；表格模型按 doc_unwarp 分槽缓存）
@@ -209,6 +214,16 @@ c1_structure/
   旧版三列 `task_id/task_file_id/record_id` 中的前两列新代码不再写）。
 - **/rules 入库规则页**：左数据源列表（试连/编辑/删除）右入库规则列表（字段行抽屉编辑）；
   入库在资料侧发起。
+
+**计算审计层（/compute）**：在入库业务表之上做三层计算，并把结果与源文件血缘串成完整链路。
+
+- **三层含义**：指标（选业务库表/列做聚合）→ 规则（用指标做比较）→ 框架（关联规则出结论）。页面只显示中文；`index/rule/frame` 仅用于代码与 API 前缀，定义表 `c1_*_info`、结果表 `c1_*_value`。与「抽取规则」「入库映射」是完全不同的概念，API 前缀彼此隔离。
+- **简化设计**：定义同名唯一、保存即覆盖更新，无版本、无哈希；结果表只存结果本身与血缘锚点，不复制配置表字段（库/表/列/聚合/过滤/阈值/权重）。每次运行新增一行。
+- **全路径可回溯**：指标结果存参与计算的行锚点 `(file_id, record_id, 值)`；规则结果存指标结果 ID；框架结果存规则结果 ID。`GET /api/{scope}/value/{id}/lineage` 递归展开为 `框架→规则→指标→行锚点`，行锚点经 `/api/staging/locate/{record_id}` 落到源文件具体格子；前端在追溯抽屉里点击即可下钻。
+- **结果复核**：`GET /api/{scope}/value/{id}/replay` 用当前定义重算并逐字段比对（值/结论/得分/明细）。这是降级复核（无历史版本与哈希快照），可发现定义或数据变化，不提供防篡改证据。
+- **接口**：`/api/index|rule|frame` 的定义 CRUD、`/{id}/run`、`/{id}/values`、`/value/{id}/lineage|replay`；计算引擎在 `compute/`，存储 repo 在 `store/{index,rule,frame}_repo.py`。
+- **建表**：执行 `store/migrations/003_simplify_value.sql`（重建 6 张计算层表，会清空既有计算层演示数据；001 基线表不受影响）。
+- 现场演示脚本见 [docs/demo-script-index-rule-frame.md](./docs/demo-script-index-rule-frame.md)；设计稿见 [docs/design-index-rule-frame.md](./docs/design-index-rule-frame.md)。
 
 **按需导出**（file:// 直开 / 审计 / 迁移出口）：
 
@@ -338,7 +353,7 @@ IDE 高亮、改结构 / 样式不必碰 Python 逻辑。迁移经「重构前�
 | ② | `column_lines` | 空 | 人工列边界，填 `x1,x2,x3,…`（≥1 个递增数字）。**文本层 PDF** 用 PDF 点（像素×72/DPI，单条不成列自动回退）覆盖自动推断；**图片/扫描件** 用原图像素，单条即可沿竖线切开模型黏连格并重 OCR 归位（仅 `doc_unwarp=off`）。常规无需填 |
 | ③ 文字识别 | `det_thresh` / `box_thresh` | 0.3 / 0.6 | 漏检调低（0.2/0.4）、误检调高；predict 按次覆盖，不重建模型 |
 | ④ 渲染精度 | `dpi` | 110 | 小字 / 密集表提到 150~200 更清晰；坐标同步缩放 |
-| ⑤ 坐标回溯 | `doc_unwarp` | on | **电子版平整截图（如 108）设 off**：关闭方向分类 + UVDoc，单元格框直接叠原图、1:1 精确；旋转/弯曲扫描件保持 on（框叠矫正图）|
+| ⑤ 坐标回溯 | `doc_unwarp` | off | **默认关闭**：关闭方向分类 + UVDoc，单元格框直接叠原图、1:1 精确，适配电子版平整截图（如 108）；旋转/弯曲扫描件改设 on（框叠矫正图）|
 
 **参数快照**：每次上传的生效参数写进 `parse.json` 文件信封的 `params_snapshot`，
 页码写进每页 `pageRec.page`；报告页头统计行内的「参数快照 · N 项」小胶囊点开悬浮下拉，
@@ -348,12 +363,12 @@ IDE 高亮、改结构 / 样式不必碰 Python 逻辑。迁移经「重构前�
 全是 predict 级 / 纯参数，**每批可不同、零额外开销**。
 `doc_unwarp` 是唯一的引擎构造级参数：`engines.structure(use_unwarp)` 按开关
 **分两个槽位缓存单例**，所以两种配置各只加载一次模型、互不污染，切换不会反复重建。
-移动端 / server 识别模型仍未放页面（换模型要改 `config.py`，属实验模式）。
+识别模型档位保留在参数 schema 中仅作快照标签，配置面板默认隐藏（服务端 `hidden` 标记）；换模型仍需改 `config.py`，属实验模式。
 
 ### `doc_unwarp=off` 适用与实测
 
 108 是 103 那份 PDF 渲染出的**电子版平整截图**（910×1287，不旋转、不弯曲）。
-UVDoc 默认无条件执行，对它会做无谓的非线性形变：实测单元格框被撑到
+UVDoc 开启后无条件执行，对它会做无谓的非线性形变：实测单元格框被撑到
 x=0.1~910（贴满整页），而真实表格只到 x≈882；`<td>` 还多出 25 个空格子。
 关掉矫正后 `angle=-1`、矫正图与原图**逐像素差 0**、框范围 x=23.5~882 贴合真实表格，
 于是 `coord.space='source'`、不再生成 `rectified.png`、报告无需视图切换。
@@ -433,5 +448,5 @@ artifacts 六项：连接零副作用+sha 自洽 / 真链路无持久磁盘+BLOB
 - 同一字节文件可多次登记（无 sha 去重）；重放解析会清空该资料的暂存/产物/回执/隔离，不可撤销。任务概念已移除，`/tasks` 路径 404。
 - 首次运行需联网下载 PaddleX 官方模型（数百 MB）；离线部署要预置缓存，见「独立部署」。
 - 多页 PDF 默认（页码留空）**逐页全量解析 + 报告翻页切换 + 跨页续表拼接**（2026-11-19）；填页码只解析该页。拼接两条通路：重复表头（相邻页 + 同列 + 列对齐 + 表头相同）与无表头续页（列位置子集对齐 + 续页贴顶 + 首行像数据，2026-11-20）；判据保守，宁可不拼不误拼，版式差异大的续表保持各页独立。
-- 参数面板现覆盖 9 项（第一梯队 8 项 + `doc_unwarp`）+ 参数快照 + 运行日志；识别模型 mobile/server 仍未放（换模型要改 `config.py`，属实验模式）。
+- 参数面板现覆盖 10 项（schema 共 11 项，识别模型档位隐藏）+ 参数快照 + 运行日志；识别模型档位仅进快照（换模型要改 `config.py`，属实验模式）。
 - 自动列边界对「一页多表且各表端点混叠」的复杂版式仍是尽力而为；遇到新固定版式，直接在解析页填 `column_lines` 即可，不必改代码。

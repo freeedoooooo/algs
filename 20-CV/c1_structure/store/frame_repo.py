@@ -1,26 +1,18 @@
 """store/frame_repo.py — 框架域（c1_frame_info / c1_frame_value）。
 
-框架关联业务规则并组合出结论；值行携带 rule_value_ids_json（血缘上溯）
-与逐规则贡献明细，是追溯链顶点。
+简化设计（2026-11-26）：定义同名唯一、无版本、无哈希；结果只存依赖 ID 与结论。
 """
 from decimal import Decimal
 
 from . import db
-from .errors import BadRequest, Conflict, NotFound
-from .value_common import (rows, unjson, dump, spec_hash as _spec_hash,
-                           value_hash as _value_hash)
+from .errors import BadRequest, NotFound
+from .value_common import rows, unjson, dump
 
 _COMBINE = ('weighted', 'all_pass', 'any_pass', 'veto')
-_INFO_COLS = ('id', 'name', 'version', 'rule_refs_json', 'combine',
-              'threshold', 'spec_hash', 'created_at')
-_VALUE_COLS = ('id', 'frame_id', 'frame_version', 'rule_value_ids_json',
-               'outcome', 'score_text', 'detail_json', 'result_hash',
-               'computed_at')
-
-
-def _spec(rule_refs, combine, threshold):
-    return {'rule_refs': rule_refs, 'combine': combine,
-            'threshold': str(threshold) if threshold is not None else None}
+_INFO_COLS = ('id', 'name', 'rule_refs_json', 'combine', 'threshold',
+              'created_at', 'updated_at')
+_VALUE_COLS = ('id', 'frame_id', 'rule_value_ids_json', 'outcome',
+               'score_text', 'detail_json', 'computed_at')
 
 
 def _validate(name, rule_refs, combine, threshold):
@@ -34,11 +26,10 @@ def _validate(name, rule_refs, combine, threshold):
             raise BadRequest('规则引用须含 rule_id')
         try:
             ref['rule_id'] = int(ref['rule_id'])
-            ref['version'] = int(ref.get('version') or 0)
-            ref['weight'] = Decimal(str(ref.get('weight', 1)))
+            Decimal(str(ref.get('weight', 1)))
         except (TypeError, ValueError, ArithmeticError):
-            raise BadRequest('规则引用 rule_id/version/weight 非法')
-        ref['weight'] = str(ref['weight'])
+            raise BadRequest('规则引用 rule_id/weight 非法')
+        ref['weight'] = str(ref.get('weight', 1))
         ref['veto'] = bool(ref.get('veto'))
     if combine not in _COMBINE:
         raise BadRequest('组合方式仅支持：' + '/'.join(_COMBINE))
@@ -57,17 +48,8 @@ def list_defs():
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute(
-                'SELECT f.id, f.name, f.version, f.rule_refs_json, f.combine,'
-                ' f.threshold, f.spec_hash, f.created_at,'
-                ' (SELECT MAX(x.version) FROM c1_frame_info x'
-                '   WHERE x.name=f.name) AS latest_version,'
-                ' (SELECT COUNT(*) FROM c1_frame_info x'
-                '   WHERE x.name=f.name) AS version_count'
-                ' FROM c1_frame_info f'
-                ' WHERE f.version=(SELECT MAX(x.version) FROM c1_frame_info x'
-                '                  WHERE x.name=f.name)'
-                ' ORDER BY f.id')
+            cur.execute('SELECT ' + ','.join(_INFO_COLS) +
+                        ' FROM c1_frame_info ORDER BY id')
             out = rows(cur)
         for r in out:
             r['rule_refs_json'] = unjson(r['rule_refs_json'])
@@ -78,7 +60,7 @@ def list_defs():
         conn.close()
 
 
-def get_def(frame_id=None, name=None, version=None):
+def get_def(frame_id=None, name=None):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
@@ -86,14 +68,8 @@ def get_def(frame_id=None, name=None, version=None):
                 cur.execute('SELECT ' + ','.join(_INFO_COLS) +
                             ' FROM c1_frame_info WHERE id=%s', (frame_id,))
             elif name:
-                if version is not None:
-                    cur.execute('SELECT ' + ','.join(_INFO_COLS) +
-                                ' FROM c1_frame_info WHERE name=%s AND version=%s',
-                                (name, version))
-                else:
-                    cur.execute('SELECT ' + ','.join(_INFO_COLS) +
-                                ' FROM c1_frame_info WHERE name=%s'
-                                ' ORDER BY version DESC LIMIT 1', (name,))
+                cur.execute('SELECT ' + ','.join(_INFO_COLS) +
+                            ' FROM c1_frame_info WHERE name=%s', (name,))
             else:
                 return None
             got = rows(cur)
@@ -108,92 +84,77 @@ def get_def(frame_id=None, name=None, version=None):
         conn.close()
 
 
-def list_versions(name):
-    if get_def(name=name) is None:
-        raise NotFound('框架定义不存在')
-    conn = db.connect()
-    try:
-        with conn.cursor() as cur:
-            cur.execute('SELECT id, version, created_at, spec_hash'
-                        ' FROM c1_frame_info WHERE name=%s ORDER BY version DESC',
-                        (name,))
-            return rows(cur)
-    finally:
-        conn.close()
-
-
-def create_def(name, rule_refs, combine='weighted', threshold=None):
+def save_def(name, rule_refs, combine='weighted', threshold=None,
+             frame_id=None):
     name, rule_refs, combine, threshold = _validate(
         name, rule_refs, combine, threshold)
-    sh = _spec_hash(_spec(rule_refs, combine, threshold))
+    vals = (dump(rule_refs), combine, threshold)
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT MAX(version) FROM c1_frame_info WHERE name=%s',
-                        (name,))
-            v = (cur.fetchone()[0] or 0) + 1
-            cur.execute('SELECT id FROM c1_frame_info WHERE name=%s AND spec_hash=%s',
-                        (name, sh))
-            if cur.fetchone():
-                raise Conflict('框架定义未变化，无需新建版本')
-            cur.execute(
-                'INSERT INTO c1_frame_info'
-                ' (name,version,rule_refs_json,combine,threshold,spec_hash)'
-                ' VALUES (%s,%s,%s,%s,%s,%s)',
-                (name, v, dump(rule_refs), combine, threshold, sh))
-            did = cur.lastrowid
+            if frame_id:
+                cur.execute('SELECT id FROM c1_frame_info WHERE id=%s',
+                            (frame_id,))
+                if not cur.fetchone():
+                    raise NotFound('框架定义不存在')
+                cur.execute('UPDATE c1_frame_info SET rule_refs_json=%s,'
+                            ' combine=%s,threshold=%s WHERE id=%s',
+                            vals + (frame_id,))
+                did = frame_id
+            else:
+                cur.execute('SELECT id FROM c1_frame_info WHERE name=%s',
+                            (name,))
+                hit = cur.fetchone()
+                if hit:
+                    did = hit[0]
+                    cur.execute('UPDATE c1_frame_info SET rule_refs_json=%s,'
+                                ' combine=%s,threshold=%s WHERE id=%s',
+                                vals + (did,))
+                else:
+                    cur.execute(
+                        'INSERT INTO c1_frame_info'
+                        ' (name,rule_refs_json,combine,threshold)'
+                        ' VALUES (%s,%s,%s,%s)', (name,) + vals)
+                    did = cur.lastrowid
             conn.commit()
             return did
     finally:
         conn.close()
 
 
+create_def = save_def
+
+
 def delete_def(frame_id):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT name FROM c1_frame_info WHERE id=%s', (frame_id,))
-            got = cur.fetchone()
-            if not got:
+            cur.execute('SELECT id FROM c1_frame_info WHERE id=%s', (frame_id,))
+            if not cur.fetchone():
                 raise NotFound('框架定义不存在')
-            name = got[0]
-            cur.execute('SELECT COUNT(*) FROM c1_frame_value WHERE frame_id=%s',
+            cur.execute('DELETE FROM c1_frame_value WHERE frame_id=%s',
                         (frame_id,))
-            if cur.fetchone()[0]:
-                raise Conflict('该框架已有计算结果，禁止删除')
-            cur.execute('DELETE FROM c1_frame_info WHERE name=%s', (name,))
+            cur.execute('DELETE FROM c1_frame_info WHERE id=%s', (frame_id,))
             conn.commit()
     finally:
         conn.close()
 
 
-def add_value(frame_id, frame_version, def_hash, rule_value_ids, outcome,
-              detail, score_text=None):
-    vh = _value_hash(def_hash, {'rule_value_ids': rule_value_ids,
-                                'detail': detail, 'outcome': outcome,
-                                'score': score_text})
+def add_value(frame_id, rule_value_ids, outcome, detail, score_text=None):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT id FROM c1_frame_info WHERE id=%s AND version=%s',
-                        (frame_id, frame_version))
+            cur.execute('SELECT id FROM c1_frame_info WHERE id=%s', (frame_id,))
             if not cur.fetchone():
-                raise NotFound('框架定义版本不存在')
-            cur.execute(
-                'INSERT IGNORE INTO c1_frame_value'
-                ' (frame_id,frame_version,rule_value_ids_json,outcome,'
-                '  score_text,detail_json,result_hash)'
-                ' VALUES (%s,%s,%s,%s,%s,%s,%s)',
-                (frame_id, frame_version, dump(rule_value_ids), outcome,
-                 score_text, dump(detail), vh))
-            if cur.rowcount:
-                vid = cur.lastrowid
-                conn.commit()
-                return vid, vh, True
-            cur.execute('SELECT id FROM c1_frame_value WHERE frame_id=%s'
-                        ' AND frame_version=%s AND result_hash=%s',
-                        (frame_id, frame_version, vh))
-            return cur.fetchone()[0], vh, False
+                raise NotFound('框架定义不存在')
+            cur.execute('INSERT INTO c1_frame_value'
+                        ' (frame_id,rule_value_ids_json,outcome,score_text,'
+                        '  detail_json) VALUES (%s,%s,%s,%s,%s)',
+                        (frame_id, dump(rule_value_ids), outcome,
+                         score_text, dump(detail)))
+            vid = cur.lastrowid
+            conn.commit()
+            return vid
     finally:
         conn.close()
 

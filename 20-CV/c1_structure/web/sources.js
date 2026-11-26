@@ -428,6 +428,7 @@ function renderCfg(){
   if(cfgNode==='params'){
     h+=head('解析参数','对本次资料生效，重放解析时使用。参数定义与默认值来自服务端 schema，保存时同样经服务端校验。');
     (cfgData.schema||[]).forEach(function(p){
+      if(p.hidden) return;   /* 服务端标记隐藏的参数不生成控件 */
       var key=p.key, label=p.label||key, val=cfgData.params[key];
       if(val===undefined||val===null) val=p.default;
       var desc=p.desc||p.help||'';

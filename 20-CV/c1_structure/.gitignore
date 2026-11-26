@@ -2,6 +2,7 @@
 logs/
 tmp/
 data/backup/
+data/secrets.json
 
 # Python / 虚拟环境 / 本地环境变量
 __pycache__/

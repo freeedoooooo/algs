@@ -40,7 +40,7 @@ def _default_model_tier():
 SCHEMA = [
     dict(key='model', label='识别模型', type='select',
          default=_default_model_tier(), options=MODEL_OPTIONS,
-         order=0, group='⓪ 模型',
+         order=0, group='⓪ 模型', hidden=True,
          help='记录本次使用的识别模型档位到报告参数快照，便于追溯。\n'
               '默认档位跟随服务当前配置（PP-OCRv4-mobile）。\n'
               '注意：实际识别引擎使用服务配置的模型，切换档位不会改变引擎行为。'),
@@ -57,7 +57,7 @@ SCHEMA = [
               'lines：按 PDF 真实框线切分，适合框线完整或一页多表。\n'
               'text：按文字列对齐切分，适合无框线表格。\n'
               '填写「人工列边界」后，auto 会优先使用，无需单独选择策略。'),
-    dict(key='column_lines', label='人工列边界（x 坐标）', type='str', default='',
+    dict(key='column_lines', label='人工列边界', type='str', default='',
          order=3, group='② 表格识别',
          help='竖线 x 坐标列表，以逗号或空格分隔，至少 1 个且递增。\n'
               '图片/扫描件使用原图像素坐标（仅 doc_unwarp 为 off 时生效），可用于拆分粘连的单元格。\n'
@@ -90,8 +90,8 @@ SCHEMA = [
          default=config.PDF_DPI, min=72, max=400, step=10,
          order=11, group='④ 渲染精度',
          help='小字或密集表格可调高至 150~200；数值越高，处理耗时越长。'),
-    dict(key='doc_unwarp', label='文档矫正（UVDoc）', type='select',
-         default='on', options=['on', 'off'],
+    dict(key='doc_unwarp', label='文档矫正', type='select',
+         default='off', options=['on', 'off'],
          order=12, group='⑤ 坐标回溯',
          help='on：执行方向分类与 UVDoc 扭曲矫正，适用于旋转、弯曲的扫描件（检测框叠加在矫正图上）。\n'
               'off：关闭预处理，适用于平整的电子截图（检测框按 1:1 叠加在原图上）。\n'
@@ -109,7 +109,7 @@ def defaults():
 def public_schema():
     """给上传页渲染表单用的 schema（去掉内部字段，带上 group/order）。"""
     keys = ('key', 'label', 'type', 'default', 'min', 'max', 'step',
-            'options', 'order', 'group', 'help')
+            'options', 'order', 'group', 'hidden', 'help')
     return [{k: p[k] for k in keys if k in p} for p in SCHEMA]
 
 

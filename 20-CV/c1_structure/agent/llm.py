@@ -5,8 +5,9 @@
 · 缺配置显式抛 LLMUnconfigured，绝不静默降级；
 · call_json 严格解析 + ≤2 次定点修复，llm 可注入供单测/Stub 使用。
 
-Stub 模式：config.SMART_STUB=1（默认）时 call_json 不做网络调用，
-返回 stub 占位对象——供前端/API 联调不烧 token。设 C1_SMART_STUB=0 走真实模型。
+模式由 C1_SMART_STUB=stub|live 控制（默认 stub）：
+stub 时 call_json 不做网络调用，返回占位对象供联调、不烧 token；
+live 时走配置模型。兼容旧值 1/0。
 """
 import json
 import re
@@ -67,6 +68,16 @@ def raw_call(prompt, spec=None):
     try:
         with urllib.request.urlopen(req, timeout=config.LLM_TIMEOUT) as resp:
             payload = json.loads(resp.read().decode('utf-8'))
+    except urllib.error.HTTPError as exc:
+        detail = ''
+        try:
+            detail = exc.read().decode('utf-8', 'replace')[:200]
+        except Exception:
+            pass
+        if exc.code in (401, 403):
+            raise LLMUnconfigured(
+                'Agent 模型凭据无效（HTTP {}）：{}'.format(exc.code, detail))
+        raise LLLError('Agent 模型 HTTP {}：{}'.format(exc.code, detail))
     except urllib.error.URLError as exc:
         raise LLMTimeout('Agent 模型调用失败：{}'.format(type(exc).__name__))
     except (ValueError, OSError) as exc:
@@ -86,7 +97,7 @@ def call_json(prompt, schema, *, llm=None, max_repair=2, spec=None,
     """返回 (dict, meta)：严格 JSON 解析，失败时把报错回喂模型定点修复。
 
     llm 注入签名 llm(prompt, spec) -> dict；stub 注入签名 stub(prompt) -> dict。
-    生产路径：SMART_STUB=1 用占位，否则走 raw_call。
+    生产路径：SMART_STUB=True（stub）用占位，否则走 raw_call。
     """
     meta = {'prompt_version': (spec or {}).get('prompt_version'),
             'model': (spec or {}).get('model') or config.LLM_MODEL,

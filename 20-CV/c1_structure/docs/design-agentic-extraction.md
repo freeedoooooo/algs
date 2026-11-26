@@ -32,7 +32,7 @@
 | 逐格血缘锚点形态固定：`{page,table_index,table_scope,space,cell_bbox,raw_text}` | `collect.py::25 _anchor`；`collect_logic/_common.py` | 生成规则必须让每个字段管道走到 source 算子产出锚点 |
 | 声明式 `validate` 只写 `review.reason`、不改值 | `design-extract-logic-a.md` §1.3；engine `apply_pipeline` issues | 校验 Agent 沿用该约束，绝不自动改值 |
 | 环境红线：Python `D:/miniforge3/envs/paddle/python.exe`；8765 常服不启停；8799/8797 临时 | `MEMORY.md`；`docs/progress-handoff.md` | 一切验证在 8799 + 合成资料上做，8765 不动 |
-| `smart_extract.SMART_STUB` 默认 `1`（占位），真实调用需 `C1_SMART_STUB=0` | `config.py:55-57` | Agent 同样提供 Stub 开关，供前端/API 联调不烧 token |
+| `smart_extract.SMART_STUB` 默认 `True`（占位），由 `C1_SMART_STUB=stub\|live` 控制（兼容旧值 1/0） | `config.py` 模式解析段 | Agent 共用该开关，供前端/API 联调不烧 token |
 
 ---
 

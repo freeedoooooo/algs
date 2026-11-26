@@ -194,6 +194,7 @@ function pfRenderConfig(){
       return h+(desc?pfTip(desc):'')+'</span></div>';
     };
     (pfCfg.schema||[]).forEach(function(p){
+      if(p.hidden) return;   /* 服务端标记隐藏的参数不生成控件 */
       if(['model','page'].indexOf(p.key)>=0){ basic+=row(p); return; }
       if(!groups[p.group]){ groups[p.group]=[]; order.push(p.group); }
       groups[p.group].push(row(p));

@@ -43,6 +43,7 @@ function renderParams(schema){
   paramSchema=schema;
   var groups={},order=[],basic=[];
   schema.forEach(function(p){
+    if(p.hidden) return;   /* 服务端标记隐藏的参数不生成控件（如识别模型档位） */
     if(BASIC_KEYS.indexOf(p.key)>=0){ basic.push(p); return; }
     if(!groups[p.group]){groups[p.group]=[];order.push(p.group);}
     groups[p.group].push(p);

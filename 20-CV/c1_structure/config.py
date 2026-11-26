@@ -9,6 +9,25 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
+
+# 本地 secrets.json 兜底（已被 .gitignore 覆盖）：仅当环境变量未设置时注入，
+# 便于开发期免去每次导出 C1_LLM_*；生产/容器仍以真实环境变量为准。
+# 路径取 <DATA_ROOT>/data/secrets.json，环境变量 C1_STRUCTURE_DATA_ROOT 可改根。
+# 纯标准库解析，零新依赖；密钥不进代码库、不进日志。
+import json as _json
+_DATA_ROOT_EARLY = os.path.abspath(
+    os.getenv('C1_STRUCTURE_DATA_ROOT', ROOT))
+_SECRET_FILE = os.path.join(_DATA_ROOT_EARLY, 'data', 'secrets.json')
+if os.path.isfile(_SECRET_FILE):
+    try:
+        with open(_SECRET_FILE, encoding='utf-8') as _f:
+            _secrets = _json.load(_f)
+        if isinstance(_secrets, dict):
+            for _k, _v in _secrets.items():
+                if isinstance(_v, (str, int, float)) and str(_k) not in os.environ:
+                    os.environ[str(_k)] = str(_v)
+    except (ValueError, OSError):
+        pass  # 配置损坏不阻断启动；缺凭据时各调用点显式报错
 # 兜底：即使有旧脚本用顶层 `import config` 也能找到（新代码统一走包相对导入）
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
@@ -52,9 +71,19 @@ LLM_API_KEY = os.getenv('C1_LLM_API_KEY', '')
 LLM_MODEL = os.getenv('C1_LLM_MODEL', '')
 LLM_TIMEOUT = float(os.getenv('C1_LLM_TIMEOUT', '60'))
 LLM_TEMPERATURE = float(os.getenv('C1_LLM_TEMPERATURE', '0'))
-# 智能抽取占位开关：默认开启，固定返回 field1=智能抽取结果1；
-# 设 C1_SMART_STUB=0 恢复真实模型调用。
-SMART_STUB = os.getenv('C1_SMART_STUB', '1') == '1'
+# 智能抽取/规则生成模式开关（语义值）：
+#   stub = 联调占位，不访问模型、不烧 token（默认）
+#   live = 真实调用 C1_LLM_* 配置的模型
+# 兼容旧值：1/true/on → stub，0/false/off → live；其它值显式报错，不静默走错模式。
+_MODE_RAW = os.getenv('C1_SMART_STUB', 'stub').strip().lower()
+if _MODE_RAW in ('stub', '1', 'true', 'on'):
+    SMART_STUB = True
+elif _MODE_RAW in ('live', '0', 'false', 'off'):
+    SMART_STUB = False
+else:
+    raise ValueError(
+        'C1_SMART_STUB 非法值「{}」：只接受 stub / live（兼容 1/0）。'.format(
+            _MODE_RAW))
 
 # ---- 输入类型 ----
 IMAGE_EXTS = ('.png', '.jpg', '.jpeg', '.bmp', '.webp', '.tif', '.tiff')

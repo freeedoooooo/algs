@@ -186,7 +186,7 @@ def parse_one(src_path, case_abs, params=None, emit=None):
 
     page_param = params.get('page') or 'all'
     dpi = params.get('dpi')
-    use_unwarp = (params.get('doc_unwarp', 'on') == 'on')
+    use_unwarp = (params.get('doc_unwarp', 'off') == 'on')
     file_rec = {
         'file': name, 'kind': '', 'encoding': '',
         'params_snapshot': {k: v for k, v in params.items()

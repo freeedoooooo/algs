@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>计算 · 结构化工具</title>
+<link rel="stylesheet" href="/static/shell.css">
+<link rel="stylesheet" href="/static/compute.css">
+</head>
+<body>
+<nav class="topnav">
+  <a class="brand" href="/">结构化工具</a>
+  <a href="/">工作台</a>
+  <a href="/sources">资料</a>
+  <a href="/parse">解析</a>
+  <a href="/extract">抽取</a>
+  <a href="/review">校验</a>
+  <a href="/rules">入库</a>
+  <a href="/compute" class="on">计算</a>
+  <span class="spacer"></span>
+  <span class="navnote">指标 · 规则 · 框架 · 全路径追溯</span>
+</nav>
+<div class="pagebody">
+  <div class="pagehead">
+    <h1>计算</h1>
+  </div>
+  <div class="banner err" id="err" hidden></div>
+  <div class="banner info" id="ok" hidden></div>
+
+  <div class="tabs" id="tabs">
+    <button type="button" class="tab on" data-scope="index">指标</button>
+    <button type="button" class="tab" data-scope="rule">规则</button>
+    <button type="button" class="tab" data-scope="frame">框架</button>
+  </div>
+
+  <!-- 指标台账 -->
+  <section class="pane" id="pane-index">
+    <div class="panel">
+      <div class="dshead">
+        <b>指标</b>
+        <span class="spacer"></span>
+        <button type="button" class="btn mini" id="i-new">＋ 新建指标</button>
+      </div>
+      <table class="list" id="i-defs" hidden>
+        <thead><tr>
+          <th class="seq">序号</th><th>名称</th><th>来源</th><th>运算</th>
+          <th>最近结果</th><th>操作</th>
+        </tr></thead>
+        <tbody id="i-rows"></tbody>
+      </table>
+      <div class="empty" id="i-empty" hidden><b>暂无指标</b>点击右上角「新建指标」配置一条。</div>
+    </div>
+  </section>
+
+  <!-- 规则台账 -->
+  <section class="pane" id="pane-rule" hidden>
+    <div class="panel">
+      <div class="dshead">
+        <b>规则</b>
+        <span class="spacer"></span>
+        <button type="button" class="btn mini" id="r-new">＋ 新建规则</button>
+      </div>
+      <table class="list" id="r-defs" hidden>
+        <thead><tr>
+          <th class="seq">序号</th><th>名称</th><th>条件</th>
+          <th>最近结论</th><th>操作</th>
+        </tr></thead>
+        <tbody id="r-rows"></tbody>
+      </table>
+      <div class="empty" id="r-empty" hidden><b>暂无规则</b>点击右上角「新建规则」配置一条。</div>
+    </div>
+  </section>
+
+  <!-- 框架台账 -->
+  <section class="pane" id="pane-frame" hidden>
+    <div class="panel">
+      <div class="dshead">
+        <b>框架</b>
+        <span class="spacer"></span>
+        <button type="button" class="btn mini" id="f-new">＋ 新建框架</button>
+      </div>
+      <table class="list" id="f-defs" hidden>
+        <thead><tr>
+          <th class="seq">序号</th><th>名称</th><th>组合</th>
+          <th>最近结论</th><th>操作</th>
+        </tr></thead>
+        <tbody id="f-rows"></tbody>
+      </table>
+      <div class="empty" id="f-empty" hidden><b>暂无框架</b>点击右上角「新建框架」配置一条。</div>
+    </div>
+  </section>
+</div>
+
+<!-- 定义编辑抽屉（三模块复用） -->
+<div class="drawer wide" id="ded" hidden>
+  <div class="dpanel">
+    <div class="dhead">
+      <h2 id="de-title">新建定义</h2>
+      <span class="spacer"></span>
+      <button type="button" class="dclose" id="de-close">关闭 (Esc)</button>
+    </div>
+    <div class="dbody">
+      <div id="de-index" hidden>
+        <div class="fsec"><label class="flab" for="i-name">名称</label>
+          <input type="text" class="tin" id="i-name" placeholder="如：金额合计"></div>
+        <div class="fsec"><label class="flab" for="i-ds">业务库</label>
+          <select class="tin" id="i-ds"><option value="">加载中…</option></select></div>
+        <div class="fsec"><label class="flab" for="i-table">业务表</label>
+          <select class="tin" id="i-table"><option value="">先选业务库</option></select></div>
+        <div class="fsec"><label class="flab" for="i-column">聚合列（计数可留空）</label>
+          <select class="tin" id="i-column"><option value="">先选业务表</option></select></div>
+        <div class="fsec"><label class="flab" for="i-agg">运算</label>
+          <select class="tin" id="i-agg">
+            <option value="sum">求和</option><option value="count">计数</option>
+            <option value="avg">平均</option><option value="min">最小值</option>
+            <option value="max">最大值</option><option value="count_distinct">去重计数</option>
+          </select></div>
+        <div class="fsec"><label class="flab">筛选条件（可选）</label>
+          <div id="i-filters"></div>
+          <button type="button" class="btn mini ghost" id="i-addfilter" style="margin-top:4px">＋ 添加条件</button></div>
+      </div>
+      <div id="de-rule" hidden>
+        <div class="fsec"><label class="flab" for="r-name">名称</label>
+          <input type="text" class="tin" id="r-name" placeholder="如：金额超阈值"></div>
+        <div class="fsec"><label class="flab" for="r-index">引用指标</label>
+          <select class="tin" id="r-index"><option value="">加载中…</option></select></div>
+        <div class="fsec"><label class="flab" for="r-alias">标识名</label>
+          <input type="text" class="tin" id="r-alias" value="m1"></div>
+        <div class="fsec"><label class="flab" for="r-op">比较</label>
+          <select class="tin" id="r-op">
+            <option value="gt">大于</option><option value="gte">大于等于</option>
+            <option value="lt">小于</option><option value="lte">小于等于</option>
+            <option value="eq">等于</option><option value="ne">不等于</option>
+            <option value="between">介于区间</option>
+          </select></div>
+        <div class="fsec"><label class="flab" for="r-th">阈值（区间用逗号分隔）</label>
+          <input type="text" class="tin" id="r-th" placeholder="如：1000 或 100,200"></div>
+      </div>
+      <div id="de-frame" hidden>
+        <div class="fsec"><label class="flab" for="f-name">名称</label>
+          <input type="text" class="tin" id="f-name" placeholder="如：综合评估"></div>
+        <div class="fsec"><label class="flab">关联规则（勾选并设置权重）</label>
+          <div id="f-rules" class="rulechecks"></div></div>
+        <div class="fsec"><label class="flab" for="f-combine">组合方式</label>
+          <select class="tin" id="f-combine">
+            <option value="weighted">加权得分</option><option value="all_pass">全部通过</option>
+            <option value="any_pass">任一通过</option><option value="veto">一票否决</option>
+          </select></div>
+        <div class="fsec"><label class="flab" for="f-th">通过阈值（加权模式）</label>
+          <input type="text" class="tin" id="f-th" value="0.8"></div>
+      </div>
+    </div>
+    <div class="dfoot">
+      <span class="msg" id="de-msg"></span>
+      <span class="spacer"></span>
+      <button type="button" class="btn" id="de-save">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="drawer" id="trace" hidden>
+  <div class="dpanel">
+    <div class="dhead"><h2 id="tr-title">全链路追溯</h2><span class="spacer"></span>
+      <button type="button" class="dclose" id="tr-close">关闭 (Esc)</button></div>
+    <div class="dbody" id="tr-body"><div class="empty">加载中…</div></div>
+  </div>
+</div>
+
+<script src="/static/shell.js"></script>
+<script src="/static/compute.js"></script>
+</body>
+</html>

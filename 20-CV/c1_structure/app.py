@@ -245,6 +245,12 @@ def rules_page():
     return HTMLResponse(asset('rules.html'))
 
 
+@app.get('/compute', response_class=HTMLResponse)
+def compute_page():
+    """计算审计：指标→规则→框架 + 全链路追溯 + 复现校验。"""
+    return HTMLResponse(asset('compute.html'))
+
+
 @app.get('/dashboard', response_class=HTMLResponse)
 def dashboard_page():
     """数据看板：分页查看业务表数据，按 record_id 跳预览做血缘回溯。"""
@@ -539,7 +545,7 @@ async def api_rule_version_add(rule_id: int, request: Request):
 async def api_agent_generate_rule(request: Request):
     """AI 生成 v2 规则草稿：参考文件 + 目标列名 → spec + 干跑/对拍诊断。
 
-    Stub 模式（C1_SMART_STUB=1，默认）不烧 token；设 0 走真实模型。
+    C1_SMART_STUB=stub（默认）不烧 token；设 live 走真实模型。
     中间层 confirmed/edited 记录自动作标准答案，内存重跑不碰 _purge。
     """
     body = await _json_body(request)
@@ -595,16 +601,17 @@ def api_index_list():
 @app.post('/api/index')
 async def api_index_add(request: Request):
     body = await _json_body(request)
-    did = _load('store.index_repo').create_def(
+    did = _load('store.index_repo').save_def(
         body.get('name'), body.get('datasource_id'),
         body.get('source_table'), body.get('source_column'),
-        body.get('aggregate'), body.get('filter_json'))
+        body.get('aggregate'), body.get('filter_json'),
+        index_id=body.get('id'))
     return {'ok': True, 'id': did}
 
 
 @app.get('/api/index/{index_id}')
-def api_index_get(index_id: int, version: int = None):
-    d = _load('store.index_repo').get_def(index_id=index_id, version=version)
+def api_index_get(index_id: int):
+    d = _load('store.index_repo').get_def(index_id=index_id)
     if d is None:
         raise _load('store.errors').NotFound('指标定义不存在')
     return d
@@ -645,15 +652,16 @@ def api_rule_list():
 @app.post('/api/rule')
 async def api_rule_add(request: Request):
     body = await _json_body(request)
-    did = _load('store.rule_repo').create_def(
+    did = _load('store.rule_repo').save_def(
         body.get('name'), body.get('index_refs'),
-        body.get('conditions'), body.get('combine') or 'all')
+        body.get('conditions'), body.get('combine') or 'all',
+        rule_id=body.get('id'))
     return {'ok': True, 'id': did}
 
 
 @app.get('/api/rule/{rule_id}')
-def api_rule_get(rule_id: int, version: int = None):
-    d = _load('store.rule_repo').get_def(rule_id=rule_id, version=version)
+def api_rule_get(rule_id: int):
+    d = _load('store.rule_repo').get_def(rule_id=rule_id)
     if d is None:
         raise _load('store.errors').NotFound('规则定义不存在')
     return d
@@ -696,15 +704,16 @@ def api_frame_list():
 @app.post('/api/frame')
 async def api_frame_add(request: Request):
     body = await _json_body(request)
-    did = _load('store.frame_repo').create_def(
+    did = _load('store.frame_repo').save_def(
         body.get('name'), body.get('rule_refs'),
-        body.get('combine') or 'weighted', body.get('threshold'))
+        body.get('combine') or 'weighted', body.get('threshold'),
+        frame_id=body.get('id'))
     return {'ok': True, 'id': did}
 
 
 @app.get('/api/frame/{frame_id}')
-def api_frame_get(frame_id: int, version: int = None):
-    d = _load('store.frame_repo').get_def(frame_id=frame_id, version=version)
+def api_frame_get(frame_id: int):
+    d = _load('store.frame_repo').get_def(frame_id=frame_id)
     if d is None:
         raise _load('store.errors').NotFound('框架定义不存在')
     return d

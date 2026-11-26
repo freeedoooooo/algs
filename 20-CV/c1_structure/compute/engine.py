@@ -1,9 +1,9 @@
 """compute/engine.py — 计算层纯引擎（index / rule / frame）。
 
-职责：按定义快照执行运算，构造「输入快照 / 依赖快照」供 repo 算 result_hash。
+职责：按当前定义执行运算，返回结果与血缘锚点（简化设计，无版本/哈希/快照）。
 不做 DB 写入；业务库读走 store.loader（白名单 + 参数化 + 标识符转义）。
 
-设计约束（docs/design-index-rule-frame.md §4.3 / §6）：
+设计约束（docs/design-index-rule-frame.md §7）：
 - 算子固定枚举，拒绝自由 SQL / 表达式；
 - 指标同一只读连接内跑聚合 + 明细两条查询，避免中间数据变动；
 - 行锚点上限 MAX_INPUT_ROWS，超出置 truncated=True；
@@ -129,37 +129,21 @@ def run_index(defn):
             item['value'] = (format(r[2], 'f') if isinstance(r[2], Decimal)
                              else str(r[2]))
         captured.append(item)
+    # 简化设计：结果只存血缘锚点，不复制定义配置（库/表/列/聚合/过滤）。
     snapshot = {
-        'datasource_id': defn['datasource_id'], 'table': table,
-        'column': column, 'aggregate': agg, 'filter': filters,
         'rows': captured, 'truncated': truncated,
         'matched_rows': len(db_rows),
     }
     return raw_out, snapshot
 
 
-def replay_index(defn, input_rows):
-    """用结果自带输入快照重算聚合，返回重算 value_text（不查明细）。"""
-    ds, table, cols, column = _check_index_def(defn)
-    agg = defn['aggregate']
-    where, wargs = _where(input_rows.get('filter') or [], allow_cols=set(cols))
-    if agg == 'count':
-        expr = 'COUNT(*)'
-    elif agg == 'count_distinct':
-        expr = 'COUNT(DISTINCT {})'.format(loader._ident(column))
-    else:
-        expr = '{}({})'.format(_AGG_SQL[agg], loader._ident(column))
-    conn = loader.connect_datasource(ds)
-    try:
-        with conn.cursor() as cur:
-            cur.execute('SELECT {} FROM {}{}'.format(
-                expr, loader._ident(table), where), wargs)
-            raw = cur.fetchone()[0]
-    finally:
-        conn.close()
-    if raw is None:
-        return '0' if agg in ('count', 'count_distinct') else ''
-    return format(raw, 'f') if isinstance(raw, Decimal) else str(raw)
+def replay_index(defn):
+    """降级复现：用当前定义重算一次聚合值（无版本、无哈希、无输入快照）。
+
+    与存储值比对可发现数据/定义变化，但不能证明历史结果当时的口径。
+    """
+    value, _ = run_index(defn)
+    return value
 
 
 # ---------------- 规则 rule ----------------
@@ -199,9 +183,9 @@ def run_rule(defn, index_values):
             raise BadRequest('条件引用了未解析的指标别名：{}'.format(alias))
         ok = _compare(aliases[alias], op, c.get('threshold'))
         passed.append(ok)
-        detail.append({'alias': alias, 'op': op,
-                       'threshold': c.get('threshold'),
-                       'actual': str(aliases[alias]), 'passed': ok})
+        # 简化设计：只留实际值与结论，不复制 op/阈值等定义配置
+        detail.append({'alias': alias, 'actual': str(aliases[alias]),
+                       'passed': ok})
     outcome = ('all' if defn['combine'] == 'all' else 'any')
     result = all(passed) if outcome == 'all' else any(passed)
     return ('pass' if result else 'fail'), detail
@@ -219,7 +203,9 @@ def run_frame(defn, rule_outcomes):
     combine = defn['combine']
     if combine not in _COMBINE:
         raise BadRequest('组合方式非法：{}'.format(combine))
-    detail = [dict(r) for r in rule_outcomes]
+    # 简化设计：detail 只留结论与贡献，不复制 weight/veto 等定义配置
+    detail = [{'rule_value_id': r['rule_value_id'], 'outcome': r['outcome']}
+              for r in rule_outcomes]
     flags = [r['outcome'] == 'pass' for r in rule_outcomes]
     if any(r.get('veto') and not ok for r, ok in zip(rule_outcomes, flags)):
         return 'fail', None, detail
@@ -239,6 +225,7 @@ def run_frame(defn, rule_outcomes):
     score_text = format(score, 'f')
     threshold = _num(defn.get('threshold'), '阈值')
     outcome = 'pass' if score >= threshold else 'fail'
-    for r, ok in zip(detail, flags):
-        r['contribution'] = str(_num(r.get('weight', 1)) / total) if ok else '0'
+    for d, r, ok in zip(detail, rule_outcomes, flags):
+        d['contribution'] = (str(_num(r.get('weight', 1)) / total)
+                             if ok else '0')
     return outcome, score_text, detail

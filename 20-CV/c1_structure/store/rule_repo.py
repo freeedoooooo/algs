@@ -1,24 +1,17 @@
 """store/rule_repo.py — 业务规则域（c1_rule_info / c1_rule_value）。
 
-本模块的 rule 专指计算层业务规则，与抽取规则 c1_extract_rule 无关。
-定义版本行同表不可变；值行携带 index_value_ids_json（血缘上溯）+ detail_json。
+简化设计（2026-11-26）：定义同名唯一、无版本、无哈希；结果只存依赖 ID 与实际值。
 """
 from . import db
-from .errors import BadRequest, Conflict, NotFound
-from .value_common import (rows, unjson, dump, spec_hash as _spec_hash,
-                           value_hash as _value_hash)
+from .errors import BadRequest, NotFound
+from .value_common import rows, unjson, dump
 
 _OPS = ('gt', 'gte', 'lt', 'lte', 'eq', 'ne', 'between')
 _COMBINE = ('all', 'any')
-_INFO_COLS = ('id', 'name', 'version', 'index_refs_json', 'conditions_json',
-              'combine', 'spec_hash', 'created_at')
-_VALUE_COLS = ('id', 'rule_id', 'rule_version', 'index_value_ids_json',
-               'outcome', 'detail_json', 'result_hash', 'computed_at')
-
-
-def _spec(index_refs, conditions, combine):
-    return {'index_refs': index_refs, 'conditions': conditions,
-            'combine': combine}
+_INFO_COLS = ('id', 'name', 'index_refs_json', 'conditions_json',
+              'combine', 'created_at', 'updated_at')
+_VALUE_COLS = ('id', 'rule_id', 'index_value_ids_json', 'outcome',
+               'detail_json', 'computed_at')
 
 
 def _validate(name, index_refs, conditions, combine):
@@ -33,9 +26,8 @@ def _validate(name, index_refs, conditions, combine):
             raise BadRequest('指标引用须含 index_id 与 alias')
         try:
             ref['index_id'] = int(ref['index_id'])
-            ref['version'] = int(ref.get('version') or 0)
         except (TypeError, ValueError):
-            raise BadRequest('指标引用 ID/版本须为整数')
+            raise BadRequest('指标引用 ID 须为整数')
     if not isinstance(conditions, list) or not conditions:
         raise BadRequest('须配置至少一个条件')
     for c in conditions:
@@ -57,17 +49,8 @@ def list_defs():
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute(
-                'SELECT r.id, r.name, r.version, r.index_refs_json,'
-                ' r.conditions_json, r.combine, r.spec_hash, r.created_at,'
-                ' (SELECT MAX(x.version) FROM c1_rule_info x'
-                '   WHERE x.name=r.name) AS latest_version,'
-                ' (SELECT COUNT(*) FROM c1_rule_info x'
-                '   WHERE x.name=r.name) AS version_count'
-                ' FROM c1_rule_info r'
-                ' WHERE r.version=(SELECT MAX(x.version) FROM c1_rule_info x'
-                '                  WHERE x.name=r.name)'
-                ' ORDER BY r.id')
+            cur.execute('SELECT ' + ','.join(_INFO_COLS) +
+                        ' FROM c1_rule_info ORDER BY id')
             out = rows(cur)
         for r in out:
             r['index_refs_json'] = unjson(r['index_refs_json'])
@@ -77,7 +60,7 @@ def list_defs():
         conn.close()
 
 
-def get_def(rule_id=None, name=None, version=None):
+def get_def(rule_id=None, name=None):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
@@ -85,14 +68,8 @@ def get_def(rule_id=None, name=None, version=None):
                 cur.execute('SELECT ' + ','.join(_INFO_COLS) +
                             ' FROM c1_rule_info WHERE id=%s', (rule_id,))
             elif name:
-                if version is not None:
-                    cur.execute('SELECT ' + ','.join(_INFO_COLS) +
-                                ' FROM c1_rule_info WHERE name=%s AND version=%s',
-                                (name, version))
-                else:
-                    cur.execute('SELECT ' + ','.join(_INFO_COLS) +
-                                ' FROM c1_rule_info WHERE name=%s'
-                                ' ORDER BY version DESC LIMIT 1', (name,))
+                cur.execute('SELECT ' + ','.join(_INFO_COLS) +
+                            ' FROM c1_rule_info WHERE name=%s', (name,))
             else:
                 return None
             got = rows(cur)
@@ -106,91 +83,74 @@ def get_def(rule_id=None, name=None, version=None):
         conn.close()
 
 
-def list_versions(name):
-    if get_def(name=name) is None:
-        raise NotFound('规则定义不存在')
-    conn = db.connect()
-    try:
-        with conn.cursor() as cur:
-            cur.execute('SELECT id, version, created_at, spec_hash'
-                        ' FROM c1_rule_info WHERE name=%s ORDER BY version DESC',
-                        (name,))
-            return rows(cur)
-    finally:
-        conn.close()
-
-
-def create_def(name, index_refs, conditions, combine='all'):
+def save_def(name, index_refs, conditions, combine='all', rule_id=None):
     name, index_refs, conditions, combine = _validate(
         name, index_refs, conditions, combine)
-    sh = _spec_hash(_spec(index_refs, conditions, combine))
+    vals = (dump(index_refs), dump(conditions), combine)
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT MAX(version) FROM c1_rule_info WHERE name=%s',
-                        (name,))
-            v = (cur.fetchone()[0] or 0) + 1
-            cur.execute('SELECT id FROM c1_rule_info WHERE name=%s AND spec_hash=%s',
-                        (name, sh))
-            if cur.fetchone():
-                raise Conflict('规则定义未变化，无需新建版本')
-            cur.execute(
-                'INSERT INTO c1_rule_info'
-                ' (name,version,index_refs_json,conditions_json,combine,spec_hash)'
-                ' VALUES (%s,%s,%s,%s,%s,%s)',
-                (name, v, dump(index_refs), dump(conditions), combine, sh))
-            did = cur.lastrowid
+            if rule_id:
+                cur.execute('SELECT id FROM c1_rule_info WHERE id=%s',
+                            (rule_id,))
+                if not cur.fetchone():
+                    raise NotFound('规则定义不存在')
+                cur.execute('UPDATE c1_rule_info SET index_refs_json=%s,'
+                            ' conditions_json=%s,combine=%s WHERE id=%s',
+                            vals + (rule_id,))
+                did = rule_id
+            else:
+                cur.execute('SELECT id FROM c1_rule_info WHERE name=%s',
+                            (name,))
+                hit = cur.fetchone()
+                if hit:
+                    did = hit[0]
+                    cur.execute('UPDATE c1_rule_info SET index_refs_json=%s,'
+                                ' conditions_json=%s,combine=%s WHERE id=%s',
+                                vals + (did,))
+                else:
+                    cur.execute(
+                        'INSERT INTO c1_rule_info'
+                        ' (name,index_refs_json,conditions_json,combine)'
+                        ' VALUES (%s,%s,%s,%s)', (name,) + vals)
+                    did = cur.lastrowid
             conn.commit()
             return did
     finally:
         conn.close()
 
 
+create_def = save_def
+
+
 def delete_def(rule_id):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT name FROM c1_rule_info WHERE id=%s', (rule_id,))
-            got = cur.fetchone()
-            if not got:
+            cur.execute('SELECT id FROM c1_rule_info WHERE id=%s', (rule_id,))
+            if not cur.fetchone():
                 raise NotFound('规则定义不存在')
-            name = got[0]
-            cur.execute('SELECT COUNT(*) FROM c1_rule_value WHERE rule_id=%s',
-                        (rule_id,))
-            if cur.fetchone()[0]:
-                raise Conflict('该规则已有计算结果，禁止删除')
-            cur.execute('DELETE FROM c1_rule_info WHERE name=%s', (name,))
+            cur.execute('DELETE FROM c1_rule_value WHERE rule_id=%s', (rule_id,))
+            cur.execute('DELETE FROM c1_rule_info WHERE id=%s', (rule_id,))
             conn.commit()
     finally:
         conn.close()
 
 
-def add_value(rule_id, rule_version, def_hash, index_value_ids, outcome,
-              detail):
-    """写规则值：依赖 ID 列表 + 逐条件明细进快照，供追溯展开。"""
-    vh = _value_hash(def_hash, {'index_value_ids': index_value_ids,
-                                'detail': detail, 'outcome': outcome})
+def add_value(rule_id, index_value_ids, outcome, detail):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT id FROM c1_rule_info WHERE id=%s AND version=%s',
-                        (rule_id, rule_version))
+            cur.execute('SELECT id FROM c1_rule_info WHERE id=%s', (rule_id,))
             if not cur.fetchone():
-                raise NotFound('规则定义版本不存在')
-            cur.execute(
-                'INSERT IGNORE INTO c1_rule_value'
-                ' (rule_id,rule_version,index_value_ids_json,outcome,'
-                '  detail_json,result_hash) VALUES (%s,%s,%s,%s,%s,%s)',
-                (rule_id, rule_version, dump(index_value_ids), outcome,
-                 dump(detail), vh))
-            if cur.rowcount:
-                vid = cur.lastrowid
-                conn.commit()
-                return vid, vh, True
-            cur.execute('SELECT id FROM c1_rule_value WHERE rule_id=%s'
-                        ' AND rule_version=%s AND result_hash=%s',
-                        (rule_id, rule_version, vh))
-            return cur.fetchone()[0], vh, False
+                raise NotFound('规则定义不存在')
+            cur.execute('INSERT INTO c1_rule_value'
+                        ' (rule_id,index_value_ids_json,outcome,detail_json)'
+                        ' VALUES (%s,%s,%s,%s)',
+                        (rule_id, dump(index_value_ids), outcome, dump(detail)))
+            vid = cur.lastrowid
+            conn.commit()
+            return vid
     finally:
         conn.close()
 
