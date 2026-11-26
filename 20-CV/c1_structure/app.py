@@ -663,6 +663,14 @@ def api_index_values(index_id: int, limit: int = 200):
         index_id=index_id, limit=limit)}
 
 
+@app.get('/api/index/{index_id}/source-preview')
+def api_index_source_preview(index_id: int, limit: int = 50):
+    d = _load('store.index_repo').get_def(index_id=index_id)
+    if d is None:
+        raise _load('store.errors').NotFound('指标定义不存在')
+    return {'ok': True, **_load('compute').source_preview(d, limit=limit)}
+
+
 @app.get('/api/index/value/{value_id}/lineage')
 def api_index_lineage(value_id: int):
     return {'ok': True, **_load('compute').parse_lineage('index', value_id)}

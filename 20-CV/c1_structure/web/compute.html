@@ -25,35 +25,55 @@
   <div class="banner info" id="ok" hidden></div>
   <div class="compute-workspace">
     <aside class="asset-library" aria-label="计算定义资产">
-      <div class="library-head"><b>计算资产</b><span>新增、查看与运行</span></div>
-      <section class="asset-section" data-scope="index">
-        <div class="asset-title"><span class="scope-dot index"></span><b>指标</b><span class="spacer"></span>
-          <button type="button" class="btn mini" id="i-new">＋ 新建</button></div>
-        <div class="asset-list" id="i-assets"></div>
+      <section class="asset-section disclosure-section" data-scope="index">
+        <div class="disclosure">
+          <div class="disclosure__head asset-title">
+            <span class="scope-dot index"></span><span class="disclosure__title">指标</span>
+            <span class="disclosure__meta" id="i-count">0</span>
+            <button type="button" class="icon-btn" id="i-new" title="新建指标" aria-label="新建指标">＋</button>
+            <button type="button" class="disclosure__toggle" data-disclosure-toggle data-disclosure-key="compute.index"
+              aria-controls="i-assets" aria-expanded="true" aria-label="折叠指标"><span class="disclosure__chevron">⌄</span></button>
+          </div>
+          <div class="disclosure__body asset-list" id="i-assets"></div>
+        </div>
       </section>
-      <section class="asset-section" data-scope="rule">
-        <div class="asset-title"><span class="scope-dot rule"></span><b>规则</b><span class="spacer"></span>
-          <button type="button" class="btn mini" id="r-new">＋ 新建</button></div>
-        <div class="asset-list" id="r-assets"></div>
+      <section class="asset-section disclosure-section" data-scope="rule">
+        <div class="disclosure">
+          <div class="disclosure__head asset-title">
+            <span class="scope-dot rule"></span><span class="disclosure__title">规则</span>
+            <span class="disclosure__meta" id="r-count">0</span>
+            <button type="button" class="icon-btn" id="r-new" title="新建规则" aria-label="新建规则">＋</button>
+            <button type="button" class="disclosure__toggle" data-disclosure-toggle data-disclosure-key="compute.rule"
+              aria-controls="r-assets" aria-expanded="true" aria-label="折叠规则"><span class="disclosure__chevron">⌄</span></button>
+          </div>
+          <div class="disclosure__body asset-list" id="r-assets"></div>
+        </div>
       </section>
-      <section class="asset-section" data-scope="frame">
-        <div class="asset-title"><span class="scope-dot frame"></span><b>框架</b><span class="spacer"></span>
-          <button type="button" class="btn mini" id="f-new">＋ 新建</button></div>
-        <div class="asset-list" id="f-assets"></div>
+      <section class="asset-section disclosure-section" data-scope="frame">
+        <div class="disclosure">
+          <div class="disclosure__head asset-title">
+            <span class="scope-dot frame"></span><span class="disclosure__title">框架</span>
+            <span class="disclosure__meta" id="f-count">0</span>
+            <button type="button" class="icon-btn" id="f-new" title="新建框架" aria-label="新建框架">＋</button>
+            <button type="button" class="disclosure__toggle" data-disclosure-toggle data-disclosure-key="compute.frame"
+              aria-controls="f-assets" aria-expanded="true" aria-label="折叠框架"><span class="disclosure__chevron">⌄</span></button>
+          </div>
+          <div class="disclosure__body asset-list" id="f-assets"></div>
+        </div>
       </section>
     </aside>
-    <section class="graph-panel" aria-label="计算流程图配置区">
+    <section class="graph-panel" aria-label="计算流程配置区">
       <div class="graph-head">
-        <div><b>流程图配置</b><span class="graph-sub">拖动节点排布，从右侧端口连线到下级节点</span></div>
+        <div><b>计算流程配置</b><span class="graph-sub">拖动节点排布，从右侧端口连线到下级节点</span></div>
         <span class="spacer"></span>
         <span class="save-state" id="layout-state">布局读取中…</span>
         <div class="graph-tools">
-          <button type="button" class="btn mini ghost" id="zoom-out" title="缩小">−</button>
+          <button type="button" class="icon-btn" id="zoom-out" title="缩小" aria-label="缩小">−</button>
           <span id="zoom-label">100%</span>
-          <button type="button" class="btn mini ghost" id="zoom-in" title="放大">＋</button>
-          <button type="button" class="btn mini ghost" id="graph-fit">适应</button>
-          <button type="button" class="btn mini ghost" id="graph-auto">自动排布</button>
-          <button type="button" class="btn mini ghost danger" id="edge-del" hidden>断开连线</button>
+          <button type="button" class="icon-btn" id="zoom-in" title="放大" aria-label="放大">＋</button>
+          <button type="button" class="icon-btn" id="graph-fit" title="适应画布" aria-label="适应画布">适</button>
+          <button type="button" class="icon-btn" id="graph-auto" title="自动排布" aria-label="自动排布">排</button>
+          <button type="button" class="icon-btn" id="edge-del" title="断开选中连线" aria-label="断开选中连线" hidden>×</button>
         </div>
       </div>
       <div class="graph-canvas" id="graph-canvas" tabindex="0" aria-label="可拖动、缩放的计算流程图">
@@ -62,11 +82,12 @@
           <div class="graph-nodes" id="graph-nodes"></div>
         </div>
         <div class="graph-empty" id="graph-empty" hidden><b>还没有可配置的节点</b>先在左侧新建指标，再逐级建立规则与框架。</div>
-        <div class="graph-hint">空白处拖动平移 · 滚轮缩放 · 点击连线后可断开 · Delete 删除选中连线</div>
+        <div class="graph-hint">空白拖动平移 · 滚轮缩放 · 节点 ⋯ 操作 · 点选连线后断开</div>
       </div>
     </section>
   </div>
 </div>
+<div class="action-menu" id="compute-action-menu" role="menu" hidden></div>
 
 <!-- 定义编辑抽屉（三模块复用） -->
 <div class="drawer wide" id="ded" hidden>

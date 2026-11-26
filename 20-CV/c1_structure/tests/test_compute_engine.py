@@ -89,4 +89,62 @@ try:
 except errors.BadRequest:
     check('权重合计 0 拒绝', True)
 
+# --- 指标数据源样本 ---
+class FakeCursor:
+    def __init__(self, owner):
+        self.owner = owner
+    def __enter__(self):
+        return self
+    def __exit__(self, *args):
+        return False
+    def execute(self, sql, args):
+        self.owner.calls.append((sql, args))
+    def fetchone(self):
+        return (53,)
+    def fetchall(self):
+        return [(7, 901, b'abc')]
+
+
+class FakeConnection:
+    def __init__(self):
+        self.calls = []
+        self.closed = False
+    def cursor(self):
+        return FakeCursor(self)
+    def close(self):
+        self.closed = True
+
+
+fake_conn = FakeConnection()
+orig_check = engine._check_index_def
+orig_connect = engine.loader.connect_datasource
+engine._check_index_def = lambda d: ({'id': 1}, 'orders',
+                                     ['file_id', 'record_id', 'amt', 'note'],
+                                     'amt')
+engine.loader.connect_datasource = lambda ds: fake_conn
+try:
+    preview_def = {'datasource_id': 1, 'source_table': 'orders',
+                   'source_column': 'amt', 'aggregate': 'sum',
+                   'filter_json': [{'column': 'amt', 'op': 'gte', 'value': 100}]}
+    out = engine.source_preview(preview_def, limit=999)
+    check('样本总数与有界行数', out['total'] == 53 and len(out['items']) == 1)
+    check('样本最多 50 行', out['limit'] == 50 and out['has_more'])
+    check('样本列仅含溯源/聚合/筛选列',
+          out['columns'] == ['file_id', 'record_id', 'amt'])
+    check('样本二进制安全显示', out['items'][0]['note'] if 'note' in out['items'][0]
+          else out['items'][0]['record_id'] == 901)
+    check('样本连接关闭', fake_conn.closed)
+    sql, args = fake_conn.calls[1]
+    check('样本筛选参数化且 LIMIT 参数化',
+          'WHERE `amt` >= %s LIMIT %s' in sql and args == [100, 50])
+    preview_def['filter_json'][0]['column'] = 'amt`; DROP TABLE orders; --'
+    try:
+        engine.source_preview(preview_def)
+        check('样本过滤列白名单拒绝', False)
+    except errors.BadRequest:
+        check('样本过滤列白名单拒绝', True)
+finally:
+    engine._check_index_def = orig_check
+    engine.loader.connect_datasource = orig_connect
+
 print('engine logic: {} checks passed'.format(ok))

@@ -1,7 +1,7 @@
 /* web/compute_graph.js — 原生 Pointer Events 流程图；定义关系由调用方提供。 */
 (function(){
   'use strict';
-  var WIDTH=220, HEIGHT=102, PORT_Y=48;
+  var WIDTH=176, HEIGHT=72, PORT_Y=34;
   var SCOPES=['index','rule','frame'];
   var LABEL={index:'指标',rule:'规则',frame:'框架'};
 
@@ -50,7 +50,7 @@
       (defs[s]||[]).forEach(function(d,i){
         var k=s+':'+d.id;
         if(!found[k]) found[k]={scope:s,id:d.id,
-          x:SCOPES.indexOf(s)*300,y:40+i*150};
+          x:SCOPES.indexOf(s)*240,y:40+i*110};
       });
     });
     this.positions={};
@@ -75,27 +75,29 @@
     this.applyTransform();
   };
   Graph.prototype.renderNode=function(d){
-    var self=this,k=this.key(d._scope,d.id),pos=this.positions[k];
+    var self=this,k=this.key(d._scope,d.id),pos=this.positions[k],hasValue=!!d._latest;
     var el=document.createElement('div');
-    el.className='graph-node scope-'+d._scope;
+    el.className='graph-node scope-'+d._scope+(hasValue?' has-value':'');
     el.dataset.key=k;
     el.style.left=pos.x+'px';el.style.top=pos.y+'px';
     el.innerHTML='<div class="node-top"><span class="node-scope">'+LABEL[d._scope]+'</span>'+
       '<b>'+escHtml(d.name)+'</b></div><div class="node-detail">'+escHtml(this.detail(d))+'</div>'+
-      '<div class="node-actions">'+
-      '<button type="button" data-act="view">查看</button><button type="button" data-act="edit">编辑</button>'+
-      '<button type="button" data-act="trace"'+(d._latest?'':' disabled')+'>追溯</button>'+
-      '<button type="button" data-act="run">运行</button></div>'+
+      '<div class="node-foot"><span class="node-state-dot"></span><span>'+(hasValue?'已计算':'未计算')+'</span>'+
+      (hasValue?'<b class="node-value">'+escHtml(d._value)+'</b>':'')+'</div>'+
+      '<button type="button" class="icon-btn mini node-more" data-action-menu="compute-action-menu" '+
+      'aria-haspopup="menu" aria-expanded="false" aria-label="'+escHtml(d.name)+'更多操作">⋯</button>'+
       (d._scope!=='index'?'<span class="node-port input" title="输入"></span>':'')+
       (d._scope!=='frame'?'<span class="node-port output" title="拖出连线"></span>':'');
     this.nodesEl.appendChild(el);this.nodeEls[k]=el;
     el.addEventListener('pointerdown',function(e){self.nodePointer(e,d);});
-    Array.prototype.forEach.call(el.querySelectorAll('[data-act]'),function(btn){
-      btn.addEventListener('pointerdown',function(e){e.stopPropagation();});
-      btn.addEventListener('click',function(e){
-        e.stopPropagation();
-        self.cb.action(d._scope,d.id,btn.dataset.act,d._latest);
-      });
+    var more=el.querySelector('.node-more');
+    more.addEventListener('pointerdown',function(e){e.stopPropagation();});
+    more.addEventListener('click',function(e){
+      if(self.cb.menu) self.cb.menu(d._scope,d.id,d._latest,more);
+    });
+    el.addEventListener('dblclick',function(e){
+      if(e.target.closest('button,.node-port'))return;
+      self.cb.action(d._scope,d.id,'edit',d._latest);
     });
     var out=el.querySelector('.output');
     if(out) out.addEventListener('pointerdown',function(e){self.startConnect(e,d);});
@@ -241,8 +243,8 @@
   };
   Graph.prototype.fit=function(){
     var b=this.bounds();if(!b)return;
-    var r=this.canvas.getBoundingClientRect(),pad=50;
-    this.scale=Math.max(.25,Math.min(1.5,(r.width-pad*2)/(b.right-b.x),(r.height-pad*2)/(b.bottom-b.y)));
+    var r=this.canvas.getBoundingClientRect(),pad=r.width<500?24:50;
+    this.scale=Math.max(.35,Math.min(1,(r.width-pad*2)/(b.right-b.x),(r.height-pad*2)/(b.bottom-b.y)));
     this.pan.x=(r.width-(b.right-b.x)*this.scale)/2-b.x*this.scale;
     this.pan.y=(r.height-(b.bottom-b.y)*this.scale)/2-b.y*this.scale;
     this.applyTransform();
@@ -251,7 +253,7 @@
     var self=this;
     SCOPES.forEach(function(s,i){
       (self.defs[s]||[]).forEach(function(d,j){
-        self.positions[self.key(s,d.id)]={scope:s,id:d.id,x:40+i*300,y:40+j*150};
+        self.positions[self.key(s,d.id)]={scope:s,id:d.id,x:40+i*240,y:40+j*110};
       });
     });
     this.render();this.fit();if(this.cb.layout)this.cb.layout(this.positions);

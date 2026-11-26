@@ -1,4 +1,4 @@
-/* web/compute.js — 计算资产库 + 流程图配置 + 抽屉编辑 + 追溯 + 复核。 */
+/* web/compute.js — 计算资产库 + 计算流程配置 + 抽屉编辑 + 追溯 + 复核。 */
 (function(){
   'use strict';
   var $=function(id){return document.getElementById(id);};
@@ -46,7 +46,7 @@
   $('view-close').onclick=function(){closeEl('compute-view');};
 
   var graph=new ComputeGraph($('graph-canvas'),{
-    action:nodeAction,connect:connectNodes,disconnect:disconnectEdge,layout:queueLayoutSave
+    action:nodeAction,menu:openNodeMenu,connect:connectNodes,disconnect:disconnectEdge,layout:queueLayoutSave
   });
   $('zoom-in').onclick=function(){graph.zoom(1.15);};
   $('zoom-out').onclick=function(){graph.zoom(1/1.15);};
@@ -255,30 +255,44 @@
     }
     return esc(combineLabel(d.combine))+' · '+esc((d.rule_refs_json||[]).length)+' 条规则';
   }
-  function actionButtons(scope,d,v){
-    var h='<button type="button" data-act="view" data-id="'+d.id+'">查看</button>'+
-      '<button type="button" data-act="edit" data-id="'+d.id+'">编辑</button>'+
-      '<button type="button" data-act="run" data-id="'+d.id+'">运行</button>';
-    if(v)h+='<button type="button" data-act="trace" data-id="'+d.id+'" data-vid="'+v.id+'">追溯</button>'+
-      '<button type="button" data-act="replay" data-id="'+d.id+'" data-vid="'+v.id+'">复核</button>';
-    return h+'<button type="button" class="danger" data-act="del" data-id="'+d.id+'">删除</button>';
+  function actionMenuItem(act,label,d,v,disabled){
+    return '<button type="button" role="menuitem" class="menu-item'+(act==='del'?' danger':'')+
+      '" data-act="'+act+'" data-id="'+d.id+'"'+(v?' data-vid="'+v.id+'"':'')+
+      (disabled?' disabled title="暂无可追溯结果"':'')+'>'+label+'</button>';
   }
+  function fillActionMenu(scope,id){
+    var d=defs[scope].filter(function(x){return x.id===id;})[0];
+    if(!d)return;
+    var v=d._latest,menu=$('compute-action-menu');
+    menu.innerHTML=actionMenuItem('view','查看',d)+actionMenuItem('edit','编辑',d)+
+      actionMenuItem('run','运行',d)+actionMenuItem('trace','追溯',d,v,!v)+
+      actionMenuItem('replay','复核',d,v,!v)+'<div class="menu-sep"></div>'+
+      actionMenuItem('del','删除',d);
+    menu.onclick=function(e){
+      var item=e.target.closest?e.target.closest('[data-act]'):null;
+      if(!item||item.disabled)return;
+      nodeAction(scope,Number(item.dataset.id),item.dataset.act,
+        item.dataset.vid?{id:Number(item.dataset.vid)}:null);
+    };
+  }
+  function openNodeMenu(scope,id){fillActionMenu(scope,id);}
   function renderAssets(scope){
     var host=$(PFX[scope]+'-assets');
+    $(PFX[scope]+'-count').textContent=defs[scope].length;
     host.innerHTML=defs[scope].map(function(d){
       return '<article class="asset-item" data-key="'+scope+':'+d.id+'">'+
-        '<div class="asset-main"><b>'+esc(d.name)+'</b><span class="asset-detail">'+detail(scope,d)+'</span></div>'+
-        '<div class="asset-actions">'+actionButtons(scope,d,d._latest)+'</div></article>';
+        '<button type="button" class="asset-main" data-id="'+d.id+'" aria-label="定位'+esc(d.name)+'">'+
+        '<b>'+esc(d.name)+'</b><span class="asset-detail">'+detail(scope,d)+'</span></button>'+
+        '<button type="button" class="icon-btn mini asset-more" data-action-menu="compute-action-menu" '+
+        'data-scope="'+scope+'" data-id="'+d.id+'" aria-haspopup="menu" aria-expanded="false" '+
+        'aria-label="'+esc(d.name)+'更多操作">⋯</button></article>';
     }).join('')||'<div class="asset-empty">暂无'+LABEL[scope]+'</div>';
-    Array.prototype.forEach.call(host.querySelectorAll('[data-act]'),function(el){
-      el.onclick=function(e){
-        e.stopPropagation();nodeAction(scope,Number(el.dataset.id),el.dataset.act,
-          el.dataset.vid?{id:Number(el.dataset.vid)}:null);
-      };
-    });
-    Array.prototype.forEach.call(host.querySelectorAll('.asset-main'),function(el,i){
-      el.onclick=function(){graph.focus(scope,defs[scope][i].id);};
-    });
+    host.onclick=function(e){
+      var trigger=e.target.closest?e.target.closest('[data-action-menu]'):null;
+      if(trigger){fillActionMenu(trigger.dataset.scope,Number(trigger.dataset.id));return;}
+      var main=e.target.closest?e.target.closest('.asset-main'):null;
+      if(main)graph.focus(scope,Number(main.dataset.id));
+    };
   }
   function nodeAction(scope,id,act,v){
     var d=graph.def(scope,id);if(!d)return;
@@ -362,7 +376,8 @@
     var out={index:[],rule:[],frame:[]};
     ['index','rule','frame'].forEach(function(s){
       out[s]=defs[s].map(function(d){return Object.assign({},d,{_scope:s,_latest:d._latest,
-        _agg:aggLabel(d.aggregate),_combine:combineLabel(d.combine)});});
+        _agg:aggLabel(d.aggregate),_combine:combineLabel(d.combine),
+        _value:d._latest?String(d._latest[VFIELD[s]]==null?'':d._latest[VFIELD[s]]):''});});
     });
     return out;
   }
@@ -373,10 +388,13 @@
       .then(function(){
         var tasks=[];
         ['index','rule','frame'].forEach(function(s){defs[s].forEach(function(d){
-          tasks.push(latest(s,d.id).then(function(v){d._latest=v;renderAssets(s);}));
+          tasks.push(latest(s,d.id).then(function(v){d._latest=v;}));
         });});
         return Promise.all(tasks);
-      }).then(function(){graph.setData(graphDefs(),layout);})
+      }).then(function(){
+        ['index','rule','frame'].forEach(renderAssets);
+        graph.setData(graphDefs(),layout);
+      })
       .catch(function(e){err(e.message);});
   }
   function readLocal(){

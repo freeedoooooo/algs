@@ -90,6 +90,48 @@ def compute_index(defn):
     return format(raw, 'f') if isinstance(raw, Decimal) else str(raw)
 
 
+def source_preview(defn, limit=50):
+    """返回指标当前筛选命中的总数与有界样本，供配置图下钻血缘。"""
+    ds, table, cols, column = _check_index_def(defn)
+    limit = max(1, min(50, int(limit or 50)))
+    where, args = _where(defn.get('filter_json') or [], allow_cols=set(cols))
+    relevant = []
+    for name in list(loader.TRACE_COLS) + ([column] if column else []) + [
+            f.get('column') for f in defn.get('filter_json') or []]:
+        if name in cols and name not in relevant:
+            relevant.append(name)
+    if not relevant:
+        relevant = cols[:1]
+    conn = loader.connect_datasource(ds)
+    try:
+        with conn.cursor() as cur:
+            cur.execute('SELECT COUNT(*) FROM {}{}'.format(
+                loader._ident(table), where), args)
+            total = int(cur.fetchone()[0])
+            cur.execute('SELECT {} FROM {}{} LIMIT %s'.format(
+                ','.join(loader._ident(c) for c in relevant),
+                loader._ident(table), where), args + [limit])
+            rows = cur.fetchall()
+        items = []
+        for row in rows:
+            item = dict(zip(relevant, row))
+            for key, value in list(item.items()):
+                if hasattr(value, 'isoformat'):
+                    item[key] = value.isoformat(sep=' ')
+                elif isinstance(value, bytes):
+                    item[key] = '<binary {} bytes>'.format(len(value))
+            items.append(item)
+    finally:
+        conn.close()
+    trace_columns = [c for c in loader.TRACE_COLS if c in cols]
+    return {'source': {'datasource_id': defn['datasource_id'],
+                       'source_table': table, 'source_column': column,
+                       'aggregate': defn['aggregate'],
+                       'filter': defn.get('filter_json') or []},
+            'total': total, 'limit': limit, 'has_more': total > len(items),
+            'columns': relevant, 'trace_columns': trace_columns, 'items': items}
+
+
 # ---------------- 规则 ----------------
 
 def _compare(actual, op, threshold):
