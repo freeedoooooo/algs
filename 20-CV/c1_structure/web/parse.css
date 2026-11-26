@@ -156,7 +156,10 @@ body.picking .lbwrap img{cursor:crosshair}
 .histbar[hidden]{display:none}
 .histbar label{color:var(--c1-text-muted);flex:none}
 .histbar select{font:inherit;font-size:var(--c1-font-size-meta);min-height:var(--c1-control-h-mini);padding:4px 8px;border:1px solid var(--c1-border-strong);
-  border-radius:var(--c1-radius-sm);background:var(--c1-surface);color:var(--c1-text);max-width:460px;min-width:0}
+  border-radius:var(--c1-radius-sm);background:var(--c1-surface);color:var(--c1-text);flex:1;max-width:460px;min-width:0}
+.histbar .btn{flex:none}
+.hist-msg{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--c1-text-faint)}
+.hist-msg.err{color:var(--c1-danger)}
 .reportcol.has-hist .reportframe{top:38px;height:calc(100% - 38px)}
 .reportcol.has-hist .filetabs{top:38px}
 .reportcol.has-hist.hastabs .reportframe{top:76px;height:calc(100% - 76px)}

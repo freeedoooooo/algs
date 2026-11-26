@@ -9,7 +9,7 @@
   var editing={index:null,rule:null,frame:null};
   var editingScope='index',layout={},layoutAvailable=true,saveTimer=null;
   var LOCAL_KEY='c1.compute.layout';
-  var loadSeq=0,lineageSeq=0,lineageState=null,tableComments={},runAllRunning=false;
+  var loadSeq=0,lineageSeq=0,lineageState=null,tableComments={},runAllRunning=false,computeLoaded=false;
 
   function api(path,opt){
     return fetch(path,opt||{}).then(function(r){
@@ -59,7 +59,8 @@
   });
 
   var graph=new ComputeGraph($('graph-canvas'),{
-    action:nodeAction,menu:openNodeMenu,select:selectNode,connect:connectNodes,disconnect:disconnectEdge,layout:queueLayoutSave
+    action:nodeAction,menu:openNodeMenu,select:selectNode,trace:openLineage,
+    connect:connectNodes,disconnect:disconnectEdge,layout:queueLayoutSave
   });
   var lineageGraph=new ComputeGraph($('lineage-graph'),{
     select:function(scope,id){renderLineageDetails(scope,id);}
@@ -71,6 +72,56 @@
   $('edge-del').onclick=function(){graph.deleteSelected();};
   $('graph-run-all').addEventListener('pointerdown',function(e){e.stopPropagation();});
   $('graph-run-all').onclick=runAllDefinitions;
+
+  (function(){
+    var workspace=document.querySelector('.compute-workspace'),
+      divider=$('assetDivider'),button=$('assetCollapse'),
+      WKEY='c1.compute.assetWidth',CKEY='c1.compute.assetCollapsed',MIN=190,MAX=420,drag=null;
+    function maxWidth(){return Math.max(MIN,Math.min(MAX,workspace.clientWidth-480));}
+    function applyWidth(width,save){
+      var w=Math.round(Math.max(MIN,Math.min(maxWidth(),width)));
+      workspace.style.setProperty('--c1-asset-width',w+'px');
+      if(save)try{localStorage.setItem(WKEY,String(w));}catch(e){}
+    }
+    function setCollapsed(collapsed,save){
+      workspace.classList.toggle('is-collapsed',collapsed);
+      button.textContent=collapsed?'›':'‹';
+      button.title=collapsed?'展开侧栏':'收起侧栏';
+      button.setAttribute('aria-label',collapsed?'展开计算资产栏':'收起计算资产栏');
+      button.setAttribute('aria-expanded',String(!collapsed));
+      if(save)try{localStorage.setItem(CKEY,collapsed?'1':'0');}catch(e){}
+    }
+    try{
+      var savedWidth=parseInt(localStorage.getItem(WKEY),10);
+      if(savedWidth)applyWidth(savedWidth,false);
+      setCollapsed(localStorage.getItem(CKEY)==='1',false);
+    }catch(e){}
+    button.addEventListener('pointerdown',function(e){e.stopPropagation();});
+    button.onclick=function(){setCollapsed(!workspace.classList.contains('is-collapsed'),true);};
+    divider.addEventListener('pointerdown',function(e){
+      if(e.button!==0||getComputedStyle(divider).display==='none')return;
+      if(workspace.classList.contains('is-collapsed'))setCollapsed(false,true);
+      drag={id:e.pointerId,x:e.clientX,width:parseFloat(getComputedStyle(workspace).getPropertyValue('--c1-asset-width'))||248};
+      divider.setPointerCapture(e.pointerId);divider.classList.add('on');
+      document.body.style.userSelect='none';document.body.style.cursor='col-resize';e.preventDefault();
+    });
+    divider.addEventListener('pointermove',function(e){
+      if(!drag||drag.id!==e.pointerId)return;
+      applyWidth(drag.width+e.clientX-drag.x,false);
+    });
+    function endDrag(e){
+      if(!drag||drag.id!==e.pointerId)return;
+      drag=null;divider.classList.remove('on');
+      document.body.style.userSelect='';document.body.style.cursor='';
+      applyWidth(parseFloat(workspace.style.getPropertyValue('--c1-asset-width')),true);
+    }
+    divider.addEventListener('pointerup',endDrag);
+    divider.addEventListener('pointercancel',endDrag);
+    window.addEventListener('resize',function(){
+      if(workspace.style.getPropertyValue('--c1-asset-width'))
+        applyWidth(parseFloat(workspace.style.getPropertyValue('--c1-asset-width')),false);
+    });
+  })();
 
   // ---------- 指标表单 ----------
   function loadDatasources(){
@@ -263,9 +314,6 @@
   }
 
   // ---------- 资产栏与节点动作 ----------
-  function latest(scope,id){
-    return api('/api/'+scope+'/'+id+'/values?limit=1').then(function(j){return (j.items||[])[0]||null;});
-  }
   var MENU_ICON={
     view:'<path d="M2 8s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4Z"/><circle cx="8" cy="8" r="1.5"/>',
     edit:'<path d="m3 13 8-8 2 2-8 8-3 1 1-3Z"/>',
@@ -338,7 +386,7 @@
     var d=graph.def(scope,id);if(!d||!confirm('确定删除「'+d.name+'」及其全部结果？'))return;
     api('/api/'+scope+'/'+id,{method:'DELETE'}).then(function(){
       delete layout[scope+':'+id];
-      try{localStorage.setItem(LOCAL_KEY,JSON.stringify(Object.keys(layout).filter(function(k){return ['index','rule','frame'].indexOf(layout[k].scope)>=0;}).map(function(k){return layout[k];})));}catch(e){}
+      try{localStorage.setItem(LOCAL_KEY,JSON.stringify(Object.keys(layout).map(function(k){return layout[k];})));}catch(e){}
       loadAll();ok('已删除');
     })
       .catch(function(e){err(e.message);});
@@ -600,7 +648,7 @@
   }
   function openLineage(scope,id){
     var d=graph.def(scope,id);if(!d)return;
-    graph.selectNode(scope,id);lineageSeq++;lineageState={activeKey:scope+':'+id};
+    closeEl('compute-view');graph.selectNode(scope,id);lineageSeq++;lineageState={activeKey:scope+':'+id};
     $('lineage-title').textContent='上游追溯 · '+d.name;
     openEl('lineage');setLineageTab('current');refreshLineage();
   }
@@ -648,18 +696,13 @@
   }
   function loadAll(){
     var seq=++loadSeq;
-    return Promise.all([api('/api/index'),api('/api/rule'),api('/api/frame')]).then(function(res){
+    var documentsPromise=api('/api/compute/source-documents').catch(function(){return null;});
+    return api('/api/compute/definitions').then(function(j){
       if(seq!==loadSeq)return;
-      defs.index=res[0].items||[];defs.rule=res[1].items||[];defs.frame=res[2].items||[];
-      var tasks=[];
-      ['index','rule','frame'].forEach(function(s){defs[s].forEach(function(d){
-        tasks.push(latest(s,d.id).then(function(v){d._latest=v;}));
-      });});
-      return Promise.all(tasks);
-    }).then(function(){
-      if(seq!==loadSeq)return;
+      defs.index=j.index||[];defs.rule=j.rule||[];defs.frame=j.frame||[];
+      computeLoaded=true;
       renderCompute();
-      return api('/api/compute/source-documents').catch(function(){return null;});
+      return documentsPromise;
     }).then(function(j){
       if(!j||seq!==loadSeq)return;
       documentLinks=j.items||[];
@@ -676,13 +719,14 @@
     var local=readLocal();
     return api('/api/compute/layout').then(function(j){
       layoutAvailable=j.available!==false;
-      layout=layoutAvailable?{}:local;
+      layout=Object.assign({},local);
       if(layoutAvailable)(j.items||[]).forEach(function(p){layout[p.scope+':'+p.id]=p;});
-    }).catch(function(){layoutAvailable=false;layout=local;});
+      if(computeLoaded)renderCompute();
+    }).catch(function(){layoutAvailable=false;layout=local;if(computeLoaded)renderCompute();});
   }
   function queueLayoutSave(next){
     layout=next;
-    try{localStorage.setItem(LOCAL_KEY,JSON.stringify(Object.keys(layout).filter(function(k){return ['index','rule','frame'].indexOf(layout[k].scope)>=0;}).map(function(k){return layout[k];})));}catch(e){}
+    try{localStorage.setItem(LOCAL_KEY,JSON.stringify(Object.keys(layout).map(function(k){return layout[k];})));}catch(e){}
     clearTimeout(saveTimer);
     saveTimer=setTimeout(function(){
       if(!layoutAvailable)return;
@@ -707,5 +751,6 @@
   }
   function labelOf(k){return {index_value:'指标值',rule_value:'规则结果',frame_value:'框架结果'}[k]||k;}
 
-  loadDatasources();loadLayout().then(function(){setTimeout(function(){loadAll().then(function(){graph.fit();});},0);});
+  loadDatasources();
+  Promise.all([loadLayout(),loadAll()]).then(function(){graph.fit();});
 })();

@@ -615,6 +615,14 @@ async def api_agent_generate_rule(request: Request):
 # ---- 计算层 API：index / rule / frame（定义 CRUD + run）----
 # 三类前缀完全隔离；编排在 compute/orchestrate.py，本层只做请求校验。
 
+@app.get('/api/compute/definitions')
+def api_compute_definitions():
+    return {'ok': True,
+            'index': _load('store.index_repo').list_defs(),
+            'rule': _load('store.rule_repo').list_defs(),
+            'frame': _load('store.frame_repo').list_defs()}
+
+
 @app.get('/api/compute/layout')
 def api_compute_layout_list():
     return _load('store.compute_layout_repo').list_layout()

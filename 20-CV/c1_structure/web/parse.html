@@ -75,13 +75,13 @@
     <div class="histbar" id="histbar" hidden>
       <label for="histsel">资料选择</label>
       <select id="histsel"></select>
+      <button type="button" class="btn mini" id="histParse" disabled>执行解析</button>
+      <span class="hist-msg" id="histParseMsg"></span>
     </div>
     <div class="unparsed" id="unparsed" hidden>
       <div class="up-inner">
-        <b>该资料尚未解析</b>
-        <span id="upDesc">此资料已登记，但还没有对照报告。点击下方按钮发起解析，完成后自动生成报告。</span>
-        <button type="button" class="btn" id="upParse">解析此资料</button>
-        <span class="upmsg" id="upMsg"></span>
+        <b id="upTitle">该资料尚未解析</b>
+        <span id="upDesc">此资料已登记，但还没有对照报告。点击上方「执行解析」按钮发起解析，完成后自动生成报告。</span>
       </div>
     </div>
     <div class="filetabs" id="filetabs" hidden></div>

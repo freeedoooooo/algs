@@ -40,11 +40,26 @@ def list_defs():
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT ' + ','.join(_INFO_COLS) +
-                        ' FROM c1_index_info ORDER BY id')
+            cols = ['i.' + c for c in _INFO_COLS]
+            cols += ['v.id AS value_id', 'v.index_value', 'v.computed_at']
+            cur.execute(
+                'SELECT ' + ','.join(cols) +
+                ' FROM c1_index_info i'
+                ' LEFT JOIN (SELECT index_id,MAX(id) AS value_id'
+                '            FROM c1_index_value GROUP BY index_id) latest'
+                '   ON latest.index_id=i.id'
+                ' LEFT JOIN c1_index_value v ON v.id=latest.value_id'
+                ' ORDER BY i.id')
             out = rows(cur)
         for r in out:
             r['filter_json'] = unjson(r['filter_json'])
+            value_id = r.pop('value_id')
+            r['_latest'] = None if value_id is None else {
+                'id': value_id, 'index_id': r['id'],
+                'index_value': r['index_value'],
+                'computed_at': r['computed_at']}
+            r.pop('index_value')
+            r.pop('computed_at')
         return out
     finally:
         conn.close()

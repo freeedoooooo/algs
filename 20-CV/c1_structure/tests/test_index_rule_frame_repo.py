@@ -83,7 +83,7 @@ class ValueCursor:
         return self
     def __exit__(self, *args):
         return False
-    def execute(self, sql, args):
+    def execute(self, sql, args=None):
         self.calls.append((sql, args))
     def fetchone(self):
         return (1,)
@@ -118,6 +118,81 @@ try:
           value_conn.commits == 1 and value_conn.closed)
 finally:
     ir.db.connect = orig_connect
+
+
+# --- 定义列表一次查询全部最新结果 ---
+class LatestCursor:
+    def __init__(self, columns, values):
+        self.description = [(c,) for c in columns]
+        self.values = values
+        self.calls = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def execute(self, sql, args=None):
+        self.calls.append((sql, args))
+
+    def fetchall(self):
+        return self.values
+
+
+class LatestConnection:
+    def __init__(self, cursor):
+        self.cur = cursor
+        self.closed = False
+
+    def cursor(self):
+        return self.cur
+
+    def close(self):
+        self.closed = True
+
+
+def check_latest_list(module, table, foreign_key, value_field, json_cols):
+    columns = list(module._INFO_COLS) + ['value_id', value_field, 'computed_at']
+    base = {c: None for c in module._INFO_COLS}
+    base.update(id=1, name='定义')
+    for c in json_cols:
+        base[c] = '[]'
+    first = tuple(base[c] for c in module._INFO_COLS) + (
+        None, None, None)
+    second_base = dict(base, id=2)
+    second = tuple(second_base[c] for c in module._INFO_COLS) + (
+        99, '12.5', '2026-11-26 10:00:00')
+    cursor = LatestCursor(columns, [first, second])
+    conn = LatestConnection(cursor)
+    orig_connect = module.db.connect
+    module.db.connect = lambda: conn
+    try:
+        defs = module.list_defs()
+    finally:
+        module.db.connect = orig_connect
+    label = module.__name__.split('.')[-1]
+    check(label + ' 最新结果仅一次查询',
+          len(cursor.calls) == 1 and table in cursor.calls[0][0]
+          and 'MAX(id)' in cursor.calls[0][0], cursor.calls)
+    check(label + ' 无结果定义为 null', defs[0]['_latest'] is None)
+    check(label + ' 最新结果字段完整',
+          defs[1]['_latest'] == {'id': 99, foreign_key: 2,
+                                 value_field: '12.5',
+                                 'computed_at': '2026-11-26 10:00:00'},
+          defs[1]['_latest'])
+    check(label + ' 最新结果不污染定义字段',
+          not any(c in defs[1] for c in
+                  ('value_id', value_field, 'computed_at')), defs[1])
+    check(label + ' 查询后关闭连接', conn.closed)
+
+
+check_latest_list(ir, 'c1_index_info', 'index_id', 'index_value',
+                  ('filter_json',))
+check_latest_list(rr, 'c1_rule_info', 'rule_id', 'rule_value',
+                  ('index_refs_json', 'conditions_json'))
+check_latest_list(fr, 'c1_frame_info', 'frame_id', 'frame_value',
+                  ('rule_refs_json',))
 
 
 # --- 简化口径：无版本/哈希列 ---

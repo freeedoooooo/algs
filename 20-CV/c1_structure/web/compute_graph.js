@@ -2,6 +2,7 @@
 (function(){
   'use strict';
   var SCOPES=['document','source','index','rule','frame'];
+  var SVG_NS='http://www.w3.org/2000/svg',graphSeq=0;
   var LABEL={document:'文档',source:'数据',index:'指标',rule:'规则',frame:'框架'};
   var SCOPE_ICON={
     document:'<path d="M4 1.5h5l3 3v10H4zM9 1.5v3h3M6 8h4M6 10.5h4"/>',
@@ -24,6 +25,7 @@
     this.cb=callbacks||{};
     this.options=options||{};
     this.compact=!!this.options.compact;
+    this.arrowId='compute-arrow-'+(++graphSeq);
     this.defs={document:[],source:[],index:[],rule:[],frame:[]};
     this.positions={};
     this.nodeEls={};
@@ -33,6 +35,8 @@
     this.selectedNode=null;
     this.initialized=false;
     this.drag=null;
+    this.clickTimer=null;
+    this.lastClick=null;
     this.connect=null;
     this.bind();
   }
@@ -111,7 +115,7 @@
       (isSource?' source-node':'')+(isDocument?' document-node':'')+
       (this.selectedNode===k?' selected':'');
     el.dataset.key=k;el.tabIndex=0;el.setAttribute('role','button');
-    el.setAttribute('aria-label',LABEL[d._scope]+' '+d.name+(this.compact?'，双击查看详情':'，回车查看'));
+    el.setAttribute('aria-label',LABEL[d._scope]+' '+d.name+(this.compact?'，双击查看详情':'，单击查看，双击追溯'));
     el.style.left=pos.x+'px';el.style.top=pos.y+'px';
     var h='<div class="node-name">'+window.ComputeScopeIcon(d._scope,'scope-icon node-scope-icon')+
       '<b>'+escHtml(d.name)+'</b></div>';
@@ -142,8 +146,13 @@
     });
     el.addEventListener('dblclick',function(e){
       if(e.target.closest('button,.node-port'))return;
-      if(self.compact){if(self.cb.inspect)self.cb.inspect(d._scope,d.id);}
-      else self.cb.action(d._scope,d.id,(isSource||isDocument)?'view':'edit',d._latest);
+      if(self.compact){
+        if(self.cb.inspect)self.cb.inspect(d._scope,d.id);
+        return;
+      }
+      clearTimeout(self.clickTimer);self.clickTimer=null;self.lastClick=null;
+      self.selectNode(d._scope,d.id);
+      if(self.cb.trace)self.cb.trace(d._scope,d.id);
     });
     el.addEventListener('keydown',function(e){
       if(e.key==='Enter'||e.key===' '){
@@ -161,20 +170,35 @@
     return d._combine+' · '+(d.rule_refs_json||[]).length+' 条规则';
   };
   Graph.prototype.renderEdges=function(){
-    var self=this;this.edgesEl.replaceChildren();this.edges().forEach(function(e){self.renderEdge(e);});
+    var self=this;this.edgesEl.replaceChildren();this.renderArrow();
+    this.edges().forEach(function(e){self.renderEdge(e);});
     if(this.connect)this.renderWire(this.connect.from,this.connect.point,true);
   };
+  Graph.prototype.renderArrow=function(){
+    var defs=document.createElementNS(SVG_NS,'defs');
+    var marker=document.createElementNS(SVG_NS,'marker');
+    marker.setAttribute('id',this.arrowId);
+    marker.setAttribute('viewBox','0 0 8 8');
+    marker.setAttribute('refX','8');marker.setAttribute('refY','4');
+    marker.setAttribute('markerWidth','8');marker.setAttribute('markerHeight','8');
+    marker.setAttribute('markerUnits','userSpaceOnUse');marker.setAttribute('orient','auto');
+    var arrow=document.createElementNS(SVG_NS,'path');
+    arrow.setAttribute('d','M 0 0 L 8 4 L 0 8 Z');
+    arrow.setAttribute('fill','#7395c7');
+    marker.appendChild(arrow);defs.appendChild(marker);this.edgesEl.appendChild(defs);
+  };
   Graph.prototype.path=function(a,b){
-    var dx=Math.max(54,Math.abs(b.x-a.x)*.42);
+    var dx=Math.max(20,Math.abs(b.x-a.x)*.42);
     return 'M '+a.x+' '+a.y+' C '+(a.x+dx)+' '+a.y+', '+(b.x-dx)+' '+b.y+', '+b.x+' '+b.y;
   };
-  Graph.prototype.port=function(p){
+  Graph.prototype.port=function(p,output){
     var pos=this.positions[this.key(p.scope,p.id)],h=this.nodeH();
-    return {x:pos.x+(p.scope==='frame'?0:this.nodeW()),y:pos.y+h/2};
+    return {x:pos.x+(output?this.nodeW():0),y:pos.y+h/2};
   };
   Graph.prototype.renderEdge=function(e){
-    var self=this,path=document.createElementNS('http://www.w3.org/2000/svg','path');
-    path.setAttribute('d',this.path(this.port(e.from),this.port(e.to)));
+    var self=this,path=document.createElementNS(SVG_NS,'path');
+    path.setAttribute('d',this.path(this.port(e.from,true),this.port(e.to,false)));
+    path.setAttribute('marker-end','url(#'+this.arrowId+')');
     path.setAttribute('class','graph-edge'+(e.from.scope==='document'?' document-edge':e.from.scope==='source'?' source-edge':'')+
       (this.selectedEdge===this.edgeKey(e)?' selected':''));
     this.edgesEl.appendChild(path);
@@ -184,8 +208,9 @@
     }
   };
   Graph.prototype.renderWire=function(from,point,preview){
-    var path=document.createElementNS('http://www.w3.org/2000/svg','path');
-    path.setAttribute('d',this.path(this.port(from),point));path.setAttribute('class','graph-edge'+(preview?' preview':''));
+    var path=document.createElementNS(SVG_NS,'path');
+    path.setAttribute('d',this.path(this.port(from,true),point));path.setAttribute('class','graph-edge'+(preview?' preview':''));
+    path.setAttribute('marker-end','url(#'+this.arrowId+')');
     this.edgesEl.appendChild(path);
   };
   Graph.prototype.point=function(e){
@@ -197,12 +222,11 @@
     if(this.compact){
       this.selectNode(d._scope,d.id);if(this.cb.select)this.cb.select(d._scope,d.id);return;
     }
-    if(d._scope==='source'||d._scope==='document'){
-      this.selectNode(d._scope,d.id);if(this.cb.select)this.cb.select(d._scope,d.id);return;
-    }
+    clearTimeout(this.clickTimer);this.clickTimer=null;
     var self=this,k=this.key(d._scope,d.id),p=this.positions[k];
-    this.drag={kind:'node',key:k,id:e.pointerId,start:this.point(e),x:p.x,y:p.y,moved:false};
-    this.canvas.setPointerCapture(e.pointerId);this.selectEdge(null);e.preventDefault();
+    this.drag={kind:'node',key:k,id:e.pointerId,start:this.point(e),
+      startClient:{x:e.clientX,y:e.clientY},x:p.x,y:p.y,moved:false};
+    this.canvas.setPointerCapture(e.pointerId);this.selectEdge(null);
   };
   Graph.prototype.startConnect=function(e,d){
     this.connect={from:{scope:d._scope,id:d.id},point:this.point(e)};
@@ -221,9 +245,12 @@
       if(self.drag.kind==='pan'){
         self.pan.x=self.drag.x+e.clientX-self.drag.start.x;self.pan.y=self.drag.y+e.clientY-self.drag.start.y;self.applyTransform();
       }else if(self.drag.kind==='node'){
+        if(!self.drag.moved&&Math.hypot(e.clientX-self.drag.startClient.x,
+          e.clientY-self.drag.startClient.y)<4)return;
+        self.drag.moved=true;
         var p=self.point(e),pos=self.positions[self.drag.key];
         pos.x=Math.round(self.drag.x+p.x-self.drag.start.x);pos.y=Math.round(self.drag.y+p.y-self.drag.start.y);
-        self.drag.moved=true;self.nodeEls[self.drag.key].style.left=pos.x+'px';self.nodeEls[self.drag.key].style.top=pos.y+'px';self.renderEdges();
+        self.nodeEls[self.drag.key].style.left=pos.x+'px';self.nodeEls[self.drag.key].style.top=pos.y+'px';self.renderEdges();
       }else if(self.drag.kind==='connect'){self.connect.point=self.point(e);self.renderEdges();}
     });
     function up(e){
@@ -235,8 +262,21 @@
         if(valid){var parts=target.dataset.key.split(':'),scope=parts[0],id=Number(parts[1]);valid=(from.scope==='index'&&scope==='rule')||(from.scope==='rule'&&scope==='frame');}
         self.connect=null;if(valid)self.cb.connect(from.scope,from.id,scope,id);
       }else if(drag.kind==='node'){
-        if(drag.moved&&self.cb.layout)self.cb.layout(self.positions);
-        else{var parts=drag.key.split(':');self.selectNode(parts[0],Number(parts[1]));if(self.cb.select)self.cb.select(parts[0],Number(parts[1]));}
+        if(drag.moved){
+          self.lastClick=null;if(self.cb.layout)self.cb.layout(self.positions);
+        }else if(e.type!=='pointercancel'){
+          var parts=drag.key.split(':'),scope=parts[0],id=Number(parts[1]),now=Date.now();
+          var dbl=self.lastClick&&self.lastClick.key===drag.key&&now-self.lastClick.time<260;
+          clearTimeout(self.clickTimer);self.clickTimer=null;
+          if(dbl){
+            self.lastClick=null;self.selectNode(scope,id);
+          }else{
+            self.lastClick={key:drag.key,time:now};
+            self.clickTimer=setTimeout(function(){
+              self.clickTimer=null;self.selectNode(scope,id);if(self.cb.select)self.cb.select(scope,id);
+            },280);
+          }
+        }else self.lastClick=null;
       }
       self.renderEdges();
     }

@@ -495,7 +495,7 @@ function pfActionHtml(){
   var p=pfData||{}, st=String(p.state||'');
   var busy=st==='parsing'||st==='loading', label='', dis=false, tip='';
   if(pfNode==='parse'){
-    label=st==='loaded'?'测试重解析':'执行解析'; dis=busy;
+    label='执行解析'; dis=busy;
     tip=busy?'正在处理中，请稍候。'
       :(st==='loaded'
         ?'仅重新运行解析并生成 test/ 下的新报告；业务数据、正式产物、暂存、回执和已入库状态全部保留。'
@@ -667,7 +667,7 @@ function pfBindAction(){
     var btn=this, msg='';
     if(pfNode==='parse'){
       msg=st==='loaded'
-        ?'确认测试重解析？\n仅生成 test/ 下的新产物；业务数据、正式产物、暂存、回执和已入库状态全部保留。'
+        ?'确认重新执行解析？\n仅生成 test/ 下的新产物；业务数据、正式产物、暂存、回执和已入库状态全部保留。'
         :'确认按当前解析参数执行解析？\n将清空暂存、产物、回执与校验结论。';
     }else if(pfNode==='extract'){
       msg=(st==='to_review'||st==='to_load')
@@ -703,7 +703,7 @@ function pfBindAction(){
       if(pfNode==='parse'){
         if(m){
           m.textContent=st==='loaded'
-            ?'已启动测试重解析；正式数据保持不变。':'已启动解析。';
+            ?'已启动解析；正式数据保持不变。':'已启动解析。';
           var progressLink=document.createElement('a');
           progressLink.href='/parse?from_source='+pfId;
           progressLink.textContent='查看解析进度 →';

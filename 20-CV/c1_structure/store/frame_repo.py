@@ -47,13 +47,28 @@ def list_defs():
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT ' + ','.join(_INFO_COLS) +
-                        ' FROM c1_frame_info ORDER BY id')
+            cols = ['i.' + c for c in _INFO_COLS]
+            cols += ['v.id AS value_id', 'v.frame_value', 'v.computed_at']
+            cur.execute(
+                'SELECT ' + ','.join(cols) +
+                ' FROM c1_frame_info i'
+                ' LEFT JOIN (SELECT frame_id,MAX(id) AS value_id'
+                '            FROM c1_frame_value GROUP BY frame_id) latest'
+                '   ON latest.frame_id=i.id'
+                ' LEFT JOIN c1_frame_value v ON v.id=latest.value_id'
+                ' ORDER BY i.id')
             out = rows(cur)
         for r in out:
             r['rule_refs_json'] = unjson(r['rule_refs_json'])
             if r['threshold'] is not None:
                 r['threshold'] = str(r['threshold'])
+            value_id = r.pop('value_id')
+            r['_latest'] = None if value_id is None else {
+                'id': value_id, 'frame_id': r['id'],
+                'frame_value': r['frame_value'],
+                'computed_at': r['computed_at']}
+            r.pop('frame_value')
+            r.pop('computed_at')
         return out
     finally:
         conn.close()

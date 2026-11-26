@@ -41,3 +41,4 @@
 #todotable th:nth-child(5){width:150px}
 #todorows .desc{color:var(--c1-text-muted);display:block;max-width:100%;min-width:0;
   overflow-wrap:anywhere;white-space:normal;line-height:1.5;vertical-align:middle}
+#todo .tblscroll>.list{width:100%;min-width:720px}

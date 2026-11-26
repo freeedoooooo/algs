@@ -284,17 +284,17 @@ function poll(){
     progress(s);
     if(s.error){
       msg.innerHTML='<span class="err">出错：'+escHtml(s.error)+'</span>';
-      go.disabled=false;return;
+      go.disabled=false;loadHistory(s.file_id||(curHist&&curHist.id));return;
     }
     if(s.running){timer=setTimeout(poll,800);return;}
     if(s.ready){
       msg.textContent=s.test_mode
-        ?'测试重解析完成；正式数据、暂存、回执和状态均未改变。'
+        ?'解析完成；正式数据、暂存、回执和状态均未改变。'
         :'解析完成。可调整参数后，用同一批文件重新解析。';
       go.disabled=false;
       if(!s.test_mode) showStgLink(s.file_id);
       showResult(s.cases,s.test_mode);
-      loadHistory(s.file_id,true);
+      loadHistory(s.file_id);
     }
   }).catch(function(){timer=setTimeout(poll,1200);});
 }
@@ -351,26 +351,55 @@ logclose.onclick=function(){
   logclose.hidden=true;
 };
 
-/* ---- 资料选择：列出全部资料；已解析→报告，未解析→提示并提供解析按钮 ---- */
-var histItems=[], curHist=null;
+/* ---- 资料选择：列出全部资料；按实际产物显示报告，未解析时允许原地执行 ---- */
+var histItems=[],curHist=null,histSeq=0;
 var PARSED_STATES=['to_extract','to_review','to_load','loading','loaded'];
 function isParsed(f){ return PARSED_STATES.indexOf(f.state)>=0; }
 function histLabel(f){
   return '#'+f.id+' · '+shortName(f.name)+' · '+fmtTime(f.created_at)+
     (isParsed(f)?'':'（未解析）');
 }
+function showArtifact(fid,name){
+  rightState('done');
+  reportFrame.src=reportUrl(fid,name.indexOf('test/')===0)+'?t='+Date.now();
+}
+function showUnparsed(f,desc,title){
+  rightState('unparsed');
+  document.getElementById('upTitle').textContent=title||'该资料尚未解析';
+  document.getElementById('upDesc').textContent=desc||
+    ('「'+f.name+'」尚未解析，暂无对照报告。点击上方「执行解析」按钮发起解析，完成后自动生成报告。');
+  document.getElementById('histParse').disabled=false;
+  document.getElementById('histParse').textContent='执行解析';
+}
 function showHistItem(f){
+  var seq=++histSeq;
   curHist=f;
-  if(isParsed(f)){
-    showResult([{file:f.name,file_id:f.id}]);
-  }else{
-    rightState('unparsed');
-    document.getElementById('upDesc').textContent=
-      '「'+f.name+'」尚未解析，暂无对照报告。点击下方按钮发起解析，完成后自动生成报告。';
-    var b=document.getElementById('upParse');
-    b.disabled=false; b.textContent='解析此资料';
-    document.getElementById('upMsg').textContent='';
-  }
+  rightState('unparsed');
+  document.getElementById('upTitle').textContent='正在读取资料…';
+  document.getElementById('upDesc').textContent='正在查找「'+f.name+'」的解析产物。';
+  document.getElementById('histParse').disabled=true;
+  document.getElementById('histParse').textContent='执行解析';
+  document.getElementById('histParseMsg').textContent='正在读取解析产物…';
+  document.getElementById('histParseMsg').classList.remove('err');
+  fetch('/api/sources/'+f.id+'/pipeline').then(function(r){
+    return r.json().then(function(j){return {ok:r.ok,status:r.status,j:j};});
+  }).then(function(o){
+    if(seq!==histSeq)return;
+    if(!o.ok||!o.j.ok)throw new Error((o.j&&o.j.error)||('HTTP '+o.status));
+    var p=o.j.pipeline||{},arts=p.parse_artifacts||[];
+    curHist.state=p.state||f.state;
+    var name=arts.indexOf('对照报告.html')>=0?'对照报告.html':
+      (arts.indexOf('test/对照报告.html')>=0?'test/对照报告.html':null);
+    document.getElementById('histParseMsg').textContent='';
+    document.getElementById('histParse').disabled=false;
+    if(name)showArtifact(f.id,name);
+    else showUnparsed(curHist,'「'+f.name+'」尚无对照报告产物。点击上方「执行解析」按钮生成报告。');
+  }).catch(function(e){
+    if(seq!==histSeq)return;
+    showUnparsed(f,'读取「'+f.name+'」的解析产物失败：'+e.message+'。可重新选择资料或点击上方按钮重试。','无法读取解析产物');
+    document.getElementById('histParseMsg').textContent=e.message;
+    document.getElementById('histParseMsg').classList.add('err');
+  });
 }
 function loadHistory(selectId,skipRender){
   fetch('/api/sources/state').then(function(r){return r.ok?r.json():null;}).then(function(j){
@@ -385,7 +414,12 @@ function loadHistory(selectId,skipRender){
     }
     pick=pick||histItems[0];
     histsel.value=String(pick.id);
-    if(!skipRender) showHistItem(pick);
+    if(!skipRender)showHistItem(pick);
+    else{
+      curHist=pick;
+      document.getElementById('histParse').disabled=false;
+      document.getElementById('histParseMsg').textContent='';
+    }
   }).catch(function(){});
 }
 histsel.addEventListener('change',function(){
@@ -393,30 +427,41 @@ histsel.addEventListener('change',function(){
     if(String(histItems[i].id)===histsel.value){ showHistItem(histItems[i]); return; }
   }
 });
-/* 未解析资料的「解析此资料」按钮：复用 /api/sources/{id}/parse */
-document.getElementById('upParse').onclick=async function(){
-  if(!curHist) return;
-  var b=this, upMsg=document.getElementById('upMsg');
-  b.disabled=true; b.textContent='解析中…'; upMsg.textContent='正在发起解析…';
+/* 已解析资料也可再次执行；已入库资料走 test_mode，保留正式数据。 */
+document.getElementById('histParse').onclick=async function(){
+  if(!curHist||this.disabled)return;
+  var f=curHist,test=String(f.state)==='loaded';
+  if(!confirm(test
+    ?'确认重新执行解析？\n已入库资料将生成测试产物，正式数据保持不变。'
+    :'确认执行解析？\n将清空暂存、产物、回执与校验结论。'))return;
+  var b=this;
+  saveParams(collectParams());
+  b.disabled=true;b.textContent='解析中…';
+  document.getElementById('histParseMsg').textContent='正在发起解析…';
+  document.getElementById('histParseMsg').classList.remove('err');
   try{
-    saveParams(collectParams());
-    var res=await fetch('/api/sources/'+curHist.id+'/parse',{
+    var body={params:collectParams()};
+    if(test)body.test_mode=true;
+    var res=await fetch('/api/sources/'+f.id+'/'+(test?'reparse':'parse'),{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({params:collectParams()})
+      body:JSON.stringify(body)
     });
     var j=await res.json();
-    if(!j.ok) throw new Error(j.error||'发起失败');
+    if(!res.ok||!j.ok)throw new Error(j.error||('HTTP '+res.status));
     stglink.hidden=true;
     rightState('run');
     log.innerHTML='';
     document.getElementById('runfill').style.width='0%';
     document.getElementById('runpct').textContent='0%';
-    document.getElementById('runstage').textContent='准备中…';
+    document.getElementById('runstage').textContent='准备中';
     msg.textContent='处理中…';
     poll();
   }catch(e){
-    upMsg.textContent='发起失败：'+e.message;
-    b.disabled=false; b.textContent='解析此资料';
+    rightState('unparsed');
+    document.getElementById('upDesc').textContent='发起解析失败：'+e.message;
+    document.getElementById('histParseMsg').textContent=e.message;
+    document.getElementById('histParseMsg').classList.add('err');
+    b.disabled=false;b.textContent='执行解析';
   }
 };
 
@@ -453,17 +498,18 @@ go.onclick=async function(){
   }
 };
 
-/* 资料页「解析」跳转：/parse?from_source=<id> → 右侧资料选择里预选该资料 */
-var fromSrc=new URLSearchParams(location.search).get('from_source');
+/* 资料页「解析」跳转：/parse?file_id=<id> 或 from_source=<id> → 预选该资料 */
+var fromSrc=new URLSearchParams(location.search).get('file_id')||
+  new URLSearchParams(location.search).get('from_source');
 fetch('/api/status').then(function(r){return r.json();}).then(function(s){
   if(s.running){ rightState('run'); say(s.logs,s.steps); progress(s); poll(); }
   else if(s.ready){
     /* 刷新页面直接进完成态：日志/进度也要补渲染，否则「查看日志」抽屉是空的 */
     say(s.logs,s.steps); progress(s);
     if(!s.test_mode) showStgLink(s.file_id);
-    else msg.textContent='测试重解析完成；正式数据、暂存、回执和状态均未改变。';
+    else msg.textContent='解析完成；正式数据、暂存、回执和状态均未改变。';
     showResult(s.cases,s.test_mode);
-    loadHistory(s.file_id,true);
+    loadHistory(fromSrc||s.file_id,!fromSrc);
   }
   else loadHistory(fromSrc||undefined);
 });

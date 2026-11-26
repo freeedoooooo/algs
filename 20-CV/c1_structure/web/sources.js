@@ -199,7 +199,7 @@ function nodeActionHtml(key,p){
   };
   var busy=st==='parsing'||st==='loading';
   if(key==='parse'){
-    return btn('actParse',st==='loaded'?'测试重解析':'执行解析',busy,
+    return btn('actParse','执行解析',busy,
       busy?'正在解析中，请稍候。':(st==='loaded'
         ?'仅重新运行解析并生成 test/ 下的新报告；业务数据、正式产物、暂存、回执和已入库状态全部保留。'
         :'清空该资料的暂存、产物、回执与校验结论，按当前配置原地重新解析。'));
@@ -243,7 +243,7 @@ function bindNodeActions(p){
   bind('actParse',function(){
     var test=String(p.state||'')==='loaded';
     if(!confirm(test
-      ?'确认测试重解析？\n仅生成 test/ 下的新产物；业务数据、正式产物、暂存、回执和已入库状态全部保留。'
+      ?'确认重新执行解析？\n仅生成 test/ 下的新产物；业务数据、正式产物、暂存、回执和已入库状态全部保留。'
       :'确认执行解析？\n将清空暂存、产物、回执与校验结论，原地重新解析。')) return {cancel:true};
     return api('POST','/api/sources/'+fid+'/reparse',test?{test_mode:true}:{});
   });

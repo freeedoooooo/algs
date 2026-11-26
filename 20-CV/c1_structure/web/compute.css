@@ -1,18 +1,26 @@
 /* web/compute.css — 计算资产库与流程图工作台。 */
 .drawer.wide .dpanel{width:min(680px,96vw)}
-.action-menu.compute-action-menu{width:112px;min-width:112px;max-width:112px;padding:3px;box-sizing:border-box}
-.compute-action-menu .menu-item{position:relative;justify-content:center;min-height:28px;padding:3px 2px;gap:0;font-size:12px;line-height:16px;text-align:center}
-.compute-action-menu .menu-item span{display:block;width:100%;text-align:center}
-.compute-action-menu .menu-icon{position:absolute;left:6px;top:50%;transform:translateY(-50%);display:block;flex:none;width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.action-menu.compute-action-menu{width:96px;min-width:96px;max-width:96px;padding:3px;box-sizing:border-box}
+.compute-action-menu .menu-item{justify-content:center;min-height:28px;padding:3px 4px;gap:4px;font-size:12px;line-height:16px;text-align:center}
+.compute-action-menu .menu-item span{display:block;text-align:center}
+.compute-action-menu .menu-icon{display:block;flex:none;width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 .compute-action-menu .menu-item[data-act=trace]{color:var(--c1-primary);font-weight:600}
 .dbody .fsec:first-child{margin-top:2px}
 .dbody .hint,.hint{font-size:var(--c1-font-size-meta);color:var(--c1-text-faint);line-height:1.6}
 .compute-page{padding-bottom:var(--c1-space-3)}
-.compute-workspace{display:grid;grid-template-columns:248px minmax(0,1fr);gap:var(--c1-space-3);
+.compute-workspace{--c1-asset-width:248px;display:grid;grid-template-columns:var(--c1-asset-width) 6px minmax(0,1fr);gap:0;
   height:calc(100vh - 118px);min-height:620px}
 .asset-library,.graph-panel{border:1px solid var(--c1-border);border-radius:var(--c1-radius-md);background:var(--c1-surface);
   min-width:0;overflow:hidden}
-.asset-library{display:flex;flex-direction:column;gap:4px;padding:4px;overflow-y:auto}
+.asset-library{display:flex;flex-direction:column;gap:4px;padding:4px;margin-right:6px;overflow-y:auto}
+.asset-divider{position:relative;z-index:2;cursor:col-resize;background:var(--c1-border);touch-action:none;transition:background .15s}
+.asset-divider:hover,.asset-divider.on{background:var(--c1-primary)}
+.asset-collapse{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:24px;height:24px;padding:0;
+  display:flex;align-items:center;justify-content:center;border:1px solid var(--c1-border-strong);border-radius:50%;
+  background:var(--c1-surface);color:var(--c1-text-muted);font-size:18px;line-height:1;box-shadow:0 2px 6px rgba(20,30,60,.12)}
+.asset-collapse:hover{border-color:var(--c1-primary);color:var(--c1-primary)}
+.compute-workspace.is-collapsed{--c1-asset-width:0px!important}
+.compute-workspace.is-collapsed .asset-library{visibility:hidden;padding:0;border-width:0;overflow:hidden}
 .asset-section{flex:none}
 .asset-section+.asset-section{margin-top:0}
 .asset-section[data-scope=source] .disclosure__head{box-shadow:inset 3px 0 0 #64748b}
@@ -46,7 +54,7 @@
 .asset-empty{padding:8px;text-align:center;font-size:var(--c1-font-size-meta);color:var(--c1-text-faint);background:var(--c1-surface-subtle);border-radius:5px}
 
 /* ---- 流程图画布 ---- */
-.graph-panel{position:relative;display:flex;flex-direction:column}
+.graph-panel{position:relative;display:flex;flex-direction:column;margin-left:6px}
 .graph-head{display:flex;align-items:center;gap:var(--c1-space-2);padding:8px 10px;border-bottom:1px solid var(--c1-border);
   min-height:50px;background:var(--c1-surface)}
 .graph-head b{font-size:14px;color:var(--c1-text-strong)}
@@ -71,8 +79,8 @@
   gap:2px;padding:5px 25px 5px 30px;background:var(--c1-surface);border:1px solid #cbd7e8;
   border-top:3px solid var(--c1-primary);border-radius:7px;box-shadow:0 3px 10px rgba(37,55,85,.09);
   user-select:none;cursor:move}
-.graph-node.scope-document{border-top-color:var(--c1-cyan);background:#f5fcfd;cursor:pointer}
-.graph-node.scope-source{border-top-color:#64748b;background:#fbfcfe;cursor:pointer}
+.graph-node.scope-document{border-top-color:var(--c1-cyan);background:#f5fcfd}
+.graph-node.scope-source{border-top-color:#64748b;background:#fbfcfe}
 .graph-node.scope-rule{border-top-color:var(--c1-success)}.graph-node.scope-frame{border-top-color:var(--c1-purple)}
 .graph-node.selected{border-color:var(--c1-primary);box-shadow:0 0 0 3px rgba(37,99,235,.16),0 4px 14px rgba(37,55,85,.16)}
 .graph-node:hover{box-shadow:0 4px 14px rgba(37,55,85,.16)}
@@ -208,11 +216,12 @@
 .cmp th{background:#f7f9fd;font-weight:500;color:#6b7688}
 .ok{color:#177245}.bad{color:#b42318}
 @media(max-width:1050px){
-  .compute-workspace{grid-template-columns:232px minmax(0,1fr)}
+  .compute-workspace{--c1-asset-width:232px}
 }
 @media(max-width:760px){
   .compute-workspace{grid-template-columns:1fr;height:auto;min-height:0}
-  .asset-library{max-height:420px}.graph-panel{height:620px}
+  .asset-library{max-height:420px;margin-right:0}.asset-divider{display:none}.graph-panel{height:620px;margin-left:0}
+  .compute-workspace.is-collapsed .asset-library{display:flex;visibility:visible;padding:4px;border-width:1px;overflow-y:auto}
   .condition-head{display:none}.conditionrow{grid-template-columns:1fr 70px 1fr 28px}
   .conditionrow [data-k=o]{grid-column:3}.conditionrow [data-k=t]{grid-column:1/4;grid-row:2}
   .conditionrow [data-k=x]{grid-column:4;grid-row:1}

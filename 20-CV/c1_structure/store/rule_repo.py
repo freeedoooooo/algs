@@ -48,12 +48,27 @@ def list_defs():
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT ' + ','.join(_INFO_COLS) +
-                        ' FROM c1_rule_info ORDER BY id')
+            cols = ['i.' + c for c in _INFO_COLS]
+            cols += ['v.id AS value_id', 'v.rule_value', 'v.computed_at']
+            cur.execute(
+                'SELECT ' + ','.join(cols) +
+                ' FROM c1_rule_info i'
+                ' LEFT JOIN (SELECT rule_id,MAX(id) AS value_id'
+                '            FROM c1_rule_value GROUP BY rule_id) latest'
+                '   ON latest.rule_id=i.id'
+                ' LEFT JOIN c1_rule_value v ON v.id=latest.value_id'
+                ' ORDER BY i.id')
             out = rows(cur)
         for r in out:
             r['index_refs_json'] = unjson(r['index_refs_json'])
             r['conditions_json'] = unjson(r['conditions_json'])
+            value_id = r.pop('value_id')
+            r['_latest'] = None if value_id is None else {
+                'id': value_id, 'rule_id': r['id'],
+                'rule_value': r['rule_value'],
+                'computed_at': r['computed_at']}
+            r.pop('rule_value')
+            r.pop('computed_at')
         return out
     finally:
         conn.close()
