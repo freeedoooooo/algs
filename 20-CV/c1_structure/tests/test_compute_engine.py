@@ -138,6 +138,12 @@ try:
     check('样本筛选参数化且 LIMIT 参数化',
           'WHERE `amt` >= %s AND `note` = %s LIMIT %s' in sql
           and args == [100, 'x', 50])
+    engine._check_index_def = lambda d: ({'id': 1}, 'orders',
+                                         ['file_id', 'record_id', 'amt', 'note'], None)
+    preview_def['source_column'] = None
+    count_out = engine.source_preview(preview_def, limit=0)
+    check('计数指标样本展示业务列', count_out['columns'] == ['file_id', 'record_id', 'amt', 'note'])
+    check('样本 limit 下限为 1', count_out['limit'] == 1)
     preview_def['filter_json'][0]['column'] = 'amt`; DROP TABLE orders; --'
     try:
         engine.source_preview(preview_def)

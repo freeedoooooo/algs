@@ -384,8 +384,7 @@
   function inspectorSummary(d){
     var rows=[];
     if(d._scope==='source'){
-      rows.push(['业务表',d.source_table],['数据列',d.source_column||'整行'],
-        ['关联指标',graph.def('index',d.index_id)?.name||('#'+d.index_id)]);
+      rows.push(['业务表',d.source_table],['数据列',d.source_column||'整行']);
     }else if(d._scope==='index'){
       rows.push(['业务表',d.source_table],['数据列',d.source_column||'整行'],['运算',aggLabel(d.aggregate)]);
       if((d.filter_json||[]).length)rows.push(['筛选条件',JSON.stringify(d.filter_json)]);
@@ -400,7 +399,7 @@
     var items=[];
     function add(s,id){var x=graph.def(s,id);if(x)items.push({scope:s,id:id,name:x.name,detail:x._scope==='source'?x.source_table:x._detail||''});}
     if(scope==='source'){
-      add('index',d.index_id);
+      if(direction==='down')add('index',d.index_id);
     }else if(scope==='index'){
       if(direction==='up')add('source',d.id);
       else defs.rule.forEach(function(r){if((r.index_refs_json||[]).some(function(x){return x.index_id===d.id;}))add('rule',r.id);});
@@ -486,6 +485,7 @@
     return out;
   }
   function loadAll(){
+    var selectedKey=graph.selectedNode;
     return api('/api/index').then(function(j){defs.index=j.items||[];})
       .then(function(){return api('/api/rule');}).then(function(j){defs.rule=j.items||[];})
       .then(function(){return api('/api/frame');}).then(function(j){defs.frame=j.items||[];})
@@ -498,6 +498,10 @@
       }).then(function(){
         ['index','rule','frame'].forEach(renderAssets);
         graph.setData(graphDefs(),layout);
+        if(selectedKey){
+          var parts=selectedKey.split(':'),scope=parts[0],id=Number(parts[1]);
+          if(graph.def(scope,id))openInspector(scope,id);else closeInspector();
+        }
       })
       .catch(function(e){err(e.message);});
   }

@@ -93,7 +93,7 @@ def compute_index(defn):
 def source_preview(defn, limit=50):
     """返回指标当前筛选命中的总数与有界样本，供配置图下钻血缘。"""
     ds, table, cols, column = _check_index_def(defn)
-    limit = max(1, min(50, int(limit or 50)))
+    limit = max(1, min(50, int(50 if limit is None else limit)))
     where, args = _where(defn.get('filter_json') or [], allow_cols=set(cols))
     relevant = []
     for name in list(loader.TRACE_COLS) + ([column] if column else []) + [
