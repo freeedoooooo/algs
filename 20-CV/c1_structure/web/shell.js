@@ -53,7 +53,7 @@ function closeActionMenus(){
 function positionActionMenu(menu,trigger){
   var margin=8,gap=4;
   var r=trigger.getBoundingClientRect(),m=menu.getBoundingClientRect();
-  var left=menu.classList.contains('compute-action-menu')?r.left+(r.width-m.width)/2:r.right-m.width;
+  var left=r.right-m.width;
   if(left<margin) left=margin;
   if(left+m.width>window.innerWidth-margin) left=window.innerWidth-margin-m.width;
   var top=r.bottom+gap;

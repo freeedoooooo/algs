@@ -1,8 +1,9 @@
 /* web/compute.css — 计算资产库与流程图工作台。 */
 .drawer.wide .dpanel{width:min(680px,96vw)}
-.action-menu.compute-action-menu{width:80px;min-width:80px;max-width:80px;padding:3px;box-sizing:border-box}
-.compute-action-menu .menu-item{justify-content:center;min-height:28px;padding:3px 1px;gap:4px;font-size:12px;line-height:16px;text-align:center}
-.compute-action-menu .menu-icon{display:block;flex:none;width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.action-menu.compute-action-menu{width:112px;min-width:112px;max-width:112px;padding:3px;box-sizing:border-box}
+.compute-action-menu .menu-item{position:relative;justify-content:center;min-height:28px;padding:3px 2px;gap:0;font-size:12px;line-height:16px;text-align:center}
+.compute-action-menu .menu-item span{display:block;width:100%;text-align:center}
+.compute-action-menu .menu-icon{position:absolute;left:6px;top:50%;transform:translateY(-50%);display:block;flex:none;width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 .compute-action-menu .menu-item[data-act=trace]{color:var(--c1-primary);font-weight:600}
 .dbody .fsec:first-child{margin-top:2px}
 .dbody .hint,.hint{font-size:var(--c1-font-size-meta);color:var(--c1-text-faint);line-height:1.6}
