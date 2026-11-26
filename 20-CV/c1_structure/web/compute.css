@@ -1,16 +1,7 @@
 /* web/compute.css — 计算资产库与流程图工作台。 */
 .drawer.wide .dpanel{width:min(760px,96vw)}
-.fsec{margin-bottom:12px}
-.flab{display:block;font-size:12px;font-weight:600;color:#475569;margin-bottom:5px}
-.tin{font-size:13px;padding:5px 9px;border:1px solid #cbd5e1;border-radius:6px;
-  background:#fff;color:#25324a;width:100%;box-sizing:border-box}
-.tin:focus{outline:none;border-color:#2563eb}
-.tin:disabled{background:#f3f5f9;color:#8a94a6}
-select.tin{width:100%;min-width:0}
-.sthint{font-size:12px;color:#8a94a6;margin-top:4px}
 .dbody .fsec:first-child{margin-top:2px}
-.dbody .hint,.hint{font-size:12px;color:#8a94a6;line-height:1.6}
-.spacer{flex:1}
+.dbody .hint,.hint{font-size:var(--c1-font-size-meta);color:var(--c1-text-faint);line-height:1.6}
 .compute-page{padding-bottom:var(--c1-space-3)}
 .compute-workspace{display:grid;grid-template-columns:272px minmax(0,1fr);gap:var(--c1-space-3);
   height:calc(100vh - 118px);min-height:620px}

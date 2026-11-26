@@ -1,45 +1,39 @@
-/* web/home.css — 工作台首页私有样式（快速解析条/状态卡/待办列表；
-   通用 token 全在 shell.css，这里只补工作台特有的版式） */
-.quick{padding:12px 14px;margin-bottom:12px}
-.qhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+/* web/home.css — 工作台首页私有样式（快速解析条/状态卡/待办列表） */
+.quick{padding:var(--c1-space-3) var(--c1-space-3) var(--c1-space-3);margin-bottom:var(--c1-space-3)}
+.qhead{display:flex;align-items:center;gap:var(--c1-space-2);flex-wrap:wrap;margin-bottom:var(--c1-space-2)}
 .qhead .spacer{flex:1}
-.qhead b{font-size:14px}
-.qt{font-size:12px;color:#6b7688;display:flex;align-items:center;gap:6px}
-.qt select{max-width:260px}
-.qmsg{font-size:12px;color:#8a94a6}
-.qmsg.err{color:#b42318}
-.qmsg.ok{color:#177245}
-.qmsg.run{color:#2563eb}
-#hdrop{border:1.5px dashed #c3ccd9;border-radius:8px;padding:34px 14px;
-  text-align:center;color:#6b7688;cursor:pointer;background:#fafbfd;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px}
-#hdrop b{font-weight:600;color:#374151;font-size:14px}
-#hdrop .sub{font-size:12px;color:#8a94a6;max-width:560px;line-height:1.7}
-#hdrop.on{border-color:#2563eb;background:#f2f6ff}
-.picked{list-style:none;margin:8px 0 0;padding:0;display:flex;
+.qhead b{font-size:var(--c1-font-size-body)}
+.qmsg{font-size:var(--c1-font-size-meta);color:var(--c1-text-faint)}
+.qmsg.err{color:var(--c1-danger)}
+.qmsg.ok{color:var(--c1-success)}
+.qmsg.run{color:var(--c1-primary)}
+#hdrop{border:1px dashed var(--c1-border-strong);border-radius:var(--c1-radius-md);padding:var(--c1-space-5) var(--c1-space-3);
+  text-align:center;color:var(--c1-text-muted);cursor:pointer;background:var(--c1-surface-subtle);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--c1-space-2)}
+#hdrop b{font-weight:600;color:var(--c1-text);font-size:var(--c1-font-size-body)}
+#hdrop .sub{font-size:var(--c1-font-size-meta);color:var(--c1-text-faint);max-width:560px;line-height:1.7}
+#hdrop.on{border-color:var(--c1-primary);background:var(--c1-primary-soft)}
+.picked{list-style:none;margin:var(--c1-space-2) 0 0;padding:0;display:flex;
   flex-wrap:wrap;gap:6px}
-.picked li{display:flex;align-items:center;gap:6px;border:1px solid #dbe2ec;
-  border-radius:6px;padding:3px 6px;font-size:12px;background:#fff}
-.picked .fdel{border:0;background:none;cursor:pointer;color:#8a94a6;
+.picked li{display:flex;align-items:center;gap:6px;border:1px solid var(--c1-border);
+  border-radius:var(--c1-radius-sm);padding:3px 6px;font-size:var(--c1-font-size-meta);background:var(--c1-surface);min-width:0}
+.picked .fdel{border:0;background:none;cursor:pointer;color:var(--c1-text-faint);
   font-size:14px;line-height:1}
-.picked .fdel:hover{color:#b42318}
+.picked .fdel:hover{color:var(--c1-danger)}
 
-.cards{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
-.card{flex:1 1 220px;background:#fff;border:1px solid #dbe2ec;border-radius:10px;
-  padding:12px 14px;min-width:220px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(180px,100%),1fr));gap:var(--c1-space-3);margin-bottom:var(--c1-space-3)}
+.card{min-width:0;background:var(--c1-surface);border:1px solid var(--c1-border);border-radius:var(--c1-radius-lg);
+  padding:10px var(--c1-space-3)}
 .card.zero{opacity:.6}
-.card.alert{border-color:#e4a4a0}
-.ctitle{font-size:14px;font-weight:600}
-.cnum{font-size:26px;font-weight:700;color:#2563eb;margin:6px 0 8px;
-  height:32px;line-height:32px}
-.card.zero .cnum{color:#8a94a6}
-.clink{font-size:12px;color:#2563eb;text-decoration:none}
+.card.alert{border-color:var(--c1-danger)}
+.ctitle{font-size:var(--c1-font-size-secondary);font-weight:600}
+.cnum{font-size:24px;font-weight:700;color:var(--c1-primary);margin:4px 0 6px;
+  height:30px;line-height:30px;font-variant-numeric:tabular-nums}
+.card.zero .cnum{color:var(--c1-text-faint)}
+.clink{font-size:var(--c1-font-size-meta);color:var(--c1-primary);text-decoration:none}
 .clink:hover{text-decoration:underline}
 
-#todo{padding:12px 14px}
-#todo .thead{display:flex;align-items:center;margin-bottom:8px}
-#todo .thead b{font-size:14px}
 #todo .clink{margin-left:auto}
-#todorows .warn{color:#b42318}
-#todorows .desc{color:#6b7688;display:inline-block;max-width:260px;
+#todorows .warn{color:var(--c1-danger)}
+#todorows .desc{color:var(--c1-text-muted);display:inline-block;max-width:260px;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}

@@ -1,6 +1,7 @@
 /* web/shell.css — 全站公共壳层与基础组件。 */
 :root{
   --c1-font-sans:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+  --c1-font-mono:Consolas,Monaco,monospace;
   --c1-font-size-body:14px;
   --c1-font-size-secondary:13px;
   --c1-font-size-meta:12px;
@@ -55,6 +56,7 @@ body{margin:0;background:var(--c1-bg);color:var(--c1-text);
   font:var(--c1-font-size-body)/1.5 var(--c1-font-sans)}
 a{color:var(--c1-primary);text-decoration:none}
 button{font:inherit;cursor:pointer}
+.spacer{flex:1}
 a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,
 textarea:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--c1-primary);outline-offset:2px}
 
@@ -73,19 +75,41 @@ textarea:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--c1-prima
 .topnav .navnote{font-size:11px;color:var(--c1-nav-off);white-space:nowrap}
 
 /* ---- 列表页主体 ---- */
-.pagebody{max-width:none;margin:0;padding:var(--c1-space-3) var(--c1-space-4) var(--c1-space-6)}
-.pagehead{display:flex;align-items:center;gap:var(--c1-space-2);flex-wrap:wrap;margin-bottom:10px}
+.pagebody{width:100%;min-width:0;max-width:none;margin:0;
+  padding:var(--c1-space-3) var(--c1-space-4) var(--c1-space-6)}
+.pagehead{display:flex;align-items:center;gap:var(--c1-space-2);flex-wrap:wrap;
+  min-width:0;margin-bottom:10px}
 .pagehead h1{font-size:16px;font-weight:600;margin:0;color:var(--c1-text-strong)}
 .pagehead .spacer{flex:1}
 
 /* ---- 流程条组件已移除（见 shell.js） ---- */
-.toolbar{display:flex;align-items:center;gap:var(--c1-space-2);flex-wrap:wrap}
+.toolbar{display:flex;align-items:center;gap:var(--c1-space-2);flex-wrap:wrap;min-width:0}
 .toolbar[hidden]{display:none}
 .toolbar input[type=search],.toolbar input[type=text],.toolbar select{
-  font:inherit;font-size:var(--c1-font-size-secondary);min-height:var(--c1-control-h);padding:5px 9px;
-  border:1px solid var(--c1-border-strong);border-radius:var(--c1-radius-sm);
+  font:inherit;font-size:var(--c1-font-size-secondary);min-height:var(--c1-control-h);max-width:100%;
+  padding:5px 9px;border:1px solid var(--c1-border-strong);border-radius:var(--c1-radius-sm);
   background:var(--c1-surface);color:var(--c1-text)}
-.toolbar input[type=search]{width:220px}
+.toolbar input[type=search]{flex:1 1 180px;width:220px;min-width:0}
+
+/* ---- 表单基础件（抽屉、筛选与页面内配置共用） ---- */
+.fsec{min-width:0;margin-bottom:var(--c1-space-3)}
+.flab{display:block;min-width:0;font-size:var(--c1-font-size-meta);font-weight:600;
+  color:var(--c1-text);margin-bottom:5px}
+.tin{font:inherit;font-size:var(--c1-font-size-secondary);min-height:var(--c1-control-h);max-width:100%;
+  padding:5px 9px;border:1px solid var(--c1-border-strong);border-radius:var(--c1-radius-sm);
+  background:var(--c1-surface);color:var(--c1-text-strong);width:100%;box-sizing:border-box}
+.tin:focus{outline:none;border-color:var(--c1-primary);box-shadow:0 0 0 2px var(--c1-primary-soft)}
+.tin:disabled{background:var(--c1-surface-subtle);color:var(--c1-text-faint)}
+select.tin{width:100%;min-width:0}
+textarea.tin{resize:vertical;line-height:1.6}
+.sthint{font-size:var(--c1-font-size-meta);color:var(--c1-text-faint);margin-top:var(--c1-space-1)}
+
+/* ---- 分区标题（卡片、面板与抽屉内小节共用） ---- */
+.section-head{display:flex;align-items:center;gap:var(--c1-space-2);min-height:38px;
+  padding:7px var(--c1-space-3);font-size:var(--c1-font-size-secondary);color:var(--c1-text-strong);
+  background:var(--c1-surface-subtle);border-bottom:1px solid var(--c1-border)}
+.section-head .spacer{flex:1}
+
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;
   min-height:var(--c1-control-h);font-size:var(--c1-font-size-secondary);padding:5px 14px;
   border-radius:var(--c1-radius-sm);border:1px solid var(--c1-primary);
@@ -235,6 +259,7 @@ table.list>tbody>tr:hover>td:last-child{background:var(--c1-surface-subtle)}
 .drawer{position:fixed;inset:0;z-index:60;background:var(--c1-overlay);
   display:flex;justify-content:flex-end}
 .drawer[hidden]{display:none}
+.drawer.wide .dpanel{width:min(720px,96vw)}
 .drawer .dpanel{width:min(560px,94vw);height:100%;background:var(--c1-surface);
   box-shadow:var(--c1-shadow-drawer);display:flex;flex-direction:column}
 .drawer .dhead{display:flex;align-items:center;gap:10px;padding:10px 14px;
@@ -242,7 +267,7 @@ table.list>tbody>tr:hover>td:last-child{background:var(--c1-surface-subtle)}
 .drawer .dhead h2{font-size:15px;font-weight:600;margin:0;color:var(--c1-text-strong)}
 .drawer .dhead .spacer{flex:1}
 .drawer .dbody{flex:1;min-height:0;overflow:auto;padding:10px 14px}
-.drawer .dfoot{flex:none;display:flex;align-items:center;gap:10px;
+.drawer .dfoot{flex:none;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
   padding:8px 14px;border-top:1px solid var(--c1-border);font-size:var(--c1-font-size-meta);color:var(--c1-text-muted)}
 .dclose{display:inline-flex;align-items:center;justify-content:center;min-height:30px;font-size:var(--c1-font-size-meta);
   padding:4px 12px;border-radius:var(--c1-radius-sm);border:1px solid var(--c1-border-strong);
@@ -278,11 +303,28 @@ table.list>tbody>tr:hover>td:last-child{background:var(--c1-surface-subtle)}
 .msg .err{color:var(--c1-danger)}
 .msg .ok{color:var(--c1-success)}
 code{background:var(--c1-border-subtle);padding:1px 5px;border-radius:4px;font-size:var(--c1-font-size-meta)}
-.mono{font-family:Consolas,Monaco,monospace;font-size:var(--c1-font-size-meta)}
+.mono{font-family:var(--c1-font-mono);font-size:var(--c1-font-size-meta)}
 
+@media(max-width:1180px){
+  .topnav .navnote{display:none}
+}
+@media(max-width:680px){
+  .topnav{height:auto;min-height:42px;padding:5px 8px}
+  .topnav .brand{margin-right:8px}
+  .pagebody{padding:var(--c1-space-2) var(--c1-space-2) var(--c1-space-5)}
+  .pagehead{gap:6px;margin-bottom:var(--c1-space-2)}
+  .pagehead h1{font-size:15px}
+  .pagehead>.toolbar{flex:1 1 100%}
+  .toolbar input[type=search],.toolbar input[type=text],.toolbar select{flex:1 1 140px;min-width:0}
+  .toolbar .btn{flex:0 0 auto}
+  .drawer .dhead,.drawer .dbody,.drawer .dfoot{padding-left:10px;padding-right:10px}
+  .drawer .dhead{flex-wrap:wrap}
+  .pager{flex-wrap:wrap;gap:6px;justify-content:center}
+  .pager .pginfo{flex:1 1 100%;text-align:center}
+}
 @media(pointer:coarse){
   .btn,.btn.mini,.icon-btn,.icon-btn.mini,.linkbtn,.dclose,.disclosure__toggle,
-  .pager button,.pager .pagesize,.toolbar input,.toolbar select{min-height:var(--c1-touch-h)}
+  .pager button,.pager .pagesize,.toolbar input,.toolbar select,.tin{min-height:var(--c1-touch-h)}
   .icon-btn,.icon-btn.mini{width:var(--c1-touch-h);height:var(--c1-touch-h)}
   .action-menu .menu-item{min-height:var(--c1-touch-h)}
 }

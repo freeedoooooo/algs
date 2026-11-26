@@ -39,7 +39,6 @@ function doSearch(){
   fstate=document.getElementById('fstate').value;
   page=1; load();
 }
-document.getElementById('qbtn').onclick=doSearch;
 document.getElementById('q').addEventListener('keydown',function(e){
   if(e.key==='Enter'){ e.preventDefault(); clearTimeout(qTimer); doSearch(); }
 });

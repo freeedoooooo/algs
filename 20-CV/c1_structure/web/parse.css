@@ -1,69 +1,56 @@
-/* web/parse.css — 上传页样式 */
-*{box-sizing:border-box}
-body{margin:0;background:#f4f6fa;color:#1f2738;
-  font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+/* web/parse.css — 解析工作台私有布局；基础控件与颜色沿用 shell.css */
 html,body{height:100%}
-/* 顶部色带导航占 42px（shell.css），主区让位 */
-.app{display:flex;height:calc(100vh - 42px);overflow:hidden}
-.console{width:280px;flex:none;height:100%;overflow:auto;padding:16px 16px 20px;
-  background:#fff;border-right:1px solid #e2e7f0}
-.reportcol{flex:1;min-width:0;height:100%;position:relative;background:#f4f6fa}
-.gutter{flex:none;width:5px;cursor:col-resize;background:#e2e7f0;transition:background .15s}
-.gutter:hover,.gutter.on{background:#2563eb}
+.app{display:flex;height:calc(100vh - 42px);overflow:hidden;min-width:0}
+.console{width:280px;flex:none;height:100%;overflow:auto;padding:var(--c1-space-4) var(--c1-space-4) var(--c1-space-5);
+  background:var(--c1-surface);border-right:1px solid var(--c1-border)}
+.reportcol{flex:1;min-width:0;height:100%;position:relative;background:var(--c1-bg)}
+.gutter{flex:none;width:5px;cursor:col-resize;background:var(--c1-border);transition:background .15s}
+.gutter:hover,.gutter.on{background:var(--c1-primary)}
 h1{font-size:18px;font-weight:500;margin:0 0 4px}
-.sub{color:#6b7688;font-size:12px;margin:0 0 12px;line-height:1.5}
-#drop{border:2px dashed #b9c6dd;border-radius:10px;padding:16px 12px;
-  text-align:center;color:#6b7688;cursor:pointer;transition:.15s;font-size:12px}
-#drop.on{border-color:#2563eb;background:#f0f6ff;color:#2563eb}
-#drop b{display:block;color:#25324a;font-size:15px;font-weight:500;margin-bottom:6px}
+.sub{color:var(--c1-text-muted);font-size:var(--c1-font-size-meta);margin:0 0 var(--c1-space-3);line-height:1.5}
+#drop{border:1px dashed var(--c1-border-strong);border-radius:var(--c1-radius-md);padding:var(--c1-space-4) var(--c1-space-3);
+  text-align:center;color:var(--c1-text-muted);cursor:pointer;transition:.15s;font-size:var(--c1-font-size-meta)}
+#drop.on{border-color:var(--c1-primary);background:var(--c1-primary-soft);color:var(--c1-primary)}
+#drop b{display:block;color:var(--c1-text-strong);font-size:15px;font-weight:500;margin-bottom:6px}
 input[type=file]{display:none}
-/* 文件记录：带边框容器 + 清晰分割线（与报告页 .panel/.tablewrap 同款 #e2e7f0），
-   行紧凑（28px 缩略图 + 单行省略文件名），删除键常态隐形、悬停显红。 */
-.files{margin:10px 0 0;padding:0;list-style:none;font-size:12px;
-  border:1px solid #e2e7f0;border-radius:8px;background:#fff;overflow:hidden}
+.files{margin:10px 0 0;padding:0;list-style:none;font-size:var(--c1-font-size-meta);
+  border:1px solid var(--c1-border);border-radius:var(--c1-radius-md);background:var(--c1-surface);overflow:hidden}
 .files:empty{display:none}
-.files li{padding:5px 8px;border-bottom:1px solid #e2e7f0;
-  display:flex;align-items:center;gap:8px;transition:background .12s}
+.files li{padding:5px 8px;border-bottom:1px solid var(--c1-border);
+  display:flex;align-items:center;gap:var(--c1-space-2);transition:background .12s}
 .files li:last-child{border-bottom:0}
-.files li:hover{background:#f7f9fd}
+.files li:hover{background:var(--c1-surface-subtle)}
 .files .fname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;
-  white-space:nowrap;color:#25324a}
-.files .fsize{color:#8a94a6;white-space:nowrap;font-size:11px;
+  white-space:nowrap;color:var(--c1-text-strong)}
+.files .fsize{color:var(--c1-text-faint);white-space:nowrap;font-size:11px;
   font-variant-numeric:tabular-nums}
 .files .fthumb{flex:none;display:flex}
 .files .fthumb .thumb{width:28px;height:28px;border-radius:5px}
 .files .fthumb .thumb.file{font-size:9px}
-.fdel{flex:none;width:20px;height:20px;padding:0;border-radius:5px;
-  border:0;background:none;color:#8a94a6;font-size:14px;line-height:1;cursor:pointer}
-.fdel:hover{background:#fdecea;color:#b42318}
+.fdel{flex:none;width:24px;height:24px;padding:0;border-radius:5px;
+  border:0;background:none;color:var(--c1-text-faint);font-size:14px;line-height:1;cursor:pointer}
+.fdel:hover{background:var(--c1-danger-soft);color:var(--c1-danger)}
 .filebar{display:flex;align-items:center;gap:10px;margin-top:6px}
 .filebar[hidden]{display:none}
-#filecount{font-size:11px;color:#6b7688}
-.row{display:flex;align-items:center;gap:12px;margin-top:14px;flex-wrap:wrap}
-button{font:inherit;font-size:14px;padding:9px 20px;border-radius:8px;
-  border:1px solid #2563eb;background:#2563eb;color:#fff;cursor:pointer}
-button:disabled{background:#b9c6dd;border-color:#b9c6dd;cursor:not-allowed}
-a{color:#2563eb;text-decoration:none}
-.ghost{background:#fff;color:#2563eb;padding:9px 16px;border:1px solid #2563eb;
-  border-radius:8px;font-size:14px}
-#msg{font-size:13px;color:#6b7688}
-/* 任务进度：右侧报告区居中卡片；完成后点「查看日志」作为抽屉叠加在报告上 */
+#filecount{font-size:11px;color:var(--c1-text-muted)}
+.row{display:flex;align-items:center;gap:var(--c1-space-3);margin-top:14px;flex-wrap:wrap}
+#msg{font-size:var(--c1-font-size-secondary);color:var(--c1-text-muted)}
 .runpanel{position:absolute;inset:0;display:flex;align-items:center;
-  justify-content:center;padding:24px;z-index:10}
+  justify-content:center;padding:var(--c1-space-5);z-index:10}
 .runpanel[hidden]{display:none}
-.runpanel.drawer{background:rgba(15,23,38,.45);z-index:20}
-.runcard{width:min(600px,100%);background:#fff;border:1px solid #e2e7f0;
-  border-radius:12px;padding:16px 18px;box-shadow:0 4px 24px rgba(20,30,60,.12)}
-.runbar{display:flex;align-items:center;gap:10px;font-size:12px;color:#25324a}
+.runpanel.drawer{background:var(--c1-overlay);z-index:20}
+.runcard{width:min(600px,100%);background:var(--c1-surface);border:1px solid var(--c1-border);
+  border-radius:var(--c1-radius-lg);padding:var(--c1-space-4) 18px;box-shadow:var(--c1-shadow-menu)}
+.runbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:var(--c1-font-size-meta);color:var(--c1-text-strong)}
 .runbar .spacer{flex:1}
-#runpct{font-variant-numeric:tabular-nums;color:#2563eb;font-weight:500}
-a.mini-link,button.mini-link{font:inherit;font-size:12px;color:#2563eb;text-decoration:none;
-  border:1px solid #cbd5e1;background:#fff;padding:3px 9px;border-radius:6px;cursor:pointer}
-.track{height:6px;background:#e8edf5;border-radius:4px;overflow:hidden;margin:10px 0}
-.track .fill{height:100%;width:0;background:#2563eb;border-radius:4px;transition:width .3s}
-.logbox{background:#0f1726;color:#c8d4e8;border-radius:8px;padding:12px;
-  font:12px/1.7 Consolas,Monaco,monospace;max-height:46vh;overflow:auto}
-.logrow{display:flex;gap:8px;white-space:pre-wrap;word-break:break-word}
+#runpct{font-variant-numeric:tabular-nums;color:var(--c1-primary);font-weight:500}
+a.mini-link,button.mini-link{font:inherit;font-size:var(--c1-font-size-meta);color:var(--c1-primary);text-decoration:none;
+  border:1px solid var(--c1-border-strong);background:var(--c1-surface);padding:3px 9px;border-radius:var(--c1-radius-sm);cursor:pointer}
+.track{height:6px;background:var(--c1-border);border-radius:var(--c1-space-1);overflow:hidden;margin:10px 0}
+.track .fill{height:100%;width:0;background:var(--c1-primary);border-radius:var(--c1-space-1);transition:width .3s}
+.logbox{background:#0f1726;color:#c8d4e8;border-radius:var(--c1-radius-md);padding:var(--c1-space-3);
+  font:var(--c1-font-size-meta)/1.7 var(--c1-font-mono);max-height:46vh;overflow:auto}
+.logrow{display:flex;gap:var(--c1-space-2);white-space:pre-wrap;word-break:break-word}
 .logrow .t{color:#5f7391;min-width:56px;text-align:right}
 .logrow .lv{min-width:38px;font-weight:500}
 .logrow .st{min-width:62px;color:#7ea6d8}
@@ -72,144 +59,123 @@ a.mini-link,button.mini-link{font:inherit;font-size:12px;color:#2563eb;text-deco
 .lv-info .lv{color:#9fb3cf}.lv-ok .lv{color:#4ade80}.lv-stage .lv{color:#7dd3fc}
 .lv-warn .lv{color:#fbbf24}.lv-error .lv{color:#f87171}
 .lv-warn .tx{color:#fde68a}.lv-error .tx{color:#fecaca}.lv-ok .tx{color:#bbf7d0}
-code{background:#eef2f8;padding:1px 5px;border-radius:4px}
-.err{color:#b42318}
-/* 参数区：默认折叠（details），需要时展开；说明都在 ? 气泡里 */
-.params{margin-top:12px}
+code{background:var(--c1-border-subtle);padding:1px 5px;border-radius:var(--c1-space-1)}
+.err{color:var(--c1-danger)}
+.params{margin-top:var(--c1-space-3)}
 .params>summary{cursor:pointer;list-style:none;user-select:none}
 .params>summary::-webkit-details-marker{display:none}
-.params>summary::before{content:'▸';color:#8a94a6;font-size:11px;flex:none;
+.params>summary::before{content:'▸';color:var(--c1-text-faint);font-size:11px;flex:none;
   transition:transform .15s}
 .params[open]>summary::before{transform:rotate(90deg)}
 .params:not([open])>summary{margin-bottom:0}
-.params-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
-.params-title{font-size:13px;font-weight:500;color:#25324a}
+.params-head{display:flex;align-items:center;gap:var(--c1-space-2);margin-bottom:6px}
+.params-title{font-size:var(--c1-font-size-secondary);font-weight:600;color:var(--c1-text-strong)}
 .params-head .spacer{flex:1}
 .pbadge{display:inline-block;font-size:11px;font-weight:400;
-  padding:1px 8px;border-radius:10px;background:#eef2f8;color:#8a94a6}
-.pbadge.on{background:#e7f0ff;color:#2563eb}
+  padding:1px 8px;border-radius:10px;background:var(--c1-border-subtle);color:var(--c1-text-faint)}
+.pbadge.on{background:var(--c1-primary-soft);color:var(--c1-primary)}
 .param-groups{margin-top:2px}
-.pgroup{border-left:3px solid #2563eb;padding:1px 0 1px 10px;margin:8px 0}
-.pgroup h4{margin:0 0 4px;font-size:12px;font-weight:500;color:#2563eb}
-/* 基础配置常显（模型/页码）；高级配置收进 details，默认折叠 */
+.pgroup{border-left:3px solid var(--c1-primary);padding:1px 0 1px 10px;margin:8px 0}
+.pgroup h4{margin:0 0 4px;font-size:var(--c1-font-size-meta);font-weight:600;color:var(--c1-primary)}
 .pgroup.basic{margin-top:4px}
-.advanced{border:1px solid #e2e7f0;border-radius:8px;margin-top:10px;background:#fff}
+.advanced{border:1px solid var(--c1-border);border-radius:var(--c1-radius-md);margin-top:10px;background:var(--c1-surface)}
 .advanced>summary{cursor:pointer;list-style:none;user-select:none;
   display:flex;align-items:center;gap:6px;padding:6px 10px;
-  font-size:12px;font-weight:500;color:#5a6a85}
+  font-size:var(--c1-font-size-meta);font-weight:600;color:var(--c1-text-muted)}
 .advanced>summary::-webkit-details-marker{display:none}
-.advanced>summary::before{content:'▸';color:#8a94a6;font-size:11px;flex:none;
+.advanced>summary::before{content:'▸';color:var(--c1-text-faint);font-size:11px;flex:none;
   transition:transform .15s}
 .advanced[open]>summary::before{transform:rotate(90deg)}
 .advanced-body{padding:0 10px 6px}
-.advanced .pgroup{border-left-color:#cbd5e1}
-.advanced .pgroup h4{color:#6b7688}
-.field{display:flex;align-items:center;gap:8px;margin:5px 0}
-.field label{flex:none;width:88px;font-size:12px;line-height:1.3;color:#25324a}
+.advanced .pgroup{border-left-color:var(--c1-border-strong)}
+.advanced .pgroup h4{color:var(--c1-text-muted)}
+.field{display:flex;align-items:center;gap:var(--c1-space-2);margin:5px 0}
+.field label{flex:none;width:88px;font-size:var(--c1-font-size-meta);line-height:1.3;color:var(--c1-text-strong)}
 .finput{display:flex;align-items:center;gap:6px;flex:1;min-width:0}
-.finput input,.finput select{font:inherit;font-size:12px;padding:4px 8px;
-  border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#1f2738;
+.finput input,.finput select{font:inherit;font-size:var(--c1-font-size-meta);min-height:var(--c1-control-h-mini);padding:4px 8px;
+  border:1px solid var(--c1-border-strong);border-radius:var(--c1-radius-sm);background:var(--c1-surface);color:var(--c1-text);
   flex:1;min-width:0;width:auto}
-button.mini{font-size:12px;padding:4px 10px;background:#fff;color:#2563eb;
-  border:1px solid #cbd5e1}
-/* 文件预览缩略图：行内小图，图片点击放大，PDF/文本角标点击新窗口打开 */
-.thumb{width:96px;height:96px;object-fit:cover;border:1px solid #e2e7f0;
-  border-radius:8px;cursor:pointer;background:#fff}
-.thumb.file{display:flex;align-items:center;justify-content:center;
-  text-decoration:none;color:#6b7688;font-size:13px;font-weight:600}
-.thumb.file:hover{border-color:#2563eb;color:#2563eb}
-img.thumb:hover{border-color:#2563eb}
-/* 全屏预览层：点缩略图放大；可取 x 坐标、1:1 像素精确量列边界 */
 .lightbox{position:fixed;inset:0;background:rgba(10,15,30,.9);z-index:99;
   display:flex;flex-direction:column}
 .lightbox[hidden]{display:none}
-.lbtop{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 14px;
-  background:#1d2330;color:#e8ecf4;font-size:12px}
+.lbtop{display:flex;align-items:center;gap:var(--c1-space-2);flex-wrap:wrap;padding:10px 14px;
+  background:#1d2330;color:#e8ecf4;font-size:var(--c1-font-size-meta)}
 .lbtop .spacer{flex:1}
-.lbtop button{font:inherit;font-size:12px;cursor:pointer;padding:5px 12px;
+.lbtop button{font:inherit;font-size:var(--c1-font-size-meta);cursor:pointer;padding:5px 12px;
   border-radius:7px;border:1px solid #46506a;background:#2a3245;color:#e8ecf4}
 .lbtop button:hover{background:#3a4560}
-.lbtop button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.lbtop button.on{background:var(--c1-primary);border-color:var(--c1-primary);color:#fff}
 .lbstage{flex:1;min-height:0;overflow:auto;display:flex;align-items:center;
   justify-content:center;padding:14px}
 .lbstage.zoom{align-items:flex-start;justify-content:flex-start}
 .lbwrap{position:relative;line-height:0;flex:none}
-.lbwrap img{display:block;max-width:94vw;max-height:86vh;border-radius:6px;
+.lbwrap img{display:block;max-width:94vw;max-height:86vh;border-radius:var(--c1-radius-sm);
   box-shadow:0 8px 40px rgba(0,0,0,.5)}
 .lbstage.zoom .lbwrap img{max-width:none;max-height:none}
 .lbwrap svg{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
 .pickline{stroke:#ff3b30;stroke-width:2;vector-effect:non-scaling-stroke}
 body.picking .lbwrap img{cursor:crosshair}
 .pickbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 14px;
-  background:#1d2330;color:#e8ecf4;font-size:12px}
+  background:#1d2330;color:#e8ecf4;font-size:var(--c1-font-size-meta)}
 .pickbar[hidden]{display:none}
 .pickbar .picklabel{color:#9aa6bd}
-.pickbar .pickvals{font-family:Consolas,Monaco,monospace;color:#7dd3fc;
+.pickbar .pickvals{font-family:var(--c1-font-mono);color:#7dd3fc;
   font-weight:600;word-break:break-all}
-.pickbar button{font:inherit;font-size:12px;cursor:pointer;padding:4px 11px;
-  border-radius:6px;border:1px solid #46506a;background:#2a3245;color:#e8ecf4}
+.pickbar button{font:inherit;font-size:var(--c1-font-size-meta);cursor:pointer;padding:4px 11px;
+  border-radius:var(--c1-radius-sm);border:1px solid #46506a;background:#2a3245;color:#e8ecf4}
 .pickbar button:hover{background:#3a4560}
-/* 右侧报告区：idle 占位 / run 进度 / done 报告 三态；日志按钮浮于报告右上 */
-.reportframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#fff}
+.reportframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--c1-surface)}
 .reportframe[hidden]{display:none}
 .reportempty{position:absolute;inset:0;display:flex;align-items:center;
-  justify-content:center;padding:24px}
+  justify-content:center;padding:var(--c1-space-5)}
 .reportempty[hidden]{display:none}
-.re-inner{max-width:420px;text-align:center;color:#8a94a6;font-size:13px;line-height:1.8}
-.re-inner b{display:block;color:#5a6a85;font-size:15px;font-weight:500;margin-bottom:8px}
-/* 未解析资料提示层：资料选择条下方居中卡片，引导手动发起解析 */
+.re-inner{max-width:420px;text-align:center;color:var(--c1-text-faint);font-size:var(--c1-font-size-secondary);line-height:1.8}
+.re-inner b{display:block;color:var(--c1-text-muted);font-size:15px;font-weight:500;margin-bottom:8px}
 .unparsed{position:absolute;inset:0;display:flex;align-items:center;
-  justify-content:center;padding:24px;z-index:11}
+  justify-content:center;padding:var(--c1-space-5);z-index:11}
 .unparsed[hidden]{display:none}
-.up-inner{max-width:440px;text-align:center;color:#6b7688;font-size:13px;line-height:1.8}
-.up-inner b{display:block;color:#5a6a85;font-size:15px;font-weight:500;margin-bottom:8px}
-.up-inner button{display:block;margin:14px auto 6px;font:inherit;font-size:13px;
-  padding:7px 20px;border:1px solid #2563eb;border-radius:8px;
-  background:#2563eb;color:#fff;cursor:pointer}
-.up-inner button:disabled{background:#b9c6dd;border-color:#b9c6dd;cursor:not-allowed}
-.upmsg{display:block;font-size:12px;color:#92600a;min-height:18px}
-/* 有资料选择条时提示层下移，避免被顶栏遮挡 */
+.up-inner{max-width:440px;text-align:center;color:var(--c1-text-muted);font-size:var(--c1-font-size-secondary);line-height:1.8}
+.up-inner b{display:block;color:var(--c1-text-muted);font-size:15px;font-weight:500;margin-bottom:8px}
+.upmsg{display:block;font-size:var(--c1-font-size-meta);color:var(--c1-warning);min-height:18px}
 .reportcol.has-hist .unparsed{top:38px;height:calc(100% - 38px)}
-.logbtn{position:absolute;top:12px;right:12px;z-index:15;font:inherit;font-size:12px;
-  cursor:pointer;padding:6px 14px;border-radius:8px;border:1px solid #cbd5e1;
-  background:#fff;color:#2563eb;box-shadow:0 1px 4px rgba(20,30,60,.12)}
+.logbtn{position:absolute;top:12px;right:12px;z-index:15;
+  box-shadow:0 1px 4px rgba(20,30,60,.12)}
 .logbtn[hidden]{display:none}
-.logbtn:hover{border-color:#2563eb}
-/* 多文件批次：顶部文件切换条（每个文件一份独立报告，点页签在下方 iframe 切换）。
-   单文件不显示，保持干净。条高固定 38px，iframe 与日志浮钮同步让位。 */
 .filetabs{position:absolute;top:0;left:0;right:0;z-index:12;height:38px;
   box-sizing:border-box;display:flex;align-items:center;gap:4px;padding:0 10px;
-  background:#fff;border-bottom:1px solid #e2e7f0;overflow-x:auto;overflow-y:hidden}
+  background:var(--c1-surface);border-bottom:1px solid var(--c1-border);overflow-x:auto;overflow-y:hidden}
 .filetabs[hidden]{display:none}
 .ftab{flex:none;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-  font:inherit;font-size:12px;padding:4px 12px;border-radius:999px;cursor:pointer;
-  border:1px solid #d8e0ed;background:#f7f9fd;color:#5a6a85;transition:.15s}
-.ftab:hover{border-color:#2563eb;color:#2563eb}
-.ftab.on{background:#2563eb;border-color:#2563eb;color:#fff}
-/* 历史报告切换条：done 态常显顶栏（38px），多文件时 filetabs 再下移一层 */
+  font:inherit;font-size:var(--c1-font-size-meta);padding:4px 12px;border-radius:999px;cursor:pointer;
+  border:1px solid var(--c1-border);background:var(--c1-surface-subtle);color:var(--c1-text-muted);transition:.15s}
+.ftab:hover{border-color:var(--c1-primary);color:var(--c1-primary)}
+.ftab.on{background:var(--c1-primary);border-color:var(--c1-primary);color:#fff}
 .histbar{position:absolute;top:0;left:0;right:0;z-index:13;height:38px;
-  box-sizing:border-box;display:flex;align-items:center;gap:8px;padding:0 10px;
-  background:#fff;border-bottom:1px solid #e2e7f0;font-size:12px}
+  box-sizing:border-box;display:flex;align-items:center;gap:var(--c1-space-2);padding:0 10px;
+  background:var(--c1-surface);border-bottom:1px solid var(--c1-border);font-size:var(--c1-font-size-meta)}
 .histbar[hidden]{display:none}
-.histbar label{color:#6b7688;flex:none}
-.histbar select{font:inherit;font-size:12px;padding:4px 8px;border:1px solid #cbd5e1;
-  border-radius:6px;background:#fff;color:#1f2738;max-width:460px;min-width:0}
+.histbar label{color:var(--c1-text-muted);flex:none}
+.histbar select{font:inherit;font-size:var(--c1-font-size-meta);min-height:var(--c1-control-h-mini);padding:4px 8px;border:1px solid var(--c1-border-strong);
+  border-radius:var(--c1-radius-sm);background:var(--c1-surface);color:var(--c1-text);max-width:460px;min-width:0}
 .reportcol.has-hist .reportframe{top:38px;height:calc(100% - 38px)}
 .reportcol.has-hist .filetabs{top:38px}
 .reportcol.has-hist.hastabs .reportframe{top:76px;height:calc(100% - 76px)}
 .reportcol.has-hist .histbar{padding-right:96px}
 .reportcol.has-hist .logbtn{top:6px;right:10px;padding:4px 12px;line-height:1.4;box-shadow:none}
 .reportcol.has-hist.hastabs .filetabs{padding-right:10px}
-/* iframe 是替换元素：height:auto 不会在 top/bottom 间拉伸，而是回退固有 150px
-   （只露出报告页头的 bug 根因），必须显式 calc 高度。 */
 .reportcol.hastabs .reportframe{top:38px;height:calc(100% - 38px)}
-/* 有页签条时「查看日志」收进条内右端，不再悬浮压住报告内容 */
 .reportcol.hastabs .filetabs{padding-right:96px}
 .reportcol.hastabs .logbtn{top:6px;right:10px;padding:4px 12px;line-height:1.4;box-shadow:none}
 @media(max-width:900px){
   .app{flex-direction:column;height:auto;overflow:visible}
   .console{width:auto!important;height:auto;overflow:visible;border-right:0;
-    border-bottom:1px solid #e2e7f0}
+    border-bottom:1px solid var(--c1-border)}
   .gutter{display:none}
   .reportcol{height:80vh}
+}
+@media(max-width:520px){
+  .console{padding:var(--c1-space-3)}
+  .field{flex-wrap:wrap}
+  .field label{width:auto;min-width:72px}
+  .finput{flex-basis:100%}
 }

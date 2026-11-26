@@ -34,7 +34,7 @@
       <span id="filecount"></span>
     </div>
     <div class="row">
-      <button id="go" disabled>开始解析</button>
+      <button type="button" class="btn" id="go" disabled>开始解析</button>
       <span class="hint" tabindex="0" data-tip="首次加载模型约需 20~40 秒，后续任务复用模型，速度更快。">?</span>
       <span id="msg"></span>
     </div>
@@ -45,7 +45,7 @@
         <span class="hint" tabindex="0" onclick="event.preventDefault()"
               data-tip="参数按重要程度排序，通常保持默认值即可；&#10;修改仅对本次上传生效。">?</span>
         <span class="spacer"></span>
-        <button type="button" class="mini" id="resetparams">恢复默认</button>
+        <button type="button" class="btn ghost mini" id="resetparams">恢复默认</button>
       </summary>
       <div class="param-groups" id="paramgroups"></div>
     </details>
@@ -80,13 +80,13 @@
       <div class="up-inner">
         <b>该资料尚未解析</b>
         <span id="upDesc">此资料已登记，但还没有对照报告。点击下方按钮发起解析，完成后自动生成报告。</span>
-        <button type="button" id="upParse">解析此资料</button>
+        <button type="button" class="btn" id="upParse">解析此资料</button>
         <span class="upmsg" id="upMsg"></span>
       </div>
     </div>
     <div class="filetabs" id="filetabs" hidden></div>
     <iframe id="reportFrame" class="reportframe" hidden title="对照报告"></iframe>
-    <button type="button" class="logbtn" id="logbtn" hidden>查看日志</button>
+    <button type="button" class="btn ghost mini logbtn" id="logbtn" hidden>查看日志</button>
   </main>
 </div>
 <div class="lightbox" id="lightbox" hidden>

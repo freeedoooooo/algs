@@ -1,6 +1,5 @@
 /* web/review.css — 校验占位页：只优化排版，内容保持简洁 */
-.review-intro .thead{padding:10px 14px;font-size:13px;color:#25324a;
-  background:#f7f9fd;border-bottom:1px solid #e2e7f0}
-.review-intro .msg{margin:0;padding:14px 14px 16px;line-height:2;font-size:13px}
-.review-intro .msg b{color:#3b4a63;font-weight:600}
-.review-intro .msg .linkbtn{font-size:13px;padding:0 3px;vertical-align:baseline}
+.review-intro .msg{margin:0;padding:var(--c1-space-3) var(--c1-space-4) var(--c1-space-4);line-height:1.8;
+  font-size:var(--c1-font-size-secondary)}
+.review-intro .msg b{color:var(--c1-text);font-weight:600}
+.review-intro .msg .linkbtn{font-size:var(--c1-font-size-secondary);padding:0 3px;vertical-align:baseline}

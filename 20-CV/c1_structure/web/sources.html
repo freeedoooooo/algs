@@ -28,14 +28,13 @@
     <span class="spacer"></span>
     <div class="toolbar">
       <input type="search" id="q" placeholder="搜索文件名…">
-      <button type="button" class="btn mini" id="qbtn">查询</button>
-      <select id="kind">
+      <select id="kind" aria-label="文件类型">
         <option value="">全部类型</option>
         <option value="image">图片</option>
         <option value="pdf">PDF</option>
         <option value="text">文本</option>
       </select>
-      <select id="fstate">
+      <select id="fstate" aria-label="处理状态">
         <option value="">全部状态</option>
         <option value="pending">待解析</option>
         <option value="parsing">解析中</option>

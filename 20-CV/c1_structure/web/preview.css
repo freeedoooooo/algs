@@ -1,53 +1,47 @@
-/* web/review.css — 校验台（P1）页面特有样式：记录表 + 编辑/确认/拒绝
-   + 源图回溯框双向血缘侧栏 + 筛选 chips / 任务级校验台账。
-   舞台公共样式（框/视图切换/翻页胶囊/全屏浮层/光标提示）在 stage.css，先于本文件加载。 */
+/* web/preview.css — 数据预览/校验台私有样式；舞台基础样式在 stage.css */
 .pagebody.wide{max-width:none}
-.filetabs{display:flex;align-items:center;gap:4px;margin-bottom:8px;
+.filetabs{display:flex;align-items:center;gap:4px;margin-bottom:var(--c1-space-2);
   overflow-x:auto;padding-bottom:2px}
 .filetabs[hidden]{display:none}
 .ftab{flex:none;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-  font:inherit;font-size:12px;padding:4px 12px;border-radius:999px;cursor:pointer;
-  border:1px solid #d8e0ed;background:#fff;color:#5a6a85;transition:.15s}
-.ftab:hover{border-color:#2563eb;color:#2563eb}
-.ftab.on{background:#2563eb;border-color:#2563eb;color:#fff}
-.stgwrap{display:flex;gap:12px;align-items:flex-start}
-.stgmain{flex:1;min-width:0;overflow:auto;max-height:calc(100vh - 150px)}
+  font:inherit;font-size:var(--c1-font-size-meta);padding:4px 12px;border-radius:999px;cursor:pointer;
+  border:1px solid var(--c1-border);background:var(--c1-surface);color:var(--c1-text-muted);transition:.15s}
+.ftab:hover{border-color:var(--c1-primary);color:var(--c1-primary)}
+.ftab.on{background:var(--c1-primary);border-color:var(--c1-primary);color:#fff}
+.stgwrap{display:flex;gap:var(--c1-space-3);align-items:flex-start;min-width:0}
+.stgmain{flex:1;width:100%;max-width:100%;min-width:0;overflow:auto;max-height:calc(100vh - 150px)}
 .stgmain table.list th{position:sticky;top:0;z-index:2}
 .stgmain table.list td{max-width:260px;overflow:hidden;text-overflow:ellipsis;
   white-space:nowrap}
 .stgmain tbody tr{cursor:pointer}
-.stgmain tbody tr.sel{background:#e7f0ff}
+.stgmain tbody tr.sel{background:var(--c1-primary-soft)}
 .stgmain tbody tr.sel:hover{background:#dbe8ff}
-.idx{color:#8a94a6;font-variant-numeric:tabular-nums;text-align:center}
-/* 表头映射后缀：目标字段名同行淡色括号小注「account（余额）」，悬停看完整映射 */
-#rechead th .srccap{font-weight:400;font-size:11px;color:#8a94a6;
+.idx{color:var(--c1-text-faint);font-variant-numeric:tabular-nums;text-align:center}
+#rechead th .srccap{font-weight:400;font-size:11px;color:var(--c1-text-faint);
   white-space:nowrap}
-#rechead th .srccap.none{color:#b45309}
-
-/* 右侧血缘侧栏容器（吸顶 + 限高），内部舞台用报告同款 .stage */
+#rechead th .srccap.none{color:var(--c1-warning)}
 .lineage{flex:none;width:640px;max-width:52vw;max-height:calc(100vh - 150px);
   display:flex;flex-direction:column;position:sticky;top:12px;overflow:auto}
 .lineage[hidden]{display:none}
-.lhead{display:flex;align-items:center;gap:8px;padding:7px 10px;
-  border-bottom:1px solid #e2e7f0;font-size:13px;color:#25324a}
+.lhead{display:flex;align-items:center;gap:var(--c1-space-2);padding:7px 10px;
+  border-bottom:1px solid var(--c1-border);font-size:var(--c1-font-size-secondary);color:var(--c1-text-strong)}
 .lhead b{font-weight:600}
-.lsub{flex:1;font-size:11px;color:#8a94a6;font-weight:400}
+.lsub{flex:1;font-size:11px;color:var(--c1-text-faint);font-weight:400}
 .ltoggle{flex:none}
-/* 收起＝右侧细竖条（不占表格宽度）：点竖条或点数据自动展开 */
 .lineage.collapsed{width:34px;max-width:34px;max-height:none;align-self:flex-start;
   cursor:pointer}
-.lineage.collapsed:hover{border-color:#9dc0f5}
+.lineage.collapsed:hover{border-color:var(--c1-primary)}
 .lineage.collapsed .lhead{flex:0 0 auto;flex-direction:column;align-items:center;
   gap:12px;padding:12px 0;border-bottom:0}
 .lineage.collapsed .lsub,.lineage.collapsed .stage,
 .lineage.collapsed .lhint{display:none}
-.lineage.collapsed #ltitle{writing-mode:vertical-rl;font-size:12px;font-weight:500;
-  color:#5a6a85;letter-spacing:3px}
+.lineage.collapsed #ltitle{writing-mode:vertical-rl;font-size:var(--c1-font-size-meta);font-weight:500;
+  color:var(--c1-text-muted);letter-spacing:3px}
 .lineage.collapsed .ltoggle{writing-mode:horizontal-tb;padding:2px 7px;
   font-size:14px;line-height:1}
 .lineage .stage{flex:1 1 auto;min-height:220px;overflow:visible;border-right:0}
-.lhint{padding:6px 12px;font-size:12px;color:#8a6d3b;background:#fcf8e3;
-  border-top:1px solid #f0e6c8}
+.lhint{padding:6px var(--c1-space-3);font-size:var(--c1-font-size-meta);color:var(--c1-warning);background:var(--c1-warning-soft);
+  border-top:1px solid var(--c1-border)}
 .lhint[hidden]{display:none}
 
 @media(max-width:1000px){
@@ -55,44 +49,40 @@
   .lineage{width:100%;max-width:none;position:static;max-height:none}
   .lineage .stage{max-height:60vh}
   .lineage.collapsed{width:100%;max-width:none;align-self:auto}
-  .lineage.collapsed .lhead{flex-direction:row;padding:9px 12px}
+  .lineage.collapsed .lhead{flex-direction:row;padding:9px var(--c1-space-3)}
   .lineage.collapsed #ltitle,.lineage.collapsed .ltoggle{
     writing-mode:horizontal-tb;letter-spacing:normal}
 }
-/* 任务级校验台账（无 task 参数入口）：任务行汇总，展开文件子行 */
 #ledgerrows tr{cursor:pointer}
-#ledgerrows tr:hover{background:#f3f7fd}
-#ledgerrows td.led-edited{color:#b45309;font-weight:600}
-.led-caret{display:inline-block;width:12px;color:#8a94a6;font-size:10px;
+#ledgerrows tr:hover{background:var(--c1-surface-hover)}
+#ledgerrows td.led-edited{color:var(--c1-warning);font-weight:600}
+.led-caret{display:inline-block;width:12px;color:var(--c1-text-faint);font-size:10px;
   transition:transform .15s}
 tr.led-task.open .led-caret{transform:rotate(90deg)}
-#ledgerrows tr.led-file{background:#f7f9fd}
-#ledgerrows tr.led-file:hover{background:#eef4fc}
+#ledgerrows tr.led-file{background:var(--c1-surface-subtle)}
+#ledgerrows tr.led-file:hover{background:var(--c1-surface-hover)}
 .led-subname{padding-left:14px}
 
-/* P1 校验台：筛选 chips / 批量确认 / 双击改值 / 改值标记 / 行操作 / 台账入口 */
-.reviewbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 8px}
+.reviewbar{display:flex;align-items:center;gap:var(--c1-space-2);flex-wrap:wrap;margin:0 0 var(--c1-space-2)}
 .reviewbar[hidden]{display:none}
 .reviewbar .spacer{flex:1}
 .chips{display:flex;gap:4px;flex-wrap:wrap}
-.chip{font:inherit;font-size:12px;padding:4px 12px;border-radius:999px;cursor:pointer;
-  border:1px solid #d8e0ed;background:#fff;color:#5a6a85;transition:.15s}
-.chip:hover{border-color:#2563eb;color:#2563eb}
-.chip.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.chip{font:inherit;font-size:var(--c1-font-size-meta);min-height:var(--c1-control-h-mini);padding:4px 12px;border-radius:999px;cursor:pointer;
+  border:1px solid var(--c1-border);background:var(--c1-surface);color:var(--c1-text-muted);transition:.15s}
+.chip:hover{border-color:var(--c1-primary);color:var(--c1-primary)}
+.chip.on{background:var(--c1-primary);border-color:var(--c1-primary);color:#fff}
 td.cell.edited{background:rgba(216,151,10,.35)}
-/* 悬停/联动高亮不把已修改格的黄底顶掉，改为加深；钉住态保留描边 */
 #recrows td.cell.edited:hover,#recrows td.cell.edited.hv{
   background:rgba(216,151,10,.55)!important}
-.celledit{width:100%;min-width:90px;font:inherit;font-size:12px;padding:2px 5px;
-  border:1px solid #2563eb;border-radius:4px;outline:none;background:#fff;color:#1f2738}
+.celledit{width:100%;min-width:90px;font:inherit;font-size:var(--c1-font-size-meta);padding:2px 5px;
+  border:1px solid var(--c1-primary);border-radius:4px;outline:none;background:var(--c1-surface);color:var(--c1-text)}
 .acts{white-space:nowrap}
-.rowbtn{font:inherit;font-size:12px;line-height:1.4;cursor:pointer;padding:1px 8px;
-  border:1px solid #d8e0ed;background:#fff;border-radius:5px;color:#5a6a85;margin-right:4px}
-.rowbtn.ok:hover{border-color:#0f9d6e;color:#0f9d6e;background:#e5f6ec}
-.rowbtn.no:hover{border-color:#b42318;color:#b42318;background:#fdecea}
-#taskpick{margin-bottom:12px}
+.rowbtn{font:inherit;font-size:var(--c1-font-size-meta);line-height:1.4;cursor:pointer;padding:1px 8px;
+  border:1px solid var(--c1-border);background:var(--c1-surface);border-radius:5px;color:var(--c1-text-muted);margin-right:4px}
+.rowbtn.ok:hover{border-color:var(--c1-success);color:var(--c1-success);background:var(--c1-success-soft)}
+.rowbtn.no:hover{border-color:var(--c1-danger);color:var(--c1-danger);background:var(--c1-danger-soft)}
+#taskpick{margin-bottom:var(--c1-space-3)}
 
-/* embed=1：数据看板右侧 iframe 嵌入，只留血缘面板铺满容器 */
 body.embed-lineage{overflow:hidden}
 body.embed-lineage .topnav,
 body.embed-lineage .pagehead,
@@ -104,14 +94,9 @@ body.embed-lineage #taskpick,
 body.embed-lineage #lightbox,
 body.embed-lineage #receipt,
 body.embed-lineage #summary{display:none !important}
-/* 嵌入态去掉 pagebody 顶部内边距：否则 iframe 内血缘头部比宿主左侧表格低 12px */
 body.embed-lineage .pagebody{padding:0;max-width:none}
-/* 嵌入看板/处理页时头部与宿主白底齐平，避免顶部出现灰边 */
-body.embed-lineage .lhead{background:#fff}
+body.embed-lineage .lhead{background:var(--c1-surface)}
 body.embed-lineage .stgwrap{display:flex;justify-content:center;align-items:flex-start}
-/* 血缘面板保持预览页宽屏原生外观（560px 侧栏、内容高度、圆角边框、头部、舞台）。
-   关键：iframe 仅 600px 宽会触发上方 max-width:1000px 媒体查询把面板压成 100%，
-   故 embed 下用 !important 覆盖断点规则，还原宽屏展开态；折叠态还原为 34px 竖条。 */
 body.embed-lineage .lineage{width:640px !important;max-width:none !important;
   position:static !important;max-height:none !important}
 body.embed-lineage .lineage .stage{max-height:none !important}

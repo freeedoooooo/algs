@@ -1,16 +1,26 @@
-/* web/rules.css — 入库映射页私有样式（左业务库右规则；表单 token 复用 extract.css） */
-.loadwrap{display:flex;gap:12px;align-items:flex-start}
-.dspanel{width:300px;flex:none}
-.mapwrap{flex:1;min-width:0}
-.dshead{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid #e3e9f2}
+/* web/rules.css — 入库映射页私有样式（左业务库右规则；基础表单在 shell.css） */
+.loadwrap{display:grid;grid-template-columns:280px minmax(0,1fr);gap:var(--c1-space-3);align-items:start;min-width:0}
+.dspanel{min-width:0}
+.mapwrap{min-width:0}
+.dshead{display:flex;align-items:center;gap:var(--c1-space-2);min-height:42px;padding:6px 10px;
+  border-bottom:1px solid var(--c1-border);background:var(--c1-surface-subtle)}
 .dshead .spacer{flex:1}
-.dsitem{padding:8px 10px;border-bottom:1px solid #eef2f8;cursor:pointer}
+.dsitem{padding:8px 10px;border-bottom:1px solid var(--c1-border-subtle);cursor:pointer}
 .dsitem:last-child{border-bottom:none}
-.dsitem:hover{background:#f5f8fc}
-.dsitem.active{background:#eaf1fb;box-shadow:inset 3px 0 0 #3b6ea5}
-.dsmain{display:flex;align-items:center;gap:6px}
-.dsmeta{font-size:11px;color:#6b7688;margin-top:2px}
-.dsops{margin-top:4px;display:flex;gap:8px}
+.dsitem:hover{background:var(--c1-surface-subtle)}
+.dsitem.active{background:var(--c1-primary-soft);box-shadow:inset 3px 0 0 var(--c1-primary)}
+.dsmain{display:flex;align-items:center;gap:6px;min-width:0}
+.dsmain b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dsmeta{font-size:11px;color:var(--c1-text-muted);margin-top:2px;overflow-wrap:anywhere}
+.dsops{margin-top:4px;display:flex;gap:2px}
 #mptpl,#mptable,#mpmode{width:100%}
-#mprows .frow .fname{background:#f7f9fd;color:#25324a}
+#mprows .frow .fname{background:var(--c1-surface-subtle);color:var(--c1-text-strong)}
 #mprows .frow .fcol{width:240px}
+@media(max-width:760px){
+  .loadwrap{grid-template-columns:minmax(0,1fr)}
+  .dspanel{max-height:320px;overflow:auto}
+}
+@media(max-width:520px){
+  #mprows .frow{flex-wrap:wrap}
+  #mprows .frow .fcol{flex:1 1 160px;width:auto;min-width:0}
+}
