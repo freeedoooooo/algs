@@ -100,6 +100,10 @@ def source_preview(defn, limit=50):
             f.get('column') for f in defn.get('filter_json') or []]:
         if name in cols and name not in relevant:
             relevant.append(name)
+    if not column:
+        for name in cols:
+            if name not in loader.TRACE_COLS and name not in relevant:
+                relevant.append(name)
     if not relevant:
         relevant = cols[:1]
     conn = loader.connect_datasource(ds)

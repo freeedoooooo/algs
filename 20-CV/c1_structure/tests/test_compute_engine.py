@@ -102,7 +102,7 @@ class FakeCursor:
     def fetchone(self):
         return (53,)
     def fetchall(self):
-        return [(7, 901, b'abc')]
+        return [(7, 901, 120, b'abc')]
 
 
 class FakeConnection:
@@ -125,18 +125,19 @@ engine.loader.connect_datasource = lambda ds: fake_conn
 try:
     preview_def = {'datasource_id': 1, 'source_table': 'orders',
                    'source_column': 'amt', 'aggregate': 'sum',
-                   'filter_json': [{'column': 'amt', 'op': 'gte', 'value': 100}]}
+                   'filter_json': [{'column': 'amt', 'op': 'gte', 'value': 100},
+                                  {'column': 'note', 'op': 'eq', 'value': 'x'}]}
     out = engine.source_preview(preview_def, limit=999)
     check('样本总数与有界行数', out['total'] == 53 and len(out['items']) == 1)
     check('样本最多 50 行', out['limit'] == 50 and out['has_more'])
     check('样本列仅含溯源/聚合/筛选列',
-          out['columns'] == ['file_id', 'record_id', 'amt'])
-    check('样本二进制安全显示', out['items'][0]['note'] if 'note' in out['items'][0]
-          else out['items'][0]['record_id'] == 901)
+          out['columns'] == ['file_id', 'record_id', 'amt', 'note'])
+    check('样本二进制安全显示', out['items'][0]['note'] == '<binary 3 bytes>')
     check('样本连接关闭', fake_conn.closed)
     sql, args = fake_conn.calls[1]
     check('样本筛选参数化且 LIMIT 参数化',
-          'WHERE `amt` >= %s LIMIT %s' in sql and args == [100, 50])
+          'WHERE `amt` >= %s AND `note` = %s LIMIT %s' in sql
+          and args == [100, 'x', 50])
     preview_def['filter_json'][0]['column'] = 'amt`; DROP TABLE orders; --'
     try:
         engine.source_preview(preview_def)

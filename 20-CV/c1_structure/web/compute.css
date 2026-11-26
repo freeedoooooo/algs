@@ -41,7 +41,7 @@ select.tin{width:100%;min-width:0}
 .tag2{display:inline-block;margin-left:4px;padding:1px 6px;border-radius:9px;background:var(--c1-primary-soft);color:var(--c1-primary);font-size:10px}
 
 /* ---- 流程图画布 ---- */
-.graph-panel{display:flex;flex-direction:column}
+.graph-panel{position:relative;display:flex;flex-direction:column}
 .graph-head{display:flex;align-items:center;gap:var(--c1-space-2);padding:8px 10px;border-bottom:1px solid var(--c1-border);
   min-height:50px;background:var(--c1-surface)}
 .graph-head b{font-size:14px;color:var(--c1-text-strong)}
@@ -57,13 +57,16 @@ select.tin{width:100%;min-width:0}
 .graph-edges{position:absolute;left:0;top:0;width:1px;height:1px;overflow:visible;pointer-events:none}
 .graph-nodes{position:absolute;left:0;top:0}
 .graph-edge{fill:none;stroke:#9eb6d8;stroke-width:2;pointer-events:stroke}
+.graph-edge.source-edge{stroke:#94a3b8;stroke-dasharray:4 3;pointer-events:none}
 .graph-edge.selected{stroke:#d97706;stroke-width:3}
 .graph-edge.preview{stroke:var(--c1-primary);stroke-dasharray:5 4}
 .graph-edge-hit{fill:none;stroke:transparent;stroke-width:14;pointer-events:stroke;cursor:pointer}
 .graph-node{position:absolute;width:176px;height:72px;box-sizing:border-box;background:var(--c1-surface);
   border:1px solid #cbd7e8;border-top:3px solid var(--c1-primary);border-radius:7px;
   box-shadow:0 3px 10px rgba(37,55,85,.09);user-select:none;cursor:move}
+.graph-node.scope-source{border-top-color:#64748b;background:#fbfcfe;cursor:pointer}
 .graph-node.scope-rule{border-top-color:var(--c1-success)}.graph-node.scope-frame{border-top-color:var(--c1-purple)}
+.graph-node.selected{border-color:var(--c1-primary);box-shadow:0 0 0 3px rgba(37,99,235,.16),0 4px 14px rgba(37,55,85,.16)}
 .graph-node:hover{box-shadow:0 4px 14px rgba(37,55,85,.16)}
 .graph-node.flash{animation:nodeFlash 1.1s ease}
 @keyframes nodeFlash{0%,100%{box-shadow:0 3px 10px rgba(37,55,85,.09)}
@@ -71,6 +74,7 @@ select.tin{width:100%;min-width:0}
 .node-top{display:flex;align-items:center;gap:5px;padding:6px 26px 1px 8px;min-width:0}
 .node-top b{font-size:12px;color:var(--c1-text-strong);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .node-scope{flex:none;font-size:9px;line-height:14px;padding:0 5px;border-radius:8px;background:var(--c1-primary-soft);color:var(--c1-primary)}
+.scope-source .node-scope{background:#e2e8f0;color:#475569}.scope-source .node-state-dot{background:#64748b}
 .scope-rule .node-scope{background:var(--c1-success-soft);color:var(--c1-success)}.scope-frame .node-scope{background:var(--c1-purple-soft);color:var(--c1-purple)}
 .node-detail{padding:1px 8px 0;font-size:10px;color:var(--c1-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .node-foot{display:flex;align-items:center;gap:4px;padding:5px 8px 0;font-size:10px;color:var(--c1-text-muted)}
@@ -90,6 +94,33 @@ select.tin{width:100%;min-width:0}
 .graph-empty b{color:#59677c;font-size:15px}
 .graph-hint{position:absolute;left:12px;bottom:10px;font-size:11px;color:#8a94a6;
   background:rgba(248,250,252,.9);padding:4px 7px;border-radius:4px;pointer-events:none}
+
+/* ---- 节点血缘检查器 ---- */
+.compute-inspector{position:absolute;z-index:20;right:12px;top:12px;bottom:12px;width:min(380px,calc(100% - 24px));
+  display:flex;flex-direction:column;box-shadow:0 12px 32px rgba(37,55,85,.18)}
+.compute-inspector .inspector__head{flex:none}
+.compute-inspector .inspector__body{flex:1;min-height:0;overflow:auto}
+.compute-inspector .banner{margin-bottom:10px}
+.inspector-actions{display:flex;gap:6px;margin:10px 0 2px;flex-wrap:wrap}
+.lineage-section{margin-top:14px}
+.lineage-section h3{margin:0 0 6px;font-size:12px;color:var(--c1-text-strong)}
+.lineage-list{display:flex;flex-direction:column;gap:5px}
+.lineage-link{display:flex;align-items:center;gap:7px;width:100%;padding:7px 8px;border:1px solid var(--c1-border);
+  border-radius:6px;background:var(--c1-surface-subtle);color:var(--c1-text);text-align:left;cursor:pointer;font-size:12px}
+.lineage-link:hover{border-color:#b7cdf2;background:#eef4ff}
+.lineage-link b{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.lineage-empty{padding:8px;border-radius:6px;background:var(--c1-surface-subtle);color:var(--c1-text-muted);font-size:12px}
+.sample-summary{display:flex;align-items:center;gap:8px;margin:8px 0;font-size:12px;color:var(--c1-text-muted)}
+.sample-summary b{color:var(--c1-text-strong);font-variant-numeric:tabular-nums}
+.sample-scroll{max-width:100%;overflow:auto;border:1px solid var(--c1-border);border-radius:6px}
+.sample-table{border-collapse:collapse;font-size:11px;white-space:nowrap}
+.sample-table th,.sample-table td{padding:5px 7px;border-bottom:1px solid var(--c1-border-subtle);text-align:left;max-width:180px;overflow:hidden;text-overflow:ellipsis}
+.sample-table th{position:sticky;top:0;background:var(--c1-surface-subtle);color:var(--c1-text-muted);font-weight:500}
+.sample-table tr:last-child td{border-bottom:0}
+.sample-table .source-cell{display:block;max-width:160px;overflow:hidden;text-overflow:ellipsis;cursor:pointer;color:var(--c1-primary)}
+.source-preview{margin-top:12px;border-top:1px solid var(--c1-border);padding-top:10px}
+.source-preview[hidden]{display:none}
+.source-preview iframe{display:block;width:100%;height:420px;border:1px solid var(--c1-border);border-radius:6px;background:#fff}
 
 /* ---- 多条件编辑 ---- */
 .condition-head,.conditionrow{display:grid;grid-template-columns:minmax(130px,1.3fr) 74px 104px minmax(100px,1fr) 28px;
@@ -124,7 +155,7 @@ select.tin{width:100%;min-width:0}
 .chain-item .cd{font-size:12px;color:#6b7688;line-height:1.7}
 .locate{float:right;font-size:11px;color:#2563eb;background:transparent;border:0;cursor:pointer}
 .tag{padding:2px 8px;border-radius:9px;font-size:11px;font-weight:500;margin-right:4px}
-.tag-index{background:#e7f0ff;color:#2563eb}.tag-rule{background:#e5f6ec;color:#177245}.tag-frame{background:#efe9fb;color:#6d3fc0}
+.tag-source{background:#e2e8f0;color:#475569}.tag-index{background:#e7f0ff;color:#2563eb}.tag-rule{background:#e5f6ec;color:#177245}.tag-frame{background:#efe9fb;color:#6d3fc0}
 .dlist{font-size:12px;line-height:1.9;color:#6b7688}
 .cmp{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
 .cmp th,.cmp td{border:1px solid #e2e7f0;padding:6px 8px;text-align:left;vertical-align:top;word-break:break-all}
@@ -144,6 +175,7 @@ select.tin{width:100%;min-width:0}
 }
 @media(pointer:coarse){
   .asset-more{width:36px;height:var(--c1-touch-h);opacity:1}
-  .asset-title .icon-btn,.asset-title .disclosure__toggle{width:var(--c1-touch-h);height:var(--c1-touch-h)}
+  .asset-title .icon-btn,.asset-title .disclosure__toggle,.compute-inspector .icon-btn{width:var(--c1-touch-h);height:var(--c1-touch-h)}
+  .sample-table .source-cell{min-height:var(--c1-touch-h);line-height:var(--c1-touch-h)}
 }
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}

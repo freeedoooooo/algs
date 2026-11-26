@@ -2,8 +2,8 @@
 (function(){
   'use strict';
   var WIDTH=176, HEIGHT=72, PORT_Y=34;
-  var SCOPES=['index','rule','frame'];
-  var LABEL={index:'指标',rule:'规则',frame:'框架'};
+  var SCOPES=['source','index','rule','frame'];
+  var LABEL={source:'数据',index:'指标',rule:'规则',frame:'框架'};
 
   function Graph(canvas,callbacks){
     this.canvas=canvas;
@@ -12,12 +12,13 @@
     this.edgesEl=canvas.querySelector('.graph-edges');
     this.empty=canvas.querySelector('.graph-empty');
     this.cb=callbacks||{};
-    this.defs={index:[],rule:[],frame:[]};
+    this.defs={source:[],index:[],rule:[],frame:[]};
     this.positions={};
     this.nodeEls={};
     this.scale=1;
     this.pan={x:30,y:30};
     this.selectedEdge=null;
+    this.selectedNode=null;
     this.drag=null;
     this.connect=null;
     this.bind();
@@ -29,6 +30,10 @@
   Graph.prototype.edgeKey=function(e){return e.from.scope+':'+e.from.id+'>'+e.to.scope+':'+e.to.id;};
   Graph.prototype.edges=function(){
     var out=[],self=this;
+    (this.defs.source||[]).forEach(function(d){
+      if(self.def('index',d.index_id)) out.push({
+        from:{scope:'source',id:d.id},to:{scope:'index',id:d.index_id},ref:d});
+    });
     ['rule','frame'].forEach(function(scope){
       (self.defs[scope]||[]).forEach(function(d){
         var refs=scope==='rule'?d.index_refs_json:d.rule_refs_json;
@@ -53,6 +58,10 @@
           x:SCOPES.indexOf(s)*240,y:40+i*110};
       });
     });
+    (defs.source||[]).forEach(function(d){
+      var target=(positions||{})['index:'+d.index_id];
+      if(target)found['source:'+d.id]={scope:'source',id:d.id,x:target.x-240,y:target.y};
+    });
     this.positions={};
     Object.keys(found).forEach(function(k){
       this.positions[k]=(positions||{})[k]||found[k];
@@ -60,6 +69,10 @@
     if(this.selectedEdge&&!this.edges().some(function(e){
       return this.edgeKey(e)===this.selectedEdge;
     },this)) this.selectEdge(null);
+    if(this.selectedNode){
+      var parts=this.selectedNode.split(':');
+      if(!this.def(parts[0],Number(parts[1])))this.selectedNode=null;
+    }
     this.render();
   };
   Graph.prototype.render=function(){
@@ -75,34 +88,45 @@
     this.applyTransform();
   };
   Graph.prototype.renderNode=function(d){
-    var self=this,k=this.key(d._scope,d.id),pos=this.positions[k],hasValue=!!d._latest;
+    var self=this,k=this.key(d._scope,d.id),pos=this.positions[k],hasValue=!!d._latest,isSource=d._scope==='source';
     var el=document.createElement('div');
-    el.className='graph-node scope-'+d._scope+(hasValue?' has-value':'');
-    el.dataset.key=k;
+    el.className='graph-node scope-'+d._scope+(hasValue?' has-value':'')+
+      (isSource?' source-node':'')+(this.selectedNode===k?' selected':'');
+    el.dataset.key=k;el.tabIndex=0;el.setAttribute('role','button');
+    el.setAttribute('aria-label',LABEL[d._scope]+' '+d.name+'，回车查看血缘');
     el.style.left=pos.x+'px';el.style.top=pos.y+'px';
     el.innerHTML='<div class="node-top"><span class="node-scope">'+LABEL[d._scope]+'</span>'+
       '<b>'+escHtml(d.name)+'</b></div><div class="node-detail">'+escHtml(this.detail(d))+'</div>'+
-      '<div class="node-foot"><span class="node-state-dot"></span><span>'+(hasValue?'已计算':'未计算')+'</span>'+
+      '<div class="node-foot"><span class="node-state-dot"></span><span>'+(isSource?'当前数据':hasValue?'已计算':'未计算')+'</span>'+
       (hasValue?'<b class="node-value">'+escHtml(d._value)+'</b>':'')+'</div>'+
-      '<button type="button" class="icon-btn mini node-more" data-action-menu="compute-action-menu" '+
-      'aria-haspopup="menu" aria-expanded="false" aria-label="'+escHtml(d.name)+'更多操作">⋯</button>'+
-      (d._scope!=='index'?'<span class="node-port input" title="输入"></span>':'')+
+      (!isSource?'<button type="button" class="icon-btn mini node-more" data-action-menu="compute-action-menu" '+
+      'aria-haspopup="menu" aria-expanded="false" aria-label="'+escHtml(d.name)+'更多操作">⋯</button>':'')+
+      (d._scope!=='source'?'<span class="node-port input" title="输入"></span>':'')+
       (d._scope!=='frame'?'<span class="node-port output" title="拖出连线"></span>':'');
     this.nodesEl.appendChild(el);this.nodeEls[k]=el;
     el.addEventListener('pointerdown',function(e){self.nodePointer(e,d);});
     var more=el.querySelector('.node-more');
-    more.addEventListener('pointerdown',function(e){e.stopPropagation();});
-    more.addEventListener('click',function(e){
-      if(self.cb.menu) self.cb.menu(d._scope,d.id,d._latest,more);
-    });
+    if(more){
+      more.addEventListener('pointerdown',function(e){e.stopPropagation();});
+      more.addEventListener('click',function(e){
+        if(self.cb.menu) self.cb.menu(d._scope,d.id,d._latest,more);
+      });
+    }
     el.addEventListener('dblclick',function(e){
-      if(e.target.closest('button,.node-port'))return;
+      if(isSource||e.target.closest('button,.node-port'))return;
       self.cb.action(d._scope,d.id,'edit',d._latest);
     });
+    el.addEventListener('keydown',function(e){
+      if(e.key==='Enter'||e.key===' '){
+        e.preventDefault();self.selectNode(d._scope,d.id);
+        if(self.cb.select)self.cb.select(d._scope,d.id);
+      }
+    });
     var out=el.querySelector('.output');
-    if(out) out.addEventListener('pointerdown',function(e){self.startConnect(e,d);});
+    if(out&&!isSource) out.addEventListener('pointerdown',function(e){self.startConnect(e,d);});
   };
   Graph.prototype.detail=function(d){
+    if(d._scope==='source') return d.source_table+(d.source_column?' · '+d.source_column:' · 整行');
     if(d._scope==='index') return d.source_table+(d.source_column?' · '+d.source_column:'')+' · '+d._agg;
     if(d._scope==='rule') return (d.conditions_json||[]).length+' 个条件 · '+(d.combine==='all'?'全部满足':'任一满足');
     return d._combine+' · '+(d.rule_refs_json||[]).length+' 条规则';
@@ -123,9 +147,11 @@
   Graph.prototype.renderEdge=function(e){
     var self=this,path=document.createElementNS('http://www.w3.org/2000/svg','path');
     path.setAttribute('d',this.path(this.port(e.from),this.port(e.to)));
-    path.setAttribute('class','graph-edge'+(this.selectedEdge===this.edgeKey(e)?' selected':''));
-    path.addEventListener('pointerdown',function(ev){ev.stopPropagation();self.selectEdge(self.edgeKey(e));});
+    path.setAttribute('class','graph-edge'+(e.from.scope==='source'?' source-edge':'')+
+      (this.selectedEdge===this.edgeKey(e)?' selected':''));
     this.edgesEl.appendChild(path);
+    if(e.from.scope==='source')return;
+    path.addEventListener('pointerdown',function(ev){ev.stopPropagation();self.selectEdge(self.edgeKey(e));});
     var hit=document.createElementNS('http://www.w3.org/2000/svg','path');
     hit.setAttribute('d',path.getAttribute('d'));hit.setAttribute('class','graph-edge-hit');
     hit.addEventListener('pointerdown',function(ev){ev.stopPropagation();self.selectEdge(self.edgeKey(e));});
@@ -143,7 +169,12 @@
       y:(e.clientY-r.top-this.pan.y)/this.scale};
   };
   Graph.prototype.nodePointer=function(e,d){
-    if(e.button!==0||e.target.closest('.node-port'))return;
+    if(e.button!==0||e.target.closest('.node-port,.node-more'))return;
+    if(d._scope==='source'){
+      this.selectNode('source',d.id);
+      if(this.cb.select)this.cb.select('source',d.id);
+      return;
+    }
     var self=this,k=this.key(d._scope,d.id),p=this.positions[k];
     this.drag={kind:'node',key:k,id:e.pointerId,start:this.point(e),x:p.x,y:p.y,moved:false};
     this.canvas.setPointerCapture(e.pointerId);
@@ -194,8 +225,13 @@
         }
         self.connect=null;
         if(valid) self.cb.connect(from.scope,from.id,scope,id);
-      }else if(drag.kind==='node'&&drag.moved&&self.cb.layout){
-        self.cb.layout(self.positions);
+      }else if(drag.kind==='node'){
+        if(drag.moved&&self.cb.layout)self.cb.layout(self.positions);
+        else{
+          var parts=drag.key.split(':');
+          self.selectNode(parts[0],Number(parts[1]));
+          if(self.cb.select)self.cb.select(parts[0],Number(parts[1]));
+        }
       }
       self.renderEdges();
     }
@@ -269,8 +305,16 @@
     this.applyTransform();
     if(old){void old.offsetWidth;old.classList.add('flash');}
   };
+  Graph.prototype.selectNode=function(scope,id){
+    this.selectedNode=scope==null?null:this.key(scope,id);
+    var self=this;
+    Object.keys(this.nodeEls).forEach(function(k){
+      self.nodeEls[k].classList.toggle('selected',k===self.selectedNode);
+    });
+  };
   Graph.prototype.selectEdge=function(key){
     this.selectedEdge=key;
+    if(key)this.selectNode(null);
     var btn=document.getElementById('edge-del');if(btn)btn.hidden=!key;
     this.renderEdges();
   };

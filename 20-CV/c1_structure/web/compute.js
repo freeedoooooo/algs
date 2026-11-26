@@ -3,12 +3,13 @@
   'use strict';
   var $=function(id){return document.getElementById(id);};
   var PFX={index:'i',rule:'r',frame:'f'};
-  var LABEL={index:'指标',rule:'规则',frame:'框架'};
+  var LABEL={source:'数据',index:'指标',rule:'规则',frame:'框架'};
   var VFIELD={index:'index_value',rule:'rule_value',frame:'frame_value'};
   var defs={index:[],rule:[],frame:[]};
   var editing={index:null,rule:null,frame:null};
   var editingScope='index',layout={},layoutAvailable=true,saveTimer=null;
   var LOCAL_KEY='c1.compute.layout';
+  var inspectorSeq=0;
 
   function api(path,opt){
     return fetch(path,opt||{}).then(function(r){
@@ -44,9 +45,13 @@
   $('de-close').onclick=function(){closeEl('ded');};
   $('tr-close').onclick=function(){closeEl('trace');};
   $('view-close').onclick=function(){closeEl('compute-view');};
+  $('inspector-close').onclick=closeInspector;
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape'&&!$('compute-inspector').hidden&&!document.querySelector('.drawer:not([hidden])'))closeInspector();
+  });
 
   var graph=new ComputeGraph($('graph-canvas'),{
-    action:nodeAction,menu:openNodeMenu,connect:connectNodes,disconnect:disconnectEdge,layout:queueLayoutSave
+    action:nodeAction,menu:openNodeMenu,select:openInspector,connect:connectNodes,disconnect:disconnectEdge,layout:queueLayoutSave
   });
   $('zoom-in').onclick=function(){graph.zoom(1.15);};
   $('zoom-out').onclick=function(){graph.zoom(1/1.15);};
@@ -265,7 +270,7 @@
     if(!d)return;
     var v=d._latest,menu=$('compute-action-menu');
     menu.innerHTML=actionMenuItem('view','查看',d)+actionMenuItem('edit','编辑',d)+
-      actionMenuItem('run','运行',d)+actionMenuItem('trace','追溯',d,v,!v)+
+      actionMenuItem('run','运行',d)+actionMenuItem('trace','追溯',d)+
       actionMenuItem('replay','复核',d,v,!v)+'<div class="menu-sep"></div>'+
       actionMenuItem('del','删除',d);
     menu.onclick=function(e){
@@ -291,7 +296,7 @@
       var trigger=e.target.closest?e.target.closest('[data-action-menu]'):null;
       if(trigger){fillActionMenu(trigger.dataset.scope,Number(trigger.dataset.id));return;}
       var main=e.target.closest?e.target.closest('.asset-main'):null;
-      if(main)graph.focus(scope,Number(main.dataset.id));
+      if(main){var id=Number(main.dataset.id);graph.focus(scope,id);openInspector(scope,id);}
     };
   }
   function nodeAction(scope,id,act,v){
@@ -299,7 +304,7 @@
     if(act==='view')openView(scope,d);
     else if(act==='edit')fillForm(scope,d);
     else if(act==='run')doRun(scope,id);
-    else if(act==='trace'&&v)openTraceView(scope,v.id);
+    else if(act==='trace')openInspector(scope,id);
     else if(act==='replay'&&v)openReplay(scope,v.id);
     else if(act==='del')doDelete(scope,id);
   }
@@ -307,7 +312,7 @@
     var d=graph.def(scope,id);if(!d||!confirm('确定删除「'+d.name+'」及其全部结果？'))return;
     api('/api/'+scope+'/'+id,{method:'DELETE'}).then(function(){
       delete layout[scope+':'+id];
-      try{localStorage.setItem(LOCAL_KEY,JSON.stringify(Object.keys(layout).map(function(k){return layout[k];})));}catch(e){}
+      try{localStorage.setItem(LOCAL_KEY,JSON.stringify(Object.keys(layout).filter(function(k){return layout[k].scope!=='source';}).map(function(k){return layout[k];})));}catch(e){}
       loadAll();ok('已删除');
     })
       .catch(function(e){err(e.message);});
@@ -371,9 +376,108 @@
     openEl('compute-view');
   }
 
+  // ---------- 节点血缘检查器 ----------
+  function closeInspector(){
+    inspectorSeq++;$('compute-inspector').hidden=true;
+    $('inspector-body').innerHTML='';graph.selectNode(null);
+  }
+  function inspectorSummary(d){
+    var rows=[];
+    if(d._scope==='source'){
+      rows.push(['业务表',d.source_table],['数据列',d.source_column||'整行'],
+        ['关联指标',graph.def('index',d.index_id)?.name||('#'+d.index_id)]);
+    }else if(d._scope==='index'){
+      rows.push(['业务表',d.source_table],['数据列',d.source_column||'整行'],['运算',aggLabel(d.aggregate)]);
+      if((d.filter_json||[]).length)rows.push(['筛选条件',JSON.stringify(d.filter_json)]);
+    }else if(d._scope==='rule'){
+      rows.push(['条件组合',combineLabel(d.combine)],['条件数',(d.conditions_json||[]).length]);
+    }else rows.push(['组合方式',combineLabel(d.combine)],['通过阈值',d.threshold==null?'—':d.threshold]);
+    if(d._latest)rows.push(['最近结果',d._latest[VFIELD[d._scope]]]);
+    return '<div class="view-grid">'+rows.map(function(r){
+      return '<div><span>'+esc(r[0])+'</span><b>'+esc(r[1])+'</b></div>';}).join('')+'</div>';
+  }
+  function lineageItems(scope,d,direction){
+    var items=[];
+    function add(s,id){var x=graph.def(s,id);if(x)items.push({scope:s,id:id,name:x.name,detail:x._scope==='source'?x.source_table:x._detail||''});}
+    if(scope==='source'){
+      add('index',d.index_id);
+    }else if(scope==='index'){
+      if(direction==='up')add('source',d.id);
+      else defs.rule.forEach(function(r){if((r.index_refs_json||[]).some(function(x){return x.index_id===d.id;}))add('rule',r.id);});
+    }else if(scope==='rule'){
+      if(direction==='up')(d.index_refs_json||[]).forEach(function(r){add('index',r.index_id);});
+      else defs.frame.forEach(function(f){if((f.rule_refs_json||[]).some(function(x){return x.rule_id===d.id;}))add('frame',f.id);});
+    }else if(direction==='up')(d.rule_refs_json||[]).forEach(function(r){add('rule',r.rule_id);});
+    return items;
+  }
+  function lineageSection(title,items){
+    return '<section class="lineage-section"><h3>'+esc(title)+'</h3>'+(items.length?
+      '<div class="lineage-list">'+items.map(function(x){
+        return '<button type="button" class="lineage-link" data-scope="'+x.scope+'" data-id="'+x.id+'">'+
+          '<span class="tag tag-'+x.scope+'">'+LABEL[x.scope]+'</span><b>'+esc(x.name)+'</b><span>›</span></button>';
+      }).join('')+'</div>':'<div class="lineage-empty">无</div>')+'</section>';
+  }
+  function openInspector(scope,id){
+    var d=graph.def(scope,id);if(!d)return;
+    graph.selectNode(scope,id);
+    var seq=++inspectorSeq,indexId=scope==='source'?d.index_id:id;
+    $('compute-inspector').hidden=false;$('inspector-title').textContent=d.name;
+    $('inspector-tag').className='tag tag-'+scope;$('inspector-tag').textContent=LABEL[scope];
+    var h='<div class="banner info">当前配置＋当前数据，不是历史执行快照。</div>'+inspectorSummary(d);
+    h+=lineageSection('上游血缘回溯',lineageItems(scope,d,'up'));
+    h+=lineageSection('下游影响分析',lineageItems(scope,d,'down'));
+    if(scope==='source'||scope==='index')h+='<section class="lineage-section" id="inspector-sample"><h3>匹配数据样本</h3><div class="empty">加载中…</div></section>';
+    $('inspector-body').innerHTML=h;
+    Array.prototype.forEach.call($('inspector-body').querySelectorAll('[data-scope]'),function(btn){
+      btn.onclick=function(){var s=btn.dataset.scope,n=Number(btn.dataset.id);graph.focus(s,n);openInspector(s,n);};
+    });
+    if(scope==='source'||scope==='index')loadSourcePreview(indexId,seq);
+  }
+  function loadSourcePreview(indexId,seq){
+    api('/api/index/'+indexId+'/source-preview?limit=50').then(function(j){
+      if(seq!==inspectorSeq)return;
+      var host=$('inspector-sample');if(!host)return;
+      var canTrace=(j.trace_columns||[]).indexOf('file_id')>=0&&(j.trace_columns||[]).indexOf('record_id')>=0;
+      var h='<div class="sample-summary"><span>匹配 <b>'+esc(j.total)+'</b> 行</span><span>展示前 '+esc(j.items.length)+' 行</span>'+
+        (j.has_more?'<span>仅样本</span>':'')+'</div>';
+      if(!canTrace)h+='<div class="lineage-empty">业务表缺少 file_id/record_id，仅展示样本，无法回查原单元格。</div>';
+      if(j.items.length)h+='<div class="sample-scroll"><table class="sample-table"><thead><tr>'+j.columns.map(function(c){
+        return '<th>'+esc(c)+'</th>';}).join('')+'</tr></thead><tbody>'+j.items.map(function(row){
+        return '<tr>'+j.columns.map(function(c){
+          var value=row[c],text=value==null?'NULL':String(value);
+          return '<td>'+(canTrace&&row.record_id!=null&&c!=='file_id'&&c!=='record_id'?
+            '<button type="button" class="linkbtn source-cell" data-rid="'+esc(row.record_id)+'" data-col="'+esc(c)+'"'+(value==null?' disabled':'')+'>'+esc(text)+'</button>':esc(text))+'</td>';
+        }).join('')+'</tr>';
+      }).join('')+'</tbody></table></div>';
+      else h+='<div class="lineage-empty">当前筛选没有匹配记录。</div>';
+      h+='<div class="source-preview" id="source-preview" hidden><div class="sample-summary" id="source-preview-status">原单元格预览</div>'+
+        '<iframe id="source-preview-frame" title="原始资料单元格预览"></iframe></div>';
+      host.innerHTML=h;
+      Array.prototype.forEach.call(host.querySelectorAll('[data-rid]'),function(btn){btn.onclick=function(){openSourceCell(btn);};});
+    }).catch(function(e){
+      if(seq!==inspectorSeq)return;var host=$('inspector-sample');if(host)host.innerHTML='<div class="banner err">'+esc(e.message)+'</div>';
+    });
+  }
+  function openSourceCell(btn){
+    var rid=btn.dataset.rid,col=btn.dataset.col,panel=$('source-preview'),frame=$('source-preview-frame'),status=$('source-preview-status');
+    panel.hidden=false;status.textContent='定位原单元格…';
+    api('/api/staging/locate/'+encodeURIComponent(rid)+'?key='+encodeURIComponent(col)).then(function(j){
+      var key=j.field||col,base='/preview?embed=1&file='+encodeURIComponent(j.file_id);
+      status.textContent='资料 #'+j.file_id+' · 记录 '+j.record_index+' · '+key;
+      if(frame.getAttribute('data-src')===base){
+        frame.contentWindow.postMessage({c1TraceKey:{key:key,index:j.record_index}},window.location.origin);
+      }else{
+        frame.setAttribute('data-src',base);
+        frame.src=base+'&index='+encodeURIComponent(j.record_index)+'&key='+encodeURIComponent(key);
+      }
+    }).catch(function(e){status.textContent='无法定位：'+e.message;});
+  }
+
   // ---------- 数据与布局 ----------
   function graphDefs(){
-    var out={index:[],rule:[],frame:[]};
+    var out={source:[],index:[],rule:[],frame:[]};
+    out.source=defs.index.map(function(d){return {id:d.id,index_id:d.id,_scope:'source',
+      name:d.source_table+(d.source_column?'.'+d.source_column:' · 整行'),source_table:d.source_table,source_column:d.source_column};});
     ['index','rule','frame'].forEach(function(s){
       out[s]=defs[s].map(function(d){return Object.assign({},d,{_scope:s,_latest:d._latest,
         _agg:aggLabel(d.aggregate),_combine:combineLabel(d.combine),
@@ -411,48 +515,18 @@
   }
   function queueLayoutSave(next){
     layout=next;
-    try{localStorage.setItem(LOCAL_KEY,JSON.stringify(Object.keys(layout).map(function(k){return layout[k];})));}catch(e){}
+    try{localStorage.setItem(LOCAL_KEY,JSON.stringify(Object.keys(layout).filter(function(k){return layout[k].scope!=='source';}).map(function(k){return layout[k];})));}catch(e){}
     $('layout-state').textContent='正在保存…';clearTimeout(saveTimer);
     saveTimer=setTimeout(function(){
       if(!layoutAvailable){$('layout-state').textContent='未安装布局表 · 仅保存本机';return;}
-      var items=Object.keys(layout).map(function(k){var p=layout[k];return {scope:p.scope,id:p.id,x:p.x,y:p.y};});
+      var items=Object.keys(layout).filter(function(k){return layout[k].scope!=='source';}).map(function(k){var p=layout[k];return {scope:p.scope,id:p.id,x:p.x,y:p.y};});
       api('/api/compute/layout',{method:'PUT',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({items:items})}).then(function(){ $('layout-state').textContent='坐标已保存';})
         .catch(function(e){$('layout-state').textContent='保存失败：'+e.message;});
     },500);
   }
 
-  // ---------- 追溯 / 复核 ----------
-  function openTraceView(scope,vid){
-    $('tr-title').textContent='全链路追溯';$('tr-body').innerHTML='<div class="empty">加载中…</div>';openEl('trace');
-    api('/api/'+scope+'/value/'+vid+'/lineage').then(function(j){
-      var h='<div class="banner info">以下为当前配置构成的元数据链，不是历史配置快照。</div>';
-      h+='<div class="dlist">结果：<b>'+esc(String(j.result[VFIELD[j.scope]]))+'</b></div>';
-      h+='<div class="chain">'+renderMeta(j.definition,0)+'</div>';$('tr-body').innerHTML=h;
-      Array.prototype.forEach.call($('tr-body').querySelectorAll('[data-locate]'),function(btn){
-        btn.onclick=function(){closeEl('trace');graph.focus(btn.dataset.scope,Number(btn.dataset.locate));};
-      });
-    }).catch(function(e){$('tr-body').innerHTML='<div class="banner err">'+esc(e.message)+'</div>';});
-  }
-  function renderMeta(m,depth){
-    if(!m)return '';
-    var h='<div class="chain-item" style="margin-left:'+(depth*14)+'px">'+
-      '<div class="ct"><span class="tag tag-'+m.scope+'">'+LABEL[m.scope]+'</span> '+esc(m.name)+
-      '<button type="button" class="linkbtn locate" data-scope="'+m.scope+'" data-locate="'+m.id+'">定位到配置图</button></div>'+
-      '<div class="cd">'+metaConfig(m)+'</div></div>';
-    (m.refs||[]).forEach(function(r){h+=renderMeta(r,depth+1);});return h;
-  }
-  function metaConfig(m){
-    var c=m.config||{},parts=[];
-    if(m.scope==='index'){
-      parts.push('表 '+esc(c.source_table||'—'));if(c.source_column)parts.push('列 '+esc(c.source_column));
-      parts.push('运算 '+esc(aggLabel(c.aggregate)));if(c.filter&&c.filter.length)parts.push('筛选 '+esc(JSON.stringify(c.filter)));
-    }else if(m.scope==='rule'){
-      parts.push('组合 '+esc(combineLabel(c.combine)));
-      (c.conditions||[]).forEach(function(x){parts.push(esc(x.alias)+' '+esc(opLabel(x.op))+' '+esc(x.threshold));});
-    }else{parts.push('组合 '+esc(combineLabel(c.combine)));if(c.threshold!=null)parts.push('阈值 '+esc(c.threshold));}
-    return parts.join(' · ');
-  }
+  // ---------- 复核 ----------
   function openReplay(scope,vid){
     $('tr-title').textContent='结果复核';$('tr-body').innerHTML='<div class="empty">复核中…</div>';openEl('trace');
     api('/api/'+scope+'/value/'+vid+'/replay').then(function(j){

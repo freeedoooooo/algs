@@ -112,6 +112,7 @@ required = [
     ('GET', '/api/index/{index_id}'), ('DELETE', '/api/index/{index_id}'),
     ('POST', '/api/index/{index_id}/run'),
     ('GET', '/api/index/{index_id}/values'),
+    ('GET', '/api/index/{index_id}/source-preview'),
     ('GET', '/api/index/value/{value_id}/lineage'),
     ('GET', '/api/index/value/{value_id}/replay'),
     ('GET', '/api/rule'), ('POST', '/api/rule'),
@@ -128,7 +129,7 @@ required = [
     ('GET', '/api/frame/value/{value_id}/replay'),
 ]
 missing = [k for k in required if k not in paths]
-check('26 路由全注册', not missing, missing)
+check('27 路由全注册', not missing, missing)
 check('抽取规则 API 保留', ('GET', '/api/extract-rules') in paths)
 
 print('orchestrate logic: {} checks passed'.format(ok))

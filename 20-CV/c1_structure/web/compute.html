@@ -64,7 +64,7 @@
     </aside>
     <section class="graph-panel" aria-label="计算流程配置区">
       <div class="graph-head">
-        <div><b>计算流程配置</b><span class="graph-sub">拖动节点排布，从右侧端口连线到下级节点</span></div>
+        <div><b>计算流程配置</b><span class="graph-sub">点节点查看血缘与影响 · 拖动排布 · 从右侧端口连线</span></div>
         <span class="spacer"></span>
         <span class="save-state" id="layout-state">布局读取中…</span>
         <div class="graph-tools">
@@ -82,8 +82,15 @@
           <div class="graph-nodes" id="graph-nodes"></div>
         </div>
         <div class="graph-empty" id="graph-empty" hidden><b>还没有可配置的节点</b>先在左侧新建指标，再逐级建立规则与框架。</div>
-        <div class="graph-hint">空白拖动平移 · 滚轮缩放 · 节点 ⋯ 操作 · 点选连线后断开</div>
+        <div class="graph-hint">空白拖动平移 · 滚轮缩放 · 点节点看血缘 · 配置连线选中后可断开</div>
       </div>
+      <aside class="inspector compute-inspector" id="compute-inspector" aria-label="节点血缘检查器" hidden>
+        <div class="inspector__head"><span class="tag" id="inspector-tag"></span>
+          <span class="inspector__title" id="inspector-title"></span><span class="spacer"></span>
+          <button type="button" class="icon-btn" id="inspector-close" title="关闭" aria-label="关闭血缘检查器">×</button>
+        </div>
+        <div class="inspector__body" id="inspector-body"></div>
+      </aside>
     </section>
   </div>
 </div>
@@ -154,7 +161,7 @@
 
 <div class="drawer" id="trace" hidden>
   <div class="dpanel">
-    <div class="dhead"><h2 id="tr-title">全链路追溯</h2><span class="spacer"></span>
+    <div class="dhead"><h2 id="tr-title">结果复核</h2><span class="spacer"></span>
       <button type="button" class="dclose" id="tr-close">关闭 (Esc)</button></div>
     <div class="dbody" id="tr-body"><div class="empty">加载中…</div></div>
   </div>
