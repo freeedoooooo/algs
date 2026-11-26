@@ -7,6 +7,7 @@
 from .. import collect
 from ._common import (as_text, cell_anchor, dedupe_anchors, pick_column)
 from .registry import OPS, OP_KINDS
+from .ops.validate import run_validates
 
 
 def _tables_by_ref(doc, spec):
@@ -63,11 +64,18 @@ def apply_pipeline(pipeline, ctx, value=None, anchors=None):
 
 
 def _record_from_ctx(ctx, fields):
-    """在给定上下文上执行所有字段管道，产出一条无 index 的记录。"""
-    values, original, lineage = {}, {}, {}
+    """在给定上下文上执行所有字段管道，产出一条无 index 的记录。
+
+    校验只写 review.reason，不改值、不改 review.state；存量字段无 validate
+    时 reason 为空列表，records 信封多一个空键但不影响任何下游。
+    """
+    values, original, lineage, reasons = {}, {}, {}, {}
     for field in fields:
         value, anchors, meta = apply_pipeline(field.get('pipeline') or [], ctx)
         target = field['target']
+        issues = run_validates(field, ctx, value)
+        if issues:
+            reasons[target] = issues
         if isinstance(value, dict) and field.get('expand'):
             # link 算子：把关联表的多列展开进同一条记录
             field_anchors = meta.get('field_anchors') or {}
@@ -84,8 +92,11 @@ def _record_from_ctx(ctx, fields):
         lineage[target] = dedupe_anchors(anchors)
         ctx['values'][target] = value
         ctx['lineage'][target] = lineage[target]
-    return {'values': values, 'original': original, 'lineage': lineage,
-            'review': {'state': 'pending', 'at': None}}
+    rec = {'values': values, 'original': original, 'lineage': lineage,
+           'review': {'state': 'pending', 'at': None}}
+    if reasons:
+        rec['review']['reason'] = reasons
+    return rec
 
 
 def _finalize(records):

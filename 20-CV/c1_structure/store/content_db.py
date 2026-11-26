@@ -68,7 +68,7 @@ def get_records(file_id):
                 return None
             cur.execute(
                 'SELECT id, record_index, review_state, review_at,'
-                ' values_json, original_json'
+                ' values_json, original_json, review_reason_json'
                 ' FROM c1_staging_record WHERE file_id=%s'
                 ' ORDER BY record_index', (file_id,))
             recs = _rows(cur)
@@ -96,14 +96,18 @@ def get_records(file_id):
                         if g['cell_bbox'] else None,
                         'space': g['space'], 'raw_text': g['raw_text'],
                     } for g in lmap.get((r['id'], k), [])]
-                out.append({
+                rec = {
                     'index': r['record_index'], 'values': values,
                     'original': json.loads(r['original_json']),
                     'lineage': lineage,
                     'review': {'state': r['review_state'],
                                'at': r['review_at'].strftime(_TS)
                                if r['review_at'] else None},
-                })
+                }
+                if r.get('review_reason_json'):
+                    rec['review']['reason'] = json.loads(
+                        r['review_reason_json'])
+                out.append(rec)
             cur.execute(
                 'SELECT t.name, tv.version, tv.mapping_json'
                 ' FROM c1_extract_rule_version tv'
@@ -194,21 +198,28 @@ def save_records(doc):
                     original = rec.get('original') or {}
                     review = rec.get('review') or {}
                     at = review.get('at')
+                    reason = review.get('reason')
                     cur.execute(
                         'INSERT INTO c1_staging_record (file_id,'
                         ' record_index, review_state, review_at, values_json,'
-                        ' original_json) VALUES (%s,%s,%s,%s,%s,%s)',
+                        ' original_json, review_reason_json)'
+                        ' VALUES (%s,%s,%s,%s,%s,%s,%s)',
                         (file_id, rec['index'], review.get('state') or 'pending',
                          datetime.strptime(at, _TS) if at else None,
                          json.dumps(values, ensure_ascii=False),
-                         json.dumps(original, ensure_ascii=False)))
+                         json.dumps(original, ensure_ascii=False),
+                         json.dumps(reason, ensure_ascii=False)
+                         if reason else None))
                     rid = cur.lastrowid
+                    signals = rec.get('signals') or {}
                     for k, v in values.items():
+                        sig = signals.get(k) or {}
                         cur.execute(
                             'INSERT INTO c1_staging_field (record_id,'
-                            ' field_name, value_text, original_text)'
-                            ' VALUES (%s,%s,%s,%s)',
-                            (rid, k, v, original.get(k, '')))
+                            ' field_name, value_text, original_text,'
+                            ' confidence, reason) VALUES (%s,%s,%s,%s,%s,%s)',
+                            (rid, k, v, original.get(k, ''),
+                             sig.get('confidence'), sig.get('reason')))
                     for k, regs in (rec.get('lineage') or {}).items():
                         for seq, g in enumerate(regs):
                             cur.execute(

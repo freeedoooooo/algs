@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS `c1_doc_file` (
   `state` varchar(24) NOT NULL DEFAULT 'pending' COMMENT '运行状态：pending/parsing/to_extract/to_review/to_load/loading/loaded/failed',
   `error` text COMMENT '失败原因',
   `rule_version_id` bigint NULL COMMENT '抽取时绑定的规则版本 ID',
+  `doc_type` varchar(64) DEFAULT NULL COMMENT '单据类型（归类 Agent 写入，与载体 kind 解耦）',
   `params_json` json DEFAULT NULL COMMENT '生效解析参数快照',
   `load_datasource_id` bigint DEFAULT NULL COMMENT '入库数据源 ID',
   `load_table_id` bigint DEFAULT NULL COMMENT '入库映射 ID',
@@ -77,6 +78,7 @@ CREATE TABLE IF NOT EXISTS `c1_staging_record` (
   `review_at` datetime DEFAULT NULL COMMENT '校验时间（UTC）',
   `values_json` mediumtext NOT NULL COMMENT '当前值全保真 body（API 重建用）',
   `original_json` mediumtext NOT NULL COMMENT '抽取原值，永不覆盖',
+  `review_reason_json` json DEFAULT NULL COMMENT '校验标记（字段→issue 列表），只标记不改值',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '入库时间（UTC）',
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间（UTC，patch 可追溯）',
   PRIMARY KEY (`id`),
@@ -90,6 +92,8 @@ CREATE TABLE IF NOT EXISTS `c1_staging_field` (
   `field_name` varchar(128) NOT NULL COMMENT '抽取规则字段名（动态）',
   `value_text` text NOT NULL COMMENT '当前值（含 edited）',
   `original_text` text NOT NULL COMMENT '抽取原值',
+  `confidence` float DEFAULT NULL COMMENT '字段级置信度（Agent 信号，可空）',
+  `reason` varchar(255) DEFAULT NULL COMMENT '字段级判定理由（Agent 信号，可空）',
   PRIMARY KEY (`id`),
   KEY `idx_field_value` (`field_name`,`value_text`(191)),
   KEY `idx_record` (`record_id`)
@@ -128,13 +132,14 @@ CREATE TABLE IF NOT EXISTS `c1_load_datasource` (
 CREATE TABLE IF NOT EXISTS `c1_load_table` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '入库映射 ID',
   `datasource_id` bigint NOT NULL COMMENT '数据源 ID（引用 c1_load_datasource.id）',
-  `rule_id` bigint NOT NULL COMMENT '抽取规则 ID',
+  `rule_id` bigint NULL COMMENT '参考抽取规则 ID（仅配置期参考，可空）',
+  `rule_version_id` bigint NULL COMMENT '参考抽取规则版本 id（仅回溯）',
+  `source_snapshot_json` TEXT NULL COMMENT '抽取输出快照：字段名+类型+参考规则版本',
   `target_table` varchar(128) NOT NULL COMMENT '目标业务表名',
   `write_mode` varchar(16) NOT NULL DEFAULT 'upsert' COMMENT '写入模式：upsert/insert/update',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间（UTC）',
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_ds_rule_table` (`datasource_id`,`rule_id`,`target_table`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='入库映射绑定：数据源×表×抽取规则，同物理表可被不同抽取规则各建一行';
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='入库映射绑定：数据源×目标表；抽取规则仅配置期参考，输出契约以快照为准';
 
 CREATE TABLE IF NOT EXISTS `c1_load_table_field` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '字段映射 ID',

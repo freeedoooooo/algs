@@ -302,9 +302,9 @@ def task_batch(paths, params=None, log=None, task_ctx=None):
 def run_extract(file_id, force=False, rule_version_id=None):
     """执行抽取：回读 parse.json → 规则分流 → save_records。
     spec_version 缺省/1/2 走 collect.build（纯函数）；=3 走 smart_extract。
-    rule_version_id=None/0：本次走内存默认「原始透传」；正整数按版本 id 解析。
-    资料已配置 rule_version_id 不参与本次抽取（由 UI 显式传值），
-    抽取也不回写资料配置，避免 API 透传调用抹掉用户配置。
+    rule_version_id=None/0：本次走内存默认「原始透传」，不回写配置；
+    正整数按版本 id 解析，抽取成功后回写资料绑定（M4，Agent 选规则可追溯）。
+    资料已配置 rule_version_id 不参与本次抽取（由 UI 显式传值）。
 
     仅处理 to_extract；已有暂存记录（to_review/to_load）须 force=true——
     重抽先删后插，校验结论清零。loading/loaded 拒绝；缺 parse.json 拒绝。"""
@@ -338,6 +338,10 @@ def run_extract(file_id, force=False, rule_version_id=None):
         doc, recs, task_id=file_id,
         task_file_id=file_id, file_id=file_id,
         rule={'name': tpl['name'], 'version': tpl['version']}))
+    # 显式指定版本时回写绑定：抽取用的规则即资料当前规则（Agent 自动选规则可追溯）。
+    # rule_version_id=None/0 的透传调用不回写，保持 API 兼容与"不抹配置"语义。
+    if vid is not None:
+        catalog.set_rule(file_id, vid)
     catalog.set_state(file_id, 'to_review', None)
     return {'ok': True, 'file_id': file_id,
             'files': [{'file_id': file_id, 'name': f['name'],

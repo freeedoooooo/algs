@@ -522,6 +522,113 @@ async def api_rule_version_add(rule_id: int, request: Request):
 # 数据源密码明文存库、API 明文返回（2026-11-21 裁决，页面可见可编辑）；
 # 但日志永不打印凭据，测试连接回显仅 host:port/库名。
 
+# ---- 计算层 API：index / rule / frame（定义 CRUD + run）----
+# 三类前缀完全隔离；编排在 compute/orchestrate.py，本层只做请求校验。
+
+@app.get('/api/index')
+def api_index_list():
+    return {'items': _load('store.index_repo').list_defs()}
+
+
+@app.post('/api/index')
+async def api_index_add(request: Request):
+    body = await _json_body(request)
+    did = _load('store.index_repo').create_def(
+        body.get('name'), body.get('datasource_id'),
+        body.get('source_table'), body.get('source_column'),
+        body.get('aggregate'), body.get('filter_json'))
+    return {'ok': True, 'id': did}
+
+
+@app.get('/api/index/{index_id}')
+def api_index_get(index_id: int, version: int = None):
+    d = _load('store.index_repo').get_def(index_id=index_id, version=version)
+    if d is None:
+        raise _load('store.errors').NotFound('指标定义不存在')
+    return d
+
+
+@app.delete('/api/index/{index_id}')
+def api_index_del(index_id: int):
+    _load('store.index_repo').delete_def(index_id)
+    return {'ok': True}
+
+
+@app.post('/api/index/{index_id}/run')
+def api_index_run(index_id: int):
+    return {'ok': True, **_load('compute').execute_index(index_id)}
+
+
+@app.get('/api/rule')
+def api_rule_list():
+    return {'items': _load('store.rule_repo').list_defs()}
+
+
+@app.post('/api/rule')
+async def api_rule_add(request: Request):
+    body = await _json_body(request)
+    did = _load('store.rule_repo').create_def(
+        body.get('name'), body.get('index_refs'),
+        body.get('conditions'), body.get('combine') or 'all')
+    return {'ok': True, 'id': did}
+
+
+@app.get('/api/rule/{rule_id}')
+def api_rule_get(rule_id: int, version: int = None):
+    d = _load('store.rule_repo').get_def(rule_id=rule_id, version=version)
+    if d is None:
+        raise _load('store.errors').NotFound('规则定义不存在')
+    return d
+
+
+@app.delete('/api/rule/{rule_id}')
+def api_rule_del(rule_id: int):
+    _load('store.rule_repo').delete_def(rule_id)
+    return {'ok': True}
+
+
+@app.post('/api/rule/{rule_id}/run')
+async def api_rule_run(rule_id: int, request: Request):
+    body = await _json_body(request) if (await request.body()) else {}
+    return {'ok': True, **_load('compute').execute_rule(
+        rule_id, body.get('index_value_ids'))}
+
+
+@app.get('/api/frame')
+def api_frame_list():
+    return {'items': _load('store.frame_repo').list_defs()}
+
+
+@app.post('/api/frame')
+async def api_frame_add(request: Request):
+    body = await _json_body(request)
+    did = _load('store.frame_repo').create_def(
+        body.get('name'), body.get('rule_refs'),
+        body.get('combine') or 'weighted', body.get('threshold'))
+    return {'ok': True, 'id': did}
+
+
+@app.get('/api/frame/{frame_id}')
+def api_frame_get(frame_id: int, version: int = None):
+    d = _load('store.frame_repo').get_def(frame_id=frame_id, version=version)
+    if d is None:
+        raise _load('store.errors').NotFound('框架定义不存在')
+    return d
+
+
+@app.delete('/api/frame/{frame_id}')
+def api_frame_del(frame_id: int):
+    _load('store.frame_repo').delete_def(frame_id)
+    return {'ok': True}
+
+
+@app.post('/api/frame/{frame_id}/run')
+async def api_frame_run(frame_id: int, request: Request):
+    body = await _json_body(request) if (await request.body()) else {}
+    return {'ok': True, **_load('compute').execute_frame(
+        frame_id, body.get('rule_value_ids'))}
+
+
 @app.get('/api/load/datasources')
 def api_load_datasources():
     return {'items': _load('store.catalog').list_datasources()}
@@ -821,7 +928,7 @@ async def api_file_load(file_id: int, request: Request):
 @app.post('/api/sources/{file_id}/extract')
 async def api_file_run_extract(file_id: int, request: Request):
     """执行抽取：{force?, rule_version_id?}；空体/显式 null=默认原始透传；
-    正整数=指定版本（资料处理页会显式带当前配置的规则）。
+    正整数=指定版本（资料处理页会显式带当前配置的规则），抽取成功后回写绑定。
     parse.json 纯投影、同步毫秒级；重抽覆盖校验结论须 force=true。"""
     raw = await request.body()
     body = await _json_body(request) if raw else {}
