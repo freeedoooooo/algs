@@ -59,6 +59,13 @@
   var graph=new ComputeGraph($('graph-canvas'),{
     action:nodeAction,menu:openNodeMenu,select:selectNode,connect:connectNodes,disconnect:disconnectEdge,layout:queueLayoutSave
   });
+  var lineageGraph=new ComputeGraph($('lineage-graph'),{
+    select:function(scope,id){
+      if(!lineageState)return;lineageState.activeKey=scope+':'+id;
+      var d=lineageGraph.def(scope,id);if(d)$('lineage-selection').textContent=LABEL[scope]+' · '+d.name;
+    },
+    inspect:function(scope,id){renderLineageDetails(scope,id);}
+  },{compact:true});
   $('zoom-in').onclick=function(){graph.zoom(1.15);};
   $('zoom-out').onclick=function(){graph.zoom(1/1.15);};
   $('graph-fit').onclick=function(){graph.fit();};
@@ -413,7 +420,7 @@
 
   // ---------- 全宽上游追溯工作台 ----------
   function closeLineage(){
-    lineageSeq++;lineageState=null;graph.selectNode(null);
+    lineageSeq++;lineageState=null;graph.selectNode(null);lineageGraph.selectNode(null);
   }
   function setLineageTab(tab){
     Array.prototype.forEach.call(document.querySelectorAll('[data-lineage-tab]'),function(btn){
@@ -422,179 +429,183 @@
     $('lineage-data-panel').classList.toggle('lineage-mobile-active',tab==='data');
     $('lineage-document-panel').classList.toggle('lineage-mobile-active',tab==='document');
   }
-  function lineageSummary(d){
-    var rows=[];
-    if(d._scope==='document')rows.push(['资料 ID',d.id],['匹配业务行',d.row_count],['上游指标',(d.index_ids||[]).length]);
-    else if(d._scope==='source')rows.push(['业务表',d.source_table],['数据列',d.source_column||'整行']);
-    else if(d._scope==='index'){
-      rows.push(['业务表',d.source_table],['数据列',d.source_column||'整行'],['运算',aggLabel(d.aggregate)]);
-      if((d.filter_json||[]).length)rows.push(['筛选条件',JSON.stringify(d.filter_json)]);
-    }else if(d._scope==='rule')rows.push(['条件组合',combineLabel(d.combine)],['条件数',(d.conditions_json||[]).length]);
-    else rows.push(['组合方式',combineLabel(d.combine)],['通过阈值',d.threshold==null?'—':d.threshold]);
-    if(d._latest)rows.push(['最近结果',d._latest[VFIELD[d._scope]]]);
-    return '<div class="view-grid lineage-summary">'+rows.map(function(r){
-      return '<div><span>'+esc(r[0])+'</span><b>'+esc(r[1])+'</b></div>';}).join('')+'</div>';
-  }
-  function upstreamLevels(scope,d){
-    var levels=[],seen={},queue=[{scope:scope,d:d,depth:0}];
-    while(queue.length){
-      var next=[];
-      queue.forEach(function(item){
-        var x=item.d,key=item.scope+':'+x.id;if(seen[key])return;seen[key]=true;
-        if(!levels[item.depth])levels[item.depth]=[];
-        levels[item.depth].push({scope:item.scope,d:x});
-        var parents=[];
-        if(item.scope==='index'){
-        var source=defs.source.filter(function(s){return (s.index_ids||[]).indexOf(x.id)>=0;})[0];
-        if(source)parents=[{scope:'source',id:source.id}];
-      }
-        else if(item.scope==='rule')(x.index_refs_json||[]).forEach(function(r){parents.push({scope:'index',id:r.index_id});});
-        else if(item.scope==='frame')(x.rule_refs_json||[]).forEach(function(r){parents.push({scope:'rule',id:r.rule_id});});
-        parents.forEach(function(p){var parent=graph.def(p.scope,p.id);if(parent)next.push({scope:p.scope,d:parent,depth:item.depth+1});});
-      });
-      queue=next;
+  function relatedDefs(scope,d){
+    var full=graphDefs(),downstream=scope==='source'||scope==='document',seen={},queue=[{scope:scope,d:d}],out={document:[],source:[],index:[],rule:[],frame:[]};
+    function push(next){
+      if(!next)return;
+      if(!next.d)next.d=full[next.scope].filter(function(d){return d.id===next.id;})[0];
+      if(next.d&&!seen[next.scope+':'+next.id])queue.push(next);
     }
-    return levels;
+    while(queue.length){
+      var item=queue.shift(),x=item.d,key=item.scope+':'+x.id;if(seen[key])continue;seen[key]=true;
+      if(out[item.scope].indexOf(x)<0)out[item.scope].push(x);
+      if(item.scope==='document')(x.source_ids||[]).forEach(function(id){push({scope:'source',id:id});});
+      else if(item.scope==='source'){
+        full.document.filter(function(doc){return (doc.source_ids||[]).indexOf(x.id)>=0;}).forEach(function(doc){push({scope:'document',d:doc});});
+        if(downstream)(x.index_ids||[]).forEach(function(id){push({scope:'index',id:id});});
+      }else if(item.scope==='index'){
+        full.source.filter(function(s){return (s.index_ids||[]).indexOf(x.id)>=0;}).forEach(function(s){push({scope:'source',d:s});});
+        if(downstream)full.rule.filter(function(r){return (r.index_refs_json||[]).some(function(ref){return ref.index_id===x.id;});}).forEach(function(r){push({scope:'rule',d:r});});
+      }else if(item.scope==='rule'){
+        (x.index_refs_json||[]).forEach(function(ref){push({scope:'index',id:ref.index_id});});
+        if(downstream)full.frame.filter(function(f){return (f.rule_refs_json||[]).some(function(ref){return ref.rule_id===x.id;});}).forEach(function(f){push({scope:'frame',d:f});});
+      }else if(item.scope==='frame')(x.rule_refs_json||[]).forEach(function(ref){push({scope:'rule',id:ref.rule_id});});
+    }
+    ['document','source','index','rule','frame'].forEach(function(s){out[s]=out[s].map(function(x){return full[s].filter(function(d){return d.id===x.id;})[0]||x;});});
+    return out;
   }
-  function lineageNode(scope,d,current){
-    var value=d._latest?'<span class="node-result">'+esc(d._latest[VFIELD[scope]]==null?'—':d._latest[VFIELD[scope]])+'</span>':'';
-    return '<button type="button" class="lineage-node'+(current?' current':'')+'" data-scope="'+scope+'" data-id="'+d.id+'">'+
-      '<span class="lineage-node-top"><span class="tag tag-'+scope+'">'+LABEL[scope]+'</span><b>'+esc(d.name)+'</b>'+value+'</span>'+
-      '<small>'+esc(graph.detail(d))+'</small></button>';
-  }
-  function renderLineagePath(levels){
-    var h=lineageSummary(levels[0][0].d);
-    h+=levels.map(function(items,depth){
-      return '<section class="lineage-depth"><h3>'+(depth===0?'当前节点':'上游第 '+depth+' 层')+'</h3>'+
-        items.map(function(x){return lineageNode(x.scope,x.d,depth===0);}).join('')+'</section>';
-    }).join('');
-    $('lineage-path').innerHTML=h;
-    Array.prototype.forEach.call($('lineage-path').querySelectorAll('[data-scope]'),function(btn){
-      btn.onclick=function(){var s=btn.dataset.scope,id=Number(btn.dataset.id);graph.focus(s,id);openLineage(s,id);};
+  function selectedIndices(scope,d){
+    var ids=[];
+    function addIndex(id){if(id!=null&&ids.indexOf(id)<0)ids.push(id);}
+    if(scope==='index')addIndex(d.id);
+    else if(scope==='source'||scope==='document')(d.index_ids||[]).forEach(addIndex);
+    else if(scope==='rule')(d.index_refs_json||[]).forEach(function(ref){addIndex(ref.index_id);});
+    else if(scope==='frame')(d.rule_refs_json||[]).forEach(function(ref){
+      var rule=graph.def('rule',ref.rule_id);if(rule)(rule.index_refs_json||[]).forEach(function(r){addIndex(r.index_id);});
     });
+    return ids.map(function(id){return graph.def('index',id);}).filter(Boolean);
+  }
+  function indexGroups(indices){
+    var groups=[],byKey={};
+    indices.forEach(function(d){
+      var key=d.datasource_id+':'+d.source_table,g=byKey[key];
+      if(!g){g={key:key,datasource_id:d.datasource_id,table:d.source_table,indices:[]};byKey[key]=g;groups.push(g);}
+      g.indices.push(d);
+    });
+    return groups;
   }
   function resetLineageDocument(){
     if(lineageState)lineageState.cellSeq=(lineageState.cellSeq||0)+1;
-    $('lineage-documents').innerHTML='';$('lineage-open-source').hidden=true;
-    $('lineage-document-status').textContent='选择业务数据中的单元格，定位原始文档并高亮来源。';
+    $('lineage-open-source').hidden=true;$('lineage-document-status').textContent='';
     var frame=$('lineage-document-frame');frame.hidden=true;frame.removeAttribute('src');frame.removeAttribute('data-file');
   }
   function loadSourceFiles(){
-    if(sourceFiles.loaded)return;
+    if(sourceFiles.loaded){if(lineageState)renderLineageDocuments(lineageState.indices);return;}
+    if(sourceFiles.loading)return;
     sourceFiles.loading=true;
     api('/api/sources?page=1&size=200').then(function(j){
       sourceFiles.loaded=true;(j.items||[]).forEach(function(f){sourceFiles[f.id]=f.name||('资料 #'+f.id);});
-      if(lineageState&&lineageState.preview)renderLineageDocuments(lineageState.preview);
+      if(lineageState)renderLineageDocuments(lineageState.indices);
     }).catch(function(){}).then(function(){sourceFiles.loading=false;});
   }
-  function renderLineageIndices(indices){
-    $('lineage-indices').innerHTML=indices.map(function(d){
-      return '<button type="button" class="lineage-index'+(d.id===lineageState.indexId?' on':'')+'" data-index="'+d.id+'">'+esc(d.name)+'</button>';
-    }).join('')||'<span class="hint">没有上游指标</span>';
-    Array.prototype.forEach.call($('lineage-indices').querySelectorAll('[data-index]'),function(btn){
+  function renderLineageTables(groups){
+    var host=$('lineage-data');
+    if(!groups.length){host.innerHTML='<div class="lineage-empty">当前节点没有关联业务表。</div>';return;}
+    host.innerHTML=groups.map(function(g){
+      var active=lineageState.activeIndexByTable[g.key]||g.indices[0].id;
+      return '<section class="lineage-table-card" data-table="'+esc(g.key)+'">'+
+        '<div class="lineage-table-title">'+esc(g.table)+'<small>业务库 #'+esc(g.datasource_id)+'</small></div>'+
+        '<div class="lineage-index-row">'+g.indices.map(function(d){
+          return '<button type="button" class="lineage-index'+(d.id===active?' on':'')+'" data-index="'+d.id+'">'+esc(d.name)+'</button>';
+        }).join('')+'</div><div class="table-preview" data-preview><div class="lineage-empty">加载匹配数据…</div></div></section>';
+    }).join('');
+    Array.prototype.forEach.call(host.querySelectorAll('[data-index]'),function(btn){
       btn.onclick=function(){
-        if(!lineageState)return;lineageState.indexId=Number(btn.dataset.index);lineageState.activeFileId=null;
-        renderLineageIndices(indices);resetLineageDocument();setLineageTab('data');loadLineageData(lineageState.indexId,lineageState.seq);
+        var card=btn.closest('[data-table]'),key=card.dataset.table,id=Number(btn.dataset.index);
+        lineageState.activeIndexByTable[key]=id;
+        Array.prototype.forEach.call(card.querySelectorAll('[data-index]'),function(x){x.classList.toggle('on',Number(x.dataset.index)===id);});
+        loadTablePreview(key,id);
       };
     });
+    groups.forEach(function(g){
+      var active=lineageState.activeIndexByTable[g.key]||g.indices[0].id;
+      lineageState.activeIndexByTable[g.key]=active;loadTablePreview(g.key,active);
+    });
   }
-  function renderLineageData(j){
-    var host=$('lineage-data'),canTrace=(j.trace_columns||[]).indexOf('file_id')>=0&&(j.trace_columns||[]).indexOf('record_id')>=0;
-    var source=j.source||{};$('lineage-data-scope').textContent=(source.source_table||'当前业务表')+' · '+aggLabel(source.aggregate);
-    var h='<div class="sample-summary"><span>匹配 <b>'+esc(j.total)+'</b> 行</span><span>展示前 '+esc(j.items.length)+' 行</span>'+
+  function renderSampleData(j,host){
+    var canTrace=(j.trace_columns||[]).indexOf('file_id')>=0&&(j.trace_columns||[]).indexOf('record_id')>=0;
+    var tableKey=host.closest('[data-table]')?host.closest('[data-table]').dataset.table:'';
+    var h='<div class="sample-summary"><span>匹配 <b>'+esc(j.total)+'</b> 行</span><span>展示 '+esc(j.items.length)+' 行</span>'+
       (j.has_more?'<span>仅样本</span>':'')+'</div>';
-    if(!canTrace)h+='<div class="lineage-empty">业务表缺少 file_id / record_id，仅展示样本，无法回查原单元格。</div>';
-    if(j.items.length)h+='<div class="sample-scroll"><table class="sample-table"><thead><tr>'+j.columns.map(function(c){
-      return '<th>'+esc(c)+'</th>';}).join('')+'</tr></thead><tbody>'+j.items.map(function(row,rowIndex){
-      return '<tr data-row="'+rowIndex+'">'+j.columns.map(function(c){
-        var value=row[c],text=value==null?'NULL':String(value);
-        return '<td>'+(canTrace&&row.record_id!=null&&c!=='file_id'&&c!=='record_id'&&value!=null?
-          '<button type="button" class="linkbtn source-cell" data-rid="'+esc(row.record_id)+'" data-col="'+esc(c)+'" data-row="'+rowIndex+'" data-file="'+esc(row.file_id)+'" data-tip="定位原单元格">'+esc(text)+'</button>':esc(text))+'</td>';
-      }).join('')+'</tr>';
-    }).join('')+'</tbody></table></div>';
+    if(!canTrace)h+='<div class="lineage-empty">业务表缺少 file_id / record_id，仅展示样本。</div>';
+    if(j.items.length)h+='<div class="sample-scroll"><table class="sample-table"><thead><tr>'+j.columns.map(function(c){return '<th>'+esc(c)+'</th>';}).join('')+
+      '</tr></thead><tbody>'+j.items.map(function(row,rowIndex){
+        return '<tr data-row="'+rowIndex+'">'+j.columns.map(function(c){
+          var value=row[c],text=value==null?'NULL':String(value);
+          return '<td>'+(canTrace&&row.record_id!=null&&c!=='file_id'&&c!=='record_id'&&value!=null?
+            '<button type="button" class="linkbtn source-cell" data-rid="'+esc(row.record_id)+'" data-col="'+esc(c)+'" data-row="'+rowIndex+'" data-table="'+esc(tableKey)+'" data-file="'+esc(row.file_id)+'" data-tip="定位原单元格">'+esc(text)+'</button>':esc(text))+'</td>';
+        }).join('')+'</tr>';
+      }).join('')+'</tbody></table></div>';
     else h+='<div class="lineage-empty">当前筛选没有匹配记录。</div>';
     host.innerHTML=h;
     Array.prototype.forEach.call(host.querySelectorAll('[data-rid]'),function(btn){
-      btn.onclick=function(){locateLineageCell(btn.dataset.rid,btn.dataset.col,Number(btn.dataset.row),btn.dataset.file);};
+      btn.onclick=function(){locateLineageCell(btn.dataset.rid,btn.dataset.col,Number(btn.dataset.row),btn.dataset.file,btn.dataset.table);};
     });
   }
-  function renderLineageDocuments(j){
+  function loadTablePreview(key,indexId){
     if(!lineageState)return;
-    var counts={};(j.items||[]).forEach(function(row){if(row.file_id!=null)counts[row.file_id]=(counts[row.file_id]||0)+1;});
-    var ids=Object.keys(counts);if(!ids.length){$('lineage-documents').innerHTML='';return;}
-    $('lineage-documents').innerHTML=ids.map(function(id){
-      return '<button type="button" class="lineage-document-chip'+(String(lineageState.activeFileId)===id?' on':'')+'" data-file="'+esc(id)+'">'+
-        esc(sourceFiles[id]||('资料 #'+id))+' · '+counts[id]+' 行</button>';
-    }).join('');
-    Array.prototype.forEach.call($('lineage-documents').querySelectorAll('[data-file]'),function(btn){
-      btn.onclick=function(){
-        var fileId=btn.dataset.file,row=(j.items||[]).filter(function(r){return String(r.file_id)===fileId&&r.record_id!=null;})[0];
-        var col=row&&(j.columns||[]).filter(function(c){return c!=='file_id'&&c!=='record_id'&&row[c]!=null;})[0];
-        if(!row||!col){$('lineage-document-status').textContent='该资料样本中没有可定位字段。';return;}
-        locateLineageCell(row.record_id,col,j.items.indexOf(row),fileId);
-      };
-    });
-  }
-  function loadLineageData(indexId,seq){
-    if(!lineageState||seq!==lineageState.seq)return;
-    $('lineage-data').innerHTML='<div class="lineage-empty">加载当前匹配数据…</div>';
+    var seq=lineageState.seq,card=Array.prototype.filter.call($('lineage-data').querySelectorAll('[data-table]'),function(x){return x.dataset.table===key;})[0];
+    if(!card)return;
+    var host=card.querySelector('[data-preview]');host.innerHTML='<div class="lineage-empty">加载匹配数据…</div>';
     api('/api/index/'+indexId+'/source-preview?limit=50').then(function(j){
-      if(!lineageState||seq!==lineageState.seq||indexId!==lineageState.indexId)return;
-      lineageState.preview=j;renderLineageData(j);renderLineageDocuments(j);
-    }).catch(function(e){
-      if(!lineageState||seq!==lineageState.seq)return;
-      $('lineage-data').innerHTML='<div class="banner err">'+esc(e.message)+'</div>';
+      if(!lineageState||seq!==lineageState.seq||lineageState.activeIndexByTable[key]!==indexId)return;
+      lineageState.previews[key]=j;renderSampleData(j,host);
+    }).catch(function(e){if(lineageState&&seq===lineageState.seq)host.innerHTML='<div class="banner err">'+esc(e.message)+'</div>';});
+  }
+  function renderLineageDocuments(indices){
+    if(!lineageState)return;
+    var ids={},docs=[];
+    (indices||[]).forEach(function(index){if(index)ids[index.id]=true;});
+    documentLinks.forEach(function(link){
+      if(!ids[link.index_id])return;
+      var doc=docs.filter(function(d){return d.id===link.file_id;})[0];
+      if(!doc){doc={id:link.file_id,name:link.file_name,tables:[],row_count:0};docs.push(doc);}
+      if(doc.tables.indexOf(link.source_table)<0)doc.tables.push(link.source_table);
+      doc.row_count=Math.max(doc.row_count,Number(link.row_count)||0);
+    });
+    docs.sort(function(a,b){return b.row_count-a.row_count||a.id-b.id;});
+    $('lineage-documents').innerHTML=docs.map(function(d){
+      return '<button type="button" class="lineage-document-chip'+(String(lineageState.activeFileId)===String(d.id)?' on':'')+'" data-file="'+esc(d.id)+'" title="'+esc(d.name)+'">'+
+        esc(sourceFiles[d.id]||d.name||('资料 #'+d.id))+' · '+esc(d.row_count)+' 行</button>';
+    }).join('')||'<div class="lineage-empty">未匹配到资料文件。</div>';
+    Array.prototype.forEach.call($('lineage-documents').querySelectorAll('[data-file]'),function(btn){
+      btn.onclick=function(){showLineageDocument(Number(btn.dataset.file),btn.title);};
     });
   }
-  function locateLineageCell(rid,col,rowIndex,fileId){
+  function locateLineageCell(rid,col,rowIndex,fileId,tableKey){
     if(!lineageState)return;
     var seq=lineageState.seq,request=++lineageState.cellSeq,status=$('lineage-document-status');lineageState.activeFileId=fileId;
-    Array.prototype.forEach.call($('lineage-data').querySelectorAll('tr[data-row]'),function(tr){tr.classList.toggle('selected-row',Number(tr.dataset.row)===rowIndex);});
-    renderLineageDocuments(lineageState.preview||{items:[]});setLineageTab('document');status.textContent='定位原单元格…';
+    Array.prototype.forEach.call($('lineage-data').querySelectorAll('tr[data-row]'),function(tr){
+      tr.classList.toggle('selected-row',tr.closest('[data-table]').dataset.table===tableKey&&Number(tr.dataset.row)===rowIndex);
+    });
+    renderLineageDocuments(lineageState.indices);setLineageTab('document');status.textContent='定位原单元格…';
     api('/api/staging/locate/'+encodeURIComponent(rid)+'?key='+encodeURIComponent(col)).then(function(j){
       if(!lineageState||seq!==lineageState.seq||request!==lineageState.cellSeq)return;
       var key=j.field||col,file=j.file_id,name=sourceFiles[file]||('资料 #'+file),base='/preview?embed=1&file='+encodeURIComponent(file);
-      var frame=$('lineage-document-frame');lineageState.activeFileId=file;renderLineageDocuments(lineageState.preview||{items:[]});
+      var frame=$('lineage-document-frame');lineageState.activeFileId=file;renderLineageDocuments(lineageState.indices);
       status.textContent=name+' · 记录 '+j.record_index+' · '+key;
-      var open=$('lineage-open-source');open.hidden=false;open.href='/srcfiles/'+encodeURIComponent(file);
-      frame.hidden=false;
+      var open=$('lineage-open-source');open.hidden=false;open.href='/srcfiles/'+encodeURIComponent(file);frame.hidden=false;
       if(frame.getAttribute('data-file')===String(file))frame.contentWindow.postMessage({c1TraceKey:{key:key,index:j.record_index}},window.location.origin);
-      else{
-        frame.setAttribute('data-file',String(file));
-        frame.src=base+'&index='+encodeURIComponent(j.record_index)+'&key='+encodeURIComponent(key);
-      }
+      else{frame.setAttribute('data-file',String(file));frame.src=base+'&index='+encodeURIComponent(j.record_index)+'&key='+encodeURIComponent(key);}
     }).catch(function(e){if(lineageState&&seq===lineageState.seq&&request===lineageState.cellSeq)status.textContent='无法定位：'+e.message;});
   }
   function showLineageDocument(fileId,name){
     if(!lineageState)return;
-    lineageState.activeFileId=fileId;
-    $('lineage-documents').innerHTML='<button type="button" class="lineage-document-chip on">'+esc(name||('资料 #'+fileId))+'</button>';
-    $('lineage-document-status').textContent=(name||('资料 #'+fileId))+' · 原始文档预览';
+    lineageState.cellSeq=(lineageState.cellSeq||0)+1;
+    lineageState.activeFileId=fileId;renderLineageDocuments(lineageState.indices);
+    $('lineage-document-status').textContent=name||('资料 #'+fileId);
     var open=$('lineage-open-source');open.hidden=false;open.href='/srcfiles/'+encodeURIComponent(fileId);
     var frame=$('lineage-document-frame');frame.hidden=false;
-    if(frame.getAttribute('data-file')!==String(fileId)){
-      frame.setAttribute('data-file',String(fileId));
-      frame.src='/preview?embed=1&file='+encodeURIComponent(fileId);
-    }
+    if(frame.getAttribute('data-file')!==String(fileId)){frame.setAttribute('data-file',String(fileId));frame.src='/preview?embed=1&file='+encodeURIComponent(fileId);}
     setLineageTab('document');
+  }
+  function renderLineageDetails(scope,id){
+    if(!lineageState)return;
+    var d=lineageGraph.def(scope,id);if(!d)return;
+    lineageState.activeKey=scope+':'+id;lineageState.indices=selectedIndices(scope,d);
+    $('lineage-selection').textContent=LABEL[scope]+' · '+d.name;
+    resetLineageDocument();renderLineageTables(indexGroups(lineageState.indices));renderLineageDocuments(lineageState.indices);
+    if(scope==='document')showLineageDocument(id,d.name);
   }
   function openLineage(scope,id){
     var d=graph.def(scope,id);if(!d)return;
     graph.selectNode(scope,id);
-    var seq=++lineageSeq,levels=upstreamLevels(scope,d),indices=[];
-    levels.forEach(function(items){items.forEach(function(x){if(x.scope==='index'&&!indices.some(function(i){return i.id===x.d.id;}))indices.push(x.d);});});
-    if(scope==='source'){
-      var index=graph.def('index',d.index_id);if(index&&!indices.some(function(i){return i.id===index.id;}))indices.unshift(index);
-    }
-    lineageState={key:scope+':'+id,seq:seq,indexId:indices.length?indices[0].id:null,preview:null,activeFileId:null};
+    var seq=++lineageSeq;
+    lineageState={key:scope+':'+id,seq:seq,activeKey:scope+':'+id,indices:[],previews:{},activeIndexByTable:{},activeFileId:null,cellSeq:0};
     $('lineage-title').textContent='上游追溯 · '+d.name;$('lineage-tag').className='tag tag-'+scope;$('lineage-tag').textContent=LABEL[scope];
-    renderLineagePath(levels);renderLineageIndices(indices);resetLineageDocument();setLineageTab('data');openEl('lineage');
-    if(scope==='document'){
-      $('lineage-data').innerHTML='<div class="lineage-empty">该文档由业务行 file_id 汇总得到；选择上游指标可继续查看匹配数据。</div>';
-      showLineageDocument(id,d.name);
-    }else if(indices.length)loadLineageData(lineageState.indexId,seq);
-    else $('lineage-data').innerHTML='<div class="lineage-empty">该节点没有可展示的业务数据。</div>';
-    loadSourceFiles();
+    openEl('lineage');lineageGraph.setData(relatedDefs(scope,d),{});lineageGraph.selectNode(scope,id);
+    requestAnimationFrame(function(){requestAnimationFrame(function(){lineageGraph.fit();});});
+    setLineageTab('data');renderLineageDetails(scope,id);loadSourceFiles();
   }
 
   // ---------- 数据与布局 ----------

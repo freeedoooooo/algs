@@ -130,7 +130,7 @@
     });
     el.addEventListener('dblclick',function(e){
       if(e.target.closest('button,.node-port'))return;
-      if(this.compact){if(self.cb.inspect)self.cb.inspect(d._scope,d.id);}
+      if(self.compact){if(self.cb.inspect)self.cb.inspect(d._scope,d.id);}
       else self.cb.action(d._scope,d.id,(isSource||isDocument)?'view':'edit',d._latest);
     });
     el.addEventListener('keydown',function(e){
@@ -149,7 +149,7 @@
     return d._combine+' · '+(d.rule_refs_json||[]).length+' 条规则';
   };
   Graph.prototype.renderEdges=function(){
-    var self=this;this.edges().forEach(function(e){self.renderEdge(e);});
+    var self=this;this.edgesEl.replaceChildren();this.edges().forEach(function(e){self.renderEdge(e);});
     if(this.connect)this.renderWire(this.connect.from,this.connect.point,true);
   };
   Graph.prototype.path=function(a,b){
