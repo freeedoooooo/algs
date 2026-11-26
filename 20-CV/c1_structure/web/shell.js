@@ -42,6 +42,123 @@ var MODE_LABEL={
   update:'仅更新'
 };
 function modeLabel(m){ return MODE_LABEL[m]||m||'—'; }
+
+function closeActionMenus(){
+  document.querySelectorAll('.action-menu:not([hidden])').forEach(function(menu){
+    menu.hidden=true;
+    var trigger=menu._actionTrigger;
+    if(trigger&&trigger.isConnected) trigger.setAttribute('aria-expanded','false');
+  });
+}
+function positionActionMenu(menu,trigger){
+  var margin=8,gap=4;
+  var r=trigger.getBoundingClientRect(),m=menu.getBoundingClientRect();
+  var left=r.right-m.width;
+  if(left<margin) left=margin;
+  if(left+m.width>window.innerWidth-margin) left=window.innerWidth-margin-m.width;
+  var top=r.bottom+gap;
+  if(top+m.height>window.innerHeight-margin) top=r.top-m.height-gap;
+  if(top<margin) top=margin;
+  menu.style.left=Math.round(left)+'px';
+  menu.style.top=Math.round(top)+'px';
+}
+function initActionMenus(){
+  document.addEventListener('click',function(e){
+    var trigger=e.target.closest?e.target.closest('[data-action-menu]'):null;
+    if(trigger){
+      var menu=document.getElementById(trigger.getAttribute('data-action-menu'));
+      if(!menu) return;
+      e.preventDefault();
+      var wasOpen=!menu.hidden;
+      closeActionMenus();
+      if(wasOpen) return;
+      menu._actionTrigger=trigger;
+      menu.hidden=false;
+      trigger.setAttribute('aria-expanded','true');
+      positionActionMenu(menu,trigger);
+      var first=menu.querySelector('.menu-item:not(:disabled)');
+      if(first) first.focus({preventScroll:true});
+      return;
+    }
+    if(e.target.closest&&e.target.closest('.action-menu')){
+      var item=e.target.closest('.menu-item');
+      if(item&&!item.hasAttribute('data-keep-open')) closeActionMenus();
+      return;
+    }
+    closeActionMenus();
+  });
+  document.addEventListener('keydown',function(e){
+    var open=document.querySelector('.action-menu:not([hidden])');
+    var trigger=e.target.closest?e.target.closest('[data-action-menu]'):null;
+    if(trigger&&(e.key==='ArrowDown'||e.key==='ArrowUp')){
+      var menu=document.getElementById(trigger.getAttribute('data-action-menu'));
+      if(!menu) return;
+      e.preventDefault();
+      var wasOpen=!menu.hidden;
+      closeActionMenus();
+      if(wasOpen) return;
+      menu._actionTrigger=trigger;
+      menu.hidden=false;
+      trigger.setAttribute('aria-expanded','true');
+      positionActionMenu(menu,trigger);
+      var items=menu.querySelectorAll('.menu-item:not(:disabled)');
+      if(items.length) items[e.key==='ArrowUp'?items.length-1:0].focus();
+      return;
+    }
+    if(!open) return;
+    if(e.key==='Escape'){
+      e.preventDefault();
+      var owner=open._actionTrigger;
+      closeActionMenus();
+      if(owner&&owner.isConnected) owner.focus();
+      return;
+    }
+    if(!open.contains(e.target)) return;
+    var entries=Array.prototype.slice.call(open.querySelectorAll('.menu-item:not(:disabled)'));
+    var at=entries.indexOf(e.target);
+    if(e.key==='ArrowDown'||e.key==='ArrowUp'||e.key==='Home'||e.key==='End'){
+      e.preventDefault();
+      var next=e.key==='Home'?0:(e.key==='End'?entries.length-1:
+        (at+(e.key==='ArrowDown'?1:-1)+entries.length)%entries.length);
+      if(entries[next]) entries[next].focus();
+    }
+  });
+  window.addEventListener('resize',function(){
+    var menu=document.querySelector('.action-menu:not([hidden])');
+    if(menu&&menu._actionTrigger) positionActionMenu(menu,menu._actionTrigger);
+  });
+  window.addEventListener('scroll',function(e){
+    var menu=document.querySelector('.action-menu:not([hidden])');
+    if(menu&&(!e.target||!menu.contains(e.target))) closeActionMenus();
+  },true);
+}
+function setDisclosure(toggle,open,persist){
+  var body=document.getElementById(toggle.getAttribute('aria-controls'));
+  if(!body) return;
+  body.hidden=!open;
+  toggle.setAttribute('aria-expanded',String(open));
+  var key=toggle.getAttribute('data-disclosure-key');
+  if(persist&&key){
+    try{localStorage.setItem('c1.disclosure.'+key,open?'1':'0');}catch(e){}
+  }
+}
+function initDisclosures(){
+  document.querySelectorAll('[data-disclosure-toggle]').forEach(function(toggle){
+    var key=toggle.getAttribute('data-disclosure-key'),saved=null;
+    if(key){ try{saved=localStorage.getItem('c1.disclosure.'+key);}catch(e){} }
+    if(saved!=null) setDisclosure(toggle,saved==='1',false);
+  });
+  document.addEventListener('click',function(e){
+    var toggle=e.target.closest?e.target.closest('[data-disclosure-toggle]'):null;
+    if(!toggle) return;
+    setDisclosure(toggle,toggle.getAttribute('aria-expanded')!=='true',true);
+  });
+}
+initActionMenus();
+if(document.readyState==='loading')
+  document.addEventListener('DOMContentLoaded',initDisclosures);
+else initDisclosures();
+
 var STATE_LABEL={
   pending:['待解析','gray'], parsing:['解析中','blue'],
   to_extract:['待抽取','orange'], to_review:['待校验','purple'],
