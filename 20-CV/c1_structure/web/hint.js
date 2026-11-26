@@ -15,15 +15,15 @@
   }
   function hide(){ tip.hidden=true; }
   document.addEventListener('mouseover',function(e){
-    var el=e.target.closest?e.target.closest('.hint'):null;
+    var el=e.target.closest?e.target.closest('[data-tip]'):null;
     if(el) show(el); else hide();
   });
   document.addEventListener('focusin',function(e){
-    var el=e.target.closest?e.target.closest('.hint'):null;
+    var el=e.target.closest?e.target.closest('[data-tip]'):null;
     if(el) show(el);
   });
   document.addEventListener('focusout',function(e){
-    var el=e.target.closest?e.target.closest('.hint'):null;
+    var el=e.target.closest?e.target.closest('[data-tip]'):null;
     if(el) hide();
   });
   window.addEventListener('scroll',hide,true);

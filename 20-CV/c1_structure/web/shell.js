@@ -154,6 +154,12 @@ function initDisclosures(){
     setDisclosure(toggle,toggle.getAttribute('aria-expanded')!=='true',true);
   });
 }
+document.addEventListener('click',function(e){
+  var drawer=e.target.closest?e.target.closest('.drawer'):null;
+  if(!drawer||e.target!==drawer)return;
+  if(drawer.classList.contains('drawer-anim'))animDrawerClose(drawer);
+  else drawer.hidden=true;
+});
 initActionMenus();
 if(document.readyState==='loading')
   document.addEventListener('DOMContentLoaded',initDisclosures);

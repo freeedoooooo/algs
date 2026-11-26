@@ -2,14 +2,14 @@
 (function(){
   'use strict';
   var $=function(id){return document.getElementById(id);};
-  var PFX={index:'i',rule:'r',frame:'f'};
-  var LABEL={source:'数据',index:'指标',rule:'规则',frame:'框架'};
+  var PFX={source:'d',index:'i',rule:'r',frame:'f'};
+  var LABEL={document:'文档',source:'数据',index:'指标',rule:'规则',frame:'框架'};
   var VFIELD={index:'index_value',rule:'rule_value',frame:'frame_value'};
-  var defs={index:[],rule:[],frame:[]};
+  var defs={source:[],document:[],index:[],rule:[],frame:[]},documentLinks=[];
   var editing={index:null,rule:null,frame:null};
   var editingScope='index',layout={},layoutAvailable=true,saveTimer=null;
   var LOCAL_KEY='c1.compute.layout';
-  var inspectorSeq=0;
+  var lineageSeq=0,lineageState=null,sourceFiles={};
 
   function api(path,opt){
     return fetch(path,opt||{}).then(function(r){
@@ -45,13 +45,19 @@
   $('de-close').onclick=function(){closeEl('ded');};
   $('tr-close').onclick=function(){closeEl('trace');};
   $('view-close').onclick=function(){closeEl('compute-view');};
-  $('inspector-close').onclick=closeInspector;
+  $('lineage-close').onclick=function(){closeLineage();closeEl('lineage');};
+  $('lineage').addEventListener('click',function(e){if(e.target===this)closeLineage();});
   document.addEventListener('keydown',function(e){
-    if(e.key==='Escape'&&!$('compute-inspector').hidden&&!document.querySelector('.drawer:not([hidden])'))closeInspector();
+    if(e.key==='Escape'&&!$('lineage').hidden&&!document.querySelector('.drawer:not([hidden]):not(#lineage)')){
+      closeLineage();closeEl('lineage');
+    }
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-lineage-tab]'),function(btn){
+    btn.onclick=function(){setLineageTab(btn.dataset.lineageTab);};
   });
 
   var graph=new ComputeGraph($('graph-canvas'),{
-    action:nodeAction,menu:openNodeMenu,select:openInspector,connect:connectNodes,disconnect:disconnectEdge,layout:queueLayoutSave
+    action:nodeAction,menu:openNodeMenu,select:selectNode,connect:connectNodes,disconnect:disconnectEdge,layout:queueLayoutSave
   });
   $('zoom-in').onclick=function(){graph.zoom(1.15);};
   $('zoom-out').onclick=function(){graph.zoom(1/1.15);};
@@ -127,7 +133,7 @@
       '<option value="lt">小于</option><option value="lte">小于等于</option><option value="eq">等于</option>'+
       '<option value="ne">不等于</option><option value="between">介于区间</option></select>'+
       '<input class="tin" data-k="t" placeholder="100 或 100,200">'+
-      '<button type="button" class="btn mini ghost" data-k="x" title="删除条件">×</button>';
+      '<button type="button" class="btn mini ghost" data-k="x" data-tip="删除条件">×</button>';
     if(c){
       row.querySelector('[data-k=i]').value=c.index_id||'';
       row.querySelector('[data-k=a]').value=c.alias||'';
@@ -251,28 +257,36 @@
   function latest(scope,id){
     return api('/api/'+scope+'/'+id+'/values?limit=1').then(function(j){return (j.items||[])[0]||null;});
   }
-  function detail(scope,d){
-    if(scope==='index')return esc(d.source_table)+(d.source_column?' · '+esc(d.source_column):'')+
-      ' <span class="tag2">'+esc(aggLabel(d.aggregate))+'</span>';
-    if(scope==='rule'){
-      var cs=d.conditions_json||[];
-      return esc(cs.length+' 个条件')+' · '+esc(combineLabel(d.combine));
-    }
-    return esc(combineLabel(d.combine))+' · '+esc((d.rule_refs_json||[]).length)+' 条规则';
-  }
+  var MENU_ICON={
+    view:'<path d="M2 8s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4Z"/><circle cx="8" cy="8" r="1.5"/>',
+    edit:'<path d="m3 13 8-8 2 2-8 8-3 1 1-3Z"/>',
+    run:'<path d="m5 3 7 5-7 5V3Z"/>',
+    trace:'<path d="M2 3h5v5H2zM9 8h5v5H9zM7 5h2v6h2"/>',
+    replay:'<path d="M13 6a5 5 0 1 0 1 5M13 2v4H9"/>',
+    open:'<path d="M6 3h7v10H6zM3 5v8h3M9 6h2M9 9h2"/>',
+    del:'<path d="M3 5h10M6 5V3h4v2M5 5l1 8h4l1-8M7 7v4M9 7v4"/>'
+  };
   function actionMenuItem(act,label,d,v,disabled){
     return '<button type="button" role="menuitem" class="menu-item'+(act==='del'?' danger':'')+
       '" data-act="'+act+'" data-id="'+d.id+'"'+(v?' data-vid="'+v.id+'"':'')+
-      (disabled?' disabled title="暂无可追溯结果"':'')+'>'+label+'</button>';
+      (disabled?' disabled data-tip="暂无可追溯结果"':'')+'><svg class="menu-icon" viewBox="0 0 16 16" aria-hidden="true">'+MENU_ICON[act]+'</svg><span>'+label+'</span></button>';
   }
   function fillActionMenu(scope,id){
-    var d=defs[scope].filter(function(x){return x.id===id;})[0];
-    if(!d)return;
-    var v=d._latest,menu=$('compute-action-menu');
-    menu.innerHTML=actionMenuItem('view','查看',d)+actionMenuItem('edit','编辑',d)+
-      actionMenuItem('run','运行',d)+actionMenuItem('trace','追溯',d)+
-      actionMenuItem('replay','复核',d,v,!v)+'<div class="menu-sep"></div>'+
-      actionMenuItem('del','删除',d);
+    var d=graph.def(scope,id);if(!d)return;
+    var v=d._latest,menu=$('compute-action-menu'),h='';
+    if(scope==='source'){
+      h=actionMenuItem('view','查看',d)+actionMenuItem('trace','追溯',d)+
+        actionMenuItem('edit','编辑指标',d);
+    }else if(scope==='document'){
+      h=actionMenuItem('view','查看',d)+actionMenuItem('trace','追溯',d)+
+        actionMenuItem('open','打开原件',d);
+    }else{
+      h=actionMenuItem('view','查看',d)+actionMenuItem('edit','编辑',d)+
+        actionMenuItem('run','运行',d)+actionMenuItem('trace','追溯',d)+
+        actionMenuItem('replay','复核',d,v,!v)+'<div class="menu-sep"></div>'+
+        actionMenuItem('del','删除',d);
+    }
+    menu.innerHTML=h;
     menu.onclick=function(e){
       var item=e.target.closest?e.target.closest('[data-act]'):null;
       if(!item||item.disabled)return;
@@ -281,30 +295,36 @@
     };
   }
   function openNodeMenu(scope,id){fillActionMenu(scope,id);}
+  function selectNode(scope,id){
+    var d=graph.def(scope,id);if(d)openView(scope,d);
+  }
   function renderAssets(scope){
     var host=$(PFX[scope]+'-assets');
     $(PFX[scope]+'-count').textContent=defs[scope].length;
     host.innerHTML=defs[scope].map(function(d){
       return '<article class="asset-item" data-key="'+scope+':'+d.id+'">'+
-        '<button type="button" class="asset-main" data-id="'+d.id+'" aria-label="定位'+esc(d.name)+'">'+
-        '<b>'+esc(d.name)+'</b><span class="asset-detail">'+detail(scope,d)+'</span></button>'+
+        '<button type="button" class="asset-main" data-id="'+d.id+'" title="'+esc(d.name)+'" aria-label="查看'+esc(d.name)+'">'+
+        '<b>'+esc(d.name)+'</b></button>'+
         '<button type="button" class="icon-btn mini asset-more" data-action-menu="compute-action-menu" '+
-        'data-scope="'+scope+'" data-id="'+d.id+'" aria-haspopup="menu" aria-expanded="false" '+
+        'data-scope="'+scope+'" data-id="'+d.id+'" data-tip="更多操作" aria-haspopup="menu" aria-expanded="false" '+
         'aria-label="'+esc(d.name)+'更多操作">⋯</button></article>';
     }).join('')||'<div class="asset-empty">暂无'+LABEL[scope]+'</div>';
     host.onclick=function(e){
       var trigger=e.target.closest?e.target.closest('[data-action-menu]'):null;
       if(trigger){fillActionMenu(trigger.dataset.scope,Number(trigger.dataset.id));return;}
       var main=e.target.closest?e.target.closest('.asset-main'):null;
-      if(main){var id=Number(main.dataset.id);graph.focus(scope,id);openInspector(scope,id);}
+      if(main){var id=Number(main.dataset.id);graph.focus(scope,id);selectNode(scope,id);}
     };
   }
   function nodeAction(scope,id,act,v){
     var d=graph.def(scope,id);if(!d)return;
     if(act==='view')openView(scope,d);
-    else if(act==='edit')fillForm(scope,d);
+    else if(act==='edit'){
+      if(scope==='source'){var index=graph.def('index',(d.index_ids||[])[0]);if(index)fillForm('index',index);}
+      else fillForm(scope,d);
+    }else if(act==='open')window.open('/srcfiles/'+encodeURIComponent(id),'_blank','noopener');
     else if(act==='run')doRun(scope,id);
-    else if(act==='trace')openInspector(scope,id);
+    else if(act==='trace')openLineage(scope,id);
     else if(act==='replay'&&v)openReplay(scope,v.id);
     else if(act==='del')doDelete(scope,id);
   }
@@ -312,12 +332,14 @@
     var d=graph.def(scope,id);if(!d||!confirm('确定删除「'+d.name+'」及其全部结果？'))return;
     api('/api/'+scope+'/'+id,{method:'DELETE'}).then(function(){
       delete layout[scope+':'+id];
-      try{localStorage.setItem(LOCAL_KEY,JSON.stringify(Object.keys(layout).filter(function(k){return layout[k].scope!=='source';}).map(function(k){return layout[k];})));}catch(e){}
+      try{localStorage.setItem(LOCAL_KEY,JSON.stringify(Object.keys(layout).filter(function(k){return ['index','rule','frame'].indexOf(layout[k].scope)>=0;}).map(function(k){return layout[k];})));}catch(e){}
       loadAll();ok('已删除');
     })
       .catch(function(e){err(e.message);});
   }
   function doRun(scope,id){
+    var d=graph.def(scope,id);if(!d)return;
+    if(!confirm('确认按当前配置运行「'+d.name+'」？运行后会生成一条新结果。'))return;
     post('/api/'+scope+'/'+id+'/run',{}).then(function(){loadAll();ok('已计算');})
       .catch(function(e){err(e.message);});
   }
@@ -356,7 +378,13 @@
   function openView(scope,d){
     $('view-title').textContent='查看'+LABEL[scope]+' · '+d.name;
     var h='<div class="view-grid">';
-    if(scope==='index'){
+    if(scope==='source'){
+      h+='<div><span>业务库 ID</span><b>'+esc(d.datasource_id)+'</b></div><div><span>业务表</span><b>'+esc(d.source_table)+'</b></div>'+
+        '<div><span>关联指标</span><b>'+esc((d.index_ids||[]).length)+'</b></div>';
+    }else if(scope==='document'){
+      h+='<div><span>资料 ID</span><b>'+esc(d.id)+'</b></div><div><span>匹配业务行</span><b>'+esc(d.row_count)+'</b></div>'+
+        '<div><span>来源业务表</span><b>'+esc((d.source_tables||[]).join('、')||'—')+'</b></div>';
+    }else if(scope==='index'){
       h+='<div><span>业务库 ID</span><b>'+esc(d.datasource_id)+'</b></div><div><span>业务表</span><b>'+esc(d.source_table)+'</b></div>'+
         '<div><span>聚合列</span><b>'+esc(d.source_column||'整行')+'</b></div><div><span>运算</span><b>'+esc(aggLabel(d.aggregate))+'</b></div>';
     }else if(scope==='rule'){
@@ -371,112 +399,230 @@
       return '<div class="view-row">'+esc(defs.rule.filter(function(x){return x.id===r.rule_id;})[0]?.name||('#'+r.rule_id))+
         ' · 权重 '+esc(r.weight)+(r.veto?' · 否决':'')+'</div>';}).join('');
     if(d._latest)h+='<h3 class="view-sub">最近结果</h3><div class="view-row">'+esc(d._latest[VFIELD[scope]])+'</div>';
-    h+='<div class="dfoot"><span class="spacer"></span><button type="button" class="btn" id="view-edit">编辑</button></div>';
-    $('view-body').innerHTML=h;$('view-edit').onclick=function(){closeEl('compute-view');fillForm(scope,d);};
+    if(scope==='source')h+='<h3 class="view-sub">关联指标</h3>'+(d.index_ids||[]).map(function(id){
+      var index=graph.def('index',id);return '<div class="view-row">'+esc(index?index.name:('#'+id))+'</div>';
+    }).join('');
+    h+='<div class="dfoot"><span class="spacer"></span>'+
+      (scope==='document'?'<a class="btn" href="/srcfiles/'+encodeURIComponent(d.id)+'" target="_blank" rel="noopener">打开原件</a>':'')+
+      (scope==='source'||scope==='document'?'<button type="button" class="btn" id="view-trace">追溯</button>':'<button type="button" class="btn" id="view-edit">编辑</button>')+'</div>';
+    $('view-body').innerHTML=h;
+    var edit=$('view-edit');if(edit)edit.onclick=function(){closeEl('compute-view');fillForm(scope,d);};
+    var trace=$('view-trace');if(trace)trace.onclick=function(){closeEl('compute-view');openLineage(scope,d.id);};
     openEl('compute-view');
   }
 
-  // ---------- 节点血缘检查器 ----------
-  function closeInspector(){
-    inspectorSeq++;$('compute-inspector').hidden=true;
-    $('inspector-body').innerHTML='';graph.selectNode(null);
+  // ---------- 全宽上游追溯工作台 ----------
+  function closeLineage(){
+    lineageSeq++;lineageState=null;graph.selectNode(null);
   }
-  function inspectorSummary(d){
+  function setLineageTab(tab){
+    Array.prototype.forEach.call(document.querySelectorAll('[data-lineage-tab]'),function(btn){
+      var on=btn.dataset.lineageTab===tab;btn.classList.toggle('is-active',on);btn.setAttribute('aria-selected',String(on));
+    });
+    $('lineage-data-panel').classList.toggle('lineage-mobile-active',tab==='data');
+    $('lineage-document-panel').classList.toggle('lineage-mobile-active',tab==='document');
+  }
+  function lineageSummary(d){
     var rows=[];
-    if(d._scope==='source'){
-      rows.push(['业务表',d.source_table],['数据列',d.source_column||'整行']);
-    }else if(d._scope==='index'){
+    if(d._scope==='document')rows.push(['资料 ID',d.id],['匹配业务行',d.row_count],['上游指标',(d.index_ids||[]).length]);
+    else if(d._scope==='source')rows.push(['业务表',d.source_table],['数据列',d.source_column||'整行']);
+    else if(d._scope==='index'){
       rows.push(['业务表',d.source_table],['数据列',d.source_column||'整行'],['运算',aggLabel(d.aggregate)]);
       if((d.filter_json||[]).length)rows.push(['筛选条件',JSON.stringify(d.filter_json)]);
-    }else if(d._scope==='rule'){
-      rows.push(['条件组合',combineLabel(d.combine)],['条件数',(d.conditions_json||[]).length]);
-    }else rows.push(['组合方式',combineLabel(d.combine)],['通过阈值',d.threshold==null?'—':d.threshold]);
+    }else if(d._scope==='rule')rows.push(['条件组合',combineLabel(d.combine)],['条件数',(d.conditions_json||[]).length]);
+    else rows.push(['组合方式',combineLabel(d.combine)],['通过阈值',d.threshold==null?'—':d.threshold]);
     if(d._latest)rows.push(['最近结果',d._latest[VFIELD[d._scope]]]);
-    return '<div class="view-grid">'+rows.map(function(r){
+    return '<div class="view-grid lineage-summary">'+rows.map(function(r){
       return '<div><span>'+esc(r[0])+'</span><b>'+esc(r[1])+'</b></div>';}).join('')+'</div>';
   }
-  function lineageItems(scope,d,direction){
-    var items=[];
-    function add(s,id){var x=graph.def(s,id);if(x)items.push({scope:s,id:id,name:x.name,detail:x._scope==='source'?x.source_table:x._detail||''});}
-    if(scope==='source'){
-      if(direction==='down')add('index',d.index_id);
-    }else if(scope==='index'){
-      if(direction==='up')add('source',d.id);
-      else defs.rule.forEach(function(r){if((r.index_refs_json||[]).some(function(x){return x.index_id===d.id;}))add('rule',r.id);});
-    }else if(scope==='rule'){
-      if(direction==='up')(d.index_refs_json||[]).forEach(function(r){add('index',r.index_id);});
-      else defs.frame.forEach(function(f){if((f.rule_refs_json||[]).some(function(x){return x.rule_id===d.id;}))add('frame',f.id);});
-    }else if(direction==='up')(d.rule_refs_json||[]).forEach(function(r){add('rule',r.rule_id);});
-    return items;
+  function upstreamLevels(scope,d){
+    var levels=[],seen={},queue=[{scope:scope,d:d,depth:0}];
+    while(queue.length){
+      var next=[];
+      queue.forEach(function(item){
+        var x=item.d,key=item.scope+':'+x.id;if(seen[key])return;seen[key]=true;
+        if(!levels[item.depth])levels[item.depth]=[];
+        levels[item.depth].push({scope:item.scope,d:x});
+        var parents=[];
+        if(item.scope==='index'){
+        var source=defs.source.filter(function(s){return (s.index_ids||[]).indexOf(x.id)>=0;})[0];
+        if(source)parents=[{scope:'source',id:source.id}];
+      }
+        else if(item.scope==='rule')(x.index_refs_json||[]).forEach(function(r){parents.push({scope:'index',id:r.index_id});});
+        else if(item.scope==='frame')(x.rule_refs_json||[]).forEach(function(r){parents.push({scope:'rule',id:r.rule_id});});
+        parents.forEach(function(p){var parent=graph.def(p.scope,p.id);if(parent)next.push({scope:p.scope,d:parent,depth:item.depth+1});});
+      });
+      queue=next;
+    }
+    return levels;
   }
-  function lineageSection(title,items){
-    return '<section class="lineage-section"><h3>'+esc(title)+'</h3>'+(items.length?
-      '<div class="lineage-list">'+items.map(function(x){
-        return '<button type="button" class="lineage-link" data-scope="'+x.scope+'" data-id="'+x.id+'">'+
-          '<span class="tag tag-'+x.scope+'">'+LABEL[x.scope]+'</span><b>'+esc(x.name)+'</b><span>›</span></button>';
-      }).join('')+'</div>':'<div class="lineage-empty">无</div>')+'</section>';
+  function lineageNode(scope,d,current){
+    var value=d._latest?'<span class="node-result">'+esc(d._latest[VFIELD[scope]]==null?'—':d._latest[VFIELD[scope]])+'</span>':'';
+    return '<button type="button" class="lineage-node'+(current?' current':'')+'" data-scope="'+scope+'" data-id="'+d.id+'">'+
+      '<span class="lineage-node-top"><span class="tag tag-'+scope+'">'+LABEL[scope]+'</span><b>'+esc(d.name)+'</b>'+value+'</span>'+
+      '<small>'+esc(graph.detail(d))+'</small></button>';
   }
-  function openInspector(scope,id){
-    var d=graph.def(scope,id);if(!d)return;
-    graph.selectNode(scope,id);
-    var seq=++inspectorSeq,indexId=scope==='source'?d.index_id:id;
-    $('compute-inspector').hidden=false;$('inspector-title').textContent=d.name;
-    $('inspector-tag').className='tag tag-'+scope;$('inspector-tag').textContent=LABEL[scope];
-    var h='<div class="banner info">当前配置＋当前数据，不是历史执行快照。</div>'+inspectorSummary(d);
-    h+=lineageSection('上游血缘回溯',lineageItems(scope,d,'up'));
-    h+=lineageSection('下游影响分析',lineageItems(scope,d,'down'));
-    if(scope==='source'||scope==='index')h+='<section class="lineage-section" id="inspector-sample"><h3>匹配数据样本</h3><div class="empty">加载中…</div></section>';
-    $('inspector-body').innerHTML=h;
-    Array.prototype.forEach.call($('inspector-body').querySelectorAll('[data-scope]'),function(btn){
-      btn.onclick=function(){var s=btn.dataset.scope,n=Number(btn.dataset.id);graph.focus(s,n);openInspector(s,n);};
+  function renderLineagePath(levels){
+    var h=lineageSummary(levels[0][0].d);
+    h+=levels.map(function(items,depth){
+      return '<section class="lineage-depth"><h3>'+(depth===0?'当前节点':'上游第 '+depth+' 层')+'</h3>'+
+        items.map(function(x){return lineageNode(x.scope,x.d,depth===0);}).join('')+'</section>';
+    }).join('');
+    $('lineage-path').innerHTML=h;
+    Array.prototype.forEach.call($('lineage-path').querySelectorAll('[data-scope]'),function(btn){
+      btn.onclick=function(){var s=btn.dataset.scope,id=Number(btn.dataset.id);graph.focus(s,id);openLineage(s,id);};
     });
-    if(scope==='source'||scope==='index')loadSourcePreview(indexId,seq);
   }
-  function loadSourcePreview(indexId,seq){
+  function resetLineageDocument(){
+    if(lineageState)lineageState.cellSeq=(lineageState.cellSeq||0)+1;
+    $('lineage-documents').innerHTML='';$('lineage-open-source').hidden=true;
+    $('lineage-document-status').textContent='选择业务数据中的单元格，定位原始文档并高亮来源。';
+    var frame=$('lineage-document-frame');frame.hidden=true;frame.removeAttribute('src');frame.removeAttribute('data-file');
+  }
+  function loadSourceFiles(){
+    if(sourceFiles.loaded)return;
+    sourceFiles.loading=true;
+    api('/api/sources?page=1&size=200').then(function(j){
+      sourceFiles.loaded=true;(j.items||[]).forEach(function(f){sourceFiles[f.id]=f.name||('资料 #'+f.id);});
+      if(lineageState&&lineageState.preview)renderLineageDocuments(lineageState.preview);
+    }).catch(function(){}).then(function(){sourceFiles.loading=false;});
+  }
+  function renderLineageIndices(indices){
+    $('lineage-indices').innerHTML=indices.map(function(d){
+      return '<button type="button" class="lineage-index'+(d.id===lineageState.indexId?' on':'')+'" data-index="'+d.id+'">'+esc(d.name)+'</button>';
+    }).join('')||'<span class="hint">没有上游指标</span>';
+    Array.prototype.forEach.call($('lineage-indices').querySelectorAll('[data-index]'),function(btn){
+      btn.onclick=function(){
+        if(!lineageState)return;lineageState.indexId=Number(btn.dataset.index);lineageState.activeFileId=null;
+        renderLineageIndices(indices);resetLineageDocument();setLineageTab('data');loadLineageData(lineageState.indexId,lineageState.seq);
+      };
+    });
+  }
+  function renderLineageData(j){
+    var host=$('lineage-data'),canTrace=(j.trace_columns||[]).indexOf('file_id')>=0&&(j.trace_columns||[]).indexOf('record_id')>=0;
+    var source=j.source||{};$('lineage-data-scope').textContent=(source.source_table||'当前业务表')+' · '+aggLabel(source.aggregate);
+    var h='<div class="sample-summary"><span>匹配 <b>'+esc(j.total)+'</b> 行</span><span>展示前 '+esc(j.items.length)+' 行</span>'+
+      (j.has_more?'<span>仅样本</span>':'')+'</div>';
+    if(!canTrace)h+='<div class="lineage-empty">业务表缺少 file_id / record_id，仅展示样本，无法回查原单元格。</div>';
+    if(j.items.length)h+='<div class="sample-scroll"><table class="sample-table"><thead><tr>'+j.columns.map(function(c){
+      return '<th>'+esc(c)+'</th>';}).join('')+'</tr></thead><tbody>'+j.items.map(function(row,rowIndex){
+      return '<tr data-row="'+rowIndex+'">'+j.columns.map(function(c){
+        var value=row[c],text=value==null?'NULL':String(value);
+        return '<td>'+(canTrace&&row.record_id!=null&&c!=='file_id'&&c!=='record_id'&&value!=null?
+          '<button type="button" class="linkbtn source-cell" data-rid="'+esc(row.record_id)+'" data-col="'+esc(c)+'" data-row="'+rowIndex+'" data-file="'+esc(row.file_id)+'" data-tip="定位原单元格">'+esc(text)+'</button>':esc(text))+'</td>';
+      }).join('')+'</tr>';
+    }).join('')+'</tbody></table></div>';
+    else h+='<div class="lineage-empty">当前筛选没有匹配记录。</div>';
+    host.innerHTML=h;
+    Array.prototype.forEach.call(host.querySelectorAll('[data-rid]'),function(btn){
+      btn.onclick=function(){locateLineageCell(btn.dataset.rid,btn.dataset.col,Number(btn.dataset.row),btn.dataset.file);};
+    });
+  }
+  function renderLineageDocuments(j){
+    if(!lineageState)return;
+    var counts={};(j.items||[]).forEach(function(row){if(row.file_id!=null)counts[row.file_id]=(counts[row.file_id]||0)+1;});
+    var ids=Object.keys(counts);if(!ids.length){$('lineage-documents').innerHTML='';return;}
+    $('lineage-documents').innerHTML=ids.map(function(id){
+      return '<button type="button" class="lineage-document-chip'+(String(lineageState.activeFileId)===id?' on':'')+'" data-file="'+esc(id)+'">'+
+        esc(sourceFiles[id]||('资料 #'+id))+' · '+counts[id]+' 行</button>';
+    }).join('');
+    Array.prototype.forEach.call($('lineage-documents').querySelectorAll('[data-file]'),function(btn){
+      btn.onclick=function(){
+        var fileId=btn.dataset.file,row=(j.items||[]).filter(function(r){return String(r.file_id)===fileId&&r.record_id!=null;})[0];
+        var col=row&&(j.columns||[]).filter(function(c){return c!=='file_id'&&c!=='record_id'&&row[c]!=null;})[0];
+        if(!row||!col){$('lineage-document-status').textContent='该资料样本中没有可定位字段。';return;}
+        locateLineageCell(row.record_id,col,j.items.indexOf(row),fileId);
+      };
+    });
+  }
+  function loadLineageData(indexId,seq){
+    if(!lineageState||seq!==lineageState.seq)return;
+    $('lineage-data').innerHTML='<div class="lineage-empty">加载当前匹配数据…</div>';
     api('/api/index/'+indexId+'/source-preview?limit=50').then(function(j){
-      if(seq!==inspectorSeq)return;
-      var host=$('inspector-sample');if(!host)return;
-      var canTrace=(j.trace_columns||[]).indexOf('file_id')>=0&&(j.trace_columns||[]).indexOf('record_id')>=0;
-      var h='<div class="sample-summary"><span>匹配 <b>'+esc(j.total)+'</b> 行</span><span>展示前 '+esc(j.items.length)+' 行</span>'+
-        (j.has_more?'<span>仅样本</span>':'')+'</div>';
-      if(!canTrace)h+='<div class="lineage-empty">业务表缺少 file_id/record_id，仅展示样本，无法回查原单元格。</div>';
-      if(j.items.length)h+='<div class="sample-scroll"><table class="sample-table"><thead><tr>'+j.columns.map(function(c){
-        return '<th>'+esc(c)+'</th>';}).join('')+'</tr></thead><tbody>'+j.items.map(function(row){
-        return '<tr>'+j.columns.map(function(c){
-          var value=row[c],text=value==null?'NULL':String(value);
-          return '<td>'+(canTrace&&row.record_id!=null&&c!=='file_id'&&c!=='record_id'?
-            '<button type="button" class="linkbtn source-cell" data-rid="'+esc(row.record_id)+'" data-col="'+esc(c)+'"'+(value==null?' disabled':'')+'>'+esc(text)+'</button>':esc(text))+'</td>';
-        }).join('')+'</tr>';
-      }).join('')+'</tbody></table></div>';
-      else h+='<div class="lineage-empty">当前筛选没有匹配记录。</div>';
-      h+='<div class="source-preview" id="source-preview" hidden><div class="sample-summary" id="source-preview-status">原单元格预览</div>'+
-        '<iframe id="source-preview-frame" title="原始资料单元格预览"></iframe></div>';
-      host.innerHTML=h;
-      Array.prototype.forEach.call(host.querySelectorAll('[data-rid]'),function(btn){btn.onclick=function(){openSourceCell(btn);};});
+      if(!lineageState||seq!==lineageState.seq||indexId!==lineageState.indexId)return;
+      lineageState.preview=j;renderLineageData(j);renderLineageDocuments(j);
     }).catch(function(e){
-      if(seq!==inspectorSeq)return;var host=$('inspector-sample');if(host)host.innerHTML='<div class="banner err">'+esc(e.message)+'</div>';
+      if(!lineageState||seq!==lineageState.seq)return;
+      $('lineage-data').innerHTML='<div class="banner err">'+esc(e.message)+'</div>';
     });
   }
-  function openSourceCell(btn){
-    var rid=btn.dataset.rid,col=btn.dataset.col,panel=$('source-preview'),frame=$('source-preview-frame'),status=$('source-preview-status');
-    panel.hidden=false;status.textContent='定位原单元格…';
+  function locateLineageCell(rid,col,rowIndex,fileId){
+    if(!lineageState)return;
+    var seq=lineageState.seq,request=++lineageState.cellSeq,status=$('lineage-document-status');lineageState.activeFileId=fileId;
+    Array.prototype.forEach.call($('lineage-data').querySelectorAll('tr[data-row]'),function(tr){tr.classList.toggle('selected-row',Number(tr.dataset.row)===rowIndex);});
+    renderLineageDocuments(lineageState.preview||{items:[]});setLineageTab('document');status.textContent='定位原单元格…';
     api('/api/staging/locate/'+encodeURIComponent(rid)+'?key='+encodeURIComponent(col)).then(function(j){
-      var key=j.field||col,base='/preview?embed=1&file='+encodeURIComponent(j.file_id);
-      status.textContent='资料 #'+j.file_id+' · 记录 '+j.record_index+' · '+key;
-      if(frame.getAttribute('data-src')===base){
-        frame.contentWindow.postMessage({c1TraceKey:{key:key,index:j.record_index}},window.location.origin);
-      }else{
-        frame.setAttribute('data-src',base);
+      if(!lineageState||seq!==lineageState.seq||request!==lineageState.cellSeq)return;
+      var key=j.field||col,file=j.file_id,name=sourceFiles[file]||('资料 #'+file),base='/preview?embed=1&file='+encodeURIComponent(file);
+      var frame=$('lineage-document-frame');lineageState.activeFileId=file;renderLineageDocuments(lineageState.preview||{items:[]});
+      status.textContent=name+' · 记录 '+j.record_index+' · '+key;
+      var open=$('lineage-open-source');open.hidden=false;open.href='/srcfiles/'+encodeURIComponent(file);
+      frame.hidden=false;
+      if(frame.getAttribute('data-file')===String(file))frame.contentWindow.postMessage({c1TraceKey:{key:key,index:j.record_index}},window.location.origin);
+      else{
+        frame.setAttribute('data-file',String(file));
         frame.src=base+'&index='+encodeURIComponent(j.record_index)+'&key='+encodeURIComponent(key);
       }
-    }).catch(function(e){status.textContent='无法定位：'+e.message;});
+    }).catch(function(e){if(lineageState&&seq===lineageState.seq&&request===lineageState.cellSeq)status.textContent='无法定位：'+e.message;});
+  }
+  function showLineageDocument(fileId,name){
+    if(!lineageState)return;
+    lineageState.activeFileId=fileId;
+    $('lineage-documents').innerHTML='<button type="button" class="lineage-document-chip on">'+esc(name||('资料 #'+fileId))+'</button>';
+    $('lineage-document-status').textContent=(name||('资料 #'+fileId))+' · 原始文档预览';
+    var open=$('lineage-open-source');open.hidden=false;open.href='/srcfiles/'+encodeURIComponent(fileId);
+    var frame=$('lineage-document-frame');frame.hidden=false;
+    if(frame.getAttribute('data-file')!==String(fileId)){
+      frame.setAttribute('data-file',String(fileId));
+      frame.src='/preview?embed=1&file='+encodeURIComponent(fileId);
+    }
+    setLineageTab('document');
+  }
+  function openLineage(scope,id){
+    var d=graph.def(scope,id);if(!d)return;
+    graph.selectNode(scope,id);
+    var seq=++lineageSeq,levels=upstreamLevels(scope,d),indices=[];
+    levels.forEach(function(items){items.forEach(function(x){if(x.scope==='index'&&!indices.some(function(i){return i.id===x.d.id;}))indices.push(x.d);});});
+    if(scope==='source'){
+      var index=graph.def('index',d.index_id);if(index&&!indices.some(function(i){return i.id===index.id;}))indices.unshift(index);
+    }
+    lineageState={key:scope+':'+id,seq:seq,indexId:indices.length?indices[0].id:null,preview:null,activeFileId:null};
+    $('lineage-title').textContent='上游追溯 · '+d.name;$('lineage-tag').className='tag tag-'+scope;$('lineage-tag').textContent=LABEL[scope];
+    renderLineagePath(levels);renderLineageIndices(indices);resetLineageDocument();setLineageTab('data');openEl('lineage');
+    if(scope==='document'){
+      $('lineage-data').innerHTML='<div class="lineage-empty">该文档由业务行 file_id 汇总得到；选择上游指标可继续查看匹配数据。</div>';
+      showLineageDocument(id,d.name);
+    }else if(indices.length)loadLineageData(lineageState.indexId,seq);
+    else $('lineage-data').innerHTML='<div class="lineage-empty">该节点没有可展示的业务数据。</div>';
+    loadSourceFiles();
   }
 
   // ---------- 数据与布局 ----------
   function graphDefs(){
-    var out={source:[],index:[],rule:[],frame:[]};
-    out.source=defs.index.map(function(d){return {id:d.id,index_id:d.id,_scope:'source',
-      name:d.source_table+(d.source_column?'.'+d.source_column:' · 整行'),source_table:d.source_table,source_column:d.source_column};});
+    var out={document:[],source:[],index:[],rule:[],frame:[]},sourceByKey={},indexSource={};
+    defs.index.forEach(function(d){
+      var key=d.datasource_id+':'+d.source_table,source=sourceByKey[key];
+      if(!source){
+        source={id:d.id,datasource_id:d.datasource_id,source_table:d.source_table,
+          index_ids:[],source_columns:[],name:d.source_table,_scope:'source'};
+        sourceByKey[key]=source;out.source.push(source);
+      }
+      if(source.index_ids.indexOf(d.id)<0)source.index_ids.push(d.id);
+      if(d.source_column&&source.source_columns.indexOf(d.source_column)<0)source.source_columns.push(d.source_column);
+      indexSource[d.id]=source.id;
+    });
+    documentLinks.forEach(function(link){
+      var doc=out.document.filter(function(d){return d.id===link.file_id;})[0];
+      if(!doc){
+        doc={id:link.file_id,file_id:link.file_id,name:link.file_name,index_ids:[],source_ids:[],source_tables:[],row_count:0,_scope:'document'};
+        out.document.push(doc);
+      }
+      if(doc.index_ids.indexOf(link.index_id)<0)doc.index_ids.push(link.index_id);
+      var sourceId=indexSource[link.index_id];
+      if(sourceId!=null&&doc.source_ids.indexOf(sourceId)<0)doc.source_ids.push(sourceId);
+      if(doc.source_tables.indexOf(link.source_table)<0)doc.source_tables.push(link.source_table);
+      doc.row_count=Math.max(doc.row_count,Number(link.row_count)||0);
+    });
     ['index','rule','frame'].forEach(function(s){
       out[s]=defs[s].map(function(d){return Object.assign({},d,{_scope:s,_latest:d._latest,
         _agg:aggLabel(d.aggregate),_combine:combineLabel(d.combine),
@@ -496,11 +642,15 @@
         });});
         return Promise.all(tasks);
       }).then(function(){
-        ['index','rule','frame'].forEach(renderAssets);
-        graph.setData(graphDefs(),layout);
-        if(selectedKey){
+        return api('/api/compute/source-documents').catch(function(){return {items:[]};});
+      }).then(function(j){
+        documentLinks=j.items||[];
+        var next=graphDefs();defs.source=next.source;defs.document=next.document;
+        ['source','index','rule','frame'].forEach(renderAssets);
+        graph.setData(next,layout);
+        if(lineageState&&selectedKey===lineageState.key){
           var parts=selectedKey.split(':'),scope=parts[0],id=Number(parts[1]);
-          if(graph.def(scope,id))openInspector(scope,id);else closeInspector();
+          if(graph.def(scope,id))openLineage(scope,id);else{closeLineage();closeEl('lineage');}
         }
       })
       .catch(function(e){err(e.message);});
@@ -519,11 +669,11 @@
   }
   function queueLayoutSave(next){
     layout=next;
-    try{localStorage.setItem(LOCAL_KEY,JSON.stringify(Object.keys(layout).filter(function(k){return layout[k].scope!=='source';}).map(function(k){return layout[k];})));}catch(e){}
+    try{localStorage.setItem(LOCAL_KEY,JSON.stringify(Object.keys(layout).filter(function(k){return ['index','rule','frame'].indexOf(layout[k].scope)>=0;}).map(function(k){return layout[k];})));}catch(e){}
     $('layout-state').textContent='正在保存…';clearTimeout(saveTimer);
     saveTimer=setTimeout(function(){
       if(!layoutAvailable){$('layout-state').textContent='未安装布局表 · 仅保存本机';return;}
-      var items=Object.keys(layout).filter(function(k){return layout[k].scope!=='source';}).map(function(k){var p=layout[k];return {scope:p.scope,id:p.id,x:p.x,y:p.y};});
+      var items=Object.keys(layout).filter(function(k){return ['index','rule','frame'].indexOf(layout[k].scope)>=0;}).map(function(k){var p=layout[k];return {scope:p.scope,id:p.id,x:p.x,y:p.y};});
       api('/api/compute/layout',{method:'PUT',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({items:items})}).then(function(){ $('layout-state').textContent='坐标已保存';})
         .catch(function(e){$('layout-state').textContent='保存失败：'+e.message;});

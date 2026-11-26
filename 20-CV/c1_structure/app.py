@@ -622,6 +622,24 @@ async def api_compute_layout_save(request: Request):
         body.get('items'))}
 
 
+@app.get('/api/compute/source-documents')
+def api_compute_source_documents():
+    items, errors = [], []
+    catalog = _load('store.catalog')
+    for definition in _load('store.index_repo').list_defs():
+        try:
+            for doc in _load('compute').source_documents(definition):
+                file = catalog.get_file(doc['file_id']) or {}
+                items.append({'index_id': definition['id'],
+                              'source_table': definition['source_table'],
+                              'file_id': doc['file_id'],
+                              'file_name': file.get('name') or ('资料 #' + str(doc['file_id'])),
+                              'row_count': doc['row_count']})
+        except Exception:
+            errors.append({'index_id': definition['id'], 'error': '来源文档读取失败'})
+    return {'ok': True, 'items': items, 'errors': errors}
+
+
 @app.get('/api/index')
 def api_index_list():
     return {'items': _load('store.index_repo').list_defs()}

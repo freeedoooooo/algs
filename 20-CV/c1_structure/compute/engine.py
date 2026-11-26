@@ -136,6 +136,25 @@ def source_preview(defn, limit=50):
             'columns': relevant, 'trace_columns': trace_columns, 'items': items}
 
 
+def source_documents(defn, limit=50):
+    """按业务行 file_id 汇总来源文档，用于流程图文档节点。"""
+    ds, table, cols, _ = _check_index_def(defn)
+    if 'file_id' not in cols:
+        return []
+    where, args = _where(defn.get('filter_json') or [], allow_cols=set(cols))
+    limit = max(1, min(50, int(50 if limit is None else limit)))
+    conn = loader.connect_datasource(ds)
+    try:
+        with conn.cursor() as cur:
+            cur.execute('SELECT file_id,COUNT(*) FROM {}{} '
+                        'GROUP BY file_id ORDER BY COUNT(*) DESC,file_id '
+                        'LIMIT %s'.format(loader._ident(table), where), args + [limit])
+            return [{'file_id': int(row[0]), 'row_count': int(row[1])}
+                    for row in cur.fetchall() if row[0] is not None]
+    finally:
+        conn.close()
+
+
 # ---------------- 规则 ----------------
 
 def _compare(actual, op, threshold):

@@ -6,6 +6,7 @@
 <title>计算 · 结构化工具</title>
 <link rel="stylesheet" href="/static/shell.css">
 <link rel="stylesheet" href="/static/compute.css">
+<link rel="stylesheet" href="/static/hint.css">
 </head>
 <body>
 <nav class="topnav">
@@ -25,14 +26,26 @@
   <div class="banner info" id="ok" hidden></div>
   <div class="compute-workspace">
     <aside class="asset-library" aria-label="计算定义资产">
+      <section class="asset-section disclosure-section" data-scope="source">
+        <div class="disclosure">
+          <div class="disclosure__head asset-title">
+            <span class="disclosure__title"><svg class="scope-icon" viewBox="0 0 16 16" aria-hidden="true"><ellipse cx="8" cy="3.5" rx="5.5" ry="2.2"/><path d="M2.5 3.5v4c0 1.2 2.5 2.2 5.5 2.2s5.5-1 5.5-2.2v-4M2.5 7.5v4c0 1.2 2.5 2.2 5.5 2.2s5.5-1 5.5-2.2v-4"/></svg>数据</span>
+            <span class="disclosure__meta" id="d-count">0</span>
+            <span class="asset-title-spacer"></span>
+            <button type="button" class="disclosure__toggle" data-disclosure-toggle data-disclosure-key="compute.data"
+              aria-controls="d-assets" aria-expanded="true" aria-label="折叠数据"><span class="disclosure__chevron"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5"/></svg></span></button>
+          </div>
+          <div class="disclosure__body asset-list" id="d-assets"></div>
+        </div>
+      </section>
       <section class="asset-section disclosure-section" data-scope="index">
         <div class="disclosure">
           <div class="disclosure__head asset-title">
-            <span class="scope-dot index"></span><span class="disclosure__title">指标</span>
+            <span class="disclosure__title"><svg class="scope-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 13V8M6 13V3M10 13V6M14 13V1"/></svg>指标</span>
             <span class="disclosure__meta" id="i-count">0</span>
-            <button type="button" class="icon-btn" id="i-new" title="新建指标" aria-label="新建指标">＋</button>
+            <button type="button" class="icon-btn" id="i-new" data-tip="新建指标" aria-label="新建指标"><svg class="scope-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>
             <button type="button" class="disclosure__toggle" data-disclosure-toggle data-disclosure-key="compute.index"
-              aria-controls="i-assets" aria-expanded="true" aria-label="折叠指标"><span class="disclosure__chevron">⌄</span></button>
+              aria-controls="i-assets" aria-expanded="true" aria-label="折叠指标"><span class="disclosure__chevron"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5"/></svg></span></button>
           </div>
           <div class="disclosure__body asset-list" id="i-assets"></div>
         </div>
@@ -40,11 +53,11 @@
       <section class="asset-section disclosure-section" data-scope="rule">
         <div class="disclosure">
           <div class="disclosure__head asset-title">
-            <span class="scope-dot rule"></span><span class="disclosure__title">规则</span>
+            <span class="disclosure__title"><svg class="scope-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2h10M3 8h10M3 14h10"/><circle cx="6" cy="2" r="1.5" fill="currentColor" stroke="none"/><circle cx="10" cy="8" r="1.5" fill="currentColor" stroke="none"/><circle cx="6" cy="14" r="1.5" fill="currentColor" stroke="none"/></svg>规则</span>
             <span class="disclosure__meta" id="r-count">0</span>
-            <button type="button" class="icon-btn" id="r-new" title="新建规则" aria-label="新建规则">＋</button>
+            <button type="button" class="icon-btn" id="r-new" data-tip="新建规则" aria-label="新建规则"><svg class="scope-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>
             <button type="button" class="disclosure__toggle" data-disclosure-toggle data-disclosure-key="compute.rule"
-              aria-controls="r-assets" aria-expanded="true" aria-label="折叠规则"><span class="disclosure__chevron">⌄</span></button>
+              aria-controls="r-assets" aria-expanded="true" aria-label="折叠规则"><span class="disclosure__chevron"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5"/></svg></span></button>
           </div>
           <div class="disclosure__body asset-list" id="r-assets"></div>
         </div>
@@ -52,11 +65,11 @@
       <section class="asset-section disclosure-section" data-scope="frame">
         <div class="disclosure">
           <div class="disclosure__head asset-title">
-            <span class="scope-dot frame"></span><span class="disclosure__title">框架</span>
+            <span class="disclosure__title"><svg class="scope-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="m8 2 6 3-6 3-6-3 6-3ZM2 8l6 3 6-3M2 12l6 3 6-3"/></svg>框架</span>
             <span class="disclosure__meta" id="f-count">0</span>
-            <button type="button" class="icon-btn" id="f-new" title="新建框架" aria-label="新建框架">＋</button>
+            <button type="button" class="icon-btn" id="f-new" data-tip="新建框架" aria-label="新建框架"><svg class="scope-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>
             <button type="button" class="disclosure__toggle" data-disclosure-toggle data-disclosure-key="compute.frame"
-              aria-controls="f-assets" aria-expanded="true" aria-label="折叠框架"><span class="disclosure__chevron">⌄</span></button>
+              aria-controls="f-assets" aria-expanded="true" aria-label="折叠框架"><span class="disclosure__chevron"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5"/></svg></span></button>
           </div>
           <div class="disclosure__body asset-list" id="f-assets"></div>
         </div>
@@ -64,16 +77,16 @@
     </aside>
     <section class="graph-panel" aria-label="计算流程配置区">
       <div class="graph-head">
-        <div><b>计算流程配置</b><span class="graph-sub">点节点查看血缘与影响 · 拖动排布 · 从右侧端口连线</span></div>
+        <div class="graph-title"><b>流程图</b><span class="hint" tabindex="0" data-tip="单击节点查看上游追溯；拖动节点调整布局；从节点右侧端口拖出连线。&#10;空白处拖动平移，滚轮缩放。">?</span></div>
         <span class="spacer"></span>
-        <span class="save-state" id="layout-state">布局读取中…</span>
+        <span class="save-state" id="layout-state" tabindex="0" data-tip="拖动节点后自动保存布局；未安装布局表时仅保存到本机。">布局读取中…</span>
         <div class="graph-tools">
-          <button type="button" class="icon-btn" id="zoom-out" title="缩小" aria-label="缩小">−</button>
+          <button type="button" class="icon-btn" id="zoom-out" data-tip="缩小" aria-label="缩小">−</button>
           <span id="zoom-label">100%</span>
-          <button type="button" class="icon-btn" id="zoom-in" title="放大" aria-label="放大">＋</button>
-          <button type="button" class="icon-btn" id="graph-fit" title="适应画布" aria-label="适应画布">适</button>
-          <button type="button" class="icon-btn" id="graph-auto" title="自动排布" aria-label="自动排布">排</button>
-          <button type="button" class="icon-btn" id="edge-del" title="断开选中连线" aria-label="断开选中连线" hidden>×</button>
+          <button type="button" class="icon-btn" id="zoom-in" data-tip="放大" aria-label="放大">＋</button>
+          <button type="button" class="icon-btn" id="graph-fit" data-tip="适应画布" aria-label="适应画布"><svg class="scope-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 2H2v4M10 2h4v4M14 10v4h-4M6 14H2v-4"/><rect x="5" y="5" width="6" height="6" rx="1"/></svg></button>
+          <button type="button" class="icon-btn" id="graph-auto" data-tip="自动排布" aria-label="自动排布"><svg class="scope-icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="4" height="4" rx="1"/><rect x="10" y="2" width="4" height="4" rx="1"/><rect x="2" y="10" width="4" height="4" rx="1"/><rect x="10" y="10" width="4" height="4" rx="1"/><path d="M6 4h4M4 6v4M12 6v4M6 12h4"/></svg></button>
+          <button type="button" class="icon-btn" id="edge-del" data-tip="断开选中连线" aria-label="断开选中连线" hidden>×</button>
         </div>
       </div>
       <div class="graph-canvas" id="graph-canvas" tabindex="0" aria-label="可拖动、缩放的计算流程图">
@@ -82,19 +95,47 @@
           <div class="graph-nodes" id="graph-nodes"></div>
         </div>
         <div class="graph-empty" id="graph-empty" hidden><b>还没有可配置的节点</b>先在左侧新建指标，再逐级建立规则与框架。</div>
-        <div class="graph-hint">空白拖动平移 · 滚轮缩放 · 点节点看血缘 · 配置连线选中后可断开</div>
       </div>
-      <aside class="inspector compute-inspector" id="compute-inspector" aria-label="节点血缘检查器" hidden>
-        <div class="inspector__head"><span class="tag" id="inspector-tag"></span>
-          <span class="inspector__title" id="inspector-title"></span><span class="spacer"></span>
-          <button type="button" class="icon-btn" id="inspector-close" title="关闭" aria-label="关闭血缘检查器">×</button>
-        </div>
-        <div class="inspector__body" id="inspector-body"></div>
-      </aside>
     </section>
   </div>
 </div>
-<div class="action-menu" id="compute-action-menu" role="menu" hidden></div>
+<div class="action-menu compute-action-menu" id="compute-action-menu" role="menu" hidden></div>
+
+<div class="drawer wide lineage-drawer" id="lineage" aria-label="上游追溯工作台" hidden>
+  <div class="dpanel lineage-panel">
+    <div class="dhead">
+      <h2 id="lineage-title">上游追溯</h2><span class="tag" id="lineage-tag"></span>
+      <span class="spacer"></span>
+      <span class="hint" tabindex="0" data-tip="按当前配置和当前匹配数据追溯上游；不重建历史计算快照。">?</span>
+      <button type="button" class="dclose" id="lineage-close">关闭 (Esc)</button>
+    </div>
+    <div class="dbody lineage-body">
+      <section class="lineage-mini-panel">
+        <div class="lineage-mini-head"><b>上游流程</b><span class="spacer"></span><span class="hint" id="lineage-selection"></span></div>
+        <div class="graph-canvas lineage-mini-canvas" id="lineage-graph" tabindex="0" aria-label="上游追溯流程图">
+          <div class="graph-world" id="lineage-world"><svg class="graph-edges" id="lineage-edges" aria-hidden="true"></svg><div class="graph-nodes" id="lineage-nodes"></div></div>
+          <div class="graph-empty" id="lineage-empty" hidden><b>没有可展示的节点</b></div>
+        </div>
+      </section>
+      <div class="lineage-mobile-tabs" role="tablist" aria-label="追溯内容">
+        <button type="button" class="btn mini ghost is-active" data-lineage-tab="data" role="tab" aria-selected="true">业务表</button>
+        <button type="button" class="btn mini ghost" data-lineage-tab="document" role="tab" aria-selected="false">资料文件</button>
+      </div>
+      <div class="lineage-detail-grid">
+        <section class="lineage-panel lineage-data-panel lineage-mobile-active" id="lineage-data-panel">
+          <div class="section-head"><b>业务表</b><span class="spacer"></span><span class="hint" tabindex="0" data-tip="展示当前节点上游指标所依赖的业务表与匹配样本。">?</span></div>
+          <div class="lineage-data" id="lineage-data"></div>
+        </section>
+        <section class="lineage-panel lineage-document-panel" id="lineage-document-panel">
+          <div class="section-head"><b>资料文件</b><span class="spacer"></span><a id="lineage-open-source" href="#" target="_blank" rel="noopener" hidden>打开原件</a></div>
+          <div class="lineage-documents" id="lineage-documents"></div>
+          <div class="lineage-document-status" id="lineage-document-status"></div>
+          <iframe id="lineage-document-frame" title="资料文件预览" hidden></iframe>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- 定义编辑抽屉（三模块复用） -->
 <div class="drawer wide" id="ded" hidden>
@@ -153,13 +194,13 @@
   </div>
 </div>
 
-<div class="drawer" id="compute-view" hidden>
+<div class="drawer wide" id="compute-view" hidden>
   <div class="dpanel"><div class="dhead"><h2 id="view-title">查看定义</h2><span class="spacer"></span>
     <button type="button" class="dclose" id="view-close">关闭 (Esc)</button></div>
     <div class="dbody" id="view-body"></div></div>
 </div>
 
-<div class="drawer" id="trace" hidden>
+<div class="drawer wide" id="trace" hidden>
   <div class="dpanel">
     <div class="dhead"><h2 id="tr-title">结果复核</h2><span class="spacer"></span>
       <button type="button" class="dclose" id="tr-close">关闭 (Esc)</button></div>
@@ -168,6 +209,7 @@
 </div>
 
 <script src="/static/shell.js"></script>
+<script src="/static/hint.js"></script>
 <script src="/static/compute_graph.js"></script>
 <script src="/static/compute.js"></script>
 </body>

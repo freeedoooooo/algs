@@ -108,6 +108,7 @@ for route in appmod.app.routes:
         paths.setdefault((m, route.path), True)
 required = [
     ('GET', '/api/compute/layout'), ('PUT', '/api/compute/layout'),
+    ('GET', '/api/compute/source-documents'),
     ('GET', '/api/index'), ('POST', '/api/index'),
     ('GET', '/api/index/{index_id}'), ('DELETE', '/api/index/{index_id}'),
     ('POST', '/api/index/{index_id}/run'),
@@ -129,7 +130,7 @@ required = [
     ('GET', '/api/frame/value/{value_id}/replay'),
 ]
 missing = [k for k in required if k not in paths]
-check('27 路由全注册', not missing, missing)
+check('计算 API 路由全注册', not missing, missing)
 check('抽取规则 API 保留', ('GET', '/api/extract-rules') in paths)
 
 print('orchestrate logic: {} checks passed'.format(ok))

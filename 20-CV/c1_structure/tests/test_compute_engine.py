@@ -98,10 +98,13 @@ class FakeCursor:
     def __exit__(self, *args):
         return False
     def execute(self, sql, args):
+        self.sql = sql
         self.owner.calls.append((sql, args))
     def fetchone(self):
         return (53,)
     def fetchall(self):
+        if 'GROUP BY file_id' in self.sql:
+            return [(7, 3), (9, 1), (None, 2)]
         return [(7, 901, 120, b'abc')]
 
 
@@ -144,6 +147,19 @@ try:
     count_out = engine.source_preview(preview_def, limit=0)
     check('计数指标样本展示业务列', count_out['columns'] == ['file_id', 'record_id', 'amt', 'note'])
     check('样本 limit 下限为 1', count_out['limit'] == 1)
+    fake_conn.calls = []
+    docs = engine.source_documents(preview_def, limit=999)
+    check('文档节点按 file_id 汇总并过滤 NULL', docs == [
+        {'file_id': 7, 'row_count': 3}, {'file_id': 9, 'row_count': 1}])
+    sql, args = fake_conn.calls[0]
+    check('文档汇总筛选参数化且 LIMIT 参数化',
+          'GROUP BY file_id ORDER BY COUNT(*) DESC,file_id LIMIT %s' in sql
+          and args == [100, 'x', 50])
+    engine._check_index_def = lambda d: ({'id': 1}, 'orders',
+                                         ['record_id', 'amt'], None)
+    check('无 file_id 时不生成文档节点', engine.source_documents(preview_def) == [])
+    engine._check_index_def = lambda d: ({'id': 1}, 'orders',
+                                         ['file_id', 'record_id', 'amt', 'note'], None)
     preview_def['filter_json'][0]['column'] = 'amt`; DROP TABLE orders; --'
     try:
         engine.source_preview(preview_def)
