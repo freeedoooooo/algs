@@ -46,7 +46,6 @@
 .graph-title{display:flex;align-items:center;gap:6px;min-width:0}
 .graph-tools{display:flex;align-items:center;gap:2px;white-space:nowrap}
 #zoom-label{font-size:11px;color:var(--c1-text-muted);width:36px;text-align:center;font-variant-numeric:tabular-nums}
-.save-state{font-size:11px;color:var(--c1-text-muted);white-space:nowrap}
 .graph-canvas{position:relative;flex:1;overflow:hidden;outline:none;touch-action:none;
   background-color:var(--c1-surface-subtle);background-image:radial-gradient(#d7deea 1px,transparent 1px);
   background-size:20px 20px;cursor:grab}
@@ -189,7 +188,6 @@
 .ok{color:#177245}.bad{color:#b42318}
 @media(max-width:1050px){
   .compute-workspace{grid-template-columns:232px minmax(0,1fr)}
-  .save-state{display:none}
 }
 @media(max-width:760px){
   .compute-workspace{grid-template-columns:1fr;height:auto;min-height:0}

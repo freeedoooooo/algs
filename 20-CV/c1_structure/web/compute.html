@@ -77,9 +77,8 @@
     </aside>
     <section class="graph-panel" aria-label="计算流程配置区">
       <div class="graph-head">
-        <div class="graph-title"><b>流程图</b><span class="hint" tabindex="0" data-tip="单击节点查看上游追溯；拖动节点调整布局；从节点右侧端口拖出连线。&#10;空白处拖动平移，滚轮缩放。">?</span></div>
+        <div class="graph-title"><b>流程图</b><span class="hint" tabindex="0" data-tip="单击节点查看详情；拖动节点调整布局；从节点右侧端口拖出连线。&#10;空白处拖动平移，滚轮缩放。">?</span></div>
         <span class="spacer"></span>
-        <span class="save-state" id="layout-state" tabindex="0" data-tip="拖动节点后自动保存布局；未安装布局表时仅保存到本机。">布局读取中…</span>
         <div class="graph-tools">
           <button type="button" class="icon-btn" id="zoom-out" data-tip="缩小" aria-label="缩小">−</button>
           <span id="zoom-label">100%</span>
@@ -94,7 +93,7 @@
           <svg class="graph-edges" id="graph-edges" aria-hidden="true"></svg>
           <div class="graph-nodes" id="graph-nodes"></div>
         </div>
-        <div class="graph-empty" id="graph-empty" hidden><b>还没有可配置的节点</b>先在左侧新建指标，再逐级建立规则与框架。</div>
+        <div class="graph-empty" id="graph-empty" hidden><b>暂无流程节点</b></div>
       </div>
     </section>
   </div>
@@ -170,8 +169,7 @@
         <div class="fsec"><label class="flab">引用指标与条件（每行一个指标条件）</label>
           <div class="condition-head"><span>指标</span><span>标识名</span><span>比较</span><span>阈值</span><span></span></div>
           <div id="r-conditions"></div>
-          <button type="button" class="btn mini ghost" id="r-addcondition" style="margin-top:6px">＋ 添加条件</button>
-          <div class="sthint">between 区间阈值用逗号分隔，如 100,200。</div></div>
+          <button type="button" class="btn mini ghost" id="r-addcondition" style="margin-top:6px">＋ 添加条件</button></div>
         <div class="fsec"><label class="flab" for="r-combine">条件组合</label>
           <select class="tin" id="r-combine"><option value="all">全部满足</option><option value="any">任一满足</option></select></div>
       </div>

@@ -3,10 +3,7 @@
    契约见 （用词改齐）。 */
 var dss=[], maps=[], tpls=[], cols=[];
 var curDs=null, editDs=null, editLt=null, ltLocked=false, tplVersionId=null;
-var dsPage=1, mapPage=1, dsSize=getListPer(), mapSize=getListPer();
-var pgDs=bindPager(document.getElementById('dspager'),
-  function(d){ dsPage+=d; renderDs(); },
-  function(n){ dsSize=n; dsPage=1; renderDs(); });
+var mapPage=1, mapSize=getListPer();
 var pgMap=bindPager(document.getElementById('mappager'),
   function(d){ mapPage+=d; renderMaps(); },
   function(n){ mapSize=n; mapPage=1; renderMaps(); });
@@ -44,11 +41,9 @@ function dsById(id){
 
 /* ---- 左：业务库列表 ---- */
 function renderDs(){
-  var info=pageSlice(dss,dsPage,dsSize);
-  dsPage=info.page;
-  document.getElementById('dslist').innerHTML=info.rows.map(function(d,i){
+  document.getElementById('dslist').innerHTML=dss.map(function(d,i){
     return '<div class="dsitem'+(d.id===curDs?' active':'')+'" data-ds="'+d.id+'">'+
-      '<div class="dsmain"><b>'+seqNo(info,i)+'. '+escHtml(d.name)+'</b>'+
+      '<div class="dsmain"><b>'+(i+1)+'. '+escHtml(d.name)+'</b>'+
         '<span class="badge">'+d.table_count+' 规则</span></div>'+
       '<div class="dsmeta mono">'+escHtml('ID '+d.id+' · '+d.host+':'+d.port+'/'+d.db_name)+'</div>'+
       '<div class="dsops">'+
@@ -59,7 +54,6 @@ function renderDs(){
       '</div></div>';
   }).join('');
   document.getElementById('dsempty').hidden=dss.length>0;
-  pgDs.render(info);
 }
 /* ---- 右：所选业务库的入库映射列表 ---- */
 function renderMaps(){

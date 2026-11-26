@@ -164,7 +164,7 @@
         '<span class="rname">'+esc(d.name)+'</span>'+
         '<input type="number" class="tin" data-w="'+d.id+'" value="1" step="0.1" min="0" title="权重">'+
         '<label class="veto"><input type="checkbox" data-v="'+d.id+'"> 否决</label></label>';
-    }).join('')||'<span class="hint">还没有规则，请先建规则</span>';
+    }).join('')||'<span class="hint">暂无规则</span>';
   }
   function fillForm(scope,d){
     $('de-title').textContent=(d?'编辑':'新建')+LABEL[scope];
@@ -282,8 +282,7 @@
     var d=graph.def(scope,id);if(!d)return;
     var v=d._latest,menu=$('compute-action-menu'),h='';
     if(scope==='source'){
-      h=actionMenuItem('view','查看',d)+actionMenuItem('trace','追溯',d)+
-        actionMenuItem('edit','编辑指标',d);
+      h=actionMenuItem('view','查看',d)+actionMenuItem('trace','追溯',d);
     }else if(scope==='document'){
       h=actionMenuItem('view','查看',d)+actionMenuItem('trace','追溯',d)+
         actionMenuItem('open','打开原件',d);
@@ -326,10 +325,8 @@
   function nodeAction(scope,id,act,v){
     var d=graph.def(scope,id);if(!d)return;
     if(act==='view')openView(scope,d);
-    else if(act==='edit'){
-      if(scope==='source'){var index=graph.def('index',(d.index_ids||[])[0]);if(index)fillForm('index',index);}
-      else fillForm(scope,d);
-    }else if(act==='open')window.open('/srcfiles/'+encodeURIComponent(id),'_blank','noopener');
+    else if(act==='edit')fillForm(scope,d);
+    else if(act==='open')window.open('/srcfiles/'+encodeURIComponent(id),'_blank','noopener');
     else if(act==='run')doRun(scope,id);
     else if(act==='trace')openLineage(scope,id);
     else if(act==='replay'&&v)openReplay(scope,v.id);
@@ -490,7 +487,7 @@
   }
   function renderLineageTables(groups){
     var host=$('lineage-data');
-    if(!groups.length){host.innerHTML='<div class="lineage-empty">当前节点没有关联业务表。</div>';return;}
+    if(!groups.length){host.innerHTML='<div class="lineage-empty">暂无关联业务表</div>';return;}
     host.innerHTML=groups.map(function(g){
       var active=lineageState.activeIndexByTable[g.key]||g.indices[0].id;
       return '<section class="lineage-table-card" data-table="'+esc(g.key)+'">'+
@@ -526,7 +523,7 @@
             '<button type="button" class="linkbtn source-cell" data-rid="'+esc(row.record_id)+'" data-col="'+esc(c)+'" data-row="'+rowIndex+'" data-table="'+esc(tableKey)+'" data-file="'+esc(row.file_id)+'" data-tip="定位原单元格">'+esc(text)+'</button>':esc(text))+'</td>';
         }).join('')+'</tr>';
       }).join('')+'</tbody></table></div>';
-    else h+='<div class="lineage-empty">当前筛选没有匹配记录。</div>';
+    else h+='<div class="lineage-empty">暂无匹配记录</div>';
     host.innerHTML=h;
     Array.prototype.forEach.call(host.querySelectorAll('[data-rid]'),function(btn){
       btn.onclick=function(){locateLineageCell(btn.dataset.rid,btn.dataset.col,Number(btn.dataset.row),btn.dataset.file,btn.dataset.table);};
@@ -557,7 +554,7 @@
     $('lineage-documents').innerHTML=docs.map(function(d){
       return '<button type="button" class="lineage-document-chip'+(String(lineageState.activeFileId)===String(d.id)?' on':'')+'" data-file="'+esc(d.id)+'" title="'+esc(d.name)+'">'+
         esc(sourceFiles[d.id]||d.name||('资料 #'+d.id))+' · '+esc(d.row_count)+' 行</button>';
-    }).join('')||'<div class="lineage-empty">未匹配到资料文件。</div>';
+    }).join('')||'<div class="lineage-empty">暂无资料文件</div>';
     Array.prototype.forEach.call($('lineage-documents').querySelectorAll('[data-file]'),function(btn){
       btn.onclick=function(){showLineageDocument(Number(btn.dataset.file),btn.title);};
     });
@@ -675,19 +672,17 @@
       layoutAvailable=j.available!==false;
       layout=layoutAvailable?{}:local;
       if(layoutAvailable)(j.items||[]).forEach(function(p){layout[p.scope+':'+p.id]=p;});
-      $('layout-state').textContent=layoutAvailable?'坐标自动保存':'未安装布局表 · 仅保存本机';
-    }).catch(function(e){layoutAvailable=false;layout=local;$('layout-state').textContent='布局读取失败 · 仅保存本机';});
+    }).catch(function(){layoutAvailable=false;layout=local;});
   }
   function queueLayoutSave(next){
     layout=next;
     try{localStorage.setItem(LOCAL_KEY,JSON.stringify(Object.keys(layout).filter(function(k){return ['index','rule','frame'].indexOf(layout[k].scope)>=0;}).map(function(k){return layout[k];})));}catch(e){}
-    $('layout-state').textContent='正在保存…';clearTimeout(saveTimer);
+    clearTimeout(saveTimer);
     saveTimer=setTimeout(function(){
-      if(!layoutAvailable){$('layout-state').textContent='未安装布局表 · 仅保存本机';return;}
+      if(!layoutAvailable)return;
       var items=Object.keys(layout).filter(function(k){return ['index','rule','frame'].indexOf(layout[k].scope)>=0;}).map(function(k){var p=layout[k];return {scope:p.scope,id:p.id,x:p.x,y:p.y};});
       api('/api/compute/layout',{method:'PUT',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({items:items})}).then(function(){ $('layout-state').textContent='坐标已保存';})
-        .catch(function(e){$('layout-state').textContent='保存失败：'+e.message;});
+        body:JSON.stringify({items:items})}).catch(function(){});
     },500);
   }
 
