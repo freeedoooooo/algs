@@ -457,6 +457,23 @@ def add_load_log(file_id, record_index, datasource_id,
         conn.close()
 
 
+def list_loaded_documents():
+    """按数据源和业务表汇总已入库资料，供计算流程图快速建立文档节点。"""
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT g.datasource_id,g.target_table,g.file_id,g.row_count,f.name'
+                ' FROM (SELECT datasource_id,target_table,file_id,COUNT(*) AS row_count'
+                '       FROM c1_load_log'
+                '       GROUP BY datasource_id,target_table,file_id) g'
+                ' LEFT JOIN c1_doc_file f ON f.id=g.file_id'
+                ' ORDER BY g.datasource_id,g.target_table,g.row_count DESC,g.file_id')
+            return _rows(cur)
+    finally:
+        conn.close()
+
+
 def list_load_logs(file_id):
     conn = db.connect()
     try:

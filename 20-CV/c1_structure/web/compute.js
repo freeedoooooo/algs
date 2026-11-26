@@ -9,7 +9,7 @@
   var editing={index:null,rule:null,frame:null};
   var editingScope='index',layout={},layoutAvailable=true,saveTimer=null;
   var LOCAL_KEY='c1.compute.layout';
-  var lineageSeq=0,lineageState=null,sourceFiles={},tableComments={};
+  var loadSeq=0,lineageSeq=0,lineageState=null,tableComments={},runAllRunning=false;
 
   function api(path,opt){
     return fetch(path,opt||{}).then(function(r){
@@ -48,7 +48,7 @@
   $('tr-close').onclick=function(){closeEl('trace');};
   $('view-close').onclick=function(){closeEl('compute-view');};
   $('lineage-close').onclick=function(){closeLineage();closeEl('lineage');};
-  $('lineage').addEventListener('click',function(e){if(e.target===this)closeLineage();});
+  $('lineage').addEventListener('click',function(e){if(e.target===this){closeLineage();closeEl('lineage');}});
   document.addEventListener('keydown',function(e){
     if(e.key==='Escape'&&!$('lineage').hidden&&!document.querySelector('.drawer:not([hidden]):not(#lineage)')){
       closeLineage();closeEl('lineage');
@@ -62,17 +62,15 @@
     action:nodeAction,menu:openNodeMenu,select:selectNode,connect:connectNodes,disconnect:disconnectEdge,layout:queueLayoutSave
   });
   var lineageGraph=new ComputeGraph($('lineage-graph'),{
-    select:function(scope,id){
-      if(!lineageState)return;lineageState.activeKey=scope+':'+id;
-      var d=lineageGraph.def(scope,id);if(d)$('lineage-selection').textContent=LABEL[scope]+' · '+d.name;
-    },
-    inspect:function(scope,id){renderLineageDetails(scope,id);}
+    select:function(scope,id){renderLineageDetails(scope,id);}
   },{compact:true});
   $('zoom-in').onclick=function(){graph.zoom(1.15);};
   $('zoom-out').onclick=function(){graph.zoom(1/1.15);};
   $('graph-fit').onclick=function(){graph.fit();};
   $('graph-auto').onclick=function(){graph.autoLayout();ok('已自动排布');};
   $('edge-del').onclick=function(){graph.deleteSelected();};
+  $('graph-run-all').addEventListener('pointerdown',function(e){e.stopPropagation();});
+  $('graph-run-all').onclick=runAllDefinitions;
 
   // ---------- 指标表单 ----------
   function loadDatasources(){
@@ -347,9 +345,36 @@
   }
   function doRun(scope,id){
     var d=graph.def(scope,id);if(!d)return;
-    if(!confirm('确认按当前配置运行「'+d.name+'」？运行后会生成一条新结果。'))return;
+    if(!confirm('确认按当前配置运行「'+d.name+'」？运行后会覆盖该节点原结果。'))return;
     post('/api/'+scope+'/'+id+'/run',{}).then(function(){loadAll();ok('已计算');})
       .catch(function(e){err(e.message);});
+  }
+  function runAllDefinitions(){
+    if(runAllRunning)return;
+    var tasks=[];
+    ['index','rule','frame'].forEach(function(scope){
+      defs[scope].slice().sort(function(a,b){return a.id-b.id;}).forEach(function(d){
+        tasks.push({scope:scope,d:d});
+      });
+    });
+    if(!tasks.length){err('暂无可计算的定义');return;}
+    var btn=$('graph-run-all'),done=0,total=tasks.length,failed=false;
+    runAllRunning=true;btn.disabled=true;btn.textContent='计算中 0/'+total;
+    function next(){
+      if(done>=total)return Promise.resolve();
+      var task=tasks[done];
+      return post('/api/'+task.scope+'/'+task.d.id+'/run',{}).then(function(){
+        done++;btn.textContent='计算中 '+done+'/'+total;return next();
+      }).catch(function(e){
+        throw new Error('「'+task.d.name+'」计算失败：'+e.message);
+      });
+    }
+    next().catch(function(e){failed=true;err(e.message);})
+      .then(function(){return loadAll();})
+      .then(function(){
+        runAllRunning=false;btn.disabled=false;btn.textContent='重新计算';
+        if(!failed)ok('全部计算完成');
+      });
   }
   function connectNodes(fromScope,fromId,toScope,toId){
     var target=graph.def(toScope,toId);
@@ -390,8 +415,8 @@
       h+='<div><span>业务库 ID</span><b>'+esc(d.datasource_id)+'</b></div><div><span>业务表</span><b>'+esc(d.name||d.source_table)+'</b></div>'+
         '<div><span>关联指标</span><b>'+esc((d.index_ids||[]).length)+'</b></div>';
     }else if(scope==='document'){
-      h+='<div><span>资料 ID</span><b>'+esc(d.id)+'</b></div><div><span>匹配业务行</span><b>'+esc(d.row_count)+'</b></div>'+
-        '<div><span>来源业务表</span><b>'+esc((d.source_table_labels||d.source_tables||[]).join('、')||'—')+'</b></div>';
+      h+='<div><span>资料 ID</span><b>'+esc(d.id)+'</b></div><div><span>关联数据</span><b>'+esc(d.row_count)+' 行</b></div>'+
+        '<div><span>来源数据</span><b>'+esc((d.source_table_labels||d.source_tables||[]).join('、')||'—')+'</b></div>';
     }else if(scope==='index'){
       h+='<div><span>业务库 ID</span><b>'+esc(d.datasource_id)+'</b></div><div><span>业务表</span><b>'+esc(tableLabel(d.datasource_id,d.source_table))+'</b></div>'+
         '<div><span>聚合列</span><b>'+esc(d.source_column||'整行')+'</b></div><div><span>运算</span><b>'+esc(aggLabel(d.aggregate))+'</b></div>';
@@ -427,191 +452,157 @@
     Array.prototype.forEach.call(document.querySelectorAll('[data-lineage-tab]'),function(btn){
       var on=btn.dataset.lineageTab===tab;btn.classList.toggle('is-active',on);btn.setAttribute('aria-selected',String(on));
     });
-    $('lineage-data-panel').classList.toggle('lineage-mobile-active',tab==='data');
-    $('lineage-document-panel').classList.toggle('lineage-mobile-active',tab==='document');
+    $('lineage-current-panel').classList.toggle('lineage-mobile-active',tab==='current');
+    $('lineage-upstream-panel').classList.toggle('lineage-mobile-active',tab==='upstream');
   }
   function relatedDefs(scope,d){
-    var full=graphDefs(),downstream=scope==='source'||scope==='document',seen={},queue=[{scope:scope,d:d}],out={document:[],source:[],index:[],rule:[],frame:[]};
-    function push(next){
-      if(!next)return;
-      if(!next.d)next.d=full[next.scope].filter(function(d){return d.id===next.id;})[0];
-      if(next.d&&!seen[next.scope+':'+next.id])queue.push(next);
+    var full=graphDefs(),seen={},queue=[{scope:scope,d:d}],out={document:[],source:[],index:[],rule:[],frame:[]};
+    function enqueue(nextScope,id){
+      var next=full[nextScope].filter(function(x){return x.id===id;})[0];
+      if(next)queue.push({scope:nextScope,d:next});
     }
     while(queue.length){
-      var item=queue.shift(),x=item.d,key=item.scope+':'+x.id;if(seen[key])continue;seen[key]=true;
+      var item=queue.shift(),x=item.d,key=item.scope+':'+x.id;
+      if(!x||seen[key])continue;seen[key]=true;
       if(out[item.scope].indexOf(x)<0)out[item.scope].push(x);
-      if(item.scope==='document')(x.source_ids||[]).forEach(function(id){push({scope:'source',id:id});});
+      if(item.scope==='document')(x.source_ids||[]).forEach(function(id){enqueue('source',id);});
       else if(item.scope==='source'){
-        full.document.filter(function(doc){return (doc.source_ids||[]).indexOf(x.id)>=0;}).forEach(function(doc){push({scope:'document',d:doc});});
-        if(downstream)(x.index_ids||[]).forEach(function(id){push({scope:'index',id:id});});
+        full.document.filter(function(doc){return (doc.source_ids||[]).indexOf(x.id)>=0;})
+          .forEach(function(doc){queue.push({scope:'document',d:doc});});
       }else if(item.scope==='index'){
-        full.source.filter(function(s){return (s.index_ids||[]).indexOf(x.id)>=0;}).forEach(function(s){push({scope:'source',d:s});});
-        if(downstream)full.rule.filter(function(r){return (r.index_refs_json||[]).some(function(ref){return ref.index_id===x.id;});}).forEach(function(r){push({scope:'rule',d:r});});
+        full.source.filter(function(s){return (s.index_ids||[]).indexOf(x.id)>=0;})
+          .forEach(function(s){queue.push({scope:'source',d:s});});
       }else if(item.scope==='rule'){
-        (x.index_refs_json||[]).forEach(function(ref){push({scope:'index',id:ref.index_id});});
-        if(downstream)full.frame.filter(function(f){return (f.rule_refs_json||[]).some(function(ref){return ref.rule_id===x.id;});}).forEach(function(f){push({scope:'frame',d:f});});
-      }else if(item.scope==='frame')(x.rule_refs_json||[]).forEach(function(ref){push({scope:'rule',id:ref.rule_id});});
+        (x.index_refs_json||[]).forEach(function(ref){enqueue('index',ref.index_id);});
+      }else if(item.scope==='frame'){
+        (x.rule_refs_json||[]).forEach(function(ref){enqueue('rule',ref.rule_id);});
+      }
     }
-    ['document','source','index','rule','frame'].forEach(function(s){out[s]=out[s].map(function(x){return full[s].filter(function(d){return d.id===x.id;})[0]||x;});});
     return out;
   }
-  function selectedIndices(scope,d){
-    var ids=[];
-    function addIndex(id){if(id!=null&&ids.indexOf(id)<0)ids.push(id);}
-    if(scope==='index')addIndex(d.id);
-    else if(scope==='source'||scope==='document')(d.index_ids||[]).forEach(addIndex);
-    else if(scope==='rule')(d.index_refs_json||[]).forEach(function(ref){addIndex(ref.index_id);});
-    else if(scope==='frame')(d.rule_refs_json||[]).forEach(function(ref){
-      var rule=graph.def('rule',ref.rule_id);if(rule)(rule.index_refs_json||[]).forEach(function(r){addIndex(r.index_id);});
-    });
-    return ids.map(function(id){return graph.def('index',id);}).filter(Boolean);
+  function directUpstreams(scope,d){
+    var full=lineageGraph.defs;
+    function refs(targetScope,refs,key){
+      var out=[],seen={};
+      (refs||[]).forEach(function(ref){
+        var id=ref[key],k=targetScope+':'+id;if(seen[k])return;seen[k]=true;
+        var item=full[targetScope].filter(function(x){return x.id===id;})[0];if(item)out.push(item);
+      });
+      return out;
+    }
+    if(scope==='document')return [];
+    if(scope==='source')return full.document.filter(function(doc){
+      return (doc.source_ids||[]).indexOf(x.id)>=0;
+    }).sort(function(a,b){return String(a.name).localeCompare(String(b.name),'zh-CN')||Number(a.id)-Number(b.id);});
+    if(scope==='index')return full.source.filter(function(s){return (s.index_ids||[]).indexOf(d.id)>=0;});
+    if(scope==='rule')return refs('index',d.index_refs_json,'index_id');
+    return refs('rule',d.rule_refs_json,'rule_id');
   }
-  function indexGroups(indices){
-    var groups=[],byKey={};
-    indices.forEach(function(d){
-      var key=d.datasource_id+':'+d.source_table,g=byKey[key];
-      if(!g){g={key:key,datasource_id:d.datasource_id,table:d.source_table,indices:[]};byKey[key]=g;groups.push(g);}
-      g.indices.push(d);
-    });
-    return groups;
+  function valueText(value){
+    if(value==null)return '暂无结果';
+    if(typeof value==='object'){try{return JSON.stringify(value);}catch(e){return String(value);}}
+    return String(value);
   }
-  function resetLineageDocument(){
-    if(lineageState)lineageState.cellSeq=(lineageState.cellSeq||0)+1;
-    $('lineage-open-source').hidden=true;$('lineage-document-status').textContent='';
-    var frame=$('lineage-document-frame');frame.hidden=true;frame.removeAttribute('src');frame.removeAttribute('data-file');
+  function fieldHtml(label,value){
+    return '<div><span>'+esc(label)+'</span><b>'+esc(value==null||value===''?'—':value)+'</b></div>';
   }
-  function loadSourceFiles(){
-    if(sourceFiles.loaded){if(lineageState)renderLineageDocuments(lineageState.indices);return;}
-    if(sourceFiles.loading)return;
-    sourceFiles.loading=true;
-    api('/api/sources?page=1&size=200').then(function(j){
-      sourceFiles.loaded=true;(j.items||[]).forEach(function(f){sourceFiles[f.id]=f.name||('资料 #'+f.id);});
-      if(lineageState)renderLineageDocuments(lineageState.indices);
-    }).catch(function(){}).then(function(){sourceFiles.loading=false;});
+  function nodeHeading(scope,d){
+    return '<div class="lineage-current-title">'+scopeIcon(scope)+'<b>'+esc(d.name)+'</b><small>'+esc(LABEL[scope])+' #'+esc(d.id)+'</small></div>';
   }
-  function renderLineageTables(groups){
-    var host=$('lineage-data');
-    if(!groups.length){host.innerHTML='<div class="lineage-empty">暂无关联业务表</div>';return;}
-    host.innerHTML=groups.map(function(g){
-      var active=lineageState.activeIndexByTable[g.key]||g.indices[0].id;
-      return '<section class="lineage-table-card" data-table="'+esc(g.key)+'">'+
-        '<div class="lineage-table-title">'+esc(tableLabel(g.datasource_id,g.table))+'<small>业务库 #'+esc(g.datasource_id)+'</small></div>'+
-        '<div class="lineage-index-row">'+g.indices.map(function(d){
-          return '<button type="button" class="lineage-index'+(d.id===active?' on':'')+'" data-index="'+d.id+'">'+esc(d.name)+'</button>';
-        }).join('')+'</div><div class="table-preview" data-preview><div class="lineage-empty">加载匹配数据…</div></div></section>';
-    }).join('');
-    Array.prototype.forEach.call(host.querySelectorAll('[data-index]'),function(btn){
-      btn.onclick=function(){
-        var card=btn.closest('[data-table]'),key=card.dataset.table,id=Number(btn.dataset.index);
-        lineageState.activeIndexByTable[key]=id;
-        Array.prototype.forEach.call(card.querySelectorAll('[data-index]'),function(x){x.classList.toggle('on',Number(x.dataset.index)===id);});
-        loadTablePreview(key,id);
-      };
-    });
-    groups.forEach(function(g){
-      var active=lineageState.activeIndexByTable[g.key]||g.indices[0].id;
-      lineageState.activeIndexByTable[g.key]=active;loadTablePreview(g.key,active);
-    });
+  function nodeSubtitle(scope,d){
+    if(scope==='document')return '资料 #'+d.id+' · 关联数据 '+d.row_count+' 行';
+    if(scope==='source')return tableLabel(d.datasource_id,d.source_table)+' · '+(d.index_ids||[]).length+' 个指标';
+    if(scope==='index')return tableLabel(d.datasource_id,d.source_table)+' · '+aggLabel(d.aggregate);
+    if(scope==='rule')return (d.conditions_json||[]).length+' 个条件 · '+combineLabel(d.combine);
+    return combineLabel(d.combine)+' · '+(d.rule_refs_json||[]).length+' 条规则';
   }
-  function renderSampleData(j,host){
-    var canTrace=(j.trace_columns||[]).indexOf('file_id')>=0&&(j.trace_columns||[]).indexOf('record_id')>=0;
-    var tableKey=host.closest('[data-table]')?host.closest('[data-table]').dataset.table:'';
-    var rawTable=tableKey.split(':').slice(1).join(':'),comment=j.source.table_comment||rawTable;
-    var title=host.closest('[data-table]')?host.closest('[data-table]').querySelector('.lineage-table-title'):null;
-    if(title)title.innerHTML=esc(comment)+'<small>业务库 #'+esc(j.source.datasource_id)+'</small>';
-    var h='<div class="sample-summary"><span>匹配 <b>'+esc(j.total)+'</b> 行</span><span>展示 '+esc(j.items.length)+' 行</span>'+
-      (j.has_more?'<span>仅样本</span>':'')+'</div>';
-    if(!canTrace)h+='<div class="lineage-empty">业务表缺少 file_id / record_id，仅展示样本。</div>';
-    var columns=['表注释'].concat(j.columns||[]);
-    if(j.items.length)h+='<div class="sample-scroll"><table class="sample-table"><thead><tr>'+columns.map(function(c){
-      return '<th>'+esc(c)+'</th>';}).join('')+
-      '</tr></thead><tbody>'+j.items.map(function(row,rowIndex){
-        return '<tr data-row="'+rowIndex+'">'+columns.map(function(c){
-          var value=c==='表注释'?comment:row[c],text=value==null?'NULL':String(value);
-          return '<td>'+(canTrace&&c!=='表注释'&&row.record_id!=null&&c!=='file_id'&&c!=='record_id'&&value!=null?
-            '<button type="button" class="linkbtn source-cell" data-rid="'+esc(row.record_id)+'" data-col="'+esc(c)+'" data-row="'+rowIndex+'" data-table="'+esc(tableKey)+'" data-file="'+esc(row.file_id)+'" data-tip="定位原单元格">'+esc(text)+'</button>':esc(text))+'</td>';
-        }).join('')+'</tr>';
-      }).join('')+'</tbody></table></div>';
-    else h+='<div class="lineage-empty">暂无匹配记录</div>';
+  function renderCurrentNode(scope,d){
+    var host=$('lineage-current'),panel=$('lineage-current-panel'),isDocument=scope==='document';
+    var frame=$('lineage-document-frame'),open=$('lineage-open-source');
+    panel.classList.toggle('is-document',isDocument);open.hidden=!isDocument;
+    if(isDocument){
+      open.href='/srcfiles/'+encodeURIComponent(d.id);frame.title=d.name+' · 资料文件预览';frame.hidden=false;
+      if(frame.getAttribute('data-file')!==String(d.id)){
+        frame.setAttribute('data-file',String(d.id));frame.src='/preview?embed=1&file='+encodeURIComponent(d.id);
+      }
+    }else{
+      frame.hidden=true;frame.removeAttribute('src');frame.removeAttribute('data-file');
+    }
+    var h=nodeHeading(scope,d);
+    if(scope==='document'){
+      h+='<div class="lineage-summary-grid">'+fieldHtml('资料 ID',d.id)+
+        fieldHtml('文件类型',KIND_LABEL[kindOf(d.name)]||'文件')+
+        fieldHtml('关联数据',d.row_count+' 行')+
+        fieldHtml('来源数据',(d.source_table_labels||d.source_tables||[]).join('、'))+'</div>';
+    }else if(scope==='source'){
+      h+='<div class="lineage-summary-grid">'+fieldHtml('表注释',tableLabel(d.datasource_id,d.source_table))+
+        fieldHtml('业务库 ID',d.datasource_id)+fieldHtml('关联指标数',(d.index_ids||[]).length)+'</div>';
+    }else if(scope==='index'){
+      h+='<div class="lineage-summary-grid">'+fieldHtml('业务库 ID',d.datasource_id)+
+        fieldHtml('业务表',tableLabel(d.datasource_id,d.source_table))+
+        fieldHtml('聚合列',d.source_column||'整行')+fieldHtml('运算',aggLabel(d.aggregate))+
+        fieldHtml('筛选条件',(d.filter_json||[]).length+' 条')+'</div>';
+    }else if(scope==='rule'){
+      h+='<div class="lineage-summary-grid">'+fieldHtml('条件组合',combineLabel(d.combine))+
+        fieldHtml('条件数',(d.conditions_json||[]).length)+'</div>';
+      h+='<div class="lineage-summary-list">'+ruleConditions(d).map(function(c){
+        var index=defs.index.filter(function(x){return x.id===c.index_id;})[0];
+        return '<div>'+esc(index?index.name:('#'+c.index_id))+' · '+esc(c.alias)+' '+esc(opLabel(c.op))+' '+esc(valueText(c.threshold))+'</div>';
+      }).join('')+'</div>';
+    }else{
+      h+='<div class="lineage-summary-grid">'+fieldHtml('组合方式',combineLabel(d.combine))+
+        fieldHtml('关联规则数',(d.rule_refs_json||[]).length)+fieldHtml('通过阈值',d.threshold==null?'—':d.threshold)+'</div>';
+      h+='<div class="lineage-summary-list">'+(d.rule_refs_json||[]).map(function(ref){
+        var rule=defs.rule.filter(function(x){return x.id===ref.rule_id;})[0];
+        return '<div>'+esc(rule?rule.name:('#'+ref.rule_id))+' · 权重 '+esc(ref.weight)+(ref.veto?' · 否决':'')+'</div>';
+      }).join('')+'</div>';
+    }
+    if(VFIELD[scope])h+='<div class="lineage-result"><span>最新结果</span><strong>'+esc(valueText(d._latest?d._latest[VFIELD[scope]]:null))+'</strong></div>';
     host.innerHTML=h;
-    Array.prototype.forEach.call(host.querySelectorAll('[data-rid]'),function(btn){
-      btn.onclick=function(){locateLineageCell(btn.dataset.rid,btn.dataset.col,Number(btn.dataset.row),btn.dataset.file,btn.dataset.table);};
-    });
   }
-  function loadTablePreview(key,indexId){
-    if(!lineageState)return;
-    var seq=lineageState.seq,card=Array.prototype.filter.call($('lineage-data').querySelectorAll('[data-table]'),function(x){return x.dataset.table===key;})[0];
-    if(!card)return;
-    var host=card.querySelector('[data-preview]');host.innerHTML='<div class="lineage-empty">加载匹配数据…</div>';
-    api('/api/index/'+indexId+'/source-preview?limit=50').then(function(j){
-      if(!lineageState||seq!==lineageState.seq||lineageState.activeIndexByTable[key]!==indexId)return;
-      lineageState.previews[key]=j;renderSampleData(j,host);
-    }).catch(function(e){if(lineageState&&seq===lineageState.seq)host.innerHTML='<div class="banner err">'+esc(e.message)+'</div>';});
-  }
-  function renderLineageDocuments(indices){
-    if(!lineageState)return;
-    var ids={},docs=[];
-    (indices||[]).forEach(function(index){if(index)ids[index.id]=true;});
-    documentLinks.forEach(function(link){
-      if(!ids[link.index_id])return;
-      var doc=docs.filter(function(d){return d.id===link.file_id;})[0];
-      if(!doc){doc={id:link.file_id,name:link.file_name,tables:[],row_count:0};docs.push(doc);}
-      if(doc.tables.indexOf(link.source_table)<0)doc.tables.push(link.source_table);
-      doc.row_count=Math.max(doc.row_count,Number(link.row_count)||0);
-    });
-    docs.sort(function(a,b){return b.row_count-a.row_count||a.id-b.id;});
-    $('lineage-documents').innerHTML=docs.map(function(d){
-      return '<button type="button" class="lineage-document-chip'+(String(lineageState.activeFileId)===String(d.id)?' on':'')+'" data-file="'+esc(d.id)+'" title="'+esc(d.name)+'">'+
-        window.ComputeScopeIcon('document','scope-icon document-chip-icon')+'<span>'+esc(sourceFiles[d.id]||d.name||('资料 #'+d.id))+' · '+esc(d.row_count)+' 行</span></button>';
-    }).join('')||'<div class="lineage-empty">暂无资料文件</div>';
-    Array.prototype.forEach.call($('lineage-documents').querySelectorAll('[data-file]'),function(btn){
-      btn.onclick=function(){showLineageDocument(Number(btn.dataset.file),btn.title);};
-    });
-  }
-  function locateLineageCell(rid,col,rowIndex,fileId,tableKey){
-    if(!lineageState)return;
-    var seq=lineageState.seq,request=++lineageState.cellSeq,status=$('lineage-document-status');lineageState.activeFileId=fileId;
-    Array.prototype.forEach.call($('lineage-data').querySelectorAll('tr[data-row]'),function(tr){
-      tr.classList.toggle('selected-row',tr.closest('[data-table]').dataset.table===tableKey&&Number(tr.dataset.row)===rowIndex);
-    });
-    renderLineageDocuments(lineageState.indices);setLineageTab('document');status.textContent='定位原单元格…';
-    api('/api/staging/locate/'+encodeURIComponent(rid)+'?key='+encodeURIComponent(col)).then(function(j){
-      if(!lineageState||seq!==lineageState.seq||request!==lineageState.cellSeq)return;
-      var key=j.field||col,file=j.file_id,name=sourceFiles[file]||('资料 #'+file),base='/preview?embed=1&file='+encodeURIComponent(file);
-      var frame=$('lineage-document-frame');lineageState.activeFileId=file;renderLineageDocuments(lineageState.indices);
-      status.textContent=name+' · 记录 '+j.record_index+' · '+key;
-      var open=$('lineage-open-source');open.hidden=false;open.href='/srcfiles/'+encodeURIComponent(file);frame.hidden=false;
-      if(frame.getAttribute('data-file')===String(file))frame.contentWindow.postMessage({c1TraceKey:{key:key,index:j.record_index}},window.location.origin);
-      else{frame.setAttribute('data-file',String(file));frame.src=base+'&index='+encodeURIComponent(j.record_index)+'&key='+encodeURIComponent(key);}
-    }).catch(function(e){if(lineageState&&seq===lineageState.seq&&request===lineageState.cellSeq)status.textContent='无法定位：'+e.message;});
-  }
-  function showLineageDocument(fileId,name){
-    if(!lineageState)return;
-    lineageState.cellSeq=(lineageState.cellSeq||0)+1;
-    lineageState.activeFileId=fileId;renderLineageDocuments(lineageState.indices);
-    $('lineage-document-status').textContent=name||('资料 #'+fileId);
-    var open=$('lineage-open-source');open.hidden=false;open.href='/srcfiles/'+encodeURIComponent(fileId);
-    var frame=$('lineage-document-frame');frame.hidden=false;
-    if(frame.getAttribute('data-file')!==String(fileId)){frame.setAttribute('data-file',String(fileId));frame.src='/preview?embed=1&file='+encodeURIComponent(fileId);}
-    setLineageTab('document');
+
+  function renderUpstreamNodes(scope,d){
+    var host=$('lineage-upstream'),nodes=directUpstreams(scope,d);
+    if(!nodes.length){
+      host.innerHTML='<div class="lineage-empty">'+(scope==='document'?'已到资料文件':'暂无直接上游节点')+'</div>';return;
+    }
+    host.innerHTML=nodes.map(function(node){
+      return '<button type="button" class="lineage-node-card scope-'+node._scope+'" data-lineage-node="'+node._scope+':'+node.id+'">'+
+        '<span class="lineage-node-card-icon">'+scopeIcon(node._scope)+'</span>'+
+        '<span class="lineage-node-card-body"><b>'+esc(node.name)+'</b><small>'+esc(nodeSubtitle(node._scope,node))+'</small></span>'+
+        '<span class="lineage-node-card-arrow">›</span></button>';
+    }).join('');
+    host.onclick=function(e){
+      var card=e.target.closest?e.target.closest('[data-lineage-node]'):null;if(!card)return;
+      var parts=card.dataset.lineageNode.split(':');renderLineageDetails(parts[0],Number(parts[1]));
+    };
   }
   function renderLineageDetails(scope,id){
     if(!lineageState)return;
     var d=lineageGraph.def(scope,id);if(!d)return;
-    lineageState.activeKey=scope+':'+id;lineageState.indices=selectedIndices(scope,d);
+    lineageState.activeKey=scope+':'+id;lineageGraph.selectNode(scope,id);
     $('lineage-selection').textContent=LABEL[scope]+' · '+d.name;
-    resetLineageDocument();renderLineageTables(indexGroups(lineageState.indices));renderLineageDocuments(lineageState.indices);
-    if(scope==='document')showLineageDocument(id,d.name);
+    $('lineage-tag').className='tag tag-'+scope;$('lineage-tag').textContent=LABEL[scope];
+    renderCurrentNode(scope,d);renderUpstreamNodes(scope,d);
+  }
+  function refreshLineage(){
+    if(!lineageState)return;
+    var parts=lineageState.activeKey.split(':'),scope=parts[0],id=Number(parts[1]),d=graph.def(scope,id);
+    if(!d){closeLineage();closeEl('lineage');return;}
+    var seq=lineageSeq;
+    lineageGraph.setData(relatedDefs(scope,d),{});
+    Array.prototype.forEach.call($('lineage-nodes').querySelectorAll('.graph-node'),function(el){
+      var label=el.getAttribute('aria-label');
+      if(label)el.setAttribute('aria-label',label.replace('，双击查看详情','，单击查看节点数据'));
+    });
+    renderLineageDetails(scope,id);
+    requestAnimationFrame(function(){requestAnimationFrame(function(){if(seq===lineageSeq)lineageGraph.fit();});});
   }
   function openLineage(scope,id){
     var d=graph.def(scope,id);if(!d)return;
-    graph.selectNode(scope,id);
-    var seq=++lineageSeq;
-    lineageState={key:scope+':'+id,seq:seq,activeKey:scope+':'+id,indices:[],previews:{},activeIndexByTable:{},activeFileId:null,cellSeq:0};
-    $('lineage-title').textContent='上游追溯 · '+d.name;$('lineage-tag').className='tag tag-'+scope;$('lineage-tag').textContent=LABEL[scope];
-    openEl('lineage');lineageGraph.setData(relatedDefs(scope,d),{});lineageGraph.selectNode(scope,id);
-    requestAnimationFrame(function(){requestAnimationFrame(function(){lineageGraph.fit();});});
-    setLineageTab('data');renderLineageDetails(scope,id);loadSourceFiles();
+    graph.selectNode(scope,id);lineageSeq++;lineageState={activeKey:scope+':'+id};
+    $('lineage-title').textContent='上游追溯 · '+d.name;
+    openEl('lineage');setLineageTab('current');refreshLineage();
   }
 
   // ---------- 数据与布局 ----------
@@ -630,14 +621,14 @@
       indexSource[d.id]=source.id;
     });
     documentLinks.forEach(function(link){
+      var sourceId=indexSource[link.index_id];if(sourceId==null)return;
       var doc=out.document.filter(function(d){return d.id===link.file_id;})[0];
       if(!doc){
         doc={id:link.file_id,file_id:link.file_id,name:link.file_name,index_ids:[],source_ids:[],source_tables:[],source_table_labels:[],row_count:0,_scope:'document'};
         out.document.push(doc);
       }
       if(doc.index_ids.indexOf(link.index_id)<0)doc.index_ids.push(link.index_id);
-      var sourceId=indexSource[link.index_id];
-      if(sourceId!=null&&doc.source_ids.indexOf(sourceId)<0)doc.source_ids.push(sourceId);
+      if(doc.source_ids.indexOf(sourceId)<0)doc.source_ids.push(sourceId);
       var source=out.source.filter(function(item){return item.id===sourceId;})[0];
       if(source&&doc.source_table_labels.indexOf(source.name)<0)doc.source_table_labels.push(source.name);
       if(doc.source_tables.indexOf(link.source_table)<0)doc.source_tables.push(link.source_table);
@@ -650,33 +641,33 @@
     });
     return out;
   }
+  function renderCompute(){
+    var next=graphDefs();defs.source=next.source;defs.document=next.document;
+    ['source','index','rule','frame'].forEach(renderAssets);
+    graph.setData(next,layout);refreshLineage();
+  }
   function loadAll(){
-    var selectedKey=graph.selectedNode;
-    return api('/api/index').then(function(j){defs.index=j.items||[];})
-      .then(function(){return api('/api/rule');}).then(function(j){defs.rule=j.items||[];})
-      .then(function(){return api('/api/frame');}).then(function(j){defs.frame=j.items||[];})
-      .then(function(){
-        var tasks=[];
-        ['index','rule','frame'].forEach(function(s){defs[s].forEach(function(d){
-          tasks.push(latest(s,d.id).then(function(v){d._latest=v;}));
-        });});
-        return Promise.all(tasks);
-      }).then(function(){
-        return api('/api/compute/source-documents').catch(function(){return {items:[]};});
-      }).then(function(j){
-        documentLinks=j.items||[];
-        tableComments={};(j.tables||[]).forEach(function(t){
-          tableComments[t.datasource_id+':'+t.source_table]=t.table_comment||'';
-        });
-        var next=graphDefs();defs.source=next.source;defs.document=next.document;
-        ['source','index','rule','frame'].forEach(renderAssets);
-        graph.setData(next,layout);
-        if(lineageState&&selectedKey===lineageState.key){
-          var parts=selectedKey.split(':'),scope=parts[0],id=Number(parts[1]);
-          if(graph.def(scope,id))openLineage(scope,id);else{closeLineage();closeEl('lineage');}
-        }
-      })
-      .catch(function(e){err(e.message);});
+    var seq=++loadSeq;
+    return Promise.all([api('/api/index'),api('/api/rule'),api('/api/frame')]).then(function(res){
+      if(seq!==loadSeq)return;
+      defs.index=res[0].items||[];defs.rule=res[1].items||[];defs.frame=res[2].items||[];
+      var tasks=[];
+      ['index','rule','frame'].forEach(function(s){defs[s].forEach(function(d){
+        tasks.push(latest(s,d.id).then(function(v){d._latest=v;}));
+      });});
+      return Promise.all(tasks);
+    }).then(function(){
+      if(seq!==loadSeq)return;
+      renderCompute();
+      return api('/api/compute/source-documents').catch(function(){return null;});
+    }).then(function(j){
+      if(!j||seq!==loadSeq)return;
+      documentLinks=j.items||[];
+      (j.tables||[]).forEach(function(t){
+        tableComments[t.datasource_id+':'+t.source_table]=t.table_comment||'';
+      });
+      renderCompute();
+    }).catch(function(e){if(seq===loadSeq)err(e.message);});
   }
   function readLocal(){
     try{return JSON.parse(localStorage.getItem(LOCAL_KEY)||'{}');}catch(e){return {};}

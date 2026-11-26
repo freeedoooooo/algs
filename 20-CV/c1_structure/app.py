@@ -135,11 +135,16 @@ def _files_guard(rel):
     head = rel.split('/')[0]
     if head == 'raw' or rel == 'result.json':
         return 403
-    ok = (rel in _TOP_FILES
-          or (rel.startswith('pages/') and rel.endswith('.png'))
-          or rel in _IMAGE_SRCS
-          or (rel.endswith('.md') and '/' not in rel)
-          or any(fnmatch(rel, p) for p in _CSV_PATTERNS))
+    check = rel
+    if rel.startswith('test/'):
+        check = rel[len('test/'):]
+        if check.startswith('raw/') or check == 'result.json':
+            return 403
+    ok = (check in _TOP_FILES
+          or (check.startswith('pages/') and check.endswith('.png'))
+          or check in _IMAGE_SRCS
+          or (check.endswith('.md') and '/' not in check)
+          or any(fnmatch(check, p) for p in _CSV_PATTERNS))
     return None if ok else 404
 
 
@@ -624,31 +629,47 @@ async def api_compute_layout_save(request: Request):
 
 @app.get('/api/compute/source-documents')
 def api_compute_source_documents():
-    items, errors, tables, seen_tables = [], [], [], set()
-    catalog = _load('store.catalog')
+    definitions = _load('store.index_repo').list_defs()
     loader = _load('store.loader')
     catalog_load = _load('store.catalog.load')
-    for definition in _load('store.index_repo').list_defs():
+    tables, errors, seen_tables = [], [], set()
+    docs_by_table = {}
+    for doc in catalog_load.list_loaded_documents():
+        key = (doc['datasource_id'], doc['target_table'])
+        docs_by_table.setdefault(key, []).append(doc)
+    comments = {}
+    datasource_ids = list(dict.fromkeys(
+        definition['datasource_id'] for definition in definitions))
+    for datasource_id in datasource_ids:
+        names = list(dict.fromkeys(
+            definition['source_table'] for definition in definitions
+            if definition['datasource_id'] == datasource_id))
+        ds = catalog_load.get_datasource(datasource_id)
         try:
-            table_key = (definition['datasource_id'], definition['source_table'])
-            if table_key not in seen_tables:
-                ds = catalog_load.get_datasource(definition['datasource_id'])
-                tables.append({
-                    'datasource_id': definition['datasource_id'],
-                    'source_table': definition['source_table'],
-                    'table_comment': loader.table_comment(
-                        ds, definition['source_table']) if ds else '',
-                })
-                seen_tables.add(table_key)
-            for doc in _load('compute').source_documents(definition):
-                file = catalog.get_file(doc['file_id']) or {}
-                items.append({'index_id': definition['id'],
-                              'source_table': definition['source_table'],
-                              'file_id': doc['file_id'],
-                              'file_name': file.get('name') or ('资料 #' + str(doc['file_id'])),
-                              'row_count': doc['row_count']})
+            values = loader.table_comments(ds, names) if ds else {}
         except Exception:
-            errors.append({'index_id': definition['id'], 'error': '来源文档读取失败'})
+            values = {}
+            errors.append({'datasource_id': datasource_id,
+                           'error': '表注释读取失败'})
+        for name in names:
+            comments[(datasource_id, name)] = values.get(name, '')
+    for definition in definitions:
+        table_key = (definition['datasource_id'], definition['source_table'])
+        if table_key not in seen_tables:
+            tables.append({'datasource_id': definition['datasource_id'],
+                           'source_table': definition['source_table'],
+                           'table_comment': comments.get(table_key, '')})
+            seen_tables.add(table_key)
+    items = []
+    for definition in definitions:
+        key = (definition['datasource_id'], definition['source_table'])
+        for doc in docs_by_table.get(key, []):
+            items.append({'index_id': definition['id'],
+                          'source_table': definition['source_table'],
+                          'file_id': doc['file_id'],
+                          'file_name': doc.get('name') or (
+                              '资料 #' + str(doc['file_id'])),
+                          'row_count': int(doc['row_count'])})
     return {'ok': True, 'items': items, 'tables': tables, 'errors': errors}
 
 
@@ -1135,10 +1156,13 @@ async def api_file_run_extract(file_id: int, request: Request):
 
 
 @app.post('/api/sources/{file_id}/reparse')
-def api_file_reparse(file_id: int):
-    """原地重放解析：原件回捞重跑；暂存/产物/回执/隔离全清（D4）。
-    解析中/入库中/已入库回 409。"""
-    return service.reparse(file_id)
+async def api_file_reparse(file_id: int, request: Request):
+    """重放解析；已入库资料须显式 test_mode，正式数据和状态保持不变。"""
+    body = await _json_body(request)
+    if not isinstance(body, dict):
+        raise store_errors.BadRequest('请求体须为 JSON 对象')
+    return await run_in_threadpool(service.reparse, file_id,
+                                   test_mode=body.get('test_mode') is True)
 
 
 @app.post('/api/sources/{file_id}/load-preview')

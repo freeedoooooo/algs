@@ -100,8 +100,49 @@ finally:
     engine_mod.compute_index = orig_ci
     orch.index_repo = index_repo
 
-# --- 路由注册 ---
+# --- 来源文档改走入库回执，不再逐指标查业务表 ---
+class SourceIndexRepo:
+    def list_defs(self):
+        return [{'id': 1, 'datasource_id': 1, 'source_table': 'orders'},
+                {'id': 2, 'datasource_id': 1, 'source_table': 'orders'}]
+
+
+class SourceLoader:
+    def table_comments(self, ds, tables):
+        return {table: '销售订单' for table in tables}
+
+
+class SourceCatalogLoad:
+    def get_datasource(self, ds_id):
+        return {'id': ds_id}
+    def list_loaded_documents(self):
+        return [{'datasource_id': 1, 'target_table': 'orders',
+                 'file_id': 6, 'name': '四月.pdf', 'row_count': 2},
+                {'datasource_id': 1, 'target_table': 'orders',
+                 'file_id': 7, 'name': '五月.pdf', 'row_count': 1}]
+
+
 appmod = _load('app')
+source_modules = {
+    'store.index_repo': SourceIndexRepo(),
+    'store.loader': SourceLoader(),
+    'store.catalog.load': SourceCatalogLoad(),
+}
+orig_load = appmod._load
+appmod._load = lambda name: source_modules[name]
+try:
+    source_out = appmod.api_compute_source_documents()
+    check('来源文档按入库回执返回', len(source_out['items']) == 4)
+    check('来源文档保留指标关联',
+          {x['index_id'] for x in source_out['items']} == {1, 2})
+    check('来源文档表注释只读一次',
+          len(source_out['tables']) == 1
+          and source_out['tables'][0]['table_comment'] == '销售订单')
+finally:
+    appmod._load = orig_load
+
+
+# --- 路由注册 ---
 paths = {}
 for route in appmod.app.routes:
     for m in getattr(route, 'methods', []) or []:

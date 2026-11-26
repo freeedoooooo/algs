@@ -495,9 +495,11 @@ function pfActionHtml(){
   var p=pfData||{}, st=String(p.state||'');
   var busy=st==='parsing'||st==='loading', label='', dis=false, tip='';
   if(pfNode==='parse'){
-    label='执行解析'; dis=busy;
+    label=st==='loaded'?'测试重解析':'执行解析'; dis=busy;
     tip=busy?'正在处理中，请稍候。'
-      :'按当前解析参数执行解析；已有暂存、产物、回执与校验结论会被覆盖。';
+      :(st==='loaded'
+        ?'仅重新运行解析并生成 test/ 下的新报告；业务数据、正式产物、暂存、回执和已入库状态全部保留。'
+        :'按当前解析参数执行解析；已有暂存、产物、回执与校验结论会被覆盖。');
   }else if(pfNode==='extract'){
     label='执行抽取'; dis=busy;
     tip=busy?'正在处理中，请稍候。'
@@ -520,15 +522,16 @@ function pfActionHtml(){
 }
 function pfRenderResult(){
   var p=pfData||{}, box=document.getElementById('procResult');
-  var openLink='', tools='', body='';
+  var st=String(p.state||''), openLink='', tools='', body='';
   if(pfNode==='parse'){
-    var has=(p.parse_artifacts||[]).indexOf('对照报告.html')>=0;
+    var testReport=(p.parse_artifacts||[]).indexOf('test/对照报告.html')>=0;
+    var reportName=st==='loaded'&&testReport?'test/对照报告.html':'对照报告.html';
+    var reportUrl='/files/'+pfId+'/'+reportName.split('/').map(encodeURIComponent).join('/');
+    var has=(p.parse_artifacts||[]).indexOf(reportName)>=0;
     if(has) openLink='<a class="proc-open" target="_blank" rel="noopener" href="'+
-      '/files/'+pfId+'/'+encodeURIComponent('对照报告.html')+
-      '">打开对照报告 →</a>';
+      reportUrl+'">'+(testReport&&st==='loaded'?'打开测试报告':'打开对照报告')+' →</a>';
     body=has
-      ? '<iframe id="pfReport" class="proc-report" src="/files/'+pfId+'/'+
-        encodeURIComponent('对照报告.html')+'" loading="lazy" title="对照报告"></iframe>'
+      ? '<iframe id="pfReport" class="proc-report" src="'+reportUrl+'" loading="lazy" title="对照报告"></iframe>'
       : '<div class="empty">暂无对照报告</div>';
   }else if(pfNode==='extract'||pfNode==='review'){
     openLink='<a class="proc-open" target="_blank" rel="noopener" href="'+
@@ -663,7 +666,9 @@ function pfBindAction(){
   b.onclick=function(){
     var btn=this, msg='';
     if(pfNode==='parse'){
-      msg='确认按当前解析参数执行解析？\n将清空暂存、产物、回执与校验结论。';
+      msg=st==='loaded'
+        ?'确认测试重解析？\n仅生成 test/ 下的新产物；业务数据、正式产物、暂存、回执和已入库状态全部保留。'
+        :'确认按当前解析参数执行解析？\n将清空暂存、产物、回执与校验结论。';
     }else if(pfNode==='extract'){
       msg=(st==='to_review'||st==='to_load')
         ?'已有暂存记录，重新抽取将覆盖校验结论。确认继续？'
@@ -676,7 +681,8 @@ function pfBindAction(){
     if(!confirm(msg)) return;
     btn.disabled=true;
     var req;
-    if(pfNode==='parse') req=pfApi('POST','/api/sources/'+pfId+'/reparse',{});
+    if(pfNode==='parse') req=pfApi('POST','/api/sources/'+pfId+'/reparse',
+      st==='loaded'?{test_mode:true}:{});
     else if(pfNode==='extract'){
       var body=(st==='to_review'||st==='to_load')?{force:true}:{};
       var rv=document.getElementById('pfRule');
@@ -692,6 +698,19 @@ function pfBindAction(){
       if(!(o.s===200&&o.j&&o.j.ok)){
         btn.disabled=false;
         if(m) m.textContent='失败：'+((o.j&&o.j.error)||o.s);
+        return;
+      }
+      if(pfNode==='parse'){
+        if(m){
+          m.textContent=st==='loaded'
+            ?'已启动测试重解析；正式数据保持不变。':'已启动解析。';
+          var progressLink=document.createElement('a');
+          progressLink.href='/parse?from_source='+pfId;
+          progressLink.textContent='查看解析进度 →';
+          progressLink.className='linkbtn';
+          m.appendChild(document.createTextNode(' '));
+          m.appendChild(progressLink);
+        }
         return;
       }
       pfLoad();

@@ -136,13 +136,15 @@ def delete_def(index_id):
 
 
 def add_value(index_id, index_value):
-    """写指标结果：只存定义 ID + 结果值。"""
+    """覆盖指标结果：同一事务先删旧值，再写入唯一新值。"""
     conn = db.connect()
     try:
         with conn.cursor() as cur:
             cur.execute('SELECT id FROM c1_index_info WHERE id=%s', (index_id,))
             if not cur.fetchone():
                 raise NotFound('指标定义不存在')
+            cur.execute('DELETE FROM c1_index_value WHERE index_id=%s',
+                        (index_id,))
             cur.execute('INSERT INTO c1_index_value (index_id,index_value)'
                         ' VALUES (%s,%s)', (index_id, str(index_value)))
             vid = cur.lastrowid

@@ -94,6 +94,7 @@
           <div class="graph-nodes" id="graph-nodes"></div>
         </div>
         <div class="graph-empty" id="graph-empty" hidden><b>暂无流程节点</b></div>
+        <button type="button" class="btn graph-run-all" id="graph-run-all">重新计算</button>
       </div>
     </section>
   </div>
@@ -101,11 +102,10 @@
 <div class="action-menu compute-action-menu" id="compute-action-menu" role="menu" hidden></div>
 
 <div class="drawer wide lineage-drawer" id="lineage" aria-label="上游追溯工作台" hidden>
-  <div class="dpanel lineage-panel">
+  <div class="dpanel">
     <div class="dhead">
       <h2 id="lineage-title">上游追溯</h2><span class="tag" id="lineage-tag"></span>
       <span class="spacer"></span>
-      <span class="hint" tabindex="0" data-tip="双击节点查看对应业务表与资料文件；单击仅选中节点。">?</span>
       <button type="button" class="dclose" id="lineage-close">关闭 (Esc)</button>
     </div>
     <div class="dbody lineage-body">
@@ -117,19 +117,18 @@
         </div>
       </section>
       <div class="lineage-mobile-tabs" role="tablist" aria-label="追溯内容">
-        <button type="button" class="btn mini ghost is-active" data-lineage-tab="data" role="tab" aria-selected="true">业务表</button>
-        <button type="button" class="btn mini ghost" data-lineage-tab="document" role="tab" aria-selected="false">资料文件</button>
+        <button type="button" class="btn mini ghost is-active" data-lineage-tab="current" role="tab" aria-selected="true">当前节点数据</button>
+        <button type="button" class="btn mini ghost" data-lineage-tab="upstream" role="tab" aria-selected="false">上游节点数据</button>
       </div>
       <div class="lineage-detail-grid">
-        <section class="lineage-panel lineage-data-panel lineage-mobile-active" id="lineage-data-panel">
-          <div class="section-head"><b>业务表</b><span class="spacer"></span><span class="hint" tabindex="0" data-tip="展示当前节点上游指标所依赖的业务表与匹配样本。">?</span></div>
-          <div class="lineage-data" id="lineage-data"></div>
-        </section>
-        <section class="lineage-panel lineage-document-panel" id="lineage-document-panel">
-          <div class="section-head"><b>资料文件</b><span class="spacer"></span><a id="lineage-open-source" href="#" target="_blank" rel="noopener" hidden>打开原件</a></div>
-          <div class="lineage-documents" id="lineage-documents"></div>
-          <div class="lineage-document-status" id="lineage-document-status"></div>
+        <section class="lineage-panel lineage-current-panel lineage-mobile-active" id="lineage-current-panel">
+          <div class="section-head"><b>当前节点数据</b><span class="spacer"></span><a id="lineage-open-source" href="#" target="_blank" rel="noopener" hidden>打开原件</a></div>
+          <div class="lineage-current" id="lineage-current"></div>
           <iframe id="lineage-document-frame" title="资料文件预览" hidden></iframe>
+        </section>
+        <section class="lineage-panel lineage-upstream-panel" id="lineage-upstream-panel">
+          <div class="section-head"><b>上游节点数据</b></div>
+          <div class="lineage-upstream" id="lineage-upstream"></div>
         </section>
       </div>
     </div>

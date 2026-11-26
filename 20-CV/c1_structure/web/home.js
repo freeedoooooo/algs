@@ -1,6 +1,6 @@
 /* web/home.js — 工作台首页：快速解析条 + 四张状态卡 + 待办列表。
    计数纯前端拼装
-   （/api/sources/state ＋ /api/staging/ledger），无新端点、无状态落库。 */
+   （/api/sources/state ＋ /api/sources/ledger），无新端点、无状态落库。 */
 var hpicked=[];
 var hdrop=document.getElementById('hdrop'), hpick=document.getElementById('hpick');
 var hlist=document.getElementById('hlist'), hgo=document.getElementById('hgo');
@@ -193,7 +193,7 @@ function render(){
 function refresh(){
   Promise.all([
     fetch('/api/sources/state').then(function(r){return r.json();}),
-    fetch('/api/staging/ledger').then(function(r){return r.json();})
+    fetch('/api/sources/ledger').then(function(r){return r.json();})
   ]).then(function(res){
     items=res[0].items||[]; led=res[1].items||[];
     render();

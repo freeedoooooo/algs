@@ -288,10 +288,12 @@ function poll(){
     }
     if(s.running){timer=setTimeout(poll,800);return;}
     if(s.ready){
-      msg.textContent='解析完成。可调整参数后，用同一批文件重新解析。';
+      msg.textContent=s.test_mode
+        ?'测试重解析完成；正式数据、暂存、回执和状态均未改变。'
+        :'解析完成。可调整参数后，用同一批文件重新解析。';
       go.disabled=false;
-      showStgLink(s.file_id);
-      showResult(s.cases);
+      if(!s.test_mode) showStgLink(s.file_id);
+      showResult(s.cases,s.test_mode);
       loadHistory(s.file_id,true);
     }
   }).catch(function(){timer=setTimeout(poll,1200);});
@@ -329,13 +331,13 @@ function rightState(st){
   if(st!=='done'){ filetabs.hidden=true; reportcol.classList.remove('hastabs'); }
 }
 /* 单文件报告：直接落该资料命名空间，无文件页签 */
-function reportUrl(fid){
-  return '/files/'+fid+'/'+encodeURIComponent('对照报告.html');
+function reportUrl(fid,testMode){
+  return '/files/'+fid+'/'+(testMode?'test/':'')+encodeURIComponent('对照报告.html');
 }
-function showResult(cases){
+function showResult(cases,testMode){
   rightState('done');
   cases=cases||[];
-  reportFrame.src=(cases.length?reportUrl(cases[0].file_id):'/parse-report')+'?t='+Date.now();
+  reportFrame.src=(cases.length?reportUrl(cases[0].file_id,testMode):'/parse-report')+'?t='+Date.now();
 }
 /* 完成后点「查看日志」：进度卡作为抽屉叠加在报告上，「关闭」收回 */
 logbtn.onclick=function(){
@@ -457,7 +459,10 @@ fetch('/api/status').then(function(r){return r.json();}).then(function(s){
   if(s.running){ rightState('run'); say(s.logs,s.steps); progress(s); poll(); }
   else if(s.ready){
     /* 刷新页面直接进完成态：日志/进度也要补渲染，否则「查看日志」抽屉是空的 */
-    say(s.logs,s.steps); progress(s); showStgLink(s.file_id); showResult(s.cases);
+    say(s.logs,s.steps); progress(s);
+    if(!s.test_mode) showStgLink(s.file_id);
+    else msg.textContent='测试重解析完成；正式数据、暂存、回执和状态均未改变。';
+    showResult(s.cases,s.test_mode);
     loadHistory(s.file_id,true);
   }
   else loadHistory(fromSrc||undefined);

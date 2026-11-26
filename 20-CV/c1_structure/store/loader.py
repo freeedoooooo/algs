@@ -77,24 +77,36 @@ def list_tables(ds):
     return list(out)
 
 
+def table_comments(ds, tables):
+    """批量读取表注释，同一数据源只建立一次业务库连接。"""
+    names = list(dict.fromkeys(tables))
+    if not names:
+        return {}
+    key = _cache_key(ds)
+    missing = [name for name in names
+               if _cached(key, ('table_comment', name)) is None]
+    if missing:
+        conn = connect_datasource(ds)
+        try:
+            placeholders = ','.join(['%s'] * len(missing))
+            with conn.cursor() as cur:
+                cur.execute(
+                    'SELECT table_name,table_comment FROM information_schema.tables'
+                    ' WHERE table_schema=%s AND table_name IN ({})'.format(
+                        placeholders), [ds['db_name']] + missing)
+                found = {row[0]: str(row[1] or '') for row in cur.fetchall()}
+        finally:
+            conn.close()
+        now = time.monotonic()
+        for name in missing:
+            _INTROSPECT_CACHE[(key, ('table_comment', name))] = (
+                now, found.get(name, ''))
+    return {name: _cached(key, ('table_comment', name)) or ''
+            for name in names}
+
+
 def table_comment(ds, table):
-    key, kind = _cache_key(ds), ('table_comment', table)
-    hit = _cached(key, kind)
-    if hit is not None:
-        return hit
-    conn = connect_datasource(ds)
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                'SELECT table_comment FROM information_schema.tables'
-                ' WHERE table_schema=%s AND table_name=%s',
-                (ds['db_name'], table))
-            row = cur.fetchone()
-            out = str(row[0] or '') if row else ''
-    finally:
-        conn.close()
-    _INTROSPECT_CACHE[(key, kind)] = (time.monotonic(), out)
-    return out
+    return table_comments(ds, [table])[table]
 
 
 def list_columns(ds, table):

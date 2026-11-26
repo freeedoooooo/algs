@@ -74,6 +74,52 @@ try:
 except errors.BadRequest:
     check('非法组合拒绝', True)
 
+# --- 指标结果先删后写 ---
+class ValueCursor:
+    def __init__(self):
+        self.calls = []
+        self.lastrowid = 9
+    def __enter__(self):
+        return self
+    def __exit__(self, *args):
+        return False
+    def execute(self, sql, args):
+        self.calls.append((sql, args))
+    def fetchone(self):
+        return (1,)
+
+
+class ValueConnection:
+    def __init__(self):
+        self.cur = ValueCursor()
+        self.commits = 0
+        self.closed = False
+    def cursor(self):
+        return self.cur
+    def commit(self):
+        self.commits += 1
+    def close(self):
+        self.closed = True
+
+
+value_conn = ValueConnection()
+orig_connect = ir.db.connect
+ir.db.connect = lambda: value_conn
+try:
+    vid = ir.add_value(1, '12.5')
+    sqls = [sql for sql, args in value_conn.cur.calls]
+    check('指标结果返回新 ID', vid == 9)
+    check('指标结果先删后写',
+          len(sqls) == 3 and sqls[1].startswith('DELETE FROM c1_index_value')
+          and sqls[2].startswith('INSERT INTO c1_index_value'), sqls)
+    check('指标结果删除参数正确',
+          value_conn.cur.calls[1][1] == (1,))
+    check('指标结果事务提交并关闭连接',
+          value_conn.commits == 1 and value_conn.closed)
+finally:
+    ir.db.connect = orig_connect
+
+
 # --- 简化口径：无版本/哈希列 ---
 for mod in (ir, rr, fr):
     for cols_name in ('_INFO_COLS', '_VALUE_COLS'):

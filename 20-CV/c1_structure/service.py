@@ -136,7 +136,8 @@ def launch(paths, params, warns, ctx, tpl=None):
                              if not k.startswith('_')}, warnings=warns,
                      logs=[], progress=0, stage='batch',
                      log_file=label + '.log',
-                     rule=tpl, file_id=primary, task_id=primary)
+                     rule=tpl, file_id=primary, task_id=primary,
+                     test_mode=False)
     log.stage('batch', '资料 {} · 收到 {} 个文件'.format(primary, len(paths)))
     log.info('params', '生效参数：{}'.format(
         ', '.join('{}={}'.format(k, v) for k, v in params.items()
@@ -163,7 +164,7 @@ _STAGE_FRAC = {
 }
 
 
-def _ingest_case(file_id, case_abs):
+def _ingest_case(file_id, case_abs, prefix=''):
     """scratch 目录全量产物入 c1_parse_artifact（管线零改动）。"""
     artifact = _load('store.artifact')
     for root, _, files in os.walk(case_abs):
@@ -173,7 +174,7 @@ def _ingest_case(file_id, case_abs):
             p = os.path.join(root, fn)
             rel = os.path.relpath(p, case_abs).replace(os.sep, '/')
             with open(p, 'rb') as f:
-                artifact.save(file_id, rel, f.read())
+                artifact.save(file_id, prefix + rel, f.read())
 
 
 def rmtree_retry(path, tries=6, delay=0.3):
@@ -200,10 +201,12 @@ def task_batch(paths, params=None, log=None, task_ctx=None):
                                       for p in paths],
                             'created_at': _now()}
     catalog = _load('store.catalog')
+    preserve_state = bool(task_ctx.get('preserve_state'))
+    artifact_prefix = task_ctx.get('artifact_prefix') or ''
 
     def db(fid, state, error=None):
         # DB 必选：目录状态写失败上抛 → 整批显式 failed，不降级
-        if fid is None:
+        if fid is None or preserve_state:
             return
         catalog.set_state(fid, state, error)
 
@@ -256,9 +259,9 @@ def task_batch(paths, params=None, log=None, task_ctx=None):
                              params=params)
             # 解析止步：产物先入 BLOB 再置 to_extract（状态不先于内容）
             if fid is not None:
-                _ingest_case(fid, case_abs)
+                _ingest_case(fid, case_abs, artifact_prefix)
                 db(fid, 'to_extract', None)
-            fc['state'] = 'to_extract'
+            fc['state'] = 'loaded' if preserve_state else 'to_extract'
             rmtree_retry(case_abs)
             fc.pop('scratch', None)
             progress(int(i / total * 100))
@@ -274,8 +277,9 @@ def task_batch(paths, params=None, log=None, task_ctx=None):
                          elapsed=round(time.time()
                                        - (STATE['started'] or time.time()), 1),
                          progress=100, stage='done')
-        log.ok('done', '解析完成 {} 个文件（待抽取），耗时 {}s'.format(
-            total, STATE['elapsed']))
+        log.ok('done', '解析完成 {} 个文件（{}），耗时 {}s'.format(
+            total, '测试产物已保存，正式状态未变' if preserve_state else '待抽取',
+            STATE['elapsed']))
     except Exception as e:
         if log:
             log.error('error', '出错：' + str(e))
@@ -389,10 +393,10 @@ def approve_all(file_id):
             'file_state': new_state}
 
 
-def reparse(file_id, params=None):
+def reparse(file_id, params=None, test_mode=False):
     """原地重放解析：原件字节从 c1_doc_file 回捞，按资料生效参数重跑。
-    状态重置 pending→parsing；旧产物、暂存、校验结论、隔离行与回执
-    全部清空（D4）；规则绑定不保留。解析中/入库中/已入库拒绝。"""
+    普通重放清空旧产物、暂存、校验结论、隔离行与回执，规则绑定不保留。
+    test_mode 仅允许已入库资料，产物写入 test/，正式数据与状态全部保留。"""
     catalog = _load('store.catalog')
     content_db = _load('store.content_db')
     artifact = _load('store.artifact')
@@ -403,8 +407,12 @@ def reparse(file_id, params=None):
     f = catalog.get_file(file_id)
     if f is None:
         raise errors.NotFound('资料不存在')
-    if f['state'] in ('loading', 'loaded'):
-        raise errors.Conflict('资料入库中/已入库，不能原地重放（回执已对应旧记录）')
+    if f['state'] == 'loading':
+        raise errors.Conflict('资料入库中，不能重放')
+    if f['state'] == 'loaded' and not test_mode:
+        raise errors.Conflict('资料已入库，请使用测试重解析（保留正式数据）')
+    if test_mode and f['state'] != 'loaded':
+        raise errors.Conflict('测试重解析仅适用于已入库资料')
     params = params if params is not None else (f.get('params_json') or {})
     src = catalog.get_file_content(file_id)
     if src is None:
@@ -415,15 +423,16 @@ def reparse(file_id, params=None):
         path = os.path.join(in_dir, name)
         with open(path, 'wb') as fh:
             fh.write(src['data'])
-        content_db.purge_records(file_id)
-        artifact.delete_all(file_id)
-        load.clear_load_logs(file_id)
-        catalog.clear_quarantine(file_id)
-        catalog.set_rule(file_id, None)
-        catalog.set_state(file_id, 'pending', '')
+        if not test_mode:
+            content_db.purge_records(file_id)
+            artifact.delete_all(file_id)
+            load.clear_load_logs(file_id)
+            catalog.clear_quarantine(file_id)
+            catalog.set_rule(file_id, None)
+            catalog.set_state(file_id, 'pending', '')
         ctx = [{'file_id': file_id, 'name': name, 'path': path,
-                'state': 'pending'}]
-        label = 'file_{}'.format(file_id)
+                'state': f['state']}]
+        label = 'file_{}{}'.format(file_id, '_test' if test_mode else '')
         tasklog = _load('tasklog')
         log = tasklog.TaskLog(label,
                               log_path=os.path.join(config.LOG_DIR,
@@ -431,7 +440,9 @@ def reparse(file_id, params=None):
                               on_emit=_on_log)
         task_ctx = {'file_id': file_id, 'rule': None, 'files': ctx,
                     'created_at': f.get('created_at') or _now(),
-                    'in_scratch': in_dir}
+                    'in_scratch': in_dir,
+                    'preserve_state': test_mode,
+                    'artifact_prefix': 'test/' if test_mode else ''}
         with LOCK:
             STATE.update(running=True, ready=False, error=None, steps=[],
                          cases=[], started=time.time(), elapsed=0,
@@ -439,12 +450,17 @@ def reparse(file_id, params=None):
                                  if not k.startswith('_')}, warnings=[],
                          logs=[], progress=0, stage='batch',
                          log_file=label + '.log',
-                         rule=None, file_id=file_id, task_id=file_id)
-        log.stage('batch', '资料 {} · 重放解析（原地）'.format(file_id))
+                         rule=None, file_id=file_id, task_id=file_id,
+                         test_mode=test_mode)
+        log.stage('batch', '资料 {} · {}'.format(
+            file_id, '测试重解析（保留正式数据）' if test_mode else '重放解析（原地）'))
         threading.Thread(target=task_batch,
                          args=([path], params, log, task_ctx),
                          daemon=True).start()
-        return {'ok': True, 'file_id': file_id, 'count': 1}
+        return {'ok': True, 'file_id': file_id, 'count': 1,
+                'test_mode': test_mode,
+                'report_url': '/files/{}/test/{}'.format(
+                    file_id, config.PARSE_REPORT_NAME) if test_mode else None}
     except Exception:
         rmtree_retry(in_dir)
         raise

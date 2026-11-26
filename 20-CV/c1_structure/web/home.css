@@ -35,5 +35,9 @@
 
 #todo .clink{margin-left:auto}
 #todorows .warn{color:var(--c1-danger)}
-#todorows .desc{color:var(--c1-text-muted);display:inline-block;max-width:260px;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
+#todotable{table-layout:fixed;min-width:720px}
+#todotable th:nth-child(2){width:80px}
+#todotable th:nth-child(3){width:45%}
+#todotable th:nth-child(5){width:150px}
+#todorows .desc{color:var(--c1-text-muted);display:block;max-width:100%;min-width:0;
+  overflow-wrap:anywhere;white-space:normal;line-height:1.5;vertical-align:middle}
