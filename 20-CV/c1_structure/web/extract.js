@@ -650,6 +650,7 @@ document.getElementById('verlist').addEventListener('click',function(e){
 function openEditor(id){
   cur=id; cands=null; pendingTable=null; filledBy=null;
   emsg.textContent=''; frows.innerHTML='';
+  if(typeof aiClose==='function') aiClose();
   setMode('simple'); jsonspec.value='';
   smartRows.innerHTML=smartRow('',''); bindSmartEvents();
   smartScope.value='all'; smartPage.value=''; smartPage.hidden=true;
@@ -843,6 +844,74 @@ function delRule(id,name){
 }
 delbtn.onclick=function(){
   if(cur!=null) delRule(cur,ename.value.trim());
+};
+
+/* ---- P0 AI 生成规则：四段式面板（输入/过程/对拍/确认）---- */
+var aiGenBtn=document.getElementById('aiGenBtn'), aigen=document.getElementById('aigen');
+var aiFields=document.getElementById('aiFields'), aiLog=document.getElementById('aiLog');
+var aiMetrics=document.getElementById('aiMetrics'), aiDiff=document.getElementById('aiDiff');
+function aiClose(){aigen.hidden=true;aiFields.innerHTML='';aiLog.textContent='';
+  aiMetrics.innerHTML='';aiDiff.textContent='';}
+function aiTargets(){
+  var out=[], seen={};
+  if(mode==='smart'){
+    Array.prototype.forEach.call(smartRows.querySelectorAll('.tplrow'),function(r){
+      var n=r.querySelector('.sm_name').value.trim();
+      if(n&&!seen[n]){seen[n]=1;out.push({target:n,description:r.querySelector('.sm_desc').value.trim()});}
+    });
+  }else{
+    Array.prototype.forEach.call(frows.children,function(div){
+      var n=div.querySelector('.fname').value.trim();
+      if(n&&!seen[n]){seen[n]=1;out.push({target:n,description:''});}
+    });
+  }
+  return out;
+}
+function aiMetric(label,val){
+  return '<div class="aigen-metric"><span>'+escHtml(label)+'</span><b>'+escHtml(val)+'</b></div>';
+}
+aiGenBtn.onclick=function(){
+  emsg.textContent='';
+  var fid=refsel.value?Number(refsel.value):0;
+  if(!fid){showErr('请先选择参考文件（已解析的资料）');return;}
+  var fields=aiTargets();
+  if(!fields.length){showErr('请先填写目标列名（简单或智能模式的表单）');return;}
+  aigen.hidden=false;
+  aiFields.innerHTML=fields.map(function(f){
+    return '<span class="aigen-chip">'+escHtml(f.target)+'</span>';
+  }).join('');
+  aiLog.textContent='正在生成（Stub 模式不会调用真实模型）…';
+  aiMetrics.innerHTML='';aiDiff.textContent='';
+  aiGenBtn.disabled=true;
+  api('POST','/api/agent/generate-rule',{
+    file_id:fid, fields:fields,
+    datasource_id:bizds.value?Number(bizds.value):null,
+    table:biztable.value||null
+  }).then(function(j){
+    var d=j.diagnostics||{}, cmp=d.compare||{};
+    var lines=[];
+    lines.push('静态校验：通过');
+    lines.push('内存干跑：'+(d.records_n||0)+' 条记录');
+    if(j._agent_meta&&j._agent_meta.stub) lines.push('Stub 占位：pipeline 为空，仅联调');
+    if(j._agent_meta&&j._agent_meta.repairs) lines.push('JSON 修复：'+j._agent_meta.repairs+' 次');
+    aiLog.textContent=lines.join('\n');
+    var acc=cmp.field_accuracy==null?'—':(Math.round(cmp.field_accuracy*100)+'%');
+    var cov=d.anchor_coverage==null?'—':(Math.round(d.anchor_coverage*100)+'%');
+    aiMetrics.innerHTML=aiMetric('字段一致率',acc)+aiMetric('锚点覆盖',cov)+
+      aiMetric('置信度',Math.round((j.confidence||0)*100)+'%')+
+      aiMetric('对拍样本',cmp.targets_n==null?'—':cmp.targets_n);
+    var msgs=[];
+    if(d.warning) msgs.push(escHtml(d.warning));
+    if(cmp.count_match===false) msgs.push('记录数与已确认样本不一致');
+    if(cmp.targets_n&&cmp.field_accuracy==null) msgs.push('暂无可比对字段');
+    aiDiff.textContent=msgs.join('；');
+    setMode('json');
+    jsonspec.value=JSON.stringify(j.spec,null,2);
+    showOk('已生成规则草稿，请在「复杂抽取」编辑器中审阅后保存为新版本。');
+  }).catch(function(e){
+    aiLog.textContent='生成失败：'+e.message;
+    emsg.textContent=e.message;
+  }).then(function(){aiGenBtn.disabled=false;});
 };
 
 load();

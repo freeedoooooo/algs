@@ -82,7 +82,7 @@ def raw_call(prompt, spec=None):
 
 
 def call_json(prompt, schema, *, llm=None, max_repair=2, spec=None,
-              stub=None):
+              stub=None, stub_fields=None):
     """返回 (dict, meta)：严格 JSON 解析，失败时把报错回喂模型定点修复。
 
     llm 注入签名 llm(prompt, spec) -> dict；stub 注入签名 stub(prompt) -> dict。
@@ -95,8 +95,15 @@ def call_json(prompt, schema, *, llm=None, max_repair=2, spec=None,
         meta['stub'] = True
         return stub(prompt), meta
     if llm is None and config.SMART_STUB:
+        # Stub 必须返回结构合法的占位 spec，供前端/API 联调走完整链路；
+        # pipeline 留空（不取值），干跑标"全空字段"警告，不会误当可用规则。
+        # target 跟随用户字段，保证前端填入编辑器的草稿与用户目标一致。
+        targets = [str(f.get('target')) for f in (stub_fields or [])
+                   if isinstance(f, dict) and f.get('target')] or ['_stub']
         meta['stub'] = True
-        return {'fields': [], '_stub': True}, meta
+        return {'spec_version': 2,
+                'fields': [{'target': t, 'pipeline': []} for t in targets],
+                '_stub': True}, meta
 
     # 修复是 call_json 的职责，与传输来源无关：注入的 llm 也走同一循环。
     transport = llm if llm is not None else raw_call

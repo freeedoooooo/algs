@@ -189,7 +189,9 @@ def add_value(index_id, index_version, def_hash, value_text, input_rows):
                 (index_id, index_version, str(value_text),
                  dump(input_rows), vh))
             if cur.rowcount:
-                return cur.lastrowid, vh, True
+                vid = cur.lastrowid
+                conn.commit()
+                return vid, vh, True
             cur.execute('SELECT id FROM c1_index_value WHERE index_id=%s'
                         ' AND index_version=%s AND result_hash=%s',
                         (index_id, index_version, vh))

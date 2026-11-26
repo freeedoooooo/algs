@@ -84,6 +84,31 @@
         </select>
         <datalist id="bizfieldopts"></datalist>
       </div>
+      <div class="fsec" id="aiSec">
+        <label class="flab">AI 生成规则
+          <span class="hint" tabindex="0" data-tip="以参考文件与目标列名为输入，自动生成 spec_version=2 规则草稿。&#10;生成后可在复杂抽取编辑器里审阅微调；存在已确认校验记录时会自动对拍。&#10;只产草稿、不自动保存；保存仍走既有「保存为新版本」。需服务端配置 C1_LLM_*，Stub 模式仅联调。">?</span>
+        </label>
+        <button type="button" class="btn mini" id="aiGenBtn">AI 生成规则草稿</button>
+        <div class="aigen" id="aigen" hidden>
+          <div class="aigen-sec">
+            <div class="aigen-h">① 输入 · 目标列名</div>
+            <div class="aigen-fields" id="aiFields"></div>
+          </div>
+          <div class="aigen-sec">
+            <div class="aigen-h">② 生成过程</div>
+            <div class="aigen-log" id="aiLog">等待生成…</div>
+          </div>
+          <div class="aigen-sec">
+            <div class="aigen-h">③ 对拍审阅 · 中间层已确认记录</div>
+            <div class="aigen-metrics" id="aiMetrics"></div>
+            <div class="aigen-diff" id="aiDiff"></div>
+          </div>
+          <div class="aigen-sec">
+            <div class="aigen-h">④ 确认</div>
+            <div class="aigen-note">草稿已填入「复杂抽取」编辑器；审阅微调后点右下「保存为新版本」。</div>
+          </div>
+        </div>
+      </div>
       <div class="fsec">
         <label class="flab">规则模式
           <span class="hint" tabindex="0" data-tip="简单抽取：沿用选表选列方式。&#10;复杂抽取：用场景模板生成配置，也可直接编辑 mapping_json。">?</span>

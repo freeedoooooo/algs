@@ -184,7 +184,9 @@ def add_value(rule_id, rule_version, def_hash, index_value_ids, outcome,
                 (rule_id, rule_version, dump(index_value_ids), outcome,
                  dump(detail), vh))
             if cur.rowcount:
-                return cur.lastrowid, vh, True
+                vid = cur.lastrowid
+                conn.commit()
+                return vid, vh, True
             cur.execute('SELECT id FROM c1_rule_value WHERE rule_id=%s'
                         ' AND rule_version=%s AND result_hash=%s',
                         (rule_id, rule_version, vh))

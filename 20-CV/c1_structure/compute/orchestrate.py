@@ -8,6 +8,7 @@ app.py 只做 HTTP 校验，业务编排收敛在此。三类 execute_* 返回�
 from .. import store
 from ..store import index_repo, rule_repo, frame_repo
 from ..store.errors import BadRequest, NotFound
+from ..store.value_common import value_hash as _value_hash
 from . import engine
 
 
@@ -100,51 +101,200 @@ def execute_frame(frame_id, rule_value_ids):
             'result_hash': vh, 'created': created, 'detail': detail}
 
 
-def parse_lineage(scope, value_id):
-    """展开单个结果的血缘上下文（lineage/replay 接口的基础数据）。
+def _locate_url(record_id, column=None):
+    url = '/api/staging/locate/{}'.format(record_id)
+    if column:
+        url += '?key=' + str(column)
+    return url
 
-    index：返回输入行锚点 + locate 链接；
-    rule：返回依赖的 index value 列表；
-    frame：返回依赖的 rule value 列表。
-    递归全链展开留给 P2 后续接口，本函数提供逐层数据。
+
+def _index_chain(value_id, chain, file_ids):
+    """追加一个指标结果到 chain，并把其行锚点/源文件累积到上下文。"""
+    row = index_repo.get_value(value_id)
+    if row is None:
+        return
+    defn = index_repo.get_def(index_id=row['index_id'],
+                              version=row['index_version'])
+    column = (defn or {}).get('source_column')
+    rows = []
+    for r in row['input_rows_json'].get('rows') or []:
+        item = dict(r)
+        item['locate'] = (_locate_url(r['record_id'], column)
+                          if r.get('record_id') is not None else None)
+        rows.append(item)
+        if r.get('file_id') is not None:
+            file_ids.add(r['file_id'])
+    chain.append({'scope': 'index', 'result_id': row['id'],
+                  'value': row['value_text'], 'rows': rows,
+                  'matched_rows': row['input_rows_json'].get('matched_rows'),
+                  'truncated': row['input_rows_json'].get('truncated'),
+                  'result_hash': row['result_hash']})
+
+
+def _rule_chain(value_id, chain, file_ids):
+    row = rule_repo.get_value(value_id)
+    if row is None:
+        return
+    chain.append({'scope': 'rule', 'result_id': row['id'],
+                  'outcome': row['outcome'], 'detail': row['detail_json'],
+                  'result_hash': row['result_hash']})
+    for v in row['index_value_ids_json']:
+        _index_chain(v, chain, file_ids)
+
+
+def _source_files(file_ids):
+    """file_id 集合 → 源文件展示信息（名字 + 预览链接）。"""
+    out = []
+    for fid in sorted(file_ids):
+        f = store.catalog.get_file(fid)
+        out.append({'file_id': fid,
+                    'name': (f or {}).get('name') or '资料 #{}'.format(fid),
+                    'open': '/preview?embed=1&file={}'.format(fid)})
+    return out
+
+
+def parse_lineage(scope, value_id):
+    """递归展开完整血缘包（设计稿 §7 契约）。
+
+    返回 {ok, scope, result, definition, chain, source_files}：
+    chain 从顶层结果逐层下钻到指标行锚点；每行带 locate 链接可复用
+    /api/staging/locate 到原图格子；source_files 给出起点资料链接。
     """
+    if scope not in ('index', 'rule', 'frame'):
+        raise BadRequest('scope 仅支持 index/rule/frame')
+    repos = {'index': index_repo, 'rule': rule_repo, 'frame': frame_repo}
+    row = repos[scope].get_value(value_id)
+    if row is None:
+        raise NotFound('{}结果不存在'.format(
+            {'index': '指标', 'rule': '规则', 'frame': '框架'}[scope]))
+    def_id, def_ver = row[scope + '_id'], row[scope + '_version']
     if scope == 'index':
-        row = index_repo.get_value(value_id)
-        if row is None:
-            raise NotFound('指标结果不存在')
-        defn = index_repo.get_def(index_id=row['index_id'],
-                                  version=row['index_version'])
-        rows = []
-        for r in row['input_rows_json'].get('rows') or []:
-            item = dict(r)
-            item['locate'] = ('/api/staging/locate/{}'.format(r['record_id'])
-                              if r.get('record_id') is not None else None)
-            rows.append(item)
-        return {'scope': 'index', 'result': row,
-                'definition': (dict(defn) if defn else None),
-                'chain_rows': rows,
-                'source_files': sorted({r.get('file_id') for r in rows
-                                        if r.get('file_id') is not None})}
-    if scope == 'rule':
-        row = rule_repo.get_value(value_id)
-        if row is None:
-            raise NotFound('规则结果不存在')
-        defn = rule_repo.get_def(rule_id=row['rule_id'],
-                                 version=row['rule_version'])
-        deps = [index_repo.get_value(v)
-                for v in row['index_value_ids_json']]
-        return {'scope': 'rule', 'result': row,
-                'definition': (dict(defn) if defn else None),
-                'deps': [d for d in deps if d]}
-    if scope == 'frame':
-        row = frame_repo.get_value(value_id)
-        if row is None:
-            raise NotFound('框架结果不存在')
-        defn = frame_repo.get_def(frame_id=row['frame_id'],
-                                  version=row['frame_version'])
-        deps = [rule_repo.get_value(v)
-                for v in row['rule_value_ids_json']]
-        return {'scope': 'frame', 'result': row,
-                'definition': (dict(defn) if defn else None),
-                'deps': [d for d in deps if d]}
-    raise BadRequest('scope 仅支持 index/rule/frame')
+        defn = index_repo.get_def(index_id=def_id, version=def_ver)
+    elif scope == 'rule':
+        defn = rule_repo.get_def(rule_id=def_id, version=def_ver)
+    else:
+        defn = frame_repo.get_def(frame_id=def_id, version=def_ver)
+    chain, file_ids = [], set()
+    if scope == 'index':
+        _index_chain(value_id, chain, file_ids)
+    elif scope == 'rule':
+        _rule_chain(value_id, chain, file_ids)
+    else:
+        chain.append({'scope': 'frame', 'result_id': row['id'],
+                      'outcome': row['outcome'], 'score': row['score_text'],
+                      'detail': row['detail_json'],
+                      'result_hash': row['result_hash']})
+        for v in row['rule_value_ids_json']:
+            _rule_chain(v, chain, file_ids)
+    return {'scope': scope, 'result': row,
+            'definition': (dict(defn) if defn else None),
+            'chain': chain, 'source_files': _source_files(file_ids)}
+
+
+# ---------------- replay 复现校验 ----------------
+
+def _replay_index(row, defn):
+    """指标复现：用存储的输入快照重算聚合值与哈希。"""
+    snapshot = row['input_rows_json']
+    recomputed_value = engine.replay_index(defn, snapshot)
+    recomputed_hash = _value_hash(defn['spec_hash'], snapshot)
+    return {
+        'result_hash': {
+            'stored': row['result_hash'],
+            'recomputed': recomputed_hash,
+            'match': recomputed_hash == row['result_hash']},
+        'value': {
+            'stored': row['value_text'],
+            'recomputed': recomputed_value,
+            'match': recomputed_value == row['value_text']},
+    }
+
+
+def _replay_rule(row, defn):
+    """规则复现：用依赖的指标值重算比较结论与哈希。"""
+    ids = row['index_value_ids_json']
+    refs = defn['index_refs_json']
+    alias_values = {}
+    for ref, vid in zip(refs, ids):
+        iv = index_repo.get_value(vid)
+        if iv is None:
+            raise NotFound('依赖的指标结果不存在：{}'.format(vid))
+        alias_values[ref['alias']] = iv['value_text']
+    outcome, detail = engine.run_rule(defn, alias_values)
+    recomputed_hash = _value_hash(defn['spec_hash'], {
+        'index_value_ids': ids, 'detail': detail, 'outcome': outcome})
+    return {
+        'result_hash': {
+            'stored': row['result_hash'], 'recomputed': recomputed_hash,
+            'match': recomputed_hash == row['result_hash']},
+        'outcome': {
+            'stored': row['outcome'], 'recomputed': outcome,
+            'match': outcome == row['outcome']},
+        'detail': {
+            'stored': row['detail_json'], 'recomputed': detail,
+            'match': detail == row['detail_json']},
+    }
+
+
+def _replay_frame(row, defn):
+    """框架复现：用依赖的规则值重算组合结论与哈希。"""
+    ids = row['rule_value_ids_json']
+    refs = defn['rule_refs_json']
+    outcomes = []
+    for ref, vid in zip(refs, ids):
+        rv = rule_repo.get_value(vid)
+        if rv is None:
+            raise NotFound('依赖的规则结果不存在：{}'.format(vid))
+        outcomes.append({'rule_value_id': rv['id'], 'outcome': rv['outcome'],
+                         'weight': ref.get('weight', 1),
+                         'veto': bool(ref.get('veto'))})
+    outcome, score, detail = engine.run_frame(defn, outcomes)
+    recomputed_hash = _value_hash(defn['spec_hash'], {
+        'rule_value_ids': ids, 'detail': detail,
+        'outcome': outcome, 'score': score})
+    return {
+        'result_hash': {
+            'stored': row['result_hash'], 'recomputed': recomputed_hash,
+            'match': recomputed_hash == row['result_hash']},
+        'outcome': {
+            'stored': row['outcome'], 'recomputed': outcome,
+            'match': outcome == row['outcome']},
+        'score': {
+            'stored': row['score_text'], 'recomputed': score,
+            'match': (score or None) == (row['score_text'] or None)},
+        'detail': {
+            'stored': row['detail_json'], 'recomputed': detail,
+            'match': detail == row['detail_json']},
+    }
+
+
+def replay_value(scope, value_id):
+    """复现校验：用结果绑定版本的定义 + 存储快照重算，逐字段比对。
+
+    返回 {scope, value_id, definition:{id,version,spec_hash}, checks:{...},
+    consistent:bool}。consistent 为所有 check.match 的合取——
+    任何字段被篡改（结果值/依赖/明细/哈希）都会使对应 match=false。
+    """
+    if scope not in ('index', 'rule', 'frame'):
+        raise BadRequest('scope 仅支持 index/rule/frame')
+    repos = {'index': index_repo, 'rule': rule_repo, 'frame': frame_repo}
+    row = repos[scope].get_value(value_id)
+    if row is None:
+        raise NotFound('{}结果不存在'.format(
+            {'index': '指标', 'rule': '规则', 'frame': '框架'}[scope]))
+    def_id, def_ver = row[scope + '_id'], row[scope + '_version']
+    if scope == 'index':
+        defn = index_repo.get_def(index_id=def_id, version=def_ver)
+    elif scope == 'rule':
+        defn = rule_repo.get_def(rule_id=def_id, version=def_ver)
+    else:
+        defn = frame_repo.get_def(frame_id=def_id, version=def_ver)
+    if defn is None:
+        raise NotFound('结果绑定的定义版本不存在，无法复现')
+    checks = {'index': _replay_index, 'rule': _replay_rule,
+              'frame': _replay_frame}[scope](row, defn)
+    consistent = all(v['match'] for v in checks.values())
+    return {'scope': scope, 'value_id': value_id,
+            'definition': {'id': def_id, 'version': def_ver,
+                           'spec_hash': defn['spec_hash']},
+            'checks': checks, 'consistent': consistent}

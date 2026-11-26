@@ -187,7 +187,9 @@ def add_value(frame_id, frame_version, def_hash, rule_value_ids, outcome,
                 (frame_id, frame_version, dump(rule_value_ids), outcome,
                  score_text, dump(detail), vh))
             if cur.rowcount:
-                return cur.lastrowid, vh, True
+                vid = cur.lastrowid
+                conn.commit()
+                return vid, vh, True
             cur.execute('SELECT id FROM c1_frame_value WHERE frame_id=%s'
                         ' AND frame_version=%s AND result_hash=%s',
                         (frame_id, frame_version, vh))

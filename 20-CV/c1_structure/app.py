@@ -99,6 +99,18 @@ async def store_error_handler(_request, exc):
     return JSONResponse({'ok': False, 'error': exc.msg}, status_code=exc.code)
 
 
+@app.exception_handler(_load('agent.llm').LLLError)
+async def agent_llm_error_handler(_request, exc):
+    """Agent LLM 失败显式返回，不静默降级、不伪装成平台库故障。"""
+    _agent_llm = _load('agent.llm')
+    codes = {_agent_llm.LLMUnconfigured: 400,
+             _agent_llm.LLMTimeout: 504,
+             _agent_llm.LLMBadJSON: 502,
+             _agent_llm.LLMSchemaFail: 422}
+    code = codes.get(type(exc), 500)
+    return JSONResponse({'ok': False, 'error': str(exc)}, status_code=code)
+
+
 @app.exception_handler(Exception)
 async def fallback_error_handler(_request, exc):
     import pymysql
@@ -518,6 +530,56 @@ async def api_rule_version_add(rule_id: int, request: Request):
     return {'ok': True, 'version_id': vid}
 
 
+# ---- Agent 规则生成（P0）----
+# 独立前缀 /api/agent/...：避开 /api/extract-rules/{rule_id} 的 int 路由歧义。
+# 只产草稿、不写库、不建版本；保存由前端走既有 create_version，人工确认后生效。
+
+
+@app.post('/api/agent/generate-rule')
+async def api_agent_generate_rule(request: Request):
+    """AI 生成 v2 规则草稿：参考文件 + 目标列名 → spec + 干跑/对拍诊断。
+
+    Stub 模式（C1_SMART_STUB=1，默认）不烧 token；设 0 走真实模型。
+    中间层 confirmed/edited 记录自动作标准答案，内存重跑不碰 _purge。
+    """
+    body = await _json_body(request)
+    file_id = body.get('file_id')
+    if not isinstance(file_id, int):
+        raise store_errors.BadRequest('file_id 须为整数（参考文件）')
+    fields = body.get('fields')
+    if not isinstance(fields, list) or not fields:
+        raise store_errors.BadRequest('fields 须为非空数组')
+    content = _load('store.content')
+    catalog = _load('store.catalog')
+    f = catalog.get_file(file_id)
+    if f is None:
+        raise store_errors.NotFound('参考文件不存在')
+    doc = content.get_extract(file_id)
+    if doc is None:
+        raise store_errors.Conflict('参考文件尚无解析产物，请先解析')
+
+    from fastapi.concurrency import run_in_threadpool
+    agent = _load('agent.rule_author')
+    refs = {'file_id': file_id,
+            'datasource_id': body.get('datasource_id'),
+            'table': body.get('table')}
+    result = await run_in_threadpool(
+        agent.generate_rule, doc, fields, refs,
+        doc_type=f.get('doc_type'), generation=body.get('generation'),
+        targets=body.get('targets'), content=content,
+        sample_file_id=body.get('sample_file_id') or file_id)
+
+    tasklog_mod = _load('tasklog')
+    log_path = os.path.join(config.LOG_DIR, 'agent_{}.log'.format(file_id))
+    log = tasklog_mod.TaskLog('agent_{}'.format(file_id), log_path=log_path)
+    log.emit('info', 'agent', '生成规则草稿：目标字段 {}'.format(len(fields)))
+    log.emit('ok', 'agent', '静态校验通过；干跑 {} 条；置信度 {}'.format(
+        result.diagnostics.get('records_n', 0), result.confidence))
+    if result.diagnostics.get('warning'):
+        log.emit('warn', 'agent', result.diagnostics['warning'])
+    return result.as_dict()
+
+
 # ---- P2b 入库：数据源 / 映射绑定 / introspection ----
 # 数据源密码明文存库、API 明文返回（2026-11-21 裁决，页面可见可编辑）；
 # 但日志永不打印凭据，测试连接回显仅 host:port/库名。
@@ -559,6 +621,22 @@ def api_index_run(index_id: int):
     return {'ok': True, **_load('compute').execute_index(index_id)}
 
 
+@app.get('/api/index/{index_id}/values')
+def api_index_values(index_id: int, limit: int = 200):
+    return {'items': _load('store.index_repo').list_values(
+        index_id=index_id, limit=limit)}
+
+
+@app.get('/api/index/value/{value_id}/lineage')
+def api_index_lineage(value_id: int):
+    return {'ok': True, **_load('compute').parse_lineage('index', value_id)}
+
+
+@app.get('/api/index/value/{value_id}/replay')
+def api_index_replay(value_id: int):
+    return {'ok': True, **_load('compute').replay_value('index', value_id)}
+
+
 @app.get('/api/rule')
 def api_rule_list():
     return {'items': _load('store.rule_repo').list_defs()}
@@ -594,6 +672,22 @@ async def api_rule_run(rule_id: int, request: Request):
         rule_id, body.get('index_value_ids'))}
 
 
+@app.get('/api/rule/{rule_id}/values')
+def api_rule_values(rule_id: int, limit: int = 200):
+    return {'items': _load('store.rule_repo').list_values(
+        rule_id=rule_id, limit=limit)}
+
+
+@app.get('/api/rule/value/{value_id}/lineage')
+def api_rule_lineage(value_id: int):
+    return {'ok': True, **_load('compute').parse_lineage('rule', value_id)}
+
+
+@app.get('/api/rule/value/{value_id}/replay')
+def api_rule_replay(value_id: int):
+    return {'ok': True, **_load('compute').replay_value('rule', value_id)}
+
+
 @app.get('/api/frame')
 def api_frame_list():
     return {'items': _load('store.frame_repo').list_defs()}
@@ -627,6 +721,22 @@ async def api_frame_run(frame_id: int, request: Request):
     body = await _json_body(request) if (await request.body()) else {}
     return {'ok': True, **_load('compute').execute_frame(
         frame_id, body.get('rule_value_ids'))}
+
+
+@app.get('/api/frame/{frame_id}/values')
+def api_frame_values(frame_id: int, limit: int = 200):
+    return {'items': _load('store.frame_repo').list_values(
+        frame_id=frame_id, limit=limit)}
+
+
+@app.get('/api/frame/value/{value_id}/lineage')
+def api_frame_lineage(value_id: int):
+    return {'ok': True, **_load('compute').parse_lineage('frame', value_id)}
+
+
+@app.get('/api/frame/value/{value_id}/replay')
+def api_frame_replay(value_id: int):
+    return {'ok': True, **_load('compute').replay_value('frame', value_id)}
 
 
 @app.get('/api/load/datasources')
