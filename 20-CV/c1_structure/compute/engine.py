@@ -1,30 +1,15 @@
 """compute/engine.py — 计算层纯引擎（index / rule / frame）。
 
-职责：按当前定义执行运算，返回结果与血缘锚点（简化设计，无版本/哈希/快照）。
-不做 DB 写入；业务库读走 store.loader（白名单 + 参数化 + 标识符转义）。
-
-设计约束（docs/design-index-rule-frame.md §7）：
-- 算子固定枚举，拒绝自由 SQL / 表达式；
-- 指标同一只读连接内跑聚合 + 明细两条查询，避免中间数据变动；
-- 行锚点上限 MAX_INPUT_ROWS，超出置 truncated=True；
-- 所有数值比较用 Decimal，避免浮点误差；结果值以字符串保真。
+极简设计（2026-11-26）：只做运算，返回结果文本；不采行锚点、不存输入明细、
+不算哈希。参与计算的对象从定义表推导；业务库读走 store.loader（白名单 +
+参数化 + 标识符转义）。
 """
-import json
 from decimal import Decimal, InvalidOperation
 
 from ..store import loader
 from ..store.catalog import get_datasource
 from ..store.errors import BadRequest, NotFound
 
-MAX_INPUT_ROWS = 500
-_AGG_SQL = {
-    'sum': 'SUM',
-    'count': 'COUNT',
-    'avg': 'AVG',
-    'min': 'MIN',
-    'max': 'MAX',
-    'count_distinct': 'COUNT(DISTINCT',
-}
 _FILTER_OP = {'eq': '=', 'ne': '<>', 'gt': '>', 'gte': '>=',
               'lt': '<', 'lte': '<='}
 _RULE_OP = ('gt', 'gte', 'lt', 'lte', 'eq', 'ne', 'between')
@@ -39,7 +24,6 @@ def _num(value, what='数值'):
 
 
 def _where(filter_json, allow_cols=None):
-    """构造 WHERE 子句（值参数化，列名白名单校验）。返回 (sql, args)。"""
     clauses, args = [], []
     for f in filter_json or []:
         col, op, val = f.get('column'), f.get('op'), f.get('value')
@@ -62,8 +46,6 @@ def _where(filter_json, allow_cols=None):
     return (' WHERE ' + ' AND '.join(clauses)) if clauses else '', args
 
 
-# ---------------- 指标 index ----------------
-
 def _check_index_def(defn):
     if defn is None:
         raise NotFound('指标定义不存在')
@@ -77,76 +59,38 @@ def _check_index_def(defn):
     column = defn.get('source_column')
     if column and column not in cols:
         raise BadRequest('聚合列不存在：{}'.format(column))
-    if not hasattr(loader, '_ident'):
-        raise BadRequest('存储层标识符转义不可用')
     return ds, table, cols, column
 
 
-def run_index(defn):
-    """执行指标定义 → (value_text, input_rows_snapshot)。
+# ---------------- 指标 ----------------
 
-    defn：c1_index_info 一行（filter_json 已反序列化）。
-    input_rows：{datasource_id,table,column,filter,rows,truncated,aggregate}。
-    """
+def compute_index(defn):
+    """按指标定义聚合业务表，返回结果文本。"""
     ds, table, cols, column = _check_index_def(defn)
     agg = defn['aggregate']
-    filters = defn.get('filter_json') or []
-    where, wargs = _where(filters, allow_cols=set(cols))
+    where, args = _where(defn.get('filter_json') or [], allow_cols=set(cols))
     if agg == 'count':
         expr = 'COUNT(*)'
     elif agg == 'count_distinct':
         expr = 'COUNT(DISTINCT {})'.format(loader._ident(column))
     else:
-        expr = '{}({})'.format(_AGG_SQL[agg], loader._ident(column))
-
+        expr = '{}({})'.format(
+            {'sum': 'SUM', 'avg': 'AVG', 'min': 'MIN',
+             'max': 'MAX'}[agg], loader._ident(column))
     conn = loader.connect_datasource(ds)
     try:
         with conn.cursor() as cur:
             cur.execute('SELECT {} FROM {}{}'.format(
-                expr, loader._ident(table), where), wargs)
+                expr, loader._ident(table), where), args)
             raw = cur.fetchone()[0]
-            # 明细：行锚点采集（同一连接、同一 WHERE）
-            sel_cols = 'file_id, record_id'
-            if column and column not in ('file_id', 'record_id'):
-                sel_cols += ', ' + loader._ident(column)
-            cur.execute('SELECT {} FROM {}{}'.format(
-                sel_cols, loader._ident(table), where), wargs)
-            db_rows = cur.fetchall()
     finally:
         conn.close()
-
     if raw is None:
-        raw_out = '0' if agg in ('count', 'count_distinct') else ''
-    elif isinstance(raw, Decimal):
-        raw_out = format(raw, 'f')
-    else:
-        raw_out = str(raw)
-
-    captured, truncated = [], len(db_rows) > MAX_INPUT_ROWS
-    for r in db_rows[:MAX_INPUT_ROWS]:
-        item = {'file_id': r[0], 'record_id': r[1]}
-        if len(r) > 2:
-            item['value'] = (format(r[2], 'f') if isinstance(r[2], Decimal)
-                             else str(r[2]))
-        captured.append(item)
-    # 简化设计：结果只存血缘锚点，不复制定义配置（库/表/列/聚合/过滤）。
-    snapshot = {
-        'rows': captured, 'truncated': truncated,
-        'matched_rows': len(db_rows),
-    }
-    return raw_out, snapshot
+        return '0' if agg in ('count', 'count_distinct') else ''
+    return format(raw, 'f') if isinstance(raw, Decimal) else str(raw)
 
 
-def replay_index(defn):
-    """降级复现：用当前定义重算一次聚合值（无版本、无哈希、无输入快照）。
-
-    与存储值比对可发现数据/定义变化，但不能证明历史结果当时的口径。
-    """
-    value, _ = run_index(defn)
-    return value
-
-
-# ---------------- 规则 rule ----------------
+# ---------------- 规则 ----------------
 
 def _compare(actual, op, threshold):
     a = _num(actual, '指标值')
@@ -156,76 +100,61 @@ def _compare(actual, op, threshold):
         lo, hi = _num(threshold[0], '下界'), _num(threshold[1], '上界')
         return lo <= a <= hi
     t = _num(threshold, '阈值')
-    return {
-        'gt': a > t, 'gte': a >= t, 'lt': a < t,
-        'lte': a <= t, 'eq': a == t, 'ne': a != t,
-    }[op]
+    return {'gt': a > t, 'gte': a >= t, 'lt': a < t,
+            'lte': a <= t, 'eq': a == t, 'ne': a != t}[op]
 
 
-def run_rule(defn, index_values):
-    """执行业务规则 → (outcome, detail_snapshot)。
+def compute_rule(defn, index_values):
+    """按规则定义比较指标值，返回 'pass' / 'fail'。
 
-    index_values：{alias: value_text}，由 app 层按 index_refs 解析后传入。
-    这样不依赖列表顺序，别名与条件通过显式键对齐。
+    index_values：{alias: value_text}，由编排层按 index_refs 解析。
     """
     if defn is None:
         raise NotFound('规则定义不存在')
     if not isinstance(index_values, dict):
         raise BadRequest('index_values 须为 {alias: value_text} 字典')
-    aliases = dict(index_values)
-    detail, passed = [], []
+    flags = []
     for c in defn['conditions_json']:
         op = c.get('op')
         if op not in _RULE_OP:
             raise BadRequest('比较 op 非法：{}'.format(op))
         alias = c.get('alias')
-        if alias not in aliases:
+        if alias not in index_values:
             raise BadRequest('条件引用了未解析的指标别名：{}'.format(alias))
-        ok = _compare(aliases[alias], op, c.get('threshold'))
-        passed.append(ok)
-        # 简化设计：只留实际值与结论，不复制 op/阈值等定义配置
-        detail.append({'alias': alias, 'actual': str(aliases[alias]),
-                       'passed': ok})
-    outcome = ('all' if defn['combine'] == 'all' else 'any')
-    result = all(passed) if outcome == 'all' else any(passed)
-    return ('pass' if result else 'fail'), detail
+        flags.append(_compare(index_values[alias], op, c.get('threshold')))
+    if not flags:
+        raise BadRequest('规则没有条件')
+    result = (all(flags) if defn['combine'] == 'all' else any(flags))
+    return 'pass' if result else 'fail'
 
 
-# ---------------- 框架 frame ----------------
+# ---------------- 框架 ----------------
 
-def run_frame(defn, rule_outcomes):
-    """执行框架组合 → (outcome, score_text_or_None, detail_snapshot)。
+def compute_frame(defn, rule_values):
+    """按框架定义组合规则结论，返回结果文本（通过/未通过 + 得分）。
 
-    rule_outcomes：[{'rule_value_id':..., 'outcome':'pass/fail', 'weight':..., 'veto':...}]
+    rule_values：[{'outcome': 'pass/fail', 'weight':..., 'veto':...}]
     """
     if defn is None:
         raise NotFound('框架定义不存在')
     combine = defn['combine']
     if combine not in _COMBINE:
         raise BadRequest('组合方式非法：{}'.format(combine))
-    # 简化设计：detail 只留结论与贡献，不复制 weight/veto 等定义配置
-    detail = [{'rule_value_id': r['rule_value_id'], 'outcome': r['outcome']}
-              for r in rule_outcomes]
-    flags = [r['outcome'] == 'pass' for r in rule_outcomes]
-    if any(r.get('veto') and not ok for r, ok in zip(rule_outcomes, flags)):
-        return 'fail', None, detail
-    if combine == 'all_pass':
-        return ('pass' if all(flags) else 'fail'), None, detail
+    if not rule_values:
+        raise BadRequest('框架没有关联规则')
+    flags = [r['outcome'] == 'pass' for r in rule_values]
+    if any(r.get('veto') and not ok for r, ok in zip(rule_values, flags)):
+        return 'fail（一票否决）'
+    if combine in ('all_pass', 'veto'):
+        return 'pass' if all(flags) else 'fail'
     if combine == 'any_pass':
-        return ('pass' if any(flags) else 'fail'), None, detail
-    if combine == 'veto':
-        return ('pass' if all(flags) else 'fail'), None, detail
-    # weighted
-    total = sum((_num(r.get('weight', 1)) for r in rule_outcomes), Decimal(0))
+        return 'pass' if any(flags) else 'fail'
+    total = sum((_num(r.get('weight', 1)) for r in rule_values), Decimal(0))
     if total == 0:
         raise BadRequest('权重合计为 0，无法计算加权得分')
     gained = sum((_num(r.get('weight', 1)) for r, ok in
-                  zip(rule_outcomes, flags) if ok), Decimal(0))
+                  zip(rule_values, flags) if ok), Decimal(0))
     score = gained / total
-    score_text = format(score, 'f')
     threshold = _num(defn.get('threshold'), '阈值')
     outcome = 'pass' if score >= threshold else 'fail'
-    for d, r, ok in zip(detail, rule_outcomes, flags):
-        d['contribution'] = (str(_num(r.get('weight', 1)) / total)
-                             if ok else '0')
-    return outcome, score_text, detail
+    return '{}（{}）'.format(outcome, format(score, 'f'))

@@ -85,28 +85,51 @@
         </select>
         <datalist id="bizfieldopts"></datalist>
       </div>
-      <div class="fsec" id="aiSec">
-        <label class="flab">AI 生成规则
-          <span class="hint" tabindex="0" data-tip="以参考文件与目标列名为输入，自动生成 spec_version=2 规则草稿。&#10;生成后可在复杂抽取编辑器里审阅微调；存在已确认校验记录时会自动对拍。&#10;只产草稿、不自动保存；保存仍走既有「保存为新版本」。需服务端配置 C1_LLM_*，Stub 模式仅联调。">?</span>
-        </label>
-        <button type="button" class="btn mini" id="aiGenBtn">AI 生成规则草稿</button>
+      <div class="fsec ai-block" id="aiSec">
+        <div class="ai-title-row">
+          <label class="flab">AI 生成规则
+            <span class="hint" tabindex="0" data-tip="描述需求：AI 判断目标字段与抽取方式；选择参考业务表后，输出字段以物理列为准。&#10;指定字段：直接填写目标列名，AI 只生成抽取算子。&#10;只生成草稿，不自动保存。">?</span>
+          </label>
+          <span class="ai-tag">辅助配置</span>
+        </div>
+        <div class="ai-switch" id="aiModeTabs" role="tablist" aria-label="AI 生成方式">
+          <button type="button" class="ai-mode on" id="aiModeNatural" role="tab" aria-selected="true">描述需求</button>
+          <button type="button" class="ai-mode" id="aiModePrecise" role="tab" aria-selected="false">指定字段</button>
+        </div>
+        <div class="ai-input" id="aiPromptSec">
+          <label class="flab" for="aiPrompt">提取需求</label>
+          <textarea class="tin" id="aiPrompt" spellcheck="false" placeholder="例如：提取交易日期、借方金额和余额，每行一条记录。"></textarea>
+          <div class="ai-help">AI 自动判断字段与抽取方式；选择业务表后，字段以物理列为准。</div>
+        </div>
+        <div class="ai-input" id="aiPreciseSec" hidden>
+          <div class="ai-label-row">
+            <label class="flab">目标字段</label>
+            <span class="ai-help">从业务表选择或手动输入</span>
+          </div>
+          <div id="aiFieldRows"></div>
+          <button type="button" class="btn mini ghost" id="aiFieldAdd">＋添加字段</button>
+        </div>
+        <div class="ai-actions">
+          <button type="button" class="btn mini" id="aiGenBtn">生成草稿</button>
+          <span class="ai-help">生成后可继续编辑</span>
+        </div>
         <div class="aigen" id="aigen" hidden>
           <div class="aigen-sec">
-            <div class="aigen-h">① 输入 · 目标列名</div>
+            <div class="aigen-h" id="aiInputTitle">① 输入</div>
             <div class="aigen-fields" id="aiFields"></div>
           </div>
           <div class="aigen-sec">
-            <div class="aigen-h">② 生成过程</div>
+            <div class="aigen-h">② 生成结果</div>
             <div class="aigen-log" id="aiLog">等待生成…</div>
           </div>
           <div class="aigen-sec">
-            <div class="aigen-h">③ 对拍审阅 · 中间层已确认记录</div>
+            <div class="aigen-h">③ 样本校验</div>
             <div class="aigen-metrics" id="aiMetrics"></div>
             <div class="aigen-diff" id="aiDiff"></div>
           </div>
           <div class="aigen-sec">
-            <div class="aigen-h">④ 确认</div>
-            <div class="aigen-note">草稿已填入「复杂抽取」编辑器；审阅微调后点右下「保存为新版本」。</div>
+            <div class="aigen-h">④ 保存</div>
+            <div class="aigen-note">草稿已填入「复杂抽取」，审阅后保存。</div>
           </div>
         </div>
       </div>

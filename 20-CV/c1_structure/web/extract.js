@@ -485,6 +485,10 @@ function applyBizFieldOpts(){
     if(opts.length) inp.setAttribute('list','bizfieldopts');
     else inp.removeAttribute('list');
   });
+  Array.prototype.forEach.call(document.querySelectorAll('#aiFieldRows .ai-field-name'),function(inp){
+    if(opts.length) inp.setAttribute('list','bizfieldopts');
+    else inp.removeAttribute('list');
+  });
 }
 function loadRefs(){
   refsel.innerHTML='<option value="">不使用参考（手动填写源表）</option>';
@@ -650,7 +654,7 @@ document.getElementById('verlist').addEventListener('click',function(e){
 function openEditor(id){
   cur=id; cands=null; pendingTable=null; filledBy=null;
   emsg.textContent=''; frows.innerHTML='';
-  if(typeof aiClose==='function') aiClose();
+  aiReset();
   setMode('simple'); jsonspec.value='';
   smartRows.innerHTML=smartRow('',''); bindSmartEvents();
   smartScope.value='all'; smartPage.value=''; smartPage.hidden=true;
@@ -846,25 +850,77 @@ delbtn.onclick=function(){
   if(cur!=null) delRule(cur,ename.value.trim());
 };
 
-/* ---- P0 AI 生成规则：四段式面板（输入/过程/对拍/确认）---- */
+/* ---- AI 生成规则：需求描述 / 指定字段 ---- */
 var aiGenBtn=document.getElementById('aiGenBtn'), aigen=document.getElementById('aigen');
 var aiFields=document.getElementById('aiFields'), aiLog=document.getElementById('aiLog');
 var aiMetrics=document.getElementById('aiMetrics'), aiDiff=document.getElementById('aiDiff');
+var aiModeNatural=document.getElementById('aiModeNatural'), aiModePrecise=document.getElementById('aiModePrecise');
+var aiPromptSec=document.getElementById('aiPromptSec'), aiPrompt=document.getElementById('aiPrompt');
+var aiPreciseSec=document.getElementById('aiPreciseSec'), aiFieldRows=document.getElementById('aiFieldRows');
+var aiFieldAdd=document.getElementById('aiFieldAdd'), aiInputTitle=document.getElementById('aiInputTitle');
+var aiMode='natural', aiPreciseSeeded=false;
+function aiSetMode(m){
+  aiMode=m;
+  aiModeNatural.className='ai-mode'+(m==='natural'?' on':'');
+  aiModePrecise.className='ai-mode'+(m==='precise'?' on':'');
+  aiModeNatural.setAttribute('aria-selected',m==='natural'?'true':'false');
+  aiModePrecise.setAttribute('aria-selected',m==='precise'?'true':'false');
+  aiPromptSec.hidden=(m!=='natural');
+  aiPreciseSec.hidden=(m!=='precise');
+  aiInputTitle.textContent='① 输入';
+  if(m==='precise') aiSeedPrecise();
+}
+function aiAddField(value,description){
+  var div=document.createElement('div');
+  div.className='ai-field-row';
+  var input=document.createElement('input');
+  input.type='text'; input.className='tin ai-field-name';
+  input.placeholder='目标列名'; input.setAttribute('aria-label','目标字段');
+  input.value=value||''; input.dataset.description=description||'';
+  if(bizFieldOpts) input.setAttribute('list','bizfieldopts');
+  var del=document.createElement('button');
+  del.type='button'; del.className='ai-field-del'; del.textContent='删除';
+  del.onclick=function(){
+    if(aiFieldRows.children.length===1) input.value='';
+    else div.remove();
+  };
+  div.appendChild(input); div.appendChild(del); aiFieldRows.appendChild(div);
+  return input;
+}
+function aiSeedPrecise(){
+  if(aiPreciseSeeded||aiTargets().length){aiPreciseSeeded=true;return;}
+  aiPreciseSeeded=true;
+  var values=[], descriptions={};
+  if(mode==='smart'){
+    Array.prototype.forEach.call(smartRows.querySelectorAll('.tplrow'),function(r){
+      var n=r.querySelector('.sm_name').value.trim();
+      if(n&&values.indexOf(n)<0){values.push(n);descriptions[n]=r.querySelector('.sm_desc').value.trim();}
+    });
+  }else if(mode==='simple'){
+    Array.prototype.forEach.call(frows.children,function(div){
+      var n=div.querySelector('.fname').value.trim();
+      if(n&&values.indexOf(n)<0) values.push(n);
+    });
+  }
+  if(!values.length&&bizFieldOpts) values=bizFieldOpts.slice();
+  if(!values.length) values=[''];
+  values.forEach(function(n){aiAddField(n,descriptions[n]);});
+}
+function aiReset(){
+  aiClose(); aiPrompt.value=''; aiFieldRows.innerHTML=''; aiPreciseSeeded=false;
+  aiSetMode('natural');
+}
+aiModeNatural.onclick=function(){aiSetMode('natural');};
+aiModePrecise.onclick=function(){aiSetMode('precise');};
+aiFieldAdd.onclick=function(){aiAddField('').focus();};
 function aiClose(){aigen.hidden=true;aiFields.innerHTML='';aiLog.textContent='';
   aiMetrics.innerHTML='';aiDiff.textContent='';}
 function aiTargets(){
   var out=[], seen={};
-  if(mode==='smart'){
-    Array.prototype.forEach.call(smartRows.querySelectorAll('.tplrow'),function(r){
-      var n=r.querySelector('.sm_name').value.trim();
-      if(n&&!seen[n]){seen[n]=1;out.push({target:n,description:r.querySelector('.sm_desc').value.trim()});}
-    });
-  }else{
-    Array.prototype.forEach.call(frows.children,function(div){
-      var n=div.querySelector('.fname').value.trim();
-      if(n&&!seen[n]){seen[n]=1;out.push({target:n,description:''});}
-    });
-  }
+  Array.prototype.forEach.call(aiFieldRows.querySelectorAll('.ai-field-name'),function(inp){
+    var n=inp.value.trim();
+    if(n&&!seen[n]){seen[n]=1;out.push({target:n,description:inp.dataset.description||''});}
+  });
   return out;
 }
 function aiMetric(label,val){
@@ -874,20 +930,23 @@ aiGenBtn.onclick=function(){
   emsg.textContent='';
   var fid=refsel.value?Number(refsel.value):0;
   if(!fid){showErr('请先选择参考文件（已解析的资料）');return;}
-  var fields=aiTargets();
-  if(!fields.length){showErr('请先填写目标列名（简单或智能模式的表单）');return;}
+  var isNatural=aiMode==='natural';
+  var promptText=aiPrompt.value.trim();
+  var fields=isNatural?[]:aiTargets();
+  if(isNatural&&!promptText){showErr('请填写要提取的内容（需求提示词）');return;}
+  if(!isNatural&&!fields.length){showErr('请至少填写一个目标字段');return;}
   aigen.hidden=false;
-  aiFields.innerHTML=fields.map(function(f){
-    return '<span class="aigen-chip">'+escHtml(f.target)+'</span>';
-  }).join('');
-  aiLog.textContent='正在生成（Stub 模式不会调用真实模型）…';
+  aiFields.innerHTML=isNatural
+    ? '<span class="aigen-chip">'+escHtml(promptText)+'</span>'
+    : fields.map(function(f){return '<span class="aigen-chip">'+escHtml(f.target)+'</span>';}).join('');
+  aiLog.textContent='正在生成规则草稿…';
   aiMetrics.innerHTML='';aiDiff.textContent='';
   aiGenBtn.disabled=true;
-  api('POST','/api/agent/generate-rule',{
-    file_id:fid, fields:fields,
+  var payload={file_id:fid,
     datasource_id:bizds.value?Number(bizds.value):null,
-    table:biztable.value||null
-  }).then(function(j){
+    table:biztable.value||null};
+  if(isNatural) payload.prompt=promptText; else payload.fields=fields;
+  api('POST','/api/agent/generate-rule',payload).then(function(j){
     var d=j.diagnostics||{}, cmp=d.compare||{};
     var lines=[];
     lines.push('静态校验：通过');

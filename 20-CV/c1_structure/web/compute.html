@@ -20,83 +20,59 @@
   <span class="spacer"></span>
   <span class="navnote">指标 · 规则 · 框架 · 全路径追溯</span>
 </nav>
-<div class="pagebody">
-  <div class="pagehead">
-    <h1>计算</h1>
-  </div>
+<div class="pagebody compute-page">
   <div class="banner err" id="err" hidden></div>
   <div class="banner info" id="ok" hidden></div>
-
-  <div class="tabs" id="tabs">
-    <button type="button" class="tab on" data-scope="index">指标</button>
-    <button type="button" class="tab" data-scope="rule">规则</button>
-    <button type="button" class="tab" data-scope="frame">框架</button>
+  <div class="compute-workspace">
+    <aside class="asset-library" aria-label="计算定义资产">
+      <div class="library-head"><b>计算资产</b><span>新增、查看与运行</span></div>
+      <section class="asset-section" data-scope="index">
+        <div class="asset-title"><span class="scope-dot index"></span><b>指标</b><span class="spacer"></span>
+          <button type="button" class="btn mini" id="i-new">＋ 新建</button></div>
+        <div class="asset-list" id="i-assets"></div>
+      </section>
+      <section class="asset-section" data-scope="rule">
+        <div class="asset-title"><span class="scope-dot rule"></span><b>规则</b><span class="spacer"></span>
+          <button type="button" class="btn mini" id="r-new">＋ 新建</button></div>
+        <div class="asset-list" id="r-assets"></div>
+      </section>
+      <section class="asset-section" data-scope="frame">
+        <div class="asset-title"><span class="scope-dot frame"></span><b>框架</b><span class="spacer"></span>
+          <button type="button" class="btn mini" id="f-new">＋ 新建</button></div>
+        <div class="asset-list" id="f-assets"></div>
+      </section>
+    </aside>
+    <section class="graph-panel" aria-label="计算流程图配置区">
+      <div class="graph-head">
+        <div><b>流程图配置</b><span class="graph-sub">拖动节点排布，从右侧端口连线到下级节点</span></div>
+        <span class="spacer"></span>
+        <span class="save-state" id="layout-state">布局读取中…</span>
+        <div class="graph-tools">
+          <button type="button" class="btn mini ghost" id="zoom-out" title="缩小">−</button>
+          <span id="zoom-label">100%</span>
+          <button type="button" class="btn mini ghost" id="zoom-in" title="放大">＋</button>
+          <button type="button" class="btn mini ghost" id="graph-fit">适应</button>
+          <button type="button" class="btn mini ghost" id="graph-auto">自动排布</button>
+          <button type="button" class="btn mini ghost danger" id="edge-del" hidden>断开连线</button>
+        </div>
+      </div>
+      <div class="graph-canvas" id="graph-canvas" tabindex="0" aria-label="可拖动、缩放的计算流程图">
+        <div class="graph-world" id="graph-world">
+          <svg class="graph-edges" id="graph-edges" aria-hidden="true"></svg>
+          <div class="graph-nodes" id="graph-nodes"></div>
+        </div>
+        <div class="graph-empty" id="graph-empty" hidden><b>还没有可配置的节点</b>先在左侧新建指标，再逐级建立规则与框架。</div>
+        <div class="graph-hint">空白处拖动平移 · 滚轮缩放 · 点击连线后可断开 · Delete 删除选中连线</div>
+      </div>
+    </section>
   </div>
-
-  <!-- 指标台账 -->
-  <section class="pane" id="pane-index">
-    <div class="panel">
-      <div class="dshead">
-        <b>指标</b>
-        <span class="spacer"></span>
-        <button type="button" class="btn mini" id="i-new">＋ 新建指标</button>
-      </div>
-      <table class="list" id="i-defs" hidden>
-        <thead><tr>
-          <th class="seq">序号</th><th>名称</th><th>来源</th><th>运算</th>
-          <th>最近结果</th><th>操作</th>
-        </tr></thead>
-        <tbody id="i-rows"></tbody>
-      </table>
-      <div class="empty" id="i-empty" hidden><b>暂无指标</b>点击右上角「新建指标」配置一条。</div>
-    </div>
-  </section>
-
-  <!-- 规则台账 -->
-  <section class="pane" id="pane-rule" hidden>
-    <div class="panel">
-      <div class="dshead">
-        <b>规则</b>
-        <span class="spacer"></span>
-        <button type="button" class="btn mini" id="r-new">＋ 新建规则</button>
-      </div>
-      <table class="list" id="r-defs" hidden>
-        <thead><tr>
-          <th class="seq">序号</th><th>名称</th><th>条件</th>
-          <th>最近结论</th><th>操作</th>
-        </tr></thead>
-        <tbody id="r-rows"></tbody>
-      </table>
-      <div class="empty" id="r-empty" hidden><b>暂无规则</b>点击右上角「新建规则」配置一条。</div>
-    </div>
-  </section>
-
-  <!-- 框架台账 -->
-  <section class="pane" id="pane-frame" hidden>
-    <div class="panel">
-      <div class="dshead">
-        <b>框架</b>
-        <span class="spacer"></span>
-        <button type="button" class="btn mini" id="f-new">＋ 新建框架</button>
-      </div>
-      <table class="list" id="f-defs" hidden>
-        <thead><tr>
-          <th class="seq">序号</th><th>名称</th><th>组合</th>
-          <th>最近结论</th><th>操作</th>
-        </tr></thead>
-        <tbody id="f-rows"></tbody>
-      </table>
-      <div class="empty" id="f-empty" hidden><b>暂无框架</b>点击右上角「新建框架」配置一条。</div>
-    </div>
-  </section>
 </div>
 
 <!-- 定义编辑抽屉（三模块复用） -->
 <div class="drawer wide" id="ded" hidden>
   <div class="dpanel">
     <div class="dhead">
-      <h2 id="de-title">新建定义</h2>
-      <span class="spacer"></span>
+      <h2 id="de-title">新建定义</h2><span class="spacer"></span>
       <button type="button" class="dclose" id="de-close">关闭 (Esc)</button>
     </div>
     <div class="dbody">
@@ -122,19 +98,13 @@
       <div id="de-rule" hidden>
         <div class="fsec"><label class="flab" for="r-name">名称</label>
           <input type="text" class="tin" id="r-name" placeholder="如：金额超阈值"></div>
-        <div class="fsec"><label class="flab" for="r-index">引用指标</label>
-          <select class="tin" id="r-index"><option value="">加载中…</option></select></div>
-        <div class="fsec"><label class="flab" for="r-alias">标识名</label>
-          <input type="text" class="tin" id="r-alias" value="m1"></div>
-        <div class="fsec"><label class="flab" for="r-op">比较</label>
-          <select class="tin" id="r-op">
-            <option value="gt">大于</option><option value="gte">大于等于</option>
-            <option value="lt">小于</option><option value="lte">小于等于</option>
-            <option value="eq">等于</option><option value="ne">不等于</option>
-            <option value="between">介于区间</option>
-          </select></div>
-        <div class="fsec"><label class="flab" for="r-th">阈值（区间用逗号分隔）</label>
-          <input type="text" class="tin" id="r-th" placeholder="如：1000 或 100,200"></div>
+        <div class="fsec"><label class="flab">引用指标与条件（每行一个指标条件）</label>
+          <div class="condition-head"><span>指标</span><span>标识名</span><span>比较</span><span>阈值</span><span></span></div>
+          <div id="r-conditions"></div>
+          <button type="button" class="btn mini ghost" id="r-addcondition" style="margin-top:6px">＋ 添加条件</button>
+          <div class="sthint">between 区间阈值用逗号分隔，如 100,200。</div></div>
+        <div class="fsec"><label class="flab" for="r-combine">条件组合</label>
+          <select class="tin" id="r-combine"><option value="all">全部满足</option><option value="any">任一满足</option></select></div>
       </div>
       <div id="de-frame" hidden>
         <div class="fsec"><label class="flab" for="f-name">名称</label>
@@ -150,12 +120,15 @@
           <input type="text" class="tin" id="f-th" value="0.8"></div>
       </div>
     </div>
-    <div class="dfoot">
-      <span class="msg" id="de-msg"></span>
-      <span class="spacer"></span>
-      <button type="button" class="btn" id="de-save">保存</button>
-    </div>
+    <div class="dfoot"><span class="msg" id="de-msg"></span><span class="spacer"></span>
+      <button type="button" class="btn" id="de-save">保存</button></div>
   </div>
+</div>
+
+<div class="drawer" id="compute-view" hidden>
+  <div class="dpanel"><div class="dhead"><h2 id="view-title">查看定义</h2><span class="spacer"></span>
+    <button type="button" class="dclose" id="view-close">关闭 (Esc)</button></div>
+    <div class="dbody" id="view-body"></div></div>
 </div>
 
 <div class="drawer" id="trace" hidden>
@@ -167,6 +140,7 @@
 </div>
 
 <script src="/static/shell.js"></script>
+<script src="/static/compute_graph.js"></script>
 <script src="/static/compute.js"></script>
 </body>
 </html>

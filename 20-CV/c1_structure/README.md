@@ -215,15 +215,16 @@ c1_structure/
 - **/rules 入库规则页**：左数据源列表（试连/编辑/删除）右入库规则列表（字段行抽屉编辑）；
   入库在资料侧发起。
 
-**计算审计层（/compute）**：在入库业务表之上做三层计算，并把结果与源文件血缘串成完整链路。
+**计算层（/compute，导航「计算」）**：在入库业务表之上做三层轻量计算。
 
 - **三层含义**：指标（选业务库表/列做聚合）→ 规则（用指标做比较）→ 框架（关联规则出结论）。页面只显示中文；`index/rule/frame` 仅用于代码与 API 前缀，定义表 `c1_*_info`、结果表 `c1_*_value`。与「抽取规则」「入库映射」是完全不同的概念，API 前缀彼此隔离。
-- **简化设计**：定义同名唯一、保存即覆盖更新，无版本、无哈希；结果表只存结果本身与血缘锚点，不复制配置表字段（库/表/列/聚合/过滤/阈值/权重）。每次运行新增一行。
-- **全路径可回溯**：指标结果存参与计算的行锚点 `(file_id, record_id, 值)`；规则结果存指标结果 ID；框架结果存规则结果 ID。`GET /api/{scope}/value/{id}/lineage` 递归展开为 `框架→规则→指标→行锚点`，行锚点经 `/api/staging/locate/{record_id}` 落到源文件具体格子；前端在追溯抽屉里点击即可下钻。
-- **结果复核**：`GET /api/{scope}/value/{id}/replay` 用当前定义重算并逐字段比对（值/结论/得分/明细）。这是降级复核（无历史版本与哈希快照），可发现定义或数据变化，不提供防篡改证据。
-- **接口**：`/api/index|rule|frame` 的定义 CRUD、`/{id}/run`、`/{id}/values`、`/value/{id}/lineage|replay`；计算引擎在 `compute/`，存储 repo 在 `store/{index,rule,frame}_repo.py`。
-- **建表**：执行 `store/migrations/003_simplify_value.sql`（重建 6 张计算层表，会清空既有计算层演示数据；001 基线表不受影响）。
-- 现场演示脚本见 [docs/demo-script-index-rule-frame.md](./docs/demo-script-index-rule-frame.md)；设计稿见 [docs/design-index-rule-frame.md](./docs/design-index-rule-frame.md)。
+- **极简设计**：定义表存配置（同名唯一、保存即覆盖；关联关系用数组存：规则 `index_refs_json` 关联多个指标，框架 `rule_refs_json` 关联多个规则）。结果表只存 `id + 定义ID + 结果值 + 时间`——结果字段分别为 `index_value/rule_value/frame_value`；不存行锚点、依赖 ID、输入明细、版本与哈希。每次运行新增一行。
+- **运行**：`POST /api/{scope}/{id}/run` 无参数，后端从定义推导依赖（取各下级最新结果值），须先运行下级再运行上级。
+- **依据链**：`GET /api/{scope}/value/{id}/lineage` 返回参与计算的定义元数据链（框架→规则→指标，逐层展开配置），用于回答"这个结论用了哪些配置"。
+- **结果复核**：`GET /api/{scope}/value/{id}/replay` 用当前定义重算并比对结果值；可发现配置或数据变化，不提供历史口径复现与防篡改证据。
+- **接口**：`/api/index|rule|frame` 的定义 CRUD、`/{id}/run`、`/{id}/values`、`/value/{id}/lineage|replay`；引擎在 `compute/`，repo 在 `store/{index,rule,frame}_repo.py`。
+- **建表**：执行 `store/migrations/004_result_value_only.sql`（重建 3 张结果表；定义表与 001 基线表不动）。
+- 演示脚本见 [docs/demo-script-index-rule-frame.md](./docs/demo-script-index-rule-frame.md)；设计稿见 [docs/design-index-rule-frame.md](./docs/design-index-rule-frame.md)。
 
 **按需导出**（file:// 直开 / 审计 / 迁移出口）：
 

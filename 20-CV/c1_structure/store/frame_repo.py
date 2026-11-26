@@ -11,8 +11,7 @@ from .value_common import rows, unjson, dump
 _COMBINE = ('weighted', 'all_pass', 'any_pass', 'veto')
 _INFO_COLS = ('id', 'name', 'rule_refs_json', 'combine', 'threshold',
               'created_at', 'updated_at')
-_VALUE_COLS = ('id', 'frame_id', 'rule_value_ids_json', 'outcome',
-               'score_text', 'detail_json', 'computed_at')
+_VALUE_COLS = ('id', 'frame_id', 'frame_value', 'computed_at')
 
 
 def _validate(name, rule_refs, combine, threshold):
@@ -135,23 +134,23 @@ def delete_def(frame_id):
             cur.execute('DELETE FROM c1_frame_value WHERE frame_id=%s',
                         (frame_id,))
             cur.execute('DELETE FROM c1_frame_info WHERE id=%s', (frame_id,))
+            from .compute_layout_repo import delete_for_def
+            delete_for_def(cur, 'frame', frame_id)
             conn.commit()
     finally:
         conn.close()
 
 
-def add_value(frame_id, rule_value_ids, outcome, detail, score_text=None):
+def add_value(frame_id, frame_value):
+    """写框架结果：只存定义 ID + 结果值。"""
     conn = db.connect()
     try:
         with conn.cursor() as cur:
             cur.execute('SELECT id FROM c1_frame_info WHERE id=%s', (frame_id,))
             if not cur.fetchone():
                 raise NotFound('框架定义不存在')
-            cur.execute('INSERT INTO c1_frame_value'
-                        ' (frame_id,rule_value_ids_json,outcome,score_text,'
-                        '  detail_json) VALUES (%s,%s,%s,%s,%s)',
-                        (frame_id, dump(rule_value_ids), outcome,
-                         score_text, dump(detail)))
+            cur.execute('INSERT INTO c1_frame_value (frame_id,frame_value)'
+                        ' VALUES (%s,%s)', (frame_id, str(frame_value)))
             vid = cur.lastrowid
             conn.commit()
             return vid
@@ -166,12 +165,7 @@ def get_value(value_id):
             cur.execute('SELECT ' + ','.join(_VALUE_COLS) +
                         ' FROM c1_frame_value WHERE id=%s', (value_id,))
             got = rows(cur)
-        if not got:
-            return None
-        r = got[0]
-        for k in ('rule_value_ids_json', 'detail_json'):
-            r[k] = unjson(r[k])
-        return r
+        return got[0] if got else None
     finally:
         conn.close()
 
@@ -188,10 +182,6 @@ def list_values(frame_id=None, limit=200):
     try:
         with conn.cursor() as cur:
             cur.execute(sql, args)
-            out = rows(cur)
-        for r in out:
-            for k in ('rule_value_ids_json', 'detail_json'):
-                r[k] = unjson(r[k])
-        return out
+            return rows(cur)
     finally:
         conn.close()

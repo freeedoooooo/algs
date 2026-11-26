@@ -61,43 +61,66 @@ def _confidence(diag, cmp):
     return round(0.6 * acc + 0.4 * coverage, 4)
 
 
-def generate_rule(doc, fields, refs=None, *, doc_type=None,
+def generate_rule(doc, fields=None, refs=None, *, doc_type=None,
                   generation=None, targets=None, content=None,
-                  sample_file_id=None, llm_fn=None, stub_fn=None):
-    """生成 v2 规则草稿。
+                  sample_file_id=None, llm_fn=None, stub_fn=None,
+                  user_prompt=None, column_candidates=None):
+    """生成 v2 规则草稿（精确模式 / 自然语言模式二选一）。
 
-    doc          : c1-structure 信封（parse.json 内容）
-    fields       : [{target, description}] 目标列名与说明
-    refs/generation : 随版本保存的参考来源与生成参数（写进 _agent_meta）
-    targets      : 中间层标准答案（可选；不给则只做锚点覆盖干跑）
-    content/sample_file_id : 未给 targets 时按 file_id 自动取中间层已确认记录
-    llm_fn/stub_fn : 注入，测试用
+    精确模式：fields=[{target,description}]，用 v1 提示词（用户定字段名）。
+    自然语言模式：user_prompt=需求描述，用 v2 提示词，AI 推断字段与模式；
+                  column_candidates 非空时 target 必须取自其中（参考业务表）。
     """
     fields = [f for f in (fields or [])
               if isinstance(f, dict) and f.get('target')]
-    if not fields:
-        raise ValueError('目标字段不能为空')
-    inp_sha = _input_sha(doc, fields, refs)
+    natural = bool(str(user_prompt or '').strip())
+    if natural and fields:
+        raise ValueError('fields 与 user_prompt 只能二选一')
+    if not natural and not fields:
+        raise ValueError('须提供 fields（精确模式）或 user_prompt（自然语言模式）')
+    inp_sha = _input_sha(doc, fields if fields else user_prompt, refs)
 
     if targets is None and content is not None and sample_file_id:
         targets = _targets_from_middle(content, sample_file_id)
 
     ctx = context.doc_to_context(doc)
-    prompt = rule_author_v1.render(ctx, fields, refs)
-    spec_conf = {'prompt_version': rule_author_v1.PROMPT_VERSION,
+    if natural:
+        from .prompts import rule_author_v2
+        prompt = rule_author_v2.render(ctx, user_prompt, refs,
+                                        column_candidates)
+        pv = rule_author_v2.PROMPT_VERSION
+        stub_targets = None
+    else:
+        prompt = rule_author_v1.render(ctx, fields, refs)
+        pv = rule_author_v1.PROMPT_VERSION
+        stub_targets = fields
+    spec_conf = {'prompt_version': pv,
                  'tool_version': str(len(registry.OPS)),
-                 'model': config.LLM_MODEL}
+                 'model': config.QODER_MODEL or None}
     raw, meta = llm.call_json(prompt, None, llm=llm_fn, stub=stub_fn,
-                              spec=spec_conf, stub_fields=fields)
+                              spec=spec_conf, stub_fields=stub_targets)
     issues = validate.validate_spec(raw)
     if issues:
         raise llm.LLMSchemaFail('生成规则未通过静态校验：' + '；'.join(issues))
+    if natural:
+        cand = [str(c) for c in (column_candidates or []) if str(c or '').strip()]
+        if cand:
+            got = [str(f.get('target')) for f in raw.get('fields') or []]
+            bad = [t for t in got if t not in cand]
+            if bad:
+                raise llm.LLMSchemaFail(
+                    '生成字段名不在参考业务表列内：' + '、'.join(bad))
 
     diag = validate.dry_run(raw, doc)
     if diag.get('error'):
         raise llm.LLMSchemaFail('生成规则干跑失败：' + diag['error'])
 
-    return _finalize(raw, diag, targets, fields, meta, inp_sha,
+    meta['mode'] = 'natural' if natural else 'precise'
+    if natural:
+        meta['user_prompt_sha256'] = hashlib.sha256(
+            str(user_prompt).encode('utf-8')).hexdigest()
+    # 自然语言模式下 fields 由模型产出，schema 从 spec 推导（见 _finalize）
+    return _finalize(raw, diag, targets, fields or None, meta, inp_sha,
                      doc_type, sample_file_id)
 
 
@@ -116,11 +139,16 @@ def _finalize(spec, diag, targets, fields, meta, inp_sha,
                  'input_sha256': inp_sha,
                  'doc_type': doc_type,
                  'sample_file_id': sample_file_id,
-                 'targets_n': cmp.get('targets_n', 0),
-                 'temperature': config.LLM_TEMPERATURE})
+                 'targets_n': cmp.get('targets_n', 0)})
     spec['_agent_meta'] = meta
+    if fields is None:
+        # 自然语言模式：字段名由模型产出，schema 从生成结果推导
+        eff = [f for f in (spec.get('fields') or [])
+               if isinstance(f, dict) and f.get('target')]
+    else:
+        eff = fields
     schema = {'fields': [{'name': str(f['target']), 'type': 'text'}
-                         for f in fields]}
+                         for f in eff]}
     return GenerationResult(spec, schema, _confidence(diag, cmp), diag, meta)
 
 
@@ -167,7 +195,7 @@ def generate_rule_react(doc, fields, refs=None, *, doc_type=None,
     prompt = rule_author_v1.render(ctx, fields, refs)
     spec_conf = {'prompt_version': rule_author_v1.PROMPT_VERSION,
                  'tool_version': str(len(registry.OPS)),
-                 'model': config.LLM_MODEL}
+                 'model': config.QODER_MODEL or None}
 
     # 首轮：复用 P0 一次性生成（严格解析 + 静态校验 + 干跑）
     raw, meta = llm.call_json(prompt, None, llm=llm_fn, stub=stub_fn,

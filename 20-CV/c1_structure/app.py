@@ -543,18 +543,23 @@ async def api_rule_version_add(rule_id: int, request: Request):
 
 @app.post('/api/agent/generate-rule')
 async def api_agent_generate_rule(request: Request):
-    """AI 生成 v2 规则草稿：参考文件 + 目标列名 → spec + 干跑/对拍诊断。
+    """AI 生成 v2 规则草稿：参考文件 + (目标列名 或 需求提示词) → spec + 诊断。
 
-    C1_SMART_STUB=stub（默认）不烧 token；设 live 走真实模型。
-    中间层 confirmed/edited 记录自动作标准答案，内存重跑不碰 _purge。
+    精确模式传 fields；自然语言模式传 prompt（AI 推断字段与模式）。
+    传 datasource_id+table 时，物理列名作为输出字段候选词表。
+    C1_SMART_STUB=stub（默认）不烧 token；设 live 走 Qoder Agent SDK。
     """
     body = await _json_body(request)
     file_id = body.get('file_id')
     if not isinstance(file_id, int):
         raise store_errors.BadRequest('file_id 须为整数（参考文件）')
     fields = body.get('fields')
-    if not isinstance(fields, list) or not fields:
-        raise store_errors.BadRequest('fields 须为非空数组')
+    user_prompt = body.get('prompt')
+    has_fields = isinstance(fields, list) and bool(fields)
+    has_prompt = bool(str(user_prompt or '').strip())
+    if has_fields == has_prompt:
+        raise store_errors.BadRequest(
+            'fields（精确模式）与 prompt（自然语言模式）须且只须提供一个')
     content = _load('store.content')
     catalog = _load('store.catalog')
     f = catalog.get_file(file_id)
@@ -564,21 +569,33 @@ async def api_agent_generate_rule(request: Request):
     if doc is None:
         raise store_errors.Conflict('参考文件尚无解析产物，请先解析')
 
+    # 参考业务表 → 物理列名作 target 候选（自然语言模式必须从中选）
+    column_candidates = []
+    ds_id, table = body.get('datasource_id'), body.get('table')
+    if has_prompt and ds_id is not None and table:
+        ds = catalog.get_datasource(int(ds_id))
+        if ds is None:
+            raise store_errors.NotFound('参考业务表的数据源不存在')
+        column_candidates = [c['name'] for c in
+                             _load('store.loader').list_columns(ds, str(table))]
+
     from fastapi.concurrency import run_in_threadpool
     agent = _load('agent.rule_author')
-    refs = {'file_id': file_id,
-            'datasource_id': body.get('datasource_id'),
-            'table': body.get('table')}
+    refs = {'file_id': file_id, 'datasource_id': ds_id, 'table': table}
     result = await run_in_threadpool(
-        agent.generate_rule, doc, fields, refs,
+        agent.generate_rule, doc, fields if has_fields else None, refs,
         doc_type=f.get('doc_type'), generation=body.get('generation'),
         targets=body.get('targets'), content=content,
-        sample_file_id=body.get('sample_file_id') or file_id)
+        sample_file_id=body.get('sample_file_id') or file_id,
+        user_prompt=user_prompt if has_prompt else None,
+        column_candidates=column_candidates)
 
     tasklog_mod = _load('tasklog')
     log_path = os.path.join(config.LOG_DIR, 'agent_{}.log'.format(file_id))
     log = tasklog_mod.TaskLog('agent_{}'.format(file_id), log_path=log_path)
-    log.emit('info', 'agent', '生成规则草稿：目标字段 {}'.format(len(fields)))
+    out_fields = (result.schema or {}).get('fields') or []
+    log.emit('info', 'agent', '生成规则草稿（{}模式）：目标字段 {}'.format(
+        (result.meta or {}).get('mode', 'precise'), len(out_fields)))
     log.emit('ok', 'agent', '静态校验通过；干跑 {} 条；置信度 {}'.format(
         result.diagnostics.get('records_n', 0), result.confidence))
     if result.diagnostics.get('warning'):
@@ -592,6 +609,18 @@ async def api_agent_generate_rule(request: Request):
 
 # ---- 计算层 API：index / rule / frame（定义 CRUD + run）----
 # 三类前缀完全隔离；编排在 compute/orchestrate.py，本层只做请求校验。
+
+@app.get('/api/compute/layout')
+def api_compute_layout_list():
+    return _load('store.compute_layout_repo').list_layout()
+
+
+@app.put('/api/compute/layout')
+async def api_compute_layout_save(request: Request):
+    body = await _json_body(request)
+    return {'ok': True, **_load('store.compute_layout_repo').save_layout(
+        body.get('items'))}
+
 
 @app.get('/api/index')
 def api_index_list():
@@ -674,10 +703,8 @@ def api_rule_del(rule_id: int):
 
 
 @app.post('/api/rule/{rule_id}/run')
-async def api_rule_run(rule_id: int, request: Request):
-    body = await _json_body(request) if (await request.body()) else {}
-    return {'ok': True, **_load('compute').execute_rule(
-        rule_id, body.get('index_value_ids'))}
+def api_rule_run(rule_id: int):
+    return {'ok': True, **_load('compute').execute_rule(rule_id)}
 
 
 @app.get('/api/rule/{rule_id}/values')
@@ -726,10 +753,8 @@ def api_frame_del(frame_id: int):
 
 
 @app.post('/api/frame/{frame_id}/run')
-async def api_frame_run(frame_id: int, request: Request):
-    body = await _json_body(request) if (await request.body()) else {}
-    return {'ok': True, **_load('compute').execute_frame(
-        frame_id, body.get('rule_value_ids'))}
+def api_frame_run(frame_id: int):
+    return {'ok': True, **_load('compute').execute_frame(frame_id)}
 
 
 @app.get('/api/frame/{frame_id}/values')

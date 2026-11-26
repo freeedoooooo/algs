@@ -11,8 +11,7 @@ _FILTER_OP = ('eq', 'ne', 'gt', 'gte', 'lt', 'lte')
 _INFO_COLS = ('id', 'name', 'datasource_id', 'source_table',
               'source_column', 'aggregate', 'filter_json',
               'created_at', 'updated_at')
-_VALUE_COLS = ('id', 'index_id', 'value_text', 'input_rows_json',
-               'computed_at')
+_VALUE_COLS = ('id', 'index_id', 'index_value', 'computed_at')
 
 
 def _validate(name, datasource_id, source_table, aggregate, filter_json):
@@ -129,23 +128,23 @@ def delete_def(index_id):
             cur.execute('DELETE FROM c1_index_value WHERE index_id=%s',
                         (index_id,))
             cur.execute('DELETE FROM c1_index_info WHERE id=%s', (index_id,))
+            from .compute_layout_repo import delete_for_def
+            delete_for_def(cur, 'index', index_id)
             conn.commit()
     finally:
         conn.close()
 
 
-def add_value(index_id, value_text, anchors):
-    """写指标结果：无幂等、无哈希；anchors 只含血缘锚点。"""
+def add_value(index_id, index_value):
+    """写指标结果：只存定义 ID + 结果值。"""
     conn = db.connect()
     try:
         with conn.cursor() as cur:
             cur.execute('SELECT id FROM c1_index_info WHERE id=%s', (index_id,))
             if not cur.fetchone():
                 raise NotFound('指标定义不存在')
-            cur.execute('INSERT INTO c1_index_value'
-                        ' (index_id,value_text,input_rows_json)'
-                        ' VALUES (%s,%s,%s)',
-                        (index_id, str(value_text), dump(anchors)))
+            cur.execute('INSERT INTO c1_index_value (index_id,index_value)'
+                        ' VALUES (%s,%s)', (index_id, str(index_value)))
             vid = cur.lastrowid
             conn.commit()
             return vid
@@ -160,11 +159,7 @@ def get_value(value_id):
             cur.execute('SELECT ' + ','.join(_VALUE_COLS) +
                         ' FROM c1_index_value WHERE id=%s', (value_id,))
             got = rows(cur)
-        if not got:
-            return None
-        r = got[0]
-        r['input_rows_json'] = unjson(r['input_rows_json'])
-        return r
+        return got[0] if got else None
     finally:
         conn.close()
 
@@ -181,9 +176,6 @@ def list_values(index_id=None, limit=200):
     try:
         with conn.cursor() as cur:
             cur.execute(sql, args)
-            out = rows(cur)
-        for r in out:
-            r['input_rows_json'] = unjson(r['input_rows_json'])
-        return out
+            return rows(cur)
     finally:
         conn.close()

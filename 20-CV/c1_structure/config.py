@@ -11,7 +11,7 @@ import sys
 ROOT = os.path.dirname(os.path.abspath(__file__))
 
 # 本地 secrets.json 兜底（已被 .gitignore 覆盖）：仅当环境变量未设置时注入，
-# 便于开发期免去每次导出 C1_LLM_*；生产/容器仍以真实环境变量为准。
+# 便于开发期免去每次导出模型凭据；生产/容器仍以真实环境变量为准。
 # 路径取 <DATA_ROOT>/data/secrets.json，环境变量 C1_STRUCTURE_DATA_ROOT 可改根。
 # 纯标准库解析，零新依赖；密钥不进代码库、不进日志。
 import json as _json
@@ -71,9 +71,27 @@ LLM_API_KEY = os.getenv('C1_LLM_API_KEY', '')
 LLM_MODEL = os.getenv('C1_LLM_MODEL', '')
 LLM_TIMEOUT = float(os.getenv('C1_LLM_TIMEOUT', '60'))
 LLM_TEMPERATURE = float(os.getenv('C1_LLM_TEMPERATURE', '0'))
+
+# ---- AI 规则生成（Qoder Agent SDK）----
+# PAT 只从官方环境变量读取；data/secrets.json 存在时会先注入进程环境。
+QODER_PERSONAL_ACCESS_TOKEN = os.getenv('QODER_PERSONAL_ACCESS_TOKEN', '')
+# 留空使用 Qoder 账户默认模型；如需固定模型，填 Qoder 模型 ID，勿复用 QCode 模型名。
+QODER_MODEL = os.getenv('C1_QODER_MODEL', '').strip()
+QODER_CLI_PATH = os.getenv('C1_QODER_CLI_PATH', '').strip()
+QODER_TIMEOUT = float(os.getenv('C1_QODER_TIMEOUT', '120'))
+# Windows 下 qodercli 会在系统 Temp 解压原生模块并读取 SDK 认证文件；
+# 部分长路径/受限目录会报 EPERM 或“认证文件不存在”，可指定短路径规避。
+QODER_TMP_DIR = os.getenv('C1_QODER_TMP_DIR', '').strip()
+if QODER_TMP_DIR:
+    QODER_TMP_DIR = os.path.abspath(os.path.expanduser(QODER_TMP_DIR))
+    os.makedirs(QODER_TMP_DIR, exist_ok=True)
+    os.environ['TEMP'] = QODER_TMP_DIR
+    os.environ['TMP'] = QODER_TMP_DIR
+    import tempfile as _tempfile
+    _tempfile.tempdir = QODER_TMP_DIR
 # 智能抽取/规则生成模式开关（语义值）：
 #   stub = 联调占位，不访问模型、不烧 token（默认）
-#   live = 真实调用 C1_LLM_* 配置的模型
+#   live = 真实模型调用（Agent 规则生成走 Qoder SDK，smart_extract 走 C1_LLM_*）
 # 兼容旧值：1/true/on → stub，0/false/off → live；其它值显式报错，不静默走错模式。
 _MODE_RAW = os.getenv('C1_SMART_STUB', 'stub').strip().lower()
 if _MODE_RAW in ('stub', '1', 'true', 'on'):

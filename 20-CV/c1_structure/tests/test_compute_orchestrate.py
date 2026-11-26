@@ -1,4 +1,4 @@
-"""编排层单测（不连 DB）：依赖对齐守卫 + 血缘展开 + 降级 replay + 路由注册。"""
+"""编排层单测（不连 DB）：元数据链、极简复核、路由注册、结果表无冗余字段。"""
 import os
 import sys
 import importlib
@@ -23,103 +23,91 @@ def check(name, cond, detail=''):
     else:
         raise AssertionError('FAIL ' + name + ' :: ' + str(detail))
 
+# --- 结果表列：只有 id + def_id + 前缀_value + computed_at ---
+for mod, cols_name, value_col in [
+    (_load('store.index_repo'), '_VALUE_COLS', 'index_value'),
+    (_load('store.rule_repo'), '_VALUE_COLS', 'rule_value'),
+    (_load('store.frame_repo'), '_VALUE_COLS', 'frame_value')]:
+    cols = getattr(mod, cols_name)
+    check(mod.__name__.split('.')[-1] + ' 结果列极简',
+          set(cols) == {'id', 'computed_at', value_col,
+                        cols[1]}, cols)
+    check(mod.__name__.split('.')[-1] + ' 无输入/依赖/锚点字段',
+          not any(k in cols for k in ('input_rows_json', 'detail_json',
+                                      '_ids_json', 'outcome', 'score_text')),
+          cols)
+
+# --- 元数据链（打桩）---
 class FakeRepo:
-    def __init__(self, rows):
-        self.rows = rows
+    def __init__(self, rows, defs=None):
+        self.rows, self.defs = rows, defs or {}
     def get_value(self, vid):
         return self.rows.get(vid)
-    def get_def(self, **kwargs):
-        return {'id': 1, 'name': 'stub', 'source_column': 'amt'}
+    def get_def(self, **kw):
+        key = list(kw.values())[0]
+        return self.defs.get(key)
+    def list_values(self, **kw):
+        field = getattr(self, 'field', 'value')
+        return ([{field: '24'}] if self.rows else [])
 
-# --- 依赖对齐 ---
-defn = {'index_refs_json': [
-    {'index_id': 1, 'alias': 'm1'}, {'index_id': 2, 'alias': 'm2'}]}
-repo = FakeRepo({10: {'id': 10, 'index_id': 1, 'value_text': '100'},
-                 20: {'id': 20, 'index_id': 2, 'value_text': '200'}})
-check('对齐数量与顺序',
-      [r['id'] for _, r in orch._resolve_deps(defn, [10, 20], repo, 'index_id')]
-      == [10, 20])
-swap = FakeRepo({10: {'id': 10, 'index_id': 2, 'value_text': '100'},
-                 20: {'id': 20, 'index_id': 1, 'value_text': '200'}})
+index_repo = _load('store.index_repo')
+rule_repo = _load('store.rule_repo')
+frame_repo = _load('store.frame_repo')
+
+i_def = {'id': 1, 'name': '金额合计', 'source_table': 't',
+         'source_column': 'amt', 'aggregate': 'count', 'filter_json': []}
+r_def = {'id': 2, 'name': '超阈值', 'conditions_json': [
+             {'alias': 'm1', 'op': 'gt', 'threshold': 10}],
+         'combine': 'all', 'index_refs_json': [{'index_id': 1, 'alias': 'm1'}]}
+f_def = {'id': 3, 'name': '综合', 'combine': 'weighted', 'threshold': '0.8',
+         'rule_refs_json': [{'rule_id': 2, 'weight': 1, 'veto': False}]}
+
+orig = (orch.index_repo, orch.rule_repo, orch.frame_repo)
+fi = FakeRepo({}, {1: i_def}); fi.field = 'index_value'
+fr = FakeRepo({}, {2: r_def}); fr.field = 'rule_value'
+ff = FakeRepo({}, {3: f_def}); ff.field = 'frame_value'
+orch.index_repo, orch.rule_repo, orch.frame_repo = fi, fr, ff
 try:
-    orch._resolve_deps(defn, [10, 20], swap, 'index_id')
-    check('引用错位拒绝', False)
-except errors.BadRequest:
-    check('引用错位拒绝', True)
-for bad_ids, label in [([10], '数量不符'), ([10, 10], '重复 ID'),
-                       ([10, 999], '结果不存在')]:
-    try:
-        orch._resolve_deps(defn, bad_ids, repo, 'index_id')
-        check(label + ' 拒绝', False)
-    except (errors.BadRequest, errors.NotFound):
-        check(label + ' 拒绝', True)
-
-# --- locate 链接 ---
-check('locate 带列名',
-      orch._locate_url(101, 'amt') == '/api/staging/locate/101?key=amt')
-
-# --- 血缘展开（打桩）---
-index_row = {'id': 7, 'index_id': 6, 'value_text': '24',
-             'input_rows_json': {'rows': [
-                 {'file_id': 1, 'record_id': 121, 'value': '10'},
-                 {'file_id': 2, 'record_id': 200, 'value': '14'}],
-                 'matched_rows': 2, 'truncated': False}}
-rule_row = {'id': 8, 'rule_id': 3, 'outcome': 'pass',
-            'detail_json': [{'alias': 'm1', 'actual': '24', 'passed': True}],
-            'index_value_ids_json': [7]}
-frame_row = {'id': 9, 'frame_id': 2, 'outcome': 'pass', 'score_text': '1',
-             'detail_json': [], 'rule_value_ids_json': [8]}
-orig = (orch.index_repo, orch.rule_repo, orch.frame_repo, orch.store.catalog)
-orch.index_repo = FakeRepo({7: index_row})
-orch.rule_repo = FakeRepo({8: rule_row})
-orch.frame_repo = FakeRepo({9: frame_row})
-class FakeCatalog:
-    @staticmethod
-    def get_file(fid):
-        return {'id': fid, 'name': 'doc{}.pdf'.format(fid)}
-orch.store.catalog = FakeCatalog()
-try:
-    out = orch.parse_lineage('frame', 9)
-    check('血缘链 3 层',
-          [c['scope'] for c in out['chain']] == ['frame', 'rule', 'index'])
-    idx = out['chain'][-1]
-    check('行锚点带 locate',
-          idx['rows'][0]['locate'] == '/api/staging/locate/121?key=amt')
-    check('源文件去重带 open',
-          len(out['source_files']) == 2
-          and out['source_files'][0]['open'].startswith('/preview?embed=1'))
+    # 给 frame 结果行
+    ff.rows = {1: {'id': 1, 'frame_id': 3, 'frame_value': 'pass（1）'}}
+    out = orch.parse_lineage('frame', 1)
+    check('框架 lineage 顶层 scope', out['definition']['scope'] == 'frame')
+    check('框架 lineage 引用规则数组',
+          len(out['definition']['refs']) == 1
+          and out['definition']['refs'][0]['scope'] == 'rule')
+    check('规则 lineage 引用指标数组',
+          out['definition']['refs'][0]['refs'][0]['scope'] == 'index')
+    check('元数据链无行锚点',
+          all(k not in str(out) for k in ('record_id', 'cell_bbox')))
 finally:
-    (orch.index_repo, orch.rule_repo, orch.frame_repo, orch.store.catalog) = orig
+    orch.index_repo, orch.rule_repo, orch.frame_repo = orig
 
-# --- 降级 replay（指标：当前定义重算值比对）---
+# --- 复核字段名 ---
 engine_mod = _load('compute.engine')
-orig_replay = engine_mod.replay_index
-engine_mod.replay_index = lambda d: '24'
+orig_ci = engine_mod.compute_index
+engine_mod.compute_index = lambda d: '24'
 try:
-    defn_i = {'id': 6, 'aggregate': 'count'}
-    row_ok = {'id': 7, 'index_id': 6, 'value_text': '24'}
-    row_bad = {'id': 8, 'index_id': 6, 'value_text': '999'}
-    fake = FakeRepo({7: row_ok, 8: row_bad})
-    old = orch.index_repo
-    orch.index_repo = fake
-    try:
-        r = orch.replay_value('index', 7)
-        check('replay 一致', r['consistent'] and r['checks']['value']['match'])
-        r2 = orch.replay_value('index', 8)
-        check('replay 检测值篡改', not r2['consistent'])
-        check('replay 无哈希项', 'result_hash' not in r['checks'])
-    finally:
-        orch.index_repo = old
+    orch.index_repo = FakeRepo({1: {'id': 1, 'index_id': 1, 'index_value': '24'}})
+    orch.index_repo.defs = {1: i_def}
+    r = orch.replay_value('index', 1)
+    check('replay 用 index_value 字段', 'index_value' in r['checks'])
+    check('replay 一致', r['consistent'])
+    orch.index_repo = FakeRepo({2: {'id': 2, 'index_id': 1, 'index_value': '999'}})
+    orch.index_repo.defs = {1: i_def}
+    r2 = orch.replay_value('index', 2)
+    check('replay 检测值篡改', not r2['consistent'])
 finally:
-    engine_mod.replay_index = orig_replay
+    engine_mod.compute_index = orig_ci
+    orch.index_repo = index_repo
 
 # --- 路由注册 ---
 appmod = _load('app')
 paths = {}
-for r in appmod.app.routes:
-    for m in getattr(r, 'methods', []) or []:
-        paths.setdefault((m, r.path), True)
+for route in appmod.app.routes:
+    for m in getattr(route, 'methods', []) or []:
+        paths.setdefault((m, route.path), True)
 required = [
+    ('GET', '/api/compute/layout'), ('PUT', '/api/compute/layout'),
     ('GET', '/api/index'), ('POST', '/api/index'),
     ('GET', '/api/index/{index_id}'), ('DELETE', '/api/index/{index_id}'),
     ('POST', '/api/index/{index_id}/run'),
@@ -140,7 +128,7 @@ required = [
     ('GET', '/api/frame/value/{value_id}/replay'),
 ]
 missing = [k for k in required if k not in paths]
-check('24 路由全部注册', not missing, missing)
+check('26 路由全注册', not missing, missing)
 check('抽取规则 API 保留', ('GET', '/api/extract-rules') in paths)
 
-print('P2 orchestrate/routes: {} checks passed'.format(ok))
+print('orchestrate logic: {} checks passed'.format(ok))

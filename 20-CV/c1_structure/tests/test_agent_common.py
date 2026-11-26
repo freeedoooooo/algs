@@ -1,5 +1,8 @@
 """P0-① agent 公共层：LLM 注入/Stub、上下文压缩、静态校验与干跑对拍。"""
+import asyncio
 import unittest
+from types import SimpleNamespace
+from unittest import mock
 
 from c1_structure.agent import context, llm, validate
 from c1_structure.agent.prompts import rule_author_v1
@@ -16,6 +19,59 @@ def _doc(rows=None):
                                'coord': {'space': 'source'}}]}],
         'stitched_tables': [],
     }
+
+
+class _TextBlock:
+    def __init__(self, text):
+        self.text = text
+
+
+class _ToolUseBlock:
+    pass
+
+
+class _AssistantMessage:
+    def __init__(self, content):
+        self.content = content
+
+
+class _ResultMessage:
+    def __init__(self, result=None, *, subtype='success', is_error=False,
+                 error_code=None, terminal_reason=None, errors=None):
+        self.result = result
+        self.subtype = subtype
+        self.is_error = is_error
+        self.error_code = error_code
+        self.terminal_reason = terminal_reason
+        self.errors = errors
+
+
+class _Options:
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
+
+def _fake_sdk(batches):
+    calls = []
+
+    def query(*, prompt, options):
+        calls.append((prompt, options))
+        batch = batches.pop(0)
+
+        async def stream():
+            for message in batch:
+                yield message
+
+        return stream()
+
+    return SimpleNamespace(
+        AssistantMessage=_AssistantMessage,
+        TextBlock=_TextBlock,
+        ToolUseBlock=_ToolUseBlock,
+        ResultMessage=_ResultMessage,
+        QoderAgentOptions=_Options,
+        access_token=lambda token: ('token', token),
+        query=query), calls
 
 
 class LLMTest(unittest.TestCase):
@@ -45,15 +101,143 @@ class LLMTest(unittest.TestCase):
         self.assertIn('上次返回的不是合法 JSON', calls[1])
 
     def test_unconfigured_raises(self):
-        # 生产配置缺 API key 时显式报错，不静默降级
         import c1_structure.config as cfg
-        old = (cfg.LLM_API_KEY, cfg.LLM_BASE_URL, cfg.LLM_MODEL)
+        old = cfg.QODER_PERSONAL_ACCESS_TOKEN
         try:
-            cfg.LLM_API_KEY, cfg.LLM_BASE_URL, cfg.LLM_MODEL = '', 'x', 'm'
+            cfg.QODER_PERSONAL_ACCESS_TOKEN = ''
             with self.assertRaises(llm.LLMUnconfigured):
                 llm.raw_call('p')
         finally:
-            cfg.LLM_API_KEY, cfg.LLM_BASE_URL, cfg.LLM_MODEL = old
+            cfg.QODER_PERSONAL_ACCESS_TOKEN = old
+
+    def test_qoder_success_and_restricted_options(self):
+        sdk, calls = _fake_sdk([
+            [_ResultMessage('```json\n{"ok": true}\n```')]])
+        with mock.patch.object(llm, '_load_qoder_sdk', return_value=sdk), \
+                mock.patch.multiple(
+                    llm.config, QODER_PERSONAL_ACCESS_TOKEN='pt-test',
+                    QODER_MODEL='qoder-test-model',
+                    QODER_CLI_PATH='C:/qodercli.exe', QODER_TIMEOUT=2,
+                    QODER_TMP_DIR='D:/qoder-tmp'):
+            self.assertEqual(llm.raw_call('prompt'), {'ok': True})
+        opts = calls[0][1].kwargs
+        self.assertEqual(opts['auth'], ('token', 'pt-test'))
+        self.assertEqual(opts['model'], 'qoder-test-model')
+        self.assertEqual(opts['cli_path'], 'C:/qodercli.exe')
+        self.assertEqual(opts['tools'], [])
+        self.assertEqual(opts['allowed_tools'], [])
+        self.assertEqual(opts['permission_mode'], 'dontAsk')
+        self.assertEqual(opts['max_turns'], 1)
+        self.assertEqual(opts['skills'], [])
+        self.assertEqual(opts['mcp_servers'], {})
+        self.assertEqual(opts['allowed_mcp_server_names'], [])
+        self.assertTrue(opts['strict_mcp_config'])
+        self.assertEqual(opts['setting_sources'], [])
+        self.assertEqual(opts['memory'], {})
+        self.assertEqual(opts['env'], {'TEMP': 'D:/qoder-tmp',
+                                      'TMP': 'D:/qoder-tmp'})
+
+    def test_qoder_tool_use_is_blocked(self):
+        sdk, _ = _fake_sdk([[
+            _AssistantMessage([_ToolUseBlock()]),
+            _ResultMessage('{"ok": true}')]])
+        with mock.patch.object(llm, '_load_qoder_sdk', return_value=sdk), \
+                mock.patch.multiple(
+                    llm.config, QODER_PERSONAL_ACCESS_TOKEN='pt-test',
+                    QODER_MODEL='', QODER_CLI_PATH='', QODER_TIMEOUT=2):
+            with self.assertRaises(llm.LLLError):
+                llm.raw_call('prompt')
+
+    def test_qoder_auth_result_maps_unconfigured(self):
+        sdk, _ = _fake_sdk([[
+            _ResultMessage(subtype='error_during_execution', is_error=True,
+                           error_code=105)]])
+        with mock.patch.object(llm, '_load_qoder_sdk', return_value=sdk), \
+                mock.patch.multiple(
+                    llm.config, QODER_PERSONAL_ACCESS_TOKEN='pt-test',
+                    QODER_MODEL='', QODER_CLI_PATH='', QODER_TIMEOUT=2):
+            with self.assertRaises(llm.LLMUnconfigured):
+                llm.raw_call('prompt')
+
+    def test_qoder_rejected_token_result_maps_unconfigured(self):
+        sdk, _ = _fake_sdk([[
+            _ResultMessage(subtype='error_during_execution', is_error=True,
+                           terminal_reason='access_token_invalid',
+                           errors=['The provided access token was rejected by the API'])]])
+        with mock.patch.object(llm, '_load_qoder_sdk', return_value=sdk), \
+                mock.patch.multiple(
+                    llm.config, QODER_PERSONAL_ACCESS_TOKEN='pt-test',
+                    QODER_MODEL='', QODER_CLI_PATH='', QODER_TIMEOUT=2,
+                    QODER_TMP_DIR=''):
+            with self.assertRaises(llm.LLMUnconfigured):
+                llm.raw_call('prompt')
+
+    def test_qoder_failed_result_maps_error(self):
+        sdk, _ = _fake_sdk([[
+            _ResultMessage(subtype='error_during_execution', is_error=True,
+                           error_code=500)]])
+        with mock.patch.object(llm, '_load_qoder_sdk', return_value=sdk), \
+                mock.patch.multiple(
+                    llm.config, QODER_PERSONAL_ACCESS_TOKEN='pt-test',
+                    QODER_MODEL='', QODER_CLI_PATH='', QODER_TIMEOUT=2):
+            with self.assertRaises(llm.LLLError):
+                llm.raw_call('prompt')
+
+    def test_qoder_bad_json_uses_repair_loop(self):
+        sdk, calls = _fake_sdk([
+            [_ResultMessage('not-json')],
+            [_ResultMessage('{"ok": true}')]])
+        with mock.patch.object(llm, '_load_qoder_sdk', return_value=sdk), \
+                mock.patch.multiple(
+                    llm.config, QODER_PERSONAL_ACCESS_TOKEN='pt-test',
+                    QODER_MODEL='', QODER_CLI_PATH='', QODER_TIMEOUT=2,
+                    SMART_STUB=False):
+            obj, meta = llm.call_json('base', {}, max_repair=1)
+        self.assertEqual(obj, {'ok': True})
+        self.assertEqual(meta['repairs'], 1)
+        self.assertEqual(meta['provider'], 'qoder_agent_sdk')
+        self.assertEqual(meta['model'], 'account-default')
+        self.assertEqual(len(calls), 2)
+        self.assertIn('上次返回的不是合法 JSON', calls[1][0])
+
+    def test_qoder_sdk_auth_exception_maps_unconfigured(self):
+        class AuthError(Exception):
+            code = 'auth_not_configured'
+
+        sdk, _ = _fake_sdk([])
+
+        def query(*, prompt, options):
+            async def stream():
+                raise AuthError()
+                yield
+
+            return stream()
+
+        sdk.query = query
+        with mock.patch.object(llm, '_load_qoder_sdk', return_value=sdk), \
+                mock.patch.multiple(
+                    llm.config, QODER_PERSONAL_ACCESS_TOKEN='pt-test',
+                    QODER_MODEL='', QODER_CLI_PATH='', QODER_TIMEOUT=2):
+            with self.assertRaises(llm.LLMUnconfigured):
+                llm.raw_call('prompt')
+
+    def test_qoder_timeout_maps_to_typed_error(self):
+        sdk, _ = _fake_sdk([])
+
+        def query(*, prompt, options):
+            async def stream():
+                await asyncio.sleep(1)
+                yield _ResultMessage('{"ok": true}')
+
+            return stream()
+
+        sdk.query = query
+        with mock.patch.object(llm, '_load_qoder_sdk', return_value=sdk), \
+                mock.patch.multiple(
+                    llm.config, QODER_PERSONAL_ACCESS_TOKEN='pt-test',
+                    QODER_MODEL='', QODER_CLI_PATH='', QODER_TIMEOUT=0.01):
+            with self.assertRaises(llm.LLMTimeout):
+                llm.raw_call('prompt')
 
 
 class ContextTest(unittest.TestCase):

@@ -10,8 +10,7 @@ _OPS = ('gt', 'gte', 'lt', 'lte', 'eq', 'ne', 'between')
 _COMBINE = ('all', 'any')
 _INFO_COLS = ('id', 'name', 'index_refs_json', 'conditions_json',
               'combine', 'created_at', 'updated_at')
-_VALUE_COLS = ('id', 'rule_id', 'index_value_ids_json', 'outcome',
-               'detail_json', 'computed_at')
+_VALUE_COLS = ('id', 'rule_id', 'rule_value', 'computed_at')
 
 
 def _validate(name, index_refs, conditions, combine):
@@ -132,22 +131,23 @@ def delete_def(rule_id):
                 raise NotFound('规则定义不存在')
             cur.execute('DELETE FROM c1_rule_value WHERE rule_id=%s', (rule_id,))
             cur.execute('DELETE FROM c1_rule_info WHERE id=%s', (rule_id,))
+            from .compute_layout_repo import delete_for_def
+            delete_for_def(cur, 'rule', rule_id)
             conn.commit()
     finally:
         conn.close()
 
 
-def add_value(rule_id, index_value_ids, outcome, detail):
+def add_value(rule_id, rule_value):
+    """写规则结果：只存定义 ID + 结果值。"""
     conn = db.connect()
     try:
         with conn.cursor() as cur:
             cur.execute('SELECT id FROM c1_rule_info WHERE id=%s', (rule_id,))
             if not cur.fetchone():
                 raise NotFound('规则定义不存在')
-            cur.execute('INSERT INTO c1_rule_value'
-                        ' (rule_id,index_value_ids_json,outcome,detail_json)'
-                        ' VALUES (%s,%s,%s,%s)',
-                        (rule_id, dump(index_value_ids), outcome, dump(detail)))
+            cur.execute('INSERT INTO c1_rule_value (rule_id,rule_value)'
+                        ' VALUES (%s,%s)', (rule_id, str(rule_value)))
             vid = cur.lastrowid
             conn.commit()
             return vid
@@ -162,12 +162,7 @@ def get_value(value_id):
             cur.execute('SELECT ' + ','.join(_VALUE_COLS) +
                         ' FROM c1_rule_value WHERE id=%s', (value_id,))
             got = rows(cur)
-        if not got:
-            return None
-        r = got[0]
-        for k in ('index_value_ids_json', 'detail_json'):
-            r[k] = unjson(r[k])
-        return r
+        return got[0] if got else None
     finally:
         conn.close()
 
@@ -184,10 +179,6 @@ def list_values(rule_id=None, limit=200):
     try:
         with conn.cursor() as cur:
             cur.execute(sql, args)
-            out = rows(cur)
-        for r in out:
-            for k in ('index_value_ids_json', 'detail_json'):
-                r[k] = unjson(r[k])
-        return out
+            return rows(cur)
     finally:
         conn.close()

@@ -4,8 +4,10 @@
 > 用户拍板（2026-11-26）：一期 = 规则生成 Agent；目标档位 = L3（自动执行 + 人工只审异常）；回流闭环暂缓。
 > 后续追加诉求（2026-11-26 讨论）：① 生成阶段能否像 WorkBuddy 一样自主规划直到解决 → §4.6；
 > ② 利用中间层已确认记录作为标准答案 → §6.7；③ 前端不只是加按钮 → §6.8；
-> ④ 对话式助手深度交互 → §7（分期待定）。
-> 本文只给设计与可施工技术方案，任何一期落地前需再次确认开工单。本文不修改产品代码。
+> ④ 对话式助手深度交互 → §7（分期待定）；
+> ⑤ 自然语言驱动规则生成（用户写需求、AI 判断模式）→ §6.9，用户已拍板"选业务表则以物理列为输出字段，否则 AI 自命名"。
+> 施工进度：M1~M5 前置改造、P0（公共层/生成API/前端）、P0.5 受限 ReAct 已落地；§6.9 待施工。
+> 本文只给设计与可施工技术方案，任何一期落地前需再次确认开工单。
 
 ---
 
@@ -145,10 +147,10 @@ agent/
 ```json
 "_agent_meta": {
   "generator": "rule_author",
+  "provider": "qoder_agent_sdk",
   "prompt_version": "v1",
-  "model": "gpt-4o-mini",
+  "model": "account-default",
   "input_sha256": "<doc+fields+refs 规范化后的摘要>",
-  "temperature": 0,
   "tool_version": "<OPS 注册表版本号>",
   "created_at": "2026-11-26T09:xx:xx"
 }
@@ -158,7 +160,9 @@ agent/
 
 ### 4.5 失败与降级策略（红线）
 
-- 未配置 LLM → 显式报错（`LLMUnconfigured`），前端提示设 `C1_LLM_*`，**回退手动模式**；绝不静默走 passthrough（那会让人误以为规则已生效）。
+- 未配置 Qoder Agent SDK 或 PAT → 显式报错（`LLMUnconfigured`），前端提示设 `QODER_PERSONAL_ACCESS_TOKEN`，**回退手动模式**；绝不静默走 passthrough（那会让人误以为规则已生效）。可选 `C1_QODER_MODEL` 固定 Qoder 模型，留空使用账户默认模型。
+- Windows 若 qodercli 解压原生模块或读取 SDK 认证文件时因长路径/受限临时目录失败，设置 `C1_QODER_TMP_DIR` 为可写的短路径（如 `D:\qoder-tmp`）；配置加载时同步 Python 与子进程的 TEMP/TMP。
+- 规则生成查询固定为单轮、无工具、无 Skill、无 MCP、无记忆、`dontAsk` 权限模式；模型只返回 JSON，不能读写文件或执行命令。
 - 超时 / 非法 JSON / schema 失败 / 干跑全空 → 返回诊断信息，**不落库、不建规则版本**。
 - 干跑锚点覆盖率为 0 → 标记 `warning`，禁止"一键确认"，须人工逐字段检查。
 - Agent 永远不写 `staging`、不改 `values`、不碰 `original` / `lineage` 事实源。
@@ -261,13 +265,14 @@ agent/
 POST /api/agent/generate-rule
 Body: {
   "file_id": 8,                      // 参考文件（必填，须已解析出 parse.json）
-  "fields": [                        // 目标列名 + 说明（来自业务表列 / 手填）
-    {"target": "交易金额", "description": "借方发生额，含千分位"},
-    {"target": "交易日期", "description": "YYYY-MM-DD"}
+  "fields": [                        // 精确模式：目标列名 + 说明（与 prompt 二选一）
+    {"target": "交易金额", "description": "借方发生额，含千分位"}
   ],
-  "datasource_id": 1,                // 可选，参考业务表
+  "prompt": "提取交易日期、借方金额…", // 自然语言模式：用户意图（与 fields 二选一）
+  "datasource_id": 1,                // 可选，参考业务表（提供时 target 须取自其物理列）
   "table": "biz_test_1"              // 可选
 }
+// fields 与 prompt 必须且只能有一个；都没有或都有 → 400（见 §6.9）
 Resp 200: {
   "spec": { "spec_version":2, "tables":[...], "records":{...}, "fields":[...], "_agent_meta":{...} },
   "schema": { "fields":[{"name":"交易金额","type":"text"}, ...] },
@@ -283,7 +288,7 @@ Resp 200: {
 
 **路由命名注意**：必须避开现有 `GET /api/extract-rules/{rule_id}`（path param 是 int）。用独立前缀 `/api/agent/...`，不要挂在 `/api/extract-rules/generate` 下，否则 `generate` 会被 int 转换器拒绝（422）或触发路由歧义。
 
-新增端点必须：走 `run_in_threadpool`（LLM 是阻塞 I/O，不占事件循环）；复用 `_json_body` / 类型化业务异常；写 `tasklog.emit`；缺配置返回明确的 `BadRequest` / `503`。
+新增端点必须：走 `run_in_threadpool`（Qoder Agent SDK 的同步适配层会启动本地 qodercli，不占事件循环）；复用 `_json_body` / 类型化业务异常；写 `tasklog.emit`；缺配置返回明确的 `BadRequest` / `503`。
 
 ### 6.3 提示词与输出契约
 
@@ -389,6 +394,57 @@ def generate_rule(doc, fields, refs, *, llm=None):
 - 本期不自动放行入库——④ 的确认只存规则，应用仍需显式点执行抽取。
 
 ---
+
+### 6.9 自然语言驱动模式（用户新诉求，2026-11-26）
+
+> 用户诉求原话："选了文件之后，这里先输入提示词，要提取什么内容，AI 可以解析出来的内容自己判断是用哪种模式，然后把规则给我填好。"
+> 定位：**与 §6.1 精确模式并存**，不替换。精确模式＝用户填 target 字段名，AI 只配算子；自然语言模式＝用户写需求，AI 推断字段与模式。
+
+#### 6.9.1 两层提示词（安全边界）
+
+| 层 | 内容 | 可编辑性 |
+|---|---|---|
+| **用户层** | "要提取什么"——自然语言描述字段与口径（例：提取交易日期、借方金额、余额，每行一条） | ✅ 可见可改（就是用户说的"提示词"） |
+| **系统层** | 首算子必须 source（保血缘）、算子白名单、target 不得改名、输出 JSON 契约、cross_field 用 cmp | ❌ 内置不可改 |
+
+**为何不让用户改系统层**：放开后模型会生成无逐格血缘的规则，审计价值归零（沿用 §0 铁律）。用户提示词只描述意图，不描述实现。
+
+#### 6.9.2 输出字段命名规则（用户拍板）
+
+**选了参考业务表 → 输出 target 必须以该物理表列名为准；没选 → AI 自己命名。**
+
+- 实现：API 收到 `datasource_id` + `table` 时，后端用既有 `/api/load/datasources/{id}/columns` 的同一套 introspection 取物理列名，作为**候选词表**注入提示词，要求 target 只能从中选。
+- 好处：生成的规则天然与入库映射对齐，避免"AI 起的字段名对不上目标列"。
+- 回退：未选业务表时，AI 按字段语义中文命名（如"借方金额"），提示用户在入库映射里对齐。
+
+#### 6.9.3 AI 自主判断的"模式"
+
+模型依据解析上下文自行决定，并在生成 spec 中显式写出：
+
+| 判断项 | 取值 | 依据 |
+|---|---|---|
+| 记录切分 `records.strategy` | `row` / `key_value` / `group_by` / `one_per_page` | 表格行结构 / 证照键值版式 / 分组需求 / 纯文本正文 |
+| 字段定位 `pipeline[0].op` | `cell` / `kv` / `block` / `page_text` | 表头+样例行存在→cell；标签+值文本→kv；版面块→block；无表格→page_text |
+| 变换算子 | trim/regex/number/date … | 样例值形态（千分位、日期格式、空格） |
+
+这些判断全部落在 v2 spec 里，用户在 JSON 编辑器中可见、可改——AI 给草稿，人做最终裁决。
+
+#### 6.9.4 改动清单
+
+- `agent/prompts/rule_author_v2.py`：接收 `user_prompt` + `column_candidates`，让模型推断 fields 与策略；系统层约束复用 v1 的 RULES 文本（单一真相源）。
+- `POST /api/agent/generate-rule` 扩展：新增可选 `prompt`；`fields` 变为可选（两种模式二选一，都没有则 400）；有 `datasource_id`+`table` 时注入物理列名候选。
+- `web/extract.html/js`：AI 区加提示词输入框；四段式第①段展示用户提示词（替代固定字段 chip）；保留原精确模式的字段表单作为另一入口。
+- `_agent_meta` 增记 `user_prompt_sha256` 与 `mode: natural|precise`，可追溯生成输入。
+
+#### 6.9.5 验收口径
+
+| 项 | 口径 |
+|---|---|
+| 字段命名 | 选业务表时，生成 target 100% 落在该表物理列名集合内 |
+| 模式判断 | ≥3 份不同版式样本（表格/证照/纯文本）生成策略正确，或明确标低置信交人工 |
+| 血缘 | 同 §6.6：锚点覆盖 1.0，否则禁止保存 |
+| 兼容 | §6.1 精确模式输出逐字段不变；Stub 模式走通全链路 |
+| 环境 | 8765 不动；8799 + ASGI 验证 |
 
 ## 7. 对话式助手（聊天窗口与系统深度交互）
 
@@ -513,3 +569,4 @@ P0 建议拆成 3 个可独立验收的任务：① `agent/` 公共层（llm/con
 4. P0.5 受限 ReAct 是否立项？本文默认等 P0 实测样本再定，不 preemptive 上复杂度。
 5. 对话式助手（§7）分期归属：插在 P0 之后，还是另起独立路线与 P0 并行评估？本文默认后者。
 6. 对话助手一期范围：先只读问答 + 导航（本文默认），还是直接含执行类工具？
+7. §6.9 自然语言模式：与精确模式并存（本文默认，已获用户确认）；暂不删除 §6.1 精确入口。
