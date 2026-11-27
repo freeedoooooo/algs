@@ -830,17 +830,19 @@
       }
     }).then(function(){delete lineageTracePending[key];});
   }
-  function renderTablePreview(host,source,fileId,page,data,meta,toolbarHost){
+  function renderTablePreview(host,source,fileId,page,data,meta,toolbarHost,traceEnabled){
     var total=Number(data.total)||0,pages=Math.max(1,Math.ceil(total/Number(data.per_page||20))),current=Number(data.page)||page;
     if(meta)meta.textContent='共 '+total+' 行 · 第 '+current+' / '+pages+' 页';
-    var cols=data.columns||[],items=data.items||[],locatable=lineageLocateEnabled(),on=host.dataset.traceOn==='1',
+    var cols=data.columns||[],items=data.items||[],locatable=lineageLocateEnabled(),on=traceEnabled!==false&&host.dataset.traceOn==='1',
       cached=on?lineageTraceCache[tableCacheKey(source,fileId,page)]:null;
     host.dataset.tracePage=String(current);
     host.dataset.traceKey=tableCacheKey(source,fileId,page);
-    var toolbar='<div class="lineage-table-toolbar"><button type="button" class="btn mini ghost trace-toggle'+(on?' is-on':'')+'" data-trace-toggle aria-pressed="'+on+'">一键追溯</button>'+
+    var toolbar='';
+    if(traceEnabled!==false)toolbar='<div class="lineage-table-toolbar"><button type="button" class="btn mini ghost trace-toggle'+(on?' is-on':'')+'" data-trace-toggle aria-pressed="'+on+'">一键追溯</button>'+
       '<span class="hint" tabindex="0" aria-label="一键追溯说明" data-tip="批量追溯当前页数据；橙色表示可追溯，灰色表示不可追溯。">?</span>'+
       '<span class="lineage-trace-summary">'+esc(traceSummary(data,cached))+'</span></div>';
-    if(toolbarHost){
+    if(traceEnabled===false)delete host.dataset.traceToolbar;
+    else if(toolbarHost){
       host.dataset.traceToolbar=toolbarHost.id;
       toolbarHost.innerHTML=toolbar;
     }else{
@@ -866,26 +868,28 @@
         setTraceSummary(host,'');
       }else runTableTrace(host,source,fileId,current,data);
     }
-    if(toolbarHost)toolbarHost.onclick=function(e){
+    var toolbarEl=toolbarHost||host.querySelector('.lineage-table-toolbar');
+    if(toolbarEl)toolbarEl.onclick=function(e){
       if(e.target.closest&&e.target.closest('[data-trace-toggle]'))toggleTrace();
     };
     host.onclick=function(e){
       var cell=e.target.closest?e.target.closest('td.cell[data-col]'):null;
       if(cell){if(locatable)handleTableCellClick(cell,host,source,fileId,cell.closest('.lineage-upstream-card'));return;}
       var btn=e.target.closest?e.target.closest('[data-page]'):null;if(!btn||btn.disabled)return;
-      loadTablePreview(host,source,fileId,Number(btn.dataset.page),meta,toolbarHost);
+      loadTablePreview(host,source,fileId,Number(btn.dataset.page),meta,toolbarHost,host.dataset.traceEnabled!=='0');
     };
   }
-  function loadTablePreview(host,source,fileId,page,meta,toolbarHost){
+  function loadTablePreview(host,source,fileId,page,meta,toolbarHost,traceEnabled){
     page=Math.max(1,Number(page)||1);
     delete host.dataset.traceOn;clearTableTrace(host);
+    host.dataset.traceEnabled=traceEnabled===false?'0':'1';
     var key=tableCacheKey(source,fileId,page);
-    if(lineageTableCache[key]){renderTablePreview(host,source,fileId,page,lineageTableCache[key],meta,toolbarHost);return;}
+    if(lineageTableCache[key]){renderTablePreview(host,source,fileId,page,lineageTableCache[key],meta,toolbarHost,traceEnabled!==false);return;}
     host.innerHTML='<div class="lineage-empty">数据加载中…</div>';
     if(meta)meta.textContent='加载中…';
     api(tableRowsUrl(source,fileId,page)).then(function(data){
       lineageTableCache[key]=data;
-      if(host.isConnected)renderTablePreview(host,source,fileId,page,data,meta,toolbarHost);
+      if(host.isConnected)renderTablePreview(host,source,fileId,page,data,meta,toolbarHost,traceEnabled!==false);
     }).catch(function(e){
       if(host.isConnected){host.innerHTML='<div class="lineage-empty">数据加载失败：'+esc(e.message)+'</div>';if(meta)meta.textContent='加载失败';}
     });
@@ -940,7 +944,8 @@
     if(!node||!area)return;
     if(nodeScope==='source'){
       var active=activeLineageNode();
-      loadTablePreview(area,node,active&&active.scope==='document'?active.def.id:null,1,null);
+      area.innerHTML='<div class="lineage-data-head"><b>数据列表</b></div><div class="lineage-table-host"></div>';
+      loadTablePreview(area.querySelector('.lineage-table-host'),node,active&&active.scope==='document'?active.def.id:null,1,null,null,false);
     }else if(nodeScope==='document'){
       area.innerHTML=documentPreviewHtml(node);var frame=area.querySelector('iframe');bindLineageFrame(frame);
       var pendingBatch=card.dataset.pendingBatch;
@@ -1004,7 +1009,7 @@
   }
   function sourceCardContext(card,fileId){
     var parts=card.dataset.lineageUpstream.split(':'),source=lineageGraph.def('source',Number(parts[1])),
-      area=card.querySelector('.lineage-upstream-data');if(!source||!area)return null;
+      area=card.querySelector('.lineage-table-host');if(!source||!area)return null;
     return {host:area,source:source,fileId:fileId,card:card,meta:null};
   }
   function targetTableContexts(fileId){
