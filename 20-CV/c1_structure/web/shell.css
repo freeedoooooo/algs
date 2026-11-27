@@ -80,6 +80,11 @@ textarea:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--c1-prima
 .topnav .navnote{padding-left:14px;border-left:1px solid var(--c1-border);
   font-size:var(--c1-font-size-meta);line-height:20px;color:var(--c1-text-faint);white-space:nowrap}
 
+/* ---- 全站智能助手导航：滚动时吸附右侧 ---- */
+.topnav a[href="/chat"]{position:sticky;right:0;z-index:3;background:var(--c1-surface);
+  box-shadow:-8px 0 10px rgba(15,23,38,.05)}
+.topnav a[href="/chat"].on{background:var(--c1-primary-soft)}
+
 /* ---- 列表页主体 ---- */
 .pagebody{width:100%;min-width:0;max-width:none;margin:0;
   padding:var(--c1-space-3) var(--c1-space-4) var(--c1-space-6)}

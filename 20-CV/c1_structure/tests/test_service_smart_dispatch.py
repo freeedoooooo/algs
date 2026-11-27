@@ -29,6 +29,9 @@ class _Catalog:
     def set_rule(self, file_id, version_id):
         pass
 
+    def clear_load_logs(self, file_id):
+        pass
+
     def set_state(self, file_id, state, error=None):
         pass
 

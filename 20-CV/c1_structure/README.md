@@ -11,9 +11,8 @@
 **存储模型（2026-11-24 重构）**：一条资料记录 = 一次运行（单文件），以 `c1_doc_file.id`
 （`file_id`）为唯一运行主键；已删除 `c1_task` / `c1_task_file` 两表，运行态并入资料行。
 任务不在导航中——**资料清单（`/sources`）是唯一功能入口**，数据预览 / 解析保留为二级页。
-无外键（表 `c1_*` 前缀）；设计取舍见
-[docs/design-file-centric-refactor.md](./docs/design-file-centric-refactor.md)，
-复用事实与验证方法见 [docs/progress-handoff.md](./docs/progress-handoff.md)。
+无外键（表 `c1_*` 前缀）；当前存储模型与自动化处理方案见
+[docs/design-agentic-extraction.md](./docs/design-agentic-extraction.md)。
 
 ## 启动
 
@@ -115,6 +114,7 @@ c1_structure/
 ├── tasklog.py                 结构化运行日志（service.STATE + logs/file_<id>.log）
 ├── app.py                     FastAPI 路由 + 请求校验 + 包自举 + 异常处理器
 ├── service.py                 运行引擎：STATE/LOCK + launch + launch_load/run_load（入库）
+├── auto_service.py            自然语言自动编排：解析→规则→抽取→推荐/映射→入库
 ├── __init__.py                支持 uvicorn c1_structure.app:app 包方式启动
 ├── accept_records_db.py       records 入库七项验收（临时服务 8799/8797，含入库全链）
 ├── accept_artifacts_db.py     产物入库六项验收（两套脚本严禁并行）
@@ -133,6 +133,8 @@ c1_structure/
 │   ├── content_db.py          staging 三表：get/save/patch/set_review/query_fields
 │   ├── loader.py              入库引擎接缝：数据源直连 / introspection / 字段契约
 │   │                          / transform（trim·number）/ write_record（应用层 upsert）
+│   ├── semantic_load.py       中文字段推荐与物理列映射（纯函数）
+│   ├── load_planner.py        入库规划：目标表解析、推荐、映射与规划持久化
 │   ├── index_repo.py          指标定义/结果 repo（c1_index_info / c1_index_value）
 │   ├── rule_repo.py           业务规则定义/结果 repo（c1_rule_info / c1_rule_value）
 │   ├── frame_repo.py          框架定义/结果 repo（c1_frame_info / c1_frame_value）
@@ -164,7 +166,7 @@ c1_structure/
 │   └── report.css/js · lightbox.html   报告专用（生成时内联进 BLOB）
 ├── data/                      backup/（迁移前整库备份；DSN 已入 config.py，无 secrets.json）
 ├── logs/                      运行日志（运行时生成，每条资料一个 file_<id>.log）
-└── docs/                      progress-handoff.md（环境事实与验证方法）
+└── docs/                      design-agentic-extraction.md（当前自动结构化方案）
 ```
 
 ### 存储模型：file_id 单键，无批次戳、无外键

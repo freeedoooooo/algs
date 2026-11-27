@@ -33,6 +33,8 @@ class PromptV2Test(unittest.TestCase):
         self.assertIn('account_1', text)
         self.assertIn(rule_author_v2.PROMPT_VERSION, text)
         self.assertIn('records.strategy', text)
+        self.assertIn('region_text', text)
+        self.assertIn('文档地图', text)
         self.assertIn(rule_author_v1.RULES.split('\n')[2], text)
 
     def test_render_rejects_empty_prompt(self):

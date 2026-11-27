@@ -186,5 +186,144 @@ class CollectLogicTest(unittest.TestCase):
             apply_pipeline([{'op': 'not_exist'}], {})
 
 
+class RegionSelectionTest(unittest.TestCase):
+    def _table_doc(self):
+        def table(name, y):
+            return {'headers': ['表名', '金额'],
+                    'rows': [[name, '10']],
+                    'cells': [['表名', '金额'],
+                              [[100, y, 300, y + 50], [400, y, 600, y + 50]]],
+                    'coord': {'space': 'source'}}
+        return {'pages': [{'index': 1, 'size': [1000, 1000],
+                           'rectified_size': [1000, 2000], 'space': 'source',
+                           'blocks': [
+                               {'role': 'title', 'bbox': [100, 50, 500, 90],
+                                'text': '汇总'},
+                               {'role': 'text', 'bbox': [100, 600, 700, 650],
+                                'text': '明细'}],
+                           'texts': [],
+                           'tables': [table('汇总表', 100),
+                                      table('明细表', 600)]}],
+                'stitched_tables': []}
+
+    def test_table_region_restricts_records(self):
+        doc = self._table_doc()
+        spec = {'spec_version': 2,
+                'tables': [{'ref': 'main', 'restrict': True,
+                            'region': {'page': 1, 'rect': [0, 0.5, 1, 1]}}],
+                'fields': [{'target': '金额', 'pipeline': [
+                    {'op': 'cell', 'column': {'name': '金额'}}]}]}
+        records = build_logic(doc, {'mapping_json': spec})
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]['values']['金额'], '10')
+        self.assertEqual(records[0]['lineage']['金额'][0]['cell_bbox'],
+                         [400, 600, 600, 650])
+
+    def test_region_only_table_selector_resolves_source(self):
+        from c1_structure.collect_logic.engine import _tables_by_ref
+        doc = self._table_doc()
+        doc['pages'][0]['tables'][1]['rows'][0][1] = '20'
+        spec = {'spec_version': 2,
+                'tables': [{'ref': 'main',
+                            'region': {'page': 1, 'rect': [0, 0.5, 1, 1]}}],
+                'fields': [{'target': '金额', 'pipeline': [
+                    {'op': 'cell', 'source': 'main',
+                     'column': {'name': '金额'}}]}]}
+        picked = _tables_by_ref(doc, spec)['main']
+        self.assertEqual(len(picked), 1)
+        self.assertEqual(picked[0][0]['rows'][0][1], '20')
+
+    def test_rectified_table_region_uses_rectified_size(self):
+        doc = self._table_doc()
+        doc['pages'][0]['tables'][1]['coord']['space'] = 'rectified'
+        doc['pages'][0]['tables'][1]['cells'][1] = [
+            [100, 1000, 300, 1050], [400, 1000, 600, 1050]]
+        spec = {'spec_version': 2,
+                'tables': [{'ref': 'main', 'restrict': True,
+                            'region': {'page': 1, 'rect': [0, 0.45, 1, 0.55]}}],
+                'fields': [{'target': '金额', 'pipeline': [
+                    {'op': 'cell', 'column': {'name': '金额'}}]}]}
+        records = build_logic(doc, {'mapping_json': spec})
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]['lineage']['金额'][0]['space'], 'rectified')
+
+    def test_block_region(self):
+        doc = self._table_doc()
+        value, anchors, meta = apply_pipeline([{
+            'op': 'block', 'contains': '明细',
+            'region': {'page': 1, 'rect': [0, 0.5, 1, 1]}}], _ctx(doc))
+        self.assertEqual(value, '明细')
+        self.assertFalse(meta.get('issues'))
+        self.assertEqual(anchors[0]['cell_bbox'], [100, 600, 700, 650])
+
+    def test_kv_region_excludes_outside_decoy(self):
+        doc = _texts_doc([
+            ('账号', [100, 100, 200, 120]), ('错误值', [220, 100, 400, 120]),
+            ('账号', [550, 100, 650, 120]), ('正确值', [700, 100, 900, 120])])
+        doc['pages'][0]['size'] = [1000, 1000]
+        value, anchors, meta = apply_pipeline([{
+            'op': 'kv', 'label': {'text': '账号'},
+            'region': {'page': 1, 'rect': [0.5, 0, 1, 0.2]},
+            'value': {'direction': 'right'}}], _ctx(doc))
+        self.assertEqual(value, '正确值')
+        self.assertEqual([a['raw_text'] for a in anchors], ['正确值', '账号'])
+        self.assertFalse(meta.get('issues'))
+
+    def test_region_text_reading_order_and_anchors(self):
+        doc = _texts_doc([
+            ('末尾', [100, 600, 300, 630]),
+            ('区域外', [100, 100, 300, 130]),
+            ('开头', [100, 500, 300, 530])])
+        doc['pages'][0]['size'] = [1000, 1000]
+        value, anchors, _meta = apply_pipeline([{
+            'op': 'region_text', 'sep': '|',
+            'region': {'page': 1, 'rect': [0, 0.4, 1, 0.7]}}], _ctx(doc))
+        self.assertEqual(value, '开头|末尾')
+        self.assertEqual([a['raw_text'] for a in anchors], ['开头', '末尾'])
+
+    def test_stitched_table_region(self):
+        doc = {'pages': [{'index': 1, 'size': [1000, 1000], 'space': 'source',
+                          'texts': [], 'blocks': [], 'tables': []},
+                         {'index': 2, 'size': [1000, 1000], 'space': 'source',
+                          'texts': [], 'blocks': [], 'tables': []}],
+               'stitched_tables': [{
+                   'headers': ['金额'], 'rows': [['10']],
+                   'cells': [['金额'],
+                             [{'page': 2, 'bbox': [400, 600, 600, 650]}]],
+                   'coord': {'space': 'source'},
+                   'parts': [{'page': 2, 'tbl': 0}]}]}
+        spec = {'spec_version': 2,
+                'tables': [{'ref': 'main', 'restrict': True,
+                            'region': {'page': 2, 'rect': [0, 0.5, 1, 1]}}],
+                'fields': [{'target': '金额', 'pipeline': [
+                    {'op': 'cell', 'column': {'name': '金额'}}]}]}
+        records = build_logic(doc, {'mapping_json': spec})
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]['lineage']['金额'][0]['page'], 2)
+
+    def test_region_text_one_per_page_stays_on_current_page(self):
+        doc = {'pages': [
+            {'index': 1, 'size': [1000, 1000], 'space': 'source',
+             'texts': [{'text': '第一页',
+                        'box': [[100, 100], [300, 100], [300, 130], [100, 130]]}]},
+            {'index': 2, 'size': [1000, 1000], 'space': 'source',
+             'texts': [{'text': '第二页',
+                        'box': [[100, 100], [300, 100], [300, 130], [100, 130]]}]}],
+            'stitched_tables': []}
+        spec = {'spec_version': 2, 'records': {'strategy': 'one_per_page'},
+                'fields': [{'target': '内容', 'pipeline': [
+                    {'op': 'region_text', 'region': {'rect': [0, 0, 0.5, 0.2]}}]}]}
+        records = build_logic(doc, {'mapping_json': spec})
+        self.assertEqual([r['values']['内容'] for r in records],
+                         ['第一页', '第二页'])
+
+    def test_invalid_region_rejected(self):
+        from c1_structure.agent import validate
+        spec = {'spec_version': 2, 'fields': [{'target': '金额', 'pipeline': [
+            {'op': 'region_text', 'region': {'rect': [0, 0, 2, 1]}}]}]}
+        self.assertTrue(any('region.rect' in x
+                            for x in validate.validate_spec(spec)))
+
+
 if __name__ == '__main__':
     unittest.main()

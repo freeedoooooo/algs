@@ -8,6 +8,23 @@ from .. import collect
 from ._common import (as_text, cell_anchor, dedupe_anchors, pick_column)
 from .registry import OPS, OP_KINDS
 from .ops.validate import run_validates
+from .spatial import table_in_region
+
+
+def _filter_region(cands, doc, region):
+    if not region:
+        return cands
+    pages = doc.get('pages') or []
+    out = []
+    for cand in cands:
+        t, _scope, _ti, page_default = cand
+        pg = next((p for p in pages if p.get('index') == page_default), None)
+        if pg is None and region.get('page') is not None:
+            pg = next((p for p in pages
+                       if p.get('index') == region['page']), None)
+        if pg is not None and table_in_region(t, pg, page_default, region):
+            out.append(cand)
+    return out
 
 
 def _tables_by_ref(doc, spec):
@@ -32,6 +49,13 @@ def _tables_by_ref(doc, spec):
                     break
         elif sel.get('scope') == 'all':
             picked = list(cands)
+        elif sel.get('region'):
+            picked = list(cands)
+        if picked:
+            many = isinstance(picked, list)
+            filtered = _filter_region(
+                picked if many else [picked], doc, sel.get('region'))
+            picked = filtered if many else (filtered[0] if filtered else None)
         by_ref[ref] = picked
     return by_ref
 
@@ -129,13 +153,15 @@ def _restricted_cands(doc, spec):
         cands = collect._candidate_tables(doc)
         idx = sel.get('index')
         if isinstance(idx, int) and not isinstance(idx, bool):
-            return [cands[idx]] if 0 <= idx < len(cands) else []
-        kw = sel.get('header_contains')
-        if kw:
-            return [c for c in cands
-                    if str(kw) in ' '.join(str(h or '')
-                                           for h in (c[0].get('headers') or []))]
-        return cands
+            picked = [cands[idx]] if 0 <= idx < len(cands) else []
+        elif sel.get('header_contains'):
+            kw = sel['header_contains']
+            picked = [c for c in cands
+                      if str(kw) in ' '.join(str(h or '')
+                                             for h in (c[0].get('headers') or []))]
+        else:
+            picked = cands
+        return _filter_region(picked, doc, sel.get('region'))
     return None
 
 

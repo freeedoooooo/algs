@@ -219,6 +219,11 @@ def index():
     return HTMLResponse(asset('home.html'))
 
 
+@app.get('/chat', response_class=HTMLResponse)
+def chat_page():
+    return HTMLResponse(asset('chat.html'))
+
+
 @app.get('/parse', response_class=HTMLResponse)
 def parse_page():
     return HTMLResponse(asset('parse.html'))
@@ -310,6 +315,35 @@ def _reject_retired_load_keys(body):
             '上传不再选择抽取规则，请在「执行抽取」时选择')
 
 
+def _decode_upload_files(files, in_dir):
+    if not files:
+        raise store_errors.BadRequest('未收到文件')
+    extra_n = max(0, len(files) - 1)
+    files = files[:1]
+    paths, used, ctx = [], set(), []
+    for item in files:
+        name = service.safe_name(item.get('name', ''))
+        ext = os.path.splitext(name)[1].lower()
+        if ext not in config.ALLOWED_EXTS:
+            raise store_errors.BadRequest('不支持的格式：{}'.format(ext))
+        name = _dedup_name(name, used)
+        used.add(name)
+        try:
+            data = base64.b64decode(str(item.get('data', '')).split(',')[-1])
+        except Exception:
+            raise store_errors.BadRequest('{} 的 base64 数据无效'.format(name))
+        if len(data) > config.MAX_FILE_MB * 1024 * 1024:
+            raise store_errors.BadRequest(
+                '{} 超过 {}MB'.format(name, config.MAX_FILE_MB))
+        path = os.path.join(in_dir, name)
+        with open(path, 'wb') as f:
+            f.write(data)
+        paths.append(path)
+        info = service.register_file(name, data)
+        ctx.append(dict(info, name=name, path=path))
+    return paths, ctx, extra_n
+
+
 @app.post('/api/upload')
 async def upload(request: Request):
     if service.STATE['running']:
@@ -319,52 +353,54 @@ async def upload(request: Request):
     body = await _json_body(request)
     _reject_retired_load_keys(body)
     files = body.get('files') or []
-    if not files:
-        return JSONResponse({'ok': False, 'error': '未收到文件'},
-                            status_code=400)
-    # 一条资料 = 一次运行（单文件）：兼容旧缓存前端的多选请求，只取第一个，
-    # 把"忽略其余文件"作为 warning 回显，不让整次上传静默失败。
-    extra_n = max(0, len(files) - 1)
-    if extra_n:
-        files = files[:1]
     # 调试参数：校验一次，非法值回退默认并把警告带回页面（不让整批失败）
     params, warns = params_mod.normalize(body.get('params'))
-    if extra_n:
-        warns.insert(0, '一次只解析一个文件，已忽略另外 {} 个文件'.format(extra_n))
 
     # 输入副本只落 tmp/input scratch（字节事实源在 c1_doc_file.content），跑完即清；
     # 任何失败路径（校验 400 / DB 503）都由 finally 回收，不留孤儿
     in_dir = tempfile.mkdtemp(prefix='in_', dir=config.TMP_INPUT)
     launched = False
     try:
-        paths, used, ctx = [], set(), []
-        for item in files:
-            name = service.safe_name(item.get('name', ''))
-            ext = os.path.splitext(name)[1].lower()
-            if ext not in config.ALLOWED_EXTS:
-                return JSONResponse(
-                    {'ok': False, 'error': '不支持的格式：{}'.format(ext)},
-                    status_code=400)
-            name = _dedup_name(name, used)
-            used.add(name)
-            try:
-                data = base64.b64decode(str(item.get('data', '')).split(',')[-1])
-            except Exception:
-                return JSONResponse(
-                    {'ok': False, 'error': '{} 的 base64 数据无效'.format(name)},
-                    status_code=400)
-            if len(data) > config.MAX_FILE_MB * 1024 * 1024:
-                return JSONResponse(
-                    {'ok': False,
-                     'error': '{} 超过 {}MB'.format(name, config.MAX_FILE_MB)},
-                    status_code=400)
-            path = os.path.join(in_dir, name)
-            with open(path, 'wb') as f:
-                f.write(data)
-            paths.append(path)
-            info = service.register_file(name, data)
-            ctx.append(dict(info, name=name, path=path))
+        paths, ctx, extra_n = _decode_upload_files(files, in_dir)
+        if extra_n:
+            warns.insert(0, '一次只解析一个文件，已忽略另外 {} 个文件'.format(extra_n))
         result = service.launch(paths, params, warns, ctx)
+        launched = True
+        return result
+    finally:
+        if not launched:
+            service.rmtree_retry(in_dir)
+
+
+@app.post('/api/auto/process')
+async def auto_process(request: Request):
+    """上传 + 自然语言意图 → 解析、规则生成、抽取、表推荐/映射、自动入库。"""
+    if service.STATE['running']:
+        return JSONResponse(
+            {'ok': False, 'error': '已有任务正在处理，请等待其完成'},
+            status_code=409)
+    body = await _json_body(request)
+    _reject_retired_load_keys(body)
+    intent = body.get('intent') or {}
+    if not isinstance(intent, dict):
+        raise store_errors.BadRequest('intent 须为 JSON 对象')
+    if not intent.get('description') and body.get('description'):
+        intent = dict(intent, description=body.get('description'))
+    if not intent.get('target_table') and body.get('target_table'):
+        intent = dict(intent, target_table=body.get('target_table'))
+    if intent.get('datasource_id') is None and body.get('datasource_id') is not None:
+        intent = dict(intent, datasource_id=body.get('datasource_id'))
+    if not str(intent.get('description') or intent.get('prompt') or '').strip():
+        raise store_errors.BadRequest('自动处理需要自然语言描述')
+    params, warns = params_mod.normalize(body.get('params'))
+    in_dir = tempfile.mkdtemp(prefix='in_', dir=config.TMP_INPUT)
+    launched = False
+    try:
+        paths, ctx, extra_n = _decode_upload_files(body.get('files') or [], in_dir)
+        if extra_n:
+            warns.insert(0, '一次只解析一个文件，已忽略另外 {} 个文件'.format(extra_n))
+        result = _load('auto_service').launch(
+            paths, params, warns, ctx, intent)
         launched = True
         return result
     finally:
@@ -1134,6 +1170,40 @@ def api_file_gate(file_id: int):
 def api_file_load_log(file_id: int):
     _file_or_404(file_id)
     return {'ok': True, 'items': _load('store.catalog').list_load_logs(file_id)}
+
+
+@app.get('/api/sources/{file_id}/load-plan')
+def api_file_load_plan_get(file_id: int):
+    _file_or_404(file_id)
+    plan = _load('store.load_planner').get_plan(file_id)
+    if plan is None:
+        return JSONResponse({'ok': False, 'error': '尚无入库规划'}, status_code=404)
+    return dict(plan, ok=True)
+
+
+@app.post('/api/sources/{file_id}/load-plan')
+async def api_file_load_plan(file_id: int, request: Request):
+    """按自然语言目标重新推荐表/映射；只读业务库并保存规划，不入库。"""
+    _file_or_404(file_id)
+    body = await _json_body(request)
+    intent = body.get('intent') or body
+    if not isinstance(intent, dict):
+        raise store_errors.BadRequest('入库规划须为 JSON 对象')
+    plan = await run_in_threadpool(
+        _load('store.load_planner').plan_for_file, file_id, intent)
+    return dict(plan, ok=True)
+
+
+@app.post('/api/sources/{file_id}/load-plan/apply')
+async def api_file_load_plan_apply(file_id: int, request: Request):
+    """用户确认推荐表或补齐字段映射后，创建入库映射并执行入库。"""
+    _file_or_404(file_id)
+    body = await _json_body(request)
+    intent = body.get('intent') or body
+    if not isinstance(intent, dict):
+        raise store_errors.BadRequest('入库规划须为 JSON 对象')
+    return await run_in_threadpool(
+        _load('auto_service').apply_plan, file_id, intent)
 
 
 @app.post('/api/sources/{file_id}/load')

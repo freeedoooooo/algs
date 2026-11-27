@@ -24,6 +24,8 @@ _EXTRA_RULES = '''
 9. 自行判断每个字段的首个取值算子 pipeline[0].op：
    表格列→cell；文本标签旁取值→kv；版面块→block；整页正文→page_text。
 10. 参考样例值形态选择变换算子：千分位/货币→number(strip)，多余空格→trim，日期→date，固定格式→regex。
+11. 用户指定页码或页面区域时，使用文档地图里的 page/rect 生成 region；区域内文字用 region_text，
+    表格用 tables[].region 或 block/kv 的 region 过滤。标签旁取值优先 kv，不要跨区域串值。
 '''.strip()
 
 

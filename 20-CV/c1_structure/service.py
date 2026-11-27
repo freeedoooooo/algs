@@ -191,7 +191,7 @@ def rmtree_retry(path, tries=6, delay=0.3):
                 time.sleep(delay)
 
 
-def task_batch(paths, params=None, log=None, task_ctx=None):
+def task_batch(paths, params=None, log=None, task_ctx=None, finalize=True):
     """后台线程（仅解析）：逐个解析 → raw/ + parse.json → 对照报告
     → 产物 ingest 入 BLOB → 资料置 to_extract；抽取由 run_extract 另行触发。
     DB 必选：写失败显式 failed；scratch 跑完清尽。"""
@@ -268,15 +268,16 @@ def task_batch(paths, params=None, log=None, task_ctx=None):
         prim = task_ctx.get('file_id')
         if prim is not None:
             db(prim, 'to_extract', None)
-        with LOCK:
-            STATE.update(running=False, ready=True,
-                         cases=[{'file': f['name'],
-                                 'file_id': f.get('file_id'),
-                                 'state': f.get('state')}
-                                for f in task_ctx['files']],
-                         elapsed=round(time.time()
-                                       - (STATE['started'] or time.time()), 1),
-                         progress=100, stage='done')
+        if finalize:
+            with LOCK:
+                STATE.update(running=False, ready=True,
+                             cases=[{'file': f['name'],
+                                     'file_id': f.get('file_id'),
+                                     'state': f.get('state')}
+                                    for f in task_ctx['files']],
+                             elapsed=round(time.time()
+                                           - (STATE['started'] or time.time()), 1),
+                             progress=100, stage='done')
         log.ok('done', '解析完成 {} 个文件（{}），耗时 {}s'.format(
             total, '测试产物已保存，正式状态未变' if preserve_state else '待抽取',
             STATE['elapsed']))
@@ -289,9 +290,10 @@ def task_batch(paths, params=None, log=None, task_ctx=None):
         except Exception as e2:
             if log:
                 log.warn('store', '资料状态写入失败：{}'.format(e2))
-        with LOCK:
-            STATE.update(running=False, ready=False, error=str(e),
-                         stage='error')
+        if finalize:
+            with LOCK:
+                STATE.update(running=False, ready=False, error=str(e),
+                             stage='error')
         print(traceback.format_exc(limit=3))
     finally:
         for f in task_ctx.get('files') or []:
@@ -302,6 +304,14 @@ def task_batch(paths, params=None, log=None, task_ctx=None):
 
 
 # ---- 抽取引擎（与解析解耦）：parse.json 纯投影 → staging 三表 ----
+
+def extract_records(doc, tpl):
+    """规则版本 → 记录列表；解析、抽取、入库可分别测试的纯编排边界。"""
+    spec = tpl.get('mapping_json') or {}
+    if spec.get('spec_version') == 3:
+        return _load('smart_extract').build_smart(doc, tpl)
+    return _load('collect').build(doc, tpl)
+
 
 def run_extract(file_id, force=False, rule_version_id=None):
     """执行抽取：回读 parse.json → 规则分流 → save_records。
@@ -333,11 +343,8 @@ def run_extract(file_id, force=False, rule_version_id=None):
     doc = content.get_extract(file_id)
     if doc is None:
         raise errors.Conflict('资料缺少解析产物，请重新解析')
-    spec = tpl.get('mapping_json') or {}
-    if spec.get('spec_version') == 3:
-        recs = _load('smart_extract').build_smart(doc, tpl)
-    else:
-        recs = collect.build(doc, tpl)
+    recs = extract_records(doc, tpl)
+    catalog.clear_load_logs(file_id)
     content.save_records(collect.build_records_doc(
         doc, recs, task_id=file_id,
         task_file_id=file_id, file_id=file_id,
@@ -478,14 +485,15 @@ def _snapshot_names(snap):
     return names
 
 
-def launch_load(file_id, target=None):
+def launch_load(file_id, target=None, *, auto=False, background=True):
     """POST /api/sources/{id}/load 的编排：入库时绑定目标。
     未绑定须带 target={datasource_id,load_table_id}：归属/规则/预检/门禁
     全过才登记绑定＋起线程，任何一步失败都不落绑定（下次可另选）。
-    已绑定沿用原绑定（带 target→409，回执语义）。"""
+    已绑定沿用原绑定（带 target→409，回执语义）。
+    auto=True 用于自动处理：跳过人工 confirmed 门禁；background=False 同步执行。"""
     catalog = _load('store.catalog')
     errors = _load('store.errors')
-    if STATE['running']:
+    if STATE['running'] and not auto:
         raise errors.Conflict('已有资料正在处理，请等待其完成')
     f = catalog.get_file(file_id)
     if f is None:
@@ -495,7 +503,7 @@ def launch_load(file_id, target=None):
         raise errors.Conflict('资料已入库')
     if state == 'loading':
         raise errors.Conflict('入库进行中')
-    if state != 'to_load':
+    if not auto and state != 'to_load':
         raise errors.Conflict(
             '资料状态为 {}，未到「待入库」（须全部记录校验确认）'.format(state))
     bound = (f['load_datasource_id'], f['load_table_id']) \
@@ -526,13 +534,14 @@ def launch_load(file_id, target=None):
     recs = [r for fs in (doc['files'] if doc else []) for r in fs['records']]
     if not recs:
         raise errors.Conflict('暂无暂存记录，无法入库')
-    c = loader.review_gate(recs)
-    blocked = c['pending'] + c['edited'] + c['rejected']
-    if blocked:
-        raise errors.Conflict(
-            '{} 条待校验 / {} 条已修改未确认 / {} 条已拒绝，'
-            '请先完成校验：仅当全部记录为「已确认」时才可入库'.format(
-                c['pending'], c['edited'], c['rejected']))
+    if not auto:
+        c = loader.review_gate(recs)
+        blocked = c['pending'] + c['edited'] + c['rejected']
+        if blocked:
+            raise errors.Conflict(
+                '{} 条待校验 / {} 条已修改未确认 / {} 条已拒绝，'
+                '请先完成校验：仅当全部记录为「已确认」时才可入库'.format(
+                    c['pending'], c['edited'], c['rejected']))
     if not bound:
         catalog.set_load(file_id, ds_id, lt_id)
     label = 'file_{}_load'.format(file_id)
@@ -549,9 +558,12 @@ def launch_load(file_id, target=None):
     log.stage('load', '资料 {} 入库 → {}.{}（{} · 共 {} 条）'.format(
         file_id, ds['db_name'], lt['target_table'], lt['write_mode'],
         len(recs)))
-    threading.Thread(target=run_load,
-                     args=(file_id, ds, lt, tpl, log),
-                     daemon=True).start()
+    if background:
+        threading.Thread(target=run_load,
+                         args=(file_id, ds, lt, tpl, log),
+                         daemon=True).start()
+    else:
+        run_load(file_id, ds, lt, tpl, log)
     return {'ok': True, 'file_id': file_id}
 
 

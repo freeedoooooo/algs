@@ -8,6 +8,7 @@ import re
 
 from .._common import as_text, box_to_bbox, make_anchor
 from ..registry import register
+from ..spatial import item_in_region
 
 
 def _label_span(text, label):
@@ -57,6 +58,8 @@ def _items(ctx, args):
             else (pg.get('blocks') or [])
         for it in items:
             raw = it.get('box') if source == 'texts' else it.get('bbox')
+            if not item_in_region(raw, pg, args.get('region')):
+                continue
             out.append({'page': pg.get('index'), 'space': pg.get('space'),
                         'text': as_text(it.get('text')),
                         'bbox': box_to_bbox(raw)})

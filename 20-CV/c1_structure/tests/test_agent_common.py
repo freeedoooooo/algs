@@ -1,5 +1,6 @@
 """P0-① agent 公共层：LLM 注入/Stub、上下文压缩、静态校验与干跑对拍。"""
 import asyncio
+import copy
 import unittest
 from types import SimpleNamespace
 from unittest import mock
@@ -252,6 +253,77 @@ class ContextTest(unittest.TestCase):
     def test_budget_truncates(self):
         ctx = context.doc_to_context(_doc(), budget=20)
         self.assertTrue(ctx['truncated'])
+
+
+class DocumentMapTest(unittest.TestCase):
+    def _spatial_doc(self):
+        rows = [['行{}'.format(i)] for i in range(10)]
+        cells = [['金额']] + [[[100, 200 + i * 20, 800, 215 + i * 20]]
+                              for i in range(10)]
+        return {'file': {'name': 'map.pdf', 'kind': 'pdf'},
+                'pages': [{'index': 1, 'size': [1000, 1000],
+                           'rectified_size': [2000, 2000], 'space': 'source',
+                           'route': 'model',
+                           'blocks': [{'role': 'title', 'bbox': [100, 50, 500, 100],
+                                       'text': '对账单'}],
+                           'texts': [{'text': '表后说明',
+                                      'box': [[100, 500], [900, 500],
+                                              [900, 550], [100, 550]]}],
+                           'tables': [{'headers': ['金额'], 'rows': rows,
+                                       'cells': cells,
+                                       'coord': {'space': 'source'}}]}],
+                'stitched_tables': []}
+
+    def test_spatial_map_and_neighbors(self):
+        ctx = context.doc_to_context(self._spatial_doc())
+        table = ctx['tables'][0]
+        self.assertEqual(table['position']['norm'], [0.1, 0.2, 0.8, 0.395])
+        self.assertEqual(table['neighbors']['above'], 'p1.b0')
+        self.assertEqual(table['neighbors']['below'], 'p1.x0')
+        page = ctx['document_map']['pages'][0]
+        self.assertEqual(page['regions'][0]['ref'], 'p1.b0')
+        self.assertEqual(page['regions'][1]['ref'], 'p1.t0')
+        self.assertIn('文档地图', context.render_context(ctx))
+
+    def test_representative_first_middle_last_rows(self):
+        ctx = context.doc_to_context(self._spatial_doc())
+        table = ctx['tables'][0]
+        self.assertEqual(table['sample_rows'], [0, 4, 9])
+        self.assertEqual([r[0] for r in table['samples']], ['行0', '行4', '行9'])
+
+    def test_rectified_table_uses_rectified_size(self):
+        doc = self._spatial_doc()
+        doc['pages'][0]['tables'][0]['coord']['space'] = 'rectified'
+        position = context.doc_to_context(doc)['tables'][0]['position']
+        self.assertEqual(position['space'], 'rectified')
+        self.assertEqual(position['norm'], [0.05, 0.1, 0.4, 0.1975])
+
+    def test_empty_page_and_stitched_table(self):
+        doc = self._spatial_doc()
+        doc['pages'].append({'index': 2, 'size': [800, 600], 'space': 'source',
+                             'texts': [], 'blocks': [], 'tables': []})
+        doc['stitched_tables'] = [{'headers': ['跨页'], 'rows': [['值']],
+                                   'cells': [[[10, 20, 100, 40]]],
+                                   'coord': {'space': 'source'},
+                                   'parts': [{'page': 2, 'tbl': 0}]}]
+        ctx = context.doc_to_context(doc)
+        self.assertEqual(ctx['document_map']['pages'][1]['index'], 2)
+        stitched = next(t for t in ctx['tables'] if t['scope'] == 'stitched')
+        self.assertEqual(stitched['position']['norm'], [0.0125, 0.0333, 0.125, 0.0667])
+
+    def test_large_document_budget_and_input_unchanged(self):
+        doc = self._spatial_doc()
+        doc['pages'].extend(
+            {'index': i, 'size': [1000, 1000], 'space': 'source',
+             'texts': [], 'blocks': [], 'tables': []} for i in range(2, 31))
+        before = copy.deepcopy(doc)
+        ctx = context.doc_to_context(doc, budget=2500)
+        self.assertTrue(ctx['truncated'])
+        self.assertGreater(ctx['document_map']['omitted_pages'], 0)
+        self.assertLess(len(ctx['document_map']['pages']), 30)
+        self.assertEqual(doc, before)
+        self.assertEqual(doc['pages'][0]['tables'][0]['rows'],
+                         before['pages'][0]['tables'][0]['rows'])
 
 
 class ValidateTest(unittest.TestCase):

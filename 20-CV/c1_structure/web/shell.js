@@ -463,3 +463,18 @@ function bindPager(el,onGo,onSize){
 /* ---- 流程条组件已移除（2026-11-22 用户确认入库页也不需要） ---- */
 /* 字段名规范化（自动对齐共用口径）：小写＋去空格/下划线 */
 function normKey(s){ return String(s==null?'':s).toLowerCase().replace(/[\s_]/g,''); }
+
+/* ---- 全站智能助手导航：固定在顶部导航右侧，横向滚动时保持可见 ---- */
+(function(){
+  function mount(){
+    var nav=document.querySelector('.topnav');
+    if(!nav||nav.querySelector('a[href="/chat"]')) return;
+    var link=document.createElement('a');
+    link.href='/chat';link.textContent='智能助手';
+    if(location.pathname==='/chat') link.className='on';
+    nav.appendChild(link);
+  }
+  if(document.readyState==='loading')
+    document.addEventListener('DOMContentLoaded',mount);
+  else mount();
+})();

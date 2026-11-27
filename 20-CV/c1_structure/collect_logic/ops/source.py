@@ -1,8 +1,9 @@
-"""取值族算子：cell / row / block / page_text（kind=source，产出锚点）。"""
+"""取值族算子：cell / row / block / region_text / page_text（kind=source）。"""
 from c1_structure import collect
-from .._common import (as_text, cell_anchor, make_anchor, pick_column,
-                       resolve_tables)
+from .._common import (as_text, box_to_bbox, cell_anchor, make_anchor,
+                       pick_column, resolve_tables)
 from ..registry import register
+from ..spatial import item_in_region
 
 
 @register('cell', kind='source')
@@ -68,10 +69,35 @@ def op_block(ctx, args, value, anchors):
             continue
         if idx is not None and i != idx:
             continue
+        if not item_in_region(b.get('bbox'), pg, args.get('region')):
+            continue
         anchor = make_anchor(pg.get('index'), pg.get('space'),
                              b.get('bbox'), text)
         return text, [anchor], {}
     return '', [], {'issues': ['block_not_found']}
+
+
+@register('region_text', kind='source')
+def op_region_text(ctx, args, value, anchors):
+    """按归一化区域取文字/块，按阅读顺序拼接并保留逐项锚点。"""
+    args = args or {}
+    pg = _page(ctx, args)
+    source = args.get('source') or 'texts'
+    if source not in ('texts', 'blocks'):
+        raise ValueError('region_text.source 仅支持 texts/blocks')
+    items = pg.get(source) or []
+    key = 'box' if source == 'texts' else 'bbox'
+    picked = [(i, it) for i, it in enumerate(items)
+              if item_in_region(it.get(key), pg, args.get('region'))]
+    picked.sort(key=lambda pair: (
+        (box_to_bbox(pair[1].get(key)) or [0, 0, 0, 0])[1],
+        (box_to_bbox(pair[1].get(key)) or [0, 0, 0, 0])[0], pair[0]))
+    texts = [as_text(it.get('text')) for _i, it in picked]
+    anchors = [make_anchor(pg.get('index'), pg.get('space'), it.get(key),
+                           as_text(it.get('text'))) for _i, it in picked]
+    if not picked:
+        return '', [], {'issues': ['region_text_not_found']}
+    return str(args.get('sep', '\n')).join(texts), anchors, {}
 
 
 @register('page_text', kind='source')

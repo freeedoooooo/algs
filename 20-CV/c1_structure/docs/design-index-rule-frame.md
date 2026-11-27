@@ -2,7 +2,7 @@
 
 > 状态：**已实施完成（2026-11-26）**。本稿为极简口径，取代此前所有版本化/血缘锚点设计。
 > 变更依据：用户裁决（2026-11-26）——结果表只需「定义 ID + 结果值」；输入值、依赖 ID、行锚点全部去掉；关联对象从定义表推导；结果字段统一为 `index_value/rule_value/frame_value`。
-> 旧稿 `design-metric-rule-framework.md` 与 002/003 迁移脚本的设计已作废，以本稿和 `004_result_value_only.sql` 为准。
+> 旧稿 `archive/design-metric-rule-framework.md` 与 002/003 迁移脚本的设计已作废，以本稿和 `004_result_value_only.sql` 为准。
 
 ---
 

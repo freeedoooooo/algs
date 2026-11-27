@@ -8,8 +8,28 @@ import json
 from .. import collect
 from ..collect_logic import build_logic
 from ..collect_logic.registry import OPS
+from ..collect_logic.spatial import normalize_rect
 
 REQUIRED_TOP = ('spec_version', 'fields')
+
+
+def _region_issues(region, where):
+    if region is None:
+        return []
+    if not isinstance(region, dict):
+        return ['{} 须为对象'.format(where)]
+    issues = []
+    try:
+        normalize_rect(region.get('rect'))
+    except ValueError as exc:
+        issues.append('{}: {}'.format(where, exc))
+    page = region.get('page')
+    if page is not None and (isinstance(page, bool)
+                             or not isinstance(page, int) or page < 1):
+        issues.append('{}.page 须为正整数'.format(where))
+    if region.get('space') not in (None, 'source', 'rectified'):
+        issues.append('{}.space 仅支持 source/rectified'.format(where))
+    return issues
 
 
 def validate_spec(spec):
@@ -26,6 +46,10 @@ def validate_spec(spec):
     if not isinstance(fields, list) or not fields:
         issues.append('fields 须为非空数组')
         return issues
+    for i, sel in enumerate(spec.get('tables') or []):
+        if isinstance(sel, dict):
+            issues.extend(_region_issues(
+                sel.get('region'), 'tables[{}].region'.format(i)))
     seen = set()
     for i, f in enumerate(fields):
         if not isinstance(f, dict):
@@ -45,6 +69,9 @@ def validate_spec(spec):
             op = (step or {}).get('op') if isinstance(step, dict) else None
             if op not in OPS:
                 issues.append('{} 未知算子: {}'.format(target, op))
+            if isinstance(step, dict):
+                issues.extend(_region_issues(
+                    step.get('region'), '{}.pipeline.region'.format(target)))
         for v in f.get('validate') or []:
             from ..collect_logic.ops.validate import VALIDATORS
             op = (v or {}).get('op') if isinstance(v, dict) else None

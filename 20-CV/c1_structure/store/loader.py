@@ -37,7 +37,8 @@ def connect_datasource(ds):
 
 
 _INTROSPECT_CACHE = {}
-_CACHE_TTL = {'tables': 15.0, 'columns': 30.0, 'table_comment': 30.0}
+_CACHE_TTL = {'tables': 15.0, 'columns': 30.0, 'table_comment': 30.0,
+              'schemas': 30.0}
 
 
 def _cache_key(ds):
@@ -118,14 +119,91 @@ def list_columns(ds, table):
     try:
         with conn.cursor() as cur:
             cur.execute(
-                'SELECT column_name, data_type FROM information_schema.columns'
+                'SELECT column_name, data_type, column_comment, is_nullable,'
+                ' column_default, column_key FROM information_schema.columns'
                 ' WHERE table_schema=%s AND table_name=%s'
                 ' ORDER BY ordinal_position', (ds['db_name'], table))
-            out = [{'name': r[0], 'type': r[1]} for r in cur.fetchall()]
+            out = [{'name': r[0], 'type': r[1], 'comment': r[2] or '',
+                    'nullable': str(r[3]).upper() == 'YES',
+                    'default': r[4], 'primary': r[5] == 'PRI'}
+                   for r in cur.fetchall()]
     finally:
         conn.close()
     _INTROSPECT_CACHE[(key, kind)] = (time.monotonic(), out)
     return [dict(c) for c in out]
+
+
+def list_table_schemas(ds, tables=None):
+    """批量读取现有表结构，供中文语义推荐/映射使用。"""
+    names = list(tables) if tables is not None else list_tables(ds)
+    names = [str(name) for name in names if str(name or '').strip()]
+    if not names:
+        return []
+    key = _cache_key(ds)
+    cache_kind = ('schemas', tuple(sorted(names)))
+    hit = _cached(key, cache_kind)
+    if hit is not None:
+        return [dict(s, columns=[dict(c) for c in s.get('columns') or []],
+                     indexes=[dict(i, columns=list(i.get('columns') or []))
+                              for i in s.get('indexes') or []])
+                for s in hit]
+    placeholders = ','.join(['%s'] * len(names))
+    args = [ds['db_name']] + names
+    conn = connect_datasource(ds)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT table_name, table_comment FROM information_schema.tables'
+                ' WHERE table_schema=%s AND table_type=\'BASE TABLE\''
+                ' AND table_name IN ({}) ORDER BY table_name'.format(
+                    placeholders), args)
+            comments = {r[0]: str(r[1] or '') for r in cur.fetchall()}
+            cur.execute(
+                'SELECT table_name, column_name, data_type, column_comment,'
+                ' is_nullable, column_default, column_key'
+                ' FROM information_schema.columns WHERE table_schema=%s'
+                ' AND table_name IN ({})'
+                ' ORDER BY table_name, ordinal_position'.format(placeholders),
+                args)
+            columns = {}
+            for row in cur.fetchall():
+                columns.setdefault(row[0], []).append({
+                    'name': row[1], 'type': row[2], 'comment': row[3] or '',
+                    'nullable': str(row[4]).upper() == 'YES',
+                    'default': row[5], 'primary': row[6] == 'PRI',
+                    'unique': False})
+            cur.execute(
+                'SELECT table_name, index_name, non_unique, column_name'
+                ' FROM information_schema.statistics WHERE table_schema=%s'
+                ' AND table_name IN ({})'
+                ' ORDER BY table_name, index_name, seq_in_index'.format(
+                    placeholders), args)
+            indexes = {}
+            for table, index_name, non_unique, column_name in cur.fetchall():
+                item = indexes.setdefault(
+                    (table, index_name), {'name': index_name,
+                                          'unique': not int(non_unique),
+                                          'columns': []})
+                item['columns'].append(column_name)
+            for (table, _index_name), item in indexes.items():
+                if item['unique']:
+                    for column in item['columns']:
+                        for meta in columns.get(table) or []:
+                            if meta['name'] == column:
+                                meta['unique'] = True
+    finally:
+        conn.close()
+    out = [{'name': name, 'datasource_id': ds.get('id'),
+            'comment': comments.get(name, ''),
+            'columns': columns.get(name) or [],
+            'indexes': [item for (table, _name), item in indexes.items()
+                        if table == name]}
+           for name in names if name in comments]
+    _INTROSPECT_CACHE[(key, cache_kind)] = (time.monotonic(), out)
+    return [dict(s, columns=[dict(c) for c in s.get('columns') or []],
+                 indexes=[dict(i, columns=list(i.get('columns') or []))
+                          for i in s.get('indexes') or []])
+            for s in out]
 
 
 def validate_fields(fields, field_rows, write_mode='upsert', columns=None):
