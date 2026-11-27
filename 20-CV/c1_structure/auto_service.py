@@ -119,6 +119,16 @@ def _run(paths, params, log, task_ctx, intent, rule_generator):
                 mapping=spec, transform={})
             tpl = service.resolve_rule(version_id)
         recs = service.extract_records(doc, tpl)
+        if (tpl.get('mapping_json') or {}).get('spec_version') == 2:
+            from . import smart_extract
+            recs, fallback = smart_extract.build_row_fallback(doc, tpl, recs)
+            if fallback.get('attempted'):
+                log.info('extract', 'v3 逐行兜底：尝试{}行，补全{}个字段，失败{}行'.format(
+                    fallback['attempted'], fallback['filled'],
+                    len(fallback['failed'])))
+                for item in fallback['failed']:
+                    log.warn('extract', '第{}行兜底失败（{}），保留 v2 结果'.format(
+                        item.get('index'), item.get('reason')))
         catalog.clear_load_logs(file_id)
         content.save_records(collect.build_records_doc(
             doc, recs, task_id=file_id, task_file_id=file_id, file_id=file_id,

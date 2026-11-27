@@ -112,6 +112,40 @@ class AutoServiceTests(unittest.TestCase):
             for p in reversed(patches):
                 p.stop()
 
+    def test_auto_processing_runs_bounded_row_fallback(self):
+        patches = self._patches({'status': 'waiting_target', 'message': 'choose'})
+        for p in patches:
+            p.start()
+        try:
+            recovered = [{'index': 0, 'values': {'设备名称': '泵机'}}]
+            diag = {'attempted': 1, 'filled': 1, 'failed': []}
+            with patch('c1_structure.smart_extract.build_row_fallback',
+                       return_value=(recovered, diag)) as fallback:
+                auto_service._run(['a.pdf'], {}, self.log, self.task_ctx,
+                                  self.intent,
+                                  lambda _doc, _intent: self.result)
+            fallback.assert_called_once_with(self.doc, self.tpl, self.recs)
+            self.assertTrue(any('v3 逐行兜底' in str(call)
+                                for call in self.log.info.call_args_list))
+        finally:
+            for p in reversed(patches):
+                p.stop()
+
+    def test_v3_rule_does_not_run_row_fallback_again(self):
+        self.tpl['mapping_json'] = {'spec_version': 3, 'fields': []}
+        patches = self._patches({'status': 'waiting_target', 'message': 'choose'})
+        for p in patches:
+            p.start()
+        try:
+            with patch('c1_structure.smart_extract.build_row_fallback') as fallback:
+                auto_service._run(['a.pdf'], {}, self.log, self.task_ctx,
+                                  self.intent,
+                                  lambda _doc, _intent: self.result)
+            fallback.assert_not_called()
+        finally:
+            for p in reversed(patches):
+                p.stop()
+
     def test_chat_ready_plan_waits_for_confirmation(self):
         plan = {'status': 'ready', 'message': 'ready'}
         patches = self._patches(plan)
