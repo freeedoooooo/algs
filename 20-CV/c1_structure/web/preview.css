@@ -84,7 +84,7 @@ td.cell.edited{background:rgba(216,151,10,.35)}
 .rowbtn.no:hover{border-color:var(--c1-danger);color:var(--c1-danger);background:var(--c1-danger-soft)}
 #taskpick{margin-bottom:var(--c1-space-3)}
 
-body.embed-lineage{overflow:hidden}
+body.embed-lineage{height:100vh;overflow:hidden}
 body.embed-lineage .topnav,
 body.embed-lineage .pagehead,
 body.embed-lineage .banner,
@@ -95,12 +95,12 @@ body.embed-lineage #taskpick,
 body.embed-lineage #lightbox,
 body.embed-lineage #receipt,
 body.embed-lineage #summary{display:none !important}
-body.embed-lineage .pagebody{padding:0;max-width:none}
-body.embed-lineage .lhead{background:var(--c1-surface)}
-body.embed-lineage .stgwrap{display:flex;justify-content:center;align-items:flex-start}
-body.embed-lineage .lineage{width:640px !important;max-width:none !important;
-  position:static !important;max-height:none !important}
-body.embed-lineage .lineage .stage{max-height:none !important}
+body.embed-lineage .pagebody{height:100vh;padding:0;max-width:none}
+body.embed-lineage .lhead{flex:none;background:var(--c1-surface)}
+body.embed-lineage .stgwrap{display:flex;height:100%;min-height:0;justify-content:center;align-items:stretch}
+body.embed-lineage .lineage{width:100% !important;max-width:none !important;height:100%;max-height:100% !important;
+  position:static !important;overflow:hidden}
+body.embed-lineage .lineage .stage{flex:1;min-height:0;width:100%;max-height:none !important;overflow:auto}
 body.embed-lineage .lineage.collapsed{width:34px !important;max-width:34px !important}
 body.embed-lineage .lineage.collapsed .lhead{flex-direction:column !important;
   align-items:center !important;gap:12px !important;padding:12px 0 !important;
