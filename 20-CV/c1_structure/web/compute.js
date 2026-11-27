@@ -560,7 +560,7 @@
     }).join('');
     h+='<div class="dfoot"><span class="spacer"></span>'+
       (scope==='document'?'<a class="btn" href="/srcfiles/'+encodeURIComponent(d.id)+'" target="_blank" rel="noopener">打开原件</a>':'')+
-      (scope==='source'||scope==='document'?'<button type="button" class="btn" id="view-trace">追溯</button>':'<button type="button" class="btn" id="view-edit">编辑</button>')+'</div>';
+      (scope==='source'||scope==='document'?'<button type="button" class="btn" id="view-trace">追溯</button>':'<button type="button" class="btn" id="view-edit">编辑</button><button type="button" class="btn" id="view-trace">追溯</button>')+'</div>';
     $('view-body').innerHTML=h;
     var edit=$('view-edit');if(edit)edit.onclick=function(){closeEl('compute-view');fillForm(scope,d);};
     var trace=$('view-trace');if(trace)trace.onclick=function(){closeEl('compute-view');openLineage(scope,d.id);};
