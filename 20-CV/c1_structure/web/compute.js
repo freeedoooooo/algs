@@ -11,6 +11,7 @@
   var LOCAL_KEY='c1.compute.layout';
   var loadSeq=0,lineageSeq=0,lineageState=null,tableComments={},runAllRunning=false,computeLoaded=false;
   var assetClickTimer=null,lineageTableCache={},lineageRecordMaps={},layoutDirty=false,layoutSaving=false;
+  var lineageTraceCache={},lineageTracePending={},TRACE_SKIP_COLS={file_id:true,record_id:true};
 
   function api(path,opt){
     return fetch(path,opt||{}).then(function(r){
@@ -76,15 +77,36 @@
     setTimeout(function(){delete frame.dataset.skipPin;},1200);
     try{frame.contentWindow.postMessage({c1TraceKey:trace},location.origin);}catch(e){delete frame.dataset.skipPin;}
   }
+  function sendLineageTraceBatch(frame,batch){
+    if(!frame)return;
+    if(!frame.contentWindow||frame.dataset.ready!=='1'){
+      frame.dataset.pendingBatch=JSON.stringify(batch||{items:[]});return;
+    }
+    try{frame.contentWindow.postMessage({c1TraceBatch:batch||{items:[]}},location.origin);}
+    catch(e){frame.dataset.pendingBatch=JSON.stringify(batch||{items:[]});}
+  }
+  function clearLineageTraceBatch(frame){
+    if(!frame)return;
+    delete frame.dataset.pendingBatch;
+    if(frame.contentWindow&&frame.dataset.ready==='1'){
+      try{frame.contentWindow.postMessage({c1TraceBatchClear:true},location.origin);}catch(e){}
+    }
+  }
   function bindLineageFrame(frame){
     if(!frame||frame.dataset.bound==='1')return;
     frame.dataset.bound='1';
     frame.addEventListener('load',function(){
       frame.dataset.ready='1';
       var pending=frame.dataset.pendingTrace;
-      if(!pending)return;
-      delete frame.dataset.pendingTrace;
-      sendLineageTrace(frame,JSON.parse(pending));
+      if(pending){
+        delete frame.dataset.pendingTrace;
+        sendLineageTrace(frame,JSON.parse(pending));
+      }
+      var pendingBatch=frame.dataset.pendingBatch;
+      if(pendingBatch){
+        delete frame.dataset.pendingBatch;
+        sendLineageTraceBatch(frame,JSON.parse(pendingBatch));
+      }
     });
   }
   function lineageFrameByWindow(win){
@@ -548,7 +570,7 @@
   // ---------- 全宽血缘追溯工作台 ----------
   function closeLineage(){
     lineageSeq++;lineageState=null;graph.selectNode(null);lineageGraph.selectNode(null);
-    setLineageLinkStatus('');
+    clearLineageTraceFrames();setLineageLinkStatus('');
   }
   function setLineageTab(tab){
     Array.prototype.forEach.call(document.querySelectorAll('[data-lineage-tab]'),function(btn){
@@ -672,11 +694,144 @@
     if(typeof value==='object')return valueText(value);
     return String(value);
   }
+  function traceColumns(data){
+    return (data.columns||[]).filter(function(c){return !TRACE_SKIP_COLS[c];});
+  }
+  function traceResultMap(result){
+    var map={};(result||[]).forEach(function(item){map[String(item.record_id)]=item;});return map;
+  }
+  function traceSummary(data,result){
+    var items=data.items||[],cols=traceColumns(data);
+    if(!items.length)return '当前页暂无数据';
+    if(!result)return '标记当前页字段是否可追溯';
+    var map=traceResultMap(result),rows=0,fields=0;
+    items.forEach(function(row){
+      var item=map[String(row.record_id)],rowOk=false;
+      cols.forEach(function(c){
+        var st=item&&item.fields&&item.fields[c];
+        if(st&&st.traceable){fields++;rowOk=true;}
+      });
+      if(rowOk)rows++;
+    });
+    return '可追溯 '+rows+'/'+items.length+' 行 · '+fields+'/'+(items.length*cols.length)+' 个字段';
+  }
+  function clearTableTrace(host){
+    if(!host)return;
+    Array.prototype.forEach.call(host.querySelectorAll('.trace-ok,.trace-no'),function(td){
+      td.classList.remove('trace-ok','trace-no');td.removeAttribute('data-trace-reason');td.removeAttribute('title');
+    });
+  }
+  function applyTableTrace(host,data,result){
+    clearTableTrace(host);
+    var map=traceResultMap(result),cols=traceColumns(data);
+    (data.items||[]).forEach(function(row){
+      var rid=row.record_id==null?'':String(row.record_id),item=map[rid];
+      var tr=Array.prototype.filter.call(host.querySelectorAll('tr[data-rid]'),function(x){
+        return x.getAttribute('data-rid')===rid;
+      })[0];
+      if(!tr)return;
+      cols.forEach(function(c){
+        var td=Array.prototype.filter.call(tr.querySelectorAll('td.cell[data-col]'),function(x){
+          return x.getAttribute('data-col')===c;
+        })[0];
+        if(!td)return;
+        var st=item&&item.fields&&item.fields[c];
+        if(st&&st.traceable)td.classList.add('trace-ok');
+        else{
+          td.classList.add('trace-no');
+          var reason=st?st.message:'该记录缺少溯源标识';
+          td.dataset.traceReason=reason;td.title=reason;
+        }
+      });
+    });
+    var summary=host.querySelector('.lineage-trace-summary');
+    if(summary)summary.textContent=traceSummary(data,result);
+  }
+  function updateTraceToggle(host,on,loading){
+    if(!host)return;
+    var btn=host.querySelector('[data-trace-toggle]');
+    if(btn){btn.classList.toggle('is-on',!!on);btn.setAttribute('aria-pressed',String(!!on));btn.disabled=!!loading;}
+  }
+  function traceGroups(result,cols){
+    var groups={};
+    (result||[]).forEach(function(item){
+      if(item.file_id==null)return;
+      var keys=[];
+      cols.forEach(function(c){
+        var st=item.fields&&item.fields[c];
+        if(st&&st.traceable)keys.push(st.field||c);
+      });
+      if(!keys.length)return;
+      var fid=String(item.file_id);
+      if(!groups[fid])groups[fid]=[];
+      groups[fid].push({record_index:item.record_index,keys:keys});
+    });
+    return groups;
+  }
+  function dispatchTraceGroups(groups){
+    var active=activeLineageNode();if(!active)return;
+    var firstCard=null;
+    Object.keys(groups).forEach(function(fid){
+      var batch={items:groups[fid]},card=null,frame=null;
+      if(active.scope==='source'){
+        card=findRelatedLineageCard('document',fid);
+        if(card){
+          if(!firstCard){firstCard=card;card.open=true;loadLineageCard(card);}
+          else card.dataset.pendingBatch=JSON.stringify(batch);
+          frame=card.querySelector('iframe');
+        }
+      }else if(active.scope==='document'&&String(active.def.id)===String(fid)){
+        frame=$('lineage-document-frame');
+      }
+      if(frame)sendLineageTraceBatch(frame,batch);
+    });
+    if(firstCard)setActiveLineageCard(firstCard);
+  }
+  function clearLineageTraceFrames(){
+    Array.prototype.forEach.call(document.querySelectorAll('.lineage-upstream-frame,#lineage-document-frame'),function(frame){
+      clearLineageTraceBatch(frame);
+    });
+  }
+  function runTableTrace(host,source,fileId,page,data){
+    var key=tableCacheKey(source,fileId,page);
+    if(lineageTracePending[key])return;
+    var cols=traceColumns(data),ids=(data.items||[]).map(function(row){return row.record_id;})
+      .filter(function(rid){return rid!=null&&rid!=='';});
+    var activeKey=lineageState&&lineageState.activeKey;
+    host.dataset.traceOn='1';updateTraceToggle(host,true,true);
+    var summary=host.querySelector('.lineage-trace-summary');if(summary)summary.textContent='正在批量追溯…';
+    function done(result){
+      lineageTraceCache[key]=result;
+      if(host.isConnected&&host.dataset.traceOn==='1'&&lineageState&&lineageState.activeKey===activeKey){
+        applyTableTrace(host,data,result);updateTraceToggle(host,true,false);
+        dispatchTraceGroups(traceGroups(result,cols));
+      }
+    }
+    if(!ids.length){
+      done((data.items||[]).map(function(row){return {record_id:row.record_id,file_id:null,fields:{}};}));
+      return;
+    }
+    lineageTracePending[key]=true;
+    post('/api/staging/trace-batch',{record_ids:ids,columns:cols}).then(function(j){
+      done(j.items||[]);
+    }).catch(function(e){
+      if(host.isConnected&&host.dataset.traceOn==='1'){
+        host.dataset.traceOn='0';clearTableTrace(host);updateTraceToggle(host,false,false);
+        if(summary)summary.textContent='追溯失败：'+e.message;
+        setLineageLinkStatus('批量追溯失败：'+e.message,'warn');
+      }
+    }).then(function(){delete lineageTracePending[key];});
+  }
   function renderTablePreview(host,source,fileId,page,data,meta){
     var total=Number(data.total)||0,pages=Math.max(1,Math.ceil(total/Number(data.per_page||20))),current=Number(data.page)||page;
     if(meta)meta.textContent='共 '+total+' 行 · 第 '+current+' / '+pages+' 页';
-    var cols=data.columns||[],items=data.items||[],locatable=lineageLocateEnabled();
-    var h='<div class="lineage-table-wrap"><table class="lineage-table"><thead><tr>'+
+    var cols=data.columns||[],items=data.items||[],locatable=lineageLocateEnabled(),on=host.dataset.traceOn==='1',
+      cached=on?lineageTraceCache[tableCacheKey(source,fileId,page)]:null;
+    host.dataset.tracePage=String(current);
+    host.dataset.traceKey=tableCacheKey(source,fileId,page);
+    var h='<div class="lineage-table-toolbar"><button type="button" class="btn mini ghost trace-toggle'+(on?' is-on':'')+'" data-trace-toggle aria-pressed="'+on+'">一键追溯</button>'+
+      '<span class="lineage-trace-summary">'+esc(traceSummary(data,cached))+'</span></div>'+
+      '<div class="lineage-table-wrap"><table class="lineage-table"><thead><tr>'+
       cols.map(function(c){return '<th>'+esc(c)+'</th>';}).join('')+'</tr></thead><tbody>'+
       items.map(function(row){
         var rid=row.record_id==null?'':String(row.record_id);
@@ -689,7 +844,16 @@
       '<span>'+current+' / '+pages+'</span>'+
       '<button type="button" class="btn mini ghost" data-page="'+Math.min(pages,current+1)+'"'+(current>=pages?' disabled':'')+'>下一页</button></div>';
     host.innerHTML=h;
+    if(on&&cached)applyTableTrace(host,data,cached);
     host.onclick=function(e){
+      var toggle=e.target.closest?e.target.closest('[data-trace-toggle]'):null;
+      if(toggle){
+        if(host.dataset.traceOn==='1'){
+          host.dataset.traceOn='0';clearTableTrace(host);clearLineageTraceFrames();updateTraceToggle(host,false,false);
+          var summary=host.querySelector('.lineage-trace-summary');if(summary)summary.textContent=traceSummary(data,null);
+        }else runTableTrace(host,source,fileId,current,data);
+        return;
+      }
       var cell=e.target.closest?e.target.closest('td.cell[data-col]'):null;
       if(cell){if(locatable)handleTableCellClick(cell,host,source,fileId,cell.closest('.lineage-upstream-card'));return;}
       var btn=e.target.closest?e.target.closest('[data-page]'):null;if(!btn||btn.disabled)return;
@@ -698,6 +862,7 @@
   }
   function loadTablePreview(host,source,fileId,page,meta){
     page=Math.max(1,Number(page)||1);
+    delete host.dataset.traceOn;clearTableTrace(host);
     var key=tableCacheKey(source,fileId,page);
     if(lineageTableCache[key]){renderTablePreview(host,source,fileId,page,lineageTableCache[key],meta);return;}
     host.innerHTML='<div class="lineage-empty">数据加载中…</div>';
@@ -761,7 +926,9 @@
       var active=activeLineageNode();
       loadTablePreview(area,node,active&&active.scope==='document'?active.def.id:null,1,null);
     }else if(nodeScope==='document'){
-      area.innerHTML=documentPreviewHtml(node);bindLineageFrame(area.querySelector('iframe'));
+      area.innerHTML=documentPreviewHtml(node);var frame=area.querySelector('iframe');bindLineageFrame(frame);
+      var pendingBatch=card.dataset.pendingBatch;
+      if(pendingBatch){delete card.dataset.pendingBatch;sendLineageTraceBatch(frame,JSON.parse(pendingBatch));}
     }
   }
   function traceDocumentFrame(frame,fileId,index,key){
@@ -787,11 +954,19 @@
     var active=activeLineageNode();if(!active||(active.scope!=='source'&&active.scope!=='document'))return;
     var tr=cell.closest?cell.closest('tr[data-rid]'):null,rid=tr&&tr.getAttribute('data-rid'),
       col=cell.getAttribute('data-col'),seq=++lineageState.linkSeq;
+    if(cell.classList.contains('trace-no')){
+      setLineageLinkStatus(cell.getAttribute('data-trace-reason')||'该字段无法追溯','warn');return;
+    }
     if(!rid){setLineageLinkStatus('该记录缺少溯源标识，无法定位源文件','warn');return;}
     lineageState.activeTable={host:host,source:source,fileId:fileId,card:card||null,
       meta:host.id==='lineage-current-table'?$('lineage-current-table-meta'):null};
     setActiveLineageCard(card);highlightLineageCell(host,rid,col);setLineageLinkStatus('正在定位源文件…');
-    api('/api/staging/locate/'+encodeURIComponent(rid)+(col?('?key='+encodeURIComponent(col)):'')).then(function(hit){
+    var cached=host.dataset.traceOn==='1'?traceResultMap(lineageTraceCache[host.dataset.traceKey])[rid]:null;
+    var field=cached&&cached.fields&&cached.fields[col]?cached.fields[col].field:null;
+    var hitPromise=cached?Promise.resolve({file_id:cached.file_id,record_index:cached.record_index,
+      field:field||col,field_map:cached.field_map||{}}):
+      api('/api/staging/locate/'+encodeURIComponent(rid)+(col?('?key='+encodeURIComponent(col)):''));
+    hitPromise.then(function(hit){
       if(!lineageState||seq!==lineageState.linkSeq)return;
       if(active.scope==='source'){
         var docCard=findRelatedLineageCard('document',hit.file_id);
@@ -925,6 +1100,7 @@
   function renderLineageDetails(scope,id){
     if(!lineageState)return;
     var d=lineageGraph.def(scope,id);if(!d)return;
+    clearLineageTraceFrames();
     lineageState.activeKey=scope+':'+id;lineageState.activeCard=null;lineageState.activeTable=null;lineageState.linkSeq++;
     setLineageLinkStatus('');
     lineageGraph.selectNode(scope,id);
@@ -1002,7 +1178,7 @@
     return api('/api/compute/definitions').then(function(j){
       if(seq!==loadSeq)return;
       defs.index=j.index||[];defs.rule=j.rule||[];defs.frame=j.frame||[];
-      lineageTableCache={};
+      lineageTableCache={};lineageTraceCache={};lineageTracePending={};
       computeLoaded=true;
       renderCompute();
       return documentsPromise;

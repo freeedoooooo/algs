@@ -172,6 +172,10 @@
 .lineage-data-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:11px;color:var(--c1-text-strong)}
 .lineage-data-head span{margin-left:auto;color:var(--c1-text-faint);font-size:10px}
 .lineage-table-host{min-width:0}
+.lineage-table-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:10px;color:var(--c1-text-faint)}
+.lineage-table-toolbar .trace-toggle{flex:none}
+.lineage-table-toolbar .trace-toggle.is-on{border-color:var(--c1-primary);background:var(--c1-primary-soft);color:var(--c1-primary)}
+.lineage-trace-summary{min-width:0;line-height:1.5}
 .lineage-table-wrap{max-width:100%;overflow:auto;border:1px solid var(--c1-border-subtle);border-radius:6px}
 .lineage-table{width:100%;border-collapse:collapse;font-size:11px;line-height:1.45;white-space:nowrap}
 .lineage-table th,.lineage-table td{padding:5px 7px;border-right:1px solid var(--c1-border-subtle);border-bottom:1px solid var(--c1-border-subtle);text-align:left;vertical-align:top}
@@ -182,6 +186,9 @@
 .lineage-table td.cell.locatable:hover{background:var(--c1-primary-soft)}
 .lineage-table tr.sel-row td{background:#fff7ed}
 .lineage-table td.sel-cell{background:#fff0d9!important;outline:2px solid #d8610a;outline-offset:-2px}
+.lineage-table td.trace-ok{background:#fff0d9!important;outline:2px solid #d8610a;outline-offset:-2px}
+.lineage-table td.trace-no{background:#f3f4f6!important;color:#9ca3af!important}
+.lineage-table td.trace-no:hover{background:#e5e7eb!important}
 .lineage-table tr:last-child td{border-bottom:0}
 .lineage-table th:last-child,.lineage-table td:last-child{border-right:0}
 .lineage-pager{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:6px;color:var(--c1-text-faint);font-size:10px}

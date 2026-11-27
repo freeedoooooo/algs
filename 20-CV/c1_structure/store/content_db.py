@@ -56,6 +56,144 @@ def locate_record(record_id):
         conn.close()
 
 
+def _trace_bbox(value):
+    if value in (None, ''):
+        return None
+    try:
+        if isinstance(value, (bytes, bytearray)):
+            value = value.decode('utf-8')
+        box = json.loads(value) if isinstance(value, str) else value
+        return box if isinstance(box, list) and len(box) >= 4 else None
+    except (TypeError, ValueError):
+        return None
+
+
+def trace_records(record_ids, columns):
+    """当前页批量溯源：两条 SQL 返回记录、字段映射与锚点状态。
+
+    record_ids 来自业务表当前页；columns 为需判断的业务列。返回按入参顺序
+    排列的 items，字段级 traceable 仅代表存在有效图像坐标，不代表值已确认。
+    """
+    if not isinstance(record_ids, list) or not record_ids:
+        raise BadRequest('record_ids 须为非空数组')
+    if len(record_ids) > 200:
+        raise BadRequest('单次最多追溯 200 条记录')
+    ids = []
+    for rid in record_ids:
+        if isinstance(rid, bool):
+            raise BadRequest('record_id 须为整数')
+        try:
+            rid = int(rid)
+        except (TypeError, ValueError):
+            raise BadRequest('record_id 须为整数')
+        if rid > 0 and rid not in ids:
+            ids.append(rid)
+    if not ids:
+        raise BadRequest('record_ids 无有效整数')
+    if not isinstance(columns, list) or not columns or len(columns) > 200:
+        raise BadRequest('columns 须为 1～200 个字段名')
+    cols = []
+    for col in columns:
+        if not isinstance(col, str) or not col.strip():
+            raise BadRequest('columns 包含非法字段名')
+        if col not in cols:
+            cols.append(col)
+
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            ph = ','.join(['%s'] * len(ids))
+            cur.execute(
+                'SELECT sr.id, sr.file_id, sr.record_index, sr.review_state,'
+                ' f.state, f.load_table_id, sl.field_name, sl.page, sl.space,'
+                ' sl.cell_bbox, sl.raw_text, sl.table_index, sl.table_scope'
+                ' FROM c1_staging_record sr'
+                ' LEFT JOIN c1_doc_file f ON f.id=sr.file_id'
+                ' LEFT JOIN c1_staging_lineage sl ON sl.record_id=sr.id'
+                ' WHERE sr.id IN ({})'
+                ' ORDER BY sr.id, sl.field_name, sl.region_seq'.format(ph), ids)
+            rows = _rows(cur)
+            load_ids = sorted({r['load_table_id'] for r in rows
+                               if r['load_table_id'] is not None})
+            field_rows = []
+            if load_ids:
+                lph = ','.join(['%s'] * len(load_ids))
+                cur.execute(
+                    'SELECT load_table_id, rule_field, target_column'
+                    ' FROM c1_load_table_field WHERE load_table_id IN ({})'
+                    ' ORDER BY load_table_id, sort_order, id'.format(lph),
+                    load_ids)
+                field_rows = _rows(cur)
+    finally:
+        conn.close()
+
+    maps = {}
+    for row in field_rows:
+        maps.setdefault(row['load_table_id'], {})[
+            row['target_column']] = row['rule_field']
+    recs, anchors = {}, {}
+    for row in rows:
+        rid = row['id']
+        recs[rid] = row
+        if row['field_name'] is None:
+            continue
+        box = _trace_bbox(row['cell_bbox'])
+        anchors.setdefault((rid, row['field_name']), []).append({
+            'page': row['page'], 'space': row['space'], 'cell_bbox': box,
+            'raw_text': row['raw_text'], 'table_index': row['table_index'],
+            'table_scope': row['table_scope'],
+        })
+
+    out = []
+    for rid in ids:
+        row = recs.get(rid)
+        if row is None:
+            out.append({
+                'record_id': rid, 'file_id': None, 'record_index': None,
+                'file_state': None, 'review_state': None, 'field_map': {},
+                'fields': {c: {'field': c, 'mapped': False,
+                               'traceable': False, 'reason': 'missing_record',
+                               'message': '暂存记录不存在', 'anchors': []}
+                           for c in cols},
+            })
+            continue
+        file_missing = row['state'] is None
+        field_map = maps.get(row['load_table_id'], {})
+        fields = {}
+        for col in cols:
+            field = field_map.get(col, col)
+            mapped = col in field_map
+            regs = anchors.get((rid, field), [])
+            valid = [a for a in regs
+                     if a['page'] is not None
+                     and a['space'] in ('source', 'rectified')
+                     and a['cell_bbox'] is not None]
+            if file_missing:
+                state = {'traceable': False, 'reason': 'missing_file',
+                         'message': '来源资料不存在', 'anchors': []}
+            elif valid:
+                state = {'traceable': True, 'reason': 'ok', 'message': '',
+                         'anchors': valid}
+            elif regs:
+                state = {'traceable': False, 'reason': 'no_bbox',
+                         'message': '来源记录缺少有效图像坐标', 'anchors': []}
+            else:
+                state = {
+                    'traceable': False,
+                    'reason': 'unmapped' if not mapped else 'no_anchor',
+                    'message': '字段未配置源列映射' if not mapped else '来源记录没有该字段的坐标',
+                    'anchors': [],
+                }
+            fields[col] = {'field': field, 'mapped': mapped, **state}
+        out.append({
+            'record_id': rid, 'file_id': row['file_id'],
+            'record_index': row['record_index'], 'file_state': row['state'],
+            'review_state': row['review_state'], 'field_map': field_map,
+            'fields': fields,
+        })
+    return out
+
+
 def get_records(file_id):
     """单资料 records 信封；files 只含一项（保留信封形状兼容下游）。"""
     conn = db.connect()

@@ -51,10 +51,11 @@
 .cellbox.off{display:none!important}
 .cellbox.hv{display:block;fill:rgba(15,157,110,.30);stroke-width:5}
 .cellbox.pin{display:block;fill:rgba(216,97,10,.26);stroke:#d8610a;stroke-width:5}
+.cellbox.batch-pin{display:block;fill:rgba(216,97,10,.20);stroke:#d8610a;stroke-width:4}
 .cellbox.all{display:block;opacity:.32}
 .cellbox.all.hv,.cellbox.all.pin{opacity:1}
 /* 反向定位：框可见态（悬停/钉住/整表网格）才可交互；SVG 整体仍忽略指针，不影响图片点击 */
-.cellbox.hv,.cellbox.pin,.cellbox.all,
+.cellbox.hv,.cellbox.pin,.cellbox.all,.cellbox.batch-pin,
 .stitchbox.hv,.stitchbox.pin{pointer-events:all;cursor:crosshair}
 td.cell,th.cell{cursor:crosshair}
 td.cell:hover,th.cell:hover,td.cell.hv,th.cell.hv{background:#e3f7ee!important}

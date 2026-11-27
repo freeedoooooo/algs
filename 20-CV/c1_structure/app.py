@@ -1227,6 +1227,17 @@ def api_source_record_ids(file_id: int):
         for (_fid, idx), rid in sorted(m.items(), key=lambda kv: kv[0][1])]}
 
 
+@app.post('/api/staging/trace-batch')
+async def api_staging_trace_batch(request: Request):
+    """当前页批量溯源状态：一次请求判断 record_id→资料/字段/图像锚点。"""
+    body = await _json_body(request)
+    if not isinstance(body, dict):
+        raise store_errors.BadRequest('请求体须为 JSON 对象')
+    items = _load('store.content_db').trace_records(
+        body.get('record_ids'), body.get('columns'))
+    return {'ok': True, 'items': items}
+
+
 @app.get('/api/staging/locate/{record_id}')
 def api_staging_locate(record_id: int, key: str = None):
     """按 record_id 反查 file_id，用于数据看板血缘跳转。

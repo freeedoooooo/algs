@@ -9,7 +9,7 @@ var file=new URLSearchParams(location.search).get('file')||'';
 var curFile=file;
 var traceRecord=new URLSearchParams(location.search).get('index')||'';
 var traceKey=new URLSearchParams(location.search).get('key')||'';
-var pendingTrace=null;
+var pendingTrace=null,pendingBatch=null,batchOn=false,batchItems=[];
 var embedMode=new URLSearchParams(location.search).get('embed')==='1';
 var reviewView=new URLSearchParams(location.search).get('view')==='review';
 var fileDoc=null, records=[], keys=[], selIdx=-1, selKey=null, stateFilter='';
@@ -259,6 +259,7 @@ function updateHead(){
   lsub.textContent=(meta&&meta.size?
     ('页'+curPage+' · '+(curView==='rect'?'矫正图':'原图')+
       (selIdx>=0?(' · 选中记录 #'+recordNo(selIdx)):' · 全表')):'')+
+    (batchOn?(' · 本页追溯 '+batchItems.length+' 条'):'')+
     (mk.length?(' · 映射 '+mk.map(function(k){return srcMap[k]+'→'+k;})
       .join('，')):'');
   lsub.title=mk.length?('字段映射：'+String.fromCharCode(10)+
@@ -277,6 +278,44 @@ function applySelection(){
   }else{
     rowRects(selIdx).forEach(function(r){r.classList.add('pin');});
   }
+}
+function clearTraceBoxes(){
+  document.querySelectorAll('#views .cellbox.batch-pin').forEach(function(r){
+    r.classList.remove('batch-pin');
+  });
+}
+function applyTraceBatch(batch){
+  batchItems=((batch&&batch.items)||[]).filter(function(x){
+    return x&&x.record_index!=null;
+  });
+  batchOn=batchItems.length>0;
+  clearTraceBoxes();
+  if(!batchOn){updateHead();return;}
+  if(!records.length){pendingBatch=batch;return;}
+  var wanted={};
+  batchItems.forEach(function(item){
+    var keys={};(item.keys||[]).forEach(function(k){keys[k]=true;});
+    wanted[String(item.record_index)]=keys;
+  });
+  var first=null;
+  allAnchors.forEach(function(x){
+    var rec=records[x.i];if(!rec||!x.a.cell_bbox)return;
+    var keys=wanted[String(rec.index)];
+    if(keys&&keys[x.key]&&!first)first=x;
+  });
+  document.querySelectorAll('#views .cellbox').forEach(function(r){
+    var rec=records[+r.getAttribute('data-i')];if(!rec)return;
+    var keys=wanted[String(rec.index)];
+    if(keys&&keys[r.getAttribute('data-key')])r.classList.add('batch-pin');
+  });
+  if(first){
+    if(first.a.page!==curPage){curView=wantViewOf(first.a.space);showPage(first.a.page);}
+    else ensureViewFor(first.a.space);
+  }
+  updateHead();
+}
+function clearTraceBatch(){
+  batchOn=false;batchItems=[];pendingBatch=null;clearTraceBoxes();updateHead();
 }
 function clearHover(){
   document.querySelectorAll('#views .cellbox.hv,#recrows td.cell.hv').forEach(function(x){
@@ -739,6 +778,9 @@ function loadStaging(){
       if(pi>=0) pinField(pendingTrace.key,pi);
       pendingTrace=null;
     }
+    if(pendingBatch){
+      var pb=pendingBatch;pendingBatch=null;applyTraceBatch(pb);
+    }
     var links=document.getElementById('filelinks');
     if(curFile){
       links.innerHTML='<a class="btn mini" target="_blank" href="'+
@@ -878,7 +920,10 @@ if(embedMode){
 }else setCollapsed(true);
 /* 数据看板切单元格时不重建 iframe，只发消息让预览重新钉住对应格子 */
 window.addEventListener('message',function(e){
-  if(!e.data||!e.data.c1TraceKey) return;
+  if(e.origin!==location.origin||!e.data)return;
+  if(e.data.c1TraceBatchClear){clearTraceBatch();return;}
+  if(e.data.c1TraceBatch){applyTraceBatch(e.data.c1TraceBatch);return;}
+  if(!e.data.c1TraceKey) return;
   if(!records.length){ pendingTrace=e.data.c1TraceKey; return; }
   var ti=records.findIndex(function(r){
     return String(r.index)===String(e.data.c1TraceKey.index);
