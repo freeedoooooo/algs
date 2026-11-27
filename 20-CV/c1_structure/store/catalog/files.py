@@ -121,6 +121,8 @@ def delete_file(file_id):
             for t in ('c1_staging_record', 'c1_parse_artifact',
                       'c1_load_log', 'c1_load_quarantine'):
                 cur.execute('DELETE FROM ' + t + ' WHERE file_id=%s', (file_id,))
+            from ..compute_layout_repo import delete_for_def
+            delete_for_def(cur, 'document', file_id)
             cur.execute('DELETE FROM c1_doc_file WHERE id=%s', (file_id,))
             conn.commit()
     finally:

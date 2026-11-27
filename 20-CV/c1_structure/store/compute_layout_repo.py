@@ -6,6 +6,8 @@ from .errors import BadRequest, NotFound
 from .value_common import rows
 
 _TABLES = {
+    'document': 'c1_doc_file',
+    'source': 'c1_index_info',
     'index': 'c1_index_info',
     'rule': 'c1_rule_info',
     'frame': 'c1_frame_info',
@@ -22,7 +24,7 @@ def _item(item):
         raise BadRequest('布局项须为对象')
     scope = item.get('scope')
     if scope not in _TABLES:
-        raise BadRequest('布局 scope 仅支持 index/rule/frame')
+        raise BadRequest('布局 scope 仅支持 document/source/index/rule/frame')
     did = item.get('id')
     if isinstance(did, bool):
         raise BadRequest('布局定义 ID 须为正整数')
@@ -106,7 +108,7 @@ def save_layout(items):
                     found = {r[0] for r in cur.fetchall()}
                     missing = sorted(set(ids) - found)
                     if missing:
-                        raise NotFound('节点定义不存在：' + str(missing))
+                        raise NotFound('节点不存在：' + str(missing))
                 cur.executemany(
                     'INSERT INTO c1_compute_graph_layout'
                     ' (scope,def_id,pos_x,pos_y) VALUES (%s,%s,%s,%s)'

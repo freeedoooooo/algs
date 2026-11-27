@@ -4,8 +4,8 @@
 -- 幂等：CREATE IF NOT EXISTS；不清空已有布局。
 
 CREATE TABLE IF NOT EXISTS `c1_compute_graph_layout` (
-  `scope` varchar(8) NOT NULL COMMENT '节点域：index/rule/frame',
-  `def_id` bigint NOT NULL COMMENT '对应定义表 ID',
+  `scope` varchar(8) NOT NULL COMMENT '节点域：document/source/index/rule/frame',
+  `def_id` bigint NOT NULL COMMENT '资料ID、数据表锚点指标ID或定义表 ID',
   `pos_x` double NOT NULL COMMENT '画布逻辑坐标 X',
   `pos_y` double NOT NULL COMMENT '画布逻辑坐标 Y',
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '坐标更新时间（UTC）',

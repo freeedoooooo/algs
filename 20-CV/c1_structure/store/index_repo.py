@@ -145,6 +145,7 @@ def delete_def(index_id):
             cur.execute('DELETE FROM c1_index_info WHERE id=%s', (index_id,))
             from .compute_layout_repo import delete_for_def
             delete_for_def(cur, 'index', index_id)
+            delete_for_def(cur, 'source', index_id)
             conn.commit()
     finally:
         conn.close()

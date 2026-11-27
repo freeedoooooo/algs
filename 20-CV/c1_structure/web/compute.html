@@ -83,6 +83,7 @@
         <div class="graph-title"><b>流程图</b><span class="hint" tabindex="0" data-tip="单击节点查看详情；双击节点追溯上游；拖动节点调整布局；从节点右侧端口拖出连线。&#10;空白处拖动平移，滚轮缩放。">?</span></div>
         <span class="spacer"></span>
         <div class="graph-tools">
+          <button type="button" class="btn mini" id="layout-save" data-tip="将当前流程图位置保存到数据库">保存布局</button>
           <button type="button" class="icon-btn" id="zoom-out" data-tip="缩小" aria-label="缩小">−</button>
           <span id="zoom-label">100%</span>
           <button type="button" class="icon-btn" id="zoom-in" data-tip="放大" aria-label="放大">＋</button>
@@ -113,24 +114,24 @@
     </div>
     <div class="dbody lineage-body">
       <section class="lineage-mini-panel">
-        <div class="lineage-mini-head"><b>上游流程</b><span class="spacer"></span><span class="hint" id="lineage-selection"></span></div>
+        <div class="lineage-mini-head"><b>上游流程</b></div>
         <div class="graph-canvas lineage-mini-canvas" id="lineage-graph" tabindex="0" aria-label="上游追溯流程图">
           <div class="graph-world" id="lineage-world"><svg class="graph-edges" id="lineage-edges" aria-hidden="true"></svg><div class="graph-nodes" id="lineage-nodes"></div></div>
           <div class="graph-empty" id="lineage-empty" hidden><b>没有可展示的节点</b></div>
         </div>
       </section>
       <div class="lineage-mobile-tabs" role="tablist" aria-label="追溯内容">
-        <button type="button" class="btn mini ghost is-active" data-lineage-tab="current" role="tab" aria-selected="true">当前节点数据</button>
-        <button type="button" class="btn mini ghost" data-lineage-tab="upstream" role="tab" aria-selected="false">上游节点数据</button>
+        <button type="button" class="btn mini ghost is-active" data-lineage-tab="current" role="tab" aria-selected="true">当前节点</button>
+        <button type="button" class="btn mini ghost" data-lineage-tab="upstream" role="tab" aria-selected="false">上游节点</button>
       </div>
       <div class="lineage-detail-grid">
         <section class="lineage-panel lineage-current-panel lineage-mobile-active" id="lineage-current-panel">
-          <div class="section-head"><b>当前节点数据</b><span class="spacer"></span><a id="lineage-open-source" href="#" target="_blank" rel="noopener" hidden>打开原件</a></div>
+          <div class="section-head"><b>当前节点</b><span class="spacer"></span><a id="lineage-open-source" href="#" target="_blank" rel="noopener" hidden>打开原件</a></div>
           <div class="lineage-current" id="lineage-current"></div>
           <iframe id="lineage-document-frame" title="资料文件预览" hidden></iframe>
         </section>
         <section class="lineage-panel lineage-upstream-panel" id="lineage-upstream-panel">
-          <div class="section-head"><b>上游节点数据</b></div>
+          <div class="section-head"><b>上游节点</b></div>
           <div class="lineage-upstream" id="lineage-upstream"></div>
         </section>
       </div>

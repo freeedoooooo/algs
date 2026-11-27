@@ -95,11 +95,13 @@ conn = use(Cursor())
 check('读取坐标字段投影', repo.list_layout()['items'] ==
       [{'scope': 'index', 'id': 1, 'x': 10.5, 'y': 20.0}])
 
-items = [{'scope': 'index', 'id': '1', 'x': '30', 'y': 70},
+items = [{'scope': 'document', 'id': '6', 'x': '30', 'y': '70'},
+         {'scope': 'source', 'id': 1, 'x': 220, 'y': 80},
+         {'scope': 'index', 'id': '1', 'x': '30', 'y': '70'},
          {'scope': 'rule', 'id': 2, 'x': 320, 'y': 170}]
 conn = use(Cursor())
-check('批量保存成功', repo.save_layout(items)['saved'] == 2 and conn.committed)
-check('保存使用参数化 upsert', len(conn.cur.batch) == 2 and
+check('批量保存成功', repo.save_layout(items)['saved'] == 4 and conn.committed)
+check('保存使用参数化 upsert', len(conn.cur.batch) == 4 and
       'ON DUPLICATE KEY UPDATE' in conn.cur.calls[-1][0])
 
 try:
