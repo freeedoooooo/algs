@@ -1,5 +1,5 @@
 /* web/preview.js — 资料数据预览（P1）：DB 暂存记录表 + 编辑/确认/拒绝
-   + 源图血缘回溯。右侧舞台忠实复刻对照报告（report.js 舞台逻辑移植）：默认零框，
+   + 源图血缘追溯。右侧舞台忠实复刻对照报告（report.js 舞台逻辑移植）：默认零框，
    悬停/点击揭示单格，点图走 hitCell 命中测试可定位任意记录行/格（不限选中行），
    窗口式翻页（全页预渲染、切页只切显隐，与报告同架构）、原图/矫正图切换、
    叠加框开关、光标跟随提示、全屏浮层、左右方向键翻页。
@@ -252,7 +252,7 @@ function showPage(p){
 }
 function updateHead(){
   /* 选中记录号只在 lsub 显示一次，标题不重复 */
-  document.getElementById('ltitle').textContent='血缘回溯';
+  document.getElementById('ltitle').textContent='血缘追溯';
   var meta=metaOf(curPage);
   var mk=Object.keys(srcMap).filter(function(k){return srcMap[k];});
   var lsub=document.getElementById('lsub');
@@ -353,7 +353,7 @@ function setCollapsed(on){
   panel.classList.toggle('collapsed',on);
   var b=document.getElementById('ltoggle');
   b.textContent=on?'‹':'›';
-  b.title=on?'展开血缘回溯':'收起血缘回溯';
+  b.title=on?'展开血缘追溯':'收起血缘追溯';
   b.setAttribute('aria-expanded',on?'false':'true');
   if(on){ clearSel(); closeLb(); }else alignPagers();
   /* embed=1：把折叠态同步给父页面（数据看板右侧面板跟着收窄/展开） */
@@ -615,7 +615,7 @@ function crossView(v){
    点框关闭全屏后回左侧钉住对应记录行/格。 ---- */
 var closeLb=function(){};
 var stagingLb=bindStageLightbox({
-  title:function(img,label){ return '页'+curPage+' · '+label+' · 血缘回溯框'; },
+  title:function(img,label){ return '页'+curPage+' · '+label+' · 血缘追溯框'; },
   boxesOnOpen:function(){ return allOn; },
   syncBoxes:function(on,content){
     content.querySelectorAll('.cellbox').forEach(function(r){r.classList.toggle('all',on);});
@@ -689,7 +689,7 @@ function loadStaging(){
     mb.textContent='任务已入库 · 记录只读，修改、确认、拒绝操作已锁定';
   }else{
     mb.className='banner info';
-    mb.textContent='双击单元格修改取值，记录自动转为「已修改」；✓ 确认 · ✗ 拒绝；单击或悬停可查看血缘回溯；悬停列名/数据格/回溯框看字段映射';
+    mb.textContent='双击单元格修改取值，记录自动转为「已修改」；✓ 确认 · ✗ 拒绝；单击或悬停可查看血缘追溯；悬停列名/数据格/回溯框看字段映射';
   }
   updateLoadButtons();
   updateExButton();

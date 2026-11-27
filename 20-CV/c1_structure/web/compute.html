@@ -80,9 +80,10 @@
     </div>
     <section class="graph-panel" aria-label="计算流程配置区">
       <div class="graph-head">
-        <div class="graph-title"><b>流程图</b><span class="hint" tabindex="0" data-tip="单击节点查看详情；双击节点追溯上游；拖动节点调整布局；从节点右侧端口拖出连线。&#10;空白处拖动平移，滚轮缩放。">?</span></div>
+        <div class="graph-title"><b>流程图</b><span class="hint" tabindex="0" data-tip="单击节点查看详情；双击节点血缘追溯；拖动节点调整布局；从节点右侧端口拖出连线。&#10;空白处拖动平移，滚轮缩放。">?</span></div>
         <span class="spacer"></span>
         <div class="graph-tools">
+          <button type="button" class="btn mini" id="graph-run-all">重新计算</button>
           <button type="button" class="btn mini" id="layout-save" data-tip="将当前流程图位置保存到数据库">保存布局</button>
           <button type="button" class="icon-btn" id="zoom-out" data-tip="缩小" aria-label="缩小">−</button>
           <span id="zoom-label">100%</span>
@@ -98,31 +99,30 @@
           <div class="graph-nodes" id="graph-nodes"></div>
         </div>
         <div class="graph-empty" id="graph-empty" hidden><b>暂无流程节点</b></div>
-        <button type="button" class="btn graph-run-all" id="graph-run-all">重新计算</button>
       </div>
     </section>
   </div>
 </div>
 <div class="action-menu compute-action-menu" id="compute-action-menu" role="menu" hidden></div>
 
-<div class="drawer wide lineage-drawer" id="lineage" aria-label="上游追溯工作台" hidden>
+<div class="drawer wide lineage-drawer" id="lineage" aria-label="血缘追溯工作台" hidden>
   <div class="dpanel">
     <div class="dhead">
-      <h2 id="lineage-title">上游追溯</h2><span class="tag" id="lineage-tag"></span>
+      <h2 id="lineage-title">血缘追溯</h2><span class="tag" id="lineage-tag"></span>
       <span class="spacer"></span>
       <button type="button" class="dclose" id="lineage-close">关闭 (Esc)</button>
     </div>
     <div class="dbody lineage-body">
       <section class="lineage-mini-panel">
-        <div class="lineage-mini-head"><b>上游流程</b></div>
-        <div class="graph-canvas lineage-mini-canvas" id="lineage-graph" tabindex="0" aria-label="上游追溯流程图">
+        <div class="lineage-mini-head"><b>血缘流程</b></div>
+        <div class="graph-canvas lineage-mini-canvas" id="lineage-graph" tabindex="0" aria-label="血缘追溯流程图">
           <div class="graph-world" id="lineage-world"><svg class="graph-edges" id="lineage-edges" aria-hidden="true"></svg><div class="graph-nodes" id="lineage-nodes"></div></div>
           <div class="graph-empty" id="lineage-empty" hidden><b>没有可展示的节点</b></div>
         </div>
       </section>
       <div class="lineage-mobile-tabs" role="tablist" aria-label="追溯内容">
         <button type="button" class="btn mini ghost is-active" data-lineage-tab="current" role="tab" aria-selected="true">当前节点</button>
-        <button type="button" class="btn mini ghost" data-lineage-tab="upstream" role="tab" aria-selected="false">上游节点</button>
+        <button type="button" class="btn mini ghost" data-lineage-tab="upstream" role="tab" aria-selected="false"><span id="lineage-related-tab">上游节点</span></button>
       </div>
       <div class="lineage-detail-grid">
         <section class="lineage-panel lineage-current-panel lineage-mobile-active" id="lineage-current-panel">
@@ -131,7 +131,7 @@
           <iframe id="lineage-document-frame" title="资料文件预览" hidden></iframe>
         </section>
         <section class="lineage-panel lineage-upstream-panel" id="lineage-upstream-panel">
-          <div class="section-head"><b>上游节点</b></div>
+          <div class="section-head"><b id="lineage-related-title">上游节点</b></div>
           <div class="lineage-upstream" id="lineage-upstream"></div>
         </section>
       </div>

@@ -373,7 +373,7 @@ function pfPreviewUrl(){
     ? '/preview?file='+pfId+'&view=review'
     : '/preview?file='+pfId;
 }
-/* ---- 产物区内联血缘回溯 ---- */
+/* ---- 产物区内联血缘追溯 ---- */
 function pfLinBaseSrc(){ return '/preview?embed=1&file='+pfId; }
 function pfLinClear(){
   document.querySelectorAll('#procResult tr.pf-sel').forEach(function(tr){
@@ -560,7 +560,7 @@ function pfRenderResult(){
   }
   var linPanel=pfNode==='parse'?'':
     '<div class="proc-lineage" id="pfLineage"'+(pfLineageOpen?'':' hidden')+'>'+
-      '<iframe id="pfLinFrame" title="血缘回溯" loading="lazy"></iframe></div>';
+      '<iframe id="pfLinFrame" title="血缘追溯" loading="lazy"></iframe></div>';
   box.innerHTML='<div class="proc-bar"><div class="proc-bar-l">'+
     '<b>产物</b>'+pfTip(PF_RES_TIP[pfNode])+openLink+'</div><div class="proc-bar-r">'+
     tools+pfActionHtml()+'</div></div><div class="proc-result-split">'+

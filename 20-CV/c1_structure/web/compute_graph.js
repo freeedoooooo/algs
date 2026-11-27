@@ -15,6 +15,12 @@
     return '<svg class="'+(className||'scope-icon')+'" viewBox="0 0 16 16" aria-hidden="true">'+
       (SCOPE_ICON[scope]||SCOPE_ICON.index)+'</svg>';
   };
+  function statusOf(value){
+    var text=String(value==null?'':value).trim().toLowerCase();
+    if(/^pass(?:\s*[（(]|$)/.test(text))return 'pass';
+    if(/^fail(?:\s*[（(]|$)/.test(text))return 'fail';
+    return '';
+  }
 
   function Graph(canvas,callbacks,options){
     this.canvas=canvas;
@@ -109,25 +115,25 @@
   };
   Graph.prototype.renderNode=function(d){
     var self=this,k=this.key(d._scope,d.id),pos=this.positions[k],hasValue=!!d._latest,
-      isSource=d._scope==='source',isDocument=d._scope==='document';
+      isSource=d._scope==='source',isDocument=d._scope==='document',
+      status=d._status||statusOf(d._value);
     var el=document.createElement('div');
     el.className='graph-node scope-'+d._scope+(hasValue?' has-value':'')+
       (isSource?' source-node':'')+(isDocument?' document-node':'')+
-      (this.selectedNode===k?' selected':'');
+      (status?' status-'+status:'')+(this.selectedNode===k?' selected':'');
     el.dataset.key=k;el.tabIndex=0;el.setAttribute('role','button');
-    el.setAttribute('aria-label',LABEL[d._scope]+' '+d.name+(this.compact?'，双击查看详情':'，单击查看，双击追溯'));
+    if(status)el.dataset.status=status;
+    el.setAttribute('aria-label',LABEL[d._scope]+' '+d.name+(this.compact?'，单击查看节点数据':'，单击查看，双击血缘追溯'));
     el.style.left=pos.x+'px';el.style.top=pos.y+'px';
     var h='<div class="node-name">'+window.ComputeScopeIcon(d._scope,'scope-icon node-scope-icon')+
       '<b>'+escHtml(d.name)+'</b></div>';
-    if(this.compact){
-      h+='<div class="node-detail" hidden>'+escHtml(this.detail(d))+'</div>'+
-        '<button type="button" class="node-expand" data-tip="展开详情" aria-label="展开'+escHtml(d.name)+'详情" aria-expanded="false">⌄</button>';
-    }else if(hasValue){
+    if(!this.compact&&hasValue){
       h+='<div class="node-result">'+escHtml(d._value)+'</div>';
     }
     if(!this.compact){
       h+='<button type="button" class="icon-btn mini node-more" data-action-menu="compute-action-menu" '+
-        'data-tip="更多操作" aria-haspopup="menu" aria-expanded="false" aria-label="'+escHtml(d.name)+'更多操作">⋯</button>';
+        'data-tip="更多操作" aria-haspopup="menu" aria-expanded="false" aria-label="'+escHtml(d.name)+'更多操作">'+
+        '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg></button>';
     }
     if(!this.compact&&!isSource&&!isDocument)h+='<span class="node-port input" data-tip="上游输入"></span>';
     if(!this.compact&&d._scope!=='frame')h+='<span class="node-port output" data-tip="'+(isSource||isDocument?'来源节点':'拖动创建下游连线')+'"></span>';
@@ -138,22 +144,6 @@
       more.addEventListener('pointerdown',function(e){e.stopPropagation();});
       more.addEventListener('click',function(e){if(self.cb.menu)self.cb.menu(d._scope,d.id,d._latest,more);});
     }
-    var expand=el.querySelector('.node-expand');
-    if(expand)expand.addEventListener('click',function(e){
-      e.stopPropagation();var detail=el.querySelector('.node-detail'),open=detail.hidden;
-      detail.hidden=!open;expand.textContent=open?'⌃':'⌄';expand.setAttribute('aria-expanded',String(open));
-      el.classList.toggle('expanded',open);self.renderEdges();
-    });
-    el.addEventListener('dblclick',function(e){
-      if(e.target.closest('button,.node-port'))return;
-      if(self.compact){
-        if(self.cb.inspect)self.cb.inspect(d._scope,d.id);
-        return;
-      }
-      clearTimeout(self.clickTimer);self.clickTimer=null;self.lastClick=null;
-      self.selectNode(d._scope,d.id);
-      if(self.cb.trace)self.cb.trace(d._scope,d.id);
-    });
     el.addEventListener('keydown',function(e){
       if(e.key==='Enter'||e.key===' '){
         e.preventDefault();self.selectNode(d._scope,d.id);if(self.cb.select)self.cb.select(d._scope,d.id);
@@ -161,13 +151,6 @@
     });
     var out=el.querySelector('.output');
     if(out&&!isSource&&!isDocument)out.addEventListener('pointerdown',function(e){self.startConnect(e,d);});
-  };
-  Graph.prototype.detail=function(d){
-    if(d._scope==='document')return '资料 #'+d.id+' · '+d.row_count+' 行业务数据';
-    if(d._scope==='source')return d.name+' · '+(d.index_ids||[]).length+' 个指标';
-    if(d._scope==='index')return (d.table_comment||d.source_table)+(d.source_column?' · '+d.source_column:'')+' · '+d._agg;
-    if(d._scope==='rule')return (d.conditions_json||[]).length+' 个条件 · '+(d.combine==='all'?'全部满足':'任一满足');
-    return d._combine+' · '+(d.rule_refs_json||[]).length+' 条规则';
   };
   Graph.prototype.renderEdges=function(){
     var self=this;this.edgesEl.replaceChildren();this.renderArrow();
@@ -218,7 +201,7 @@
     return {x:(e.clientX-r.left-this.pan.x)/this.scale,y:(e.clientY-r.top-this.pan.y)/this.scale};
   };
   Graph.prototype.nodePointer=function(e,d){
-    if(e.button!==0||e.target.closest('.node-port,.node-more,.node-expand'))return;
+    if(e.button!==0||e.target.closest('.node-port,.node-more'))return;
     if(this.compact){
       this.selectNode(d._scope,d.id);if(this.cb.select)this.cb.select(d._scope,d.id);return;
     }
@@ -270,6 +253,7 @@
           clearTimeout(self.clickTimer);self.clickTimer=null;
           if(dbl){
             self.lastClick=null;self.selectNode(scope,id);
+            if(!self.compact&&self.cb.trace)self.cb.trace(scope,id);
           }else{
             self.lastClick={key:drag.key,time:now};
             self.clickTimer=setTimeout(function(){

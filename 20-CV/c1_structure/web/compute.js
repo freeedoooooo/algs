@@ -39,6 +39,17 @@
   function opLabel(o){return {gt:'>',gte:'≥',lt:'<',lte:'≤',eq:'=',ne:'≠',between:'介于'}[o]||o;}
   function combineLabel(c){return {weighted:'加权得分',all_pass:'全部通过',
     any_pass:'任一通过',veto:'一票否决',all:'全部满足',any:'任一满足'}[c]||c;}
+  function resultStatus(value){
+    var text=String(value==null?'':value).trim().toLowerCase();
+    if(/^pass(?:\s*[（(]|$)/.test(text))return 'pass';
+    if(/^fail(?:\s*[（(]|$)/.test(text))return 'fail';
+    return '';
+  }
+  function resultDisplay(scope,d){
+    if(!d||!d._latest)return '';
+    var value=d._latest[VFIELD[scope]];
+    return resultStatus(value)||String(value==null?'':value);
+  }
   function openEl(id){
     if(typeof animDrawerOpen==='function')animDrawerOpen($(id));else $(id).hidden=false;
   }
@@ -488,7 +499,7 @@
     if(scope==='frame')h+='<h3 class="view-sub">关联规则</h3>'+(d.rule_refs_json||[]).map(function(r){
       return '<div class="view-row">'+esc(defs.rule.filter(function(x){return x.id===r.rule_id;})[0]?.name||('#'+r.rule_id))+
         ' · 权重 '+esc(r.weight)+(r.veto?' · 否决':'')+'</div>';}).join('');
-    if(d._latest)h+='<h3 class="view-sub">最近结果</h3><div class="view-row">'+esc(d._latest[VFIELD[scope]])+'</div>';
+    if(d._latest)h+='<h3 class="view-sub">最近结果</h3><div class="view-row">'+esc(resultDisplay(scope,d))+'</div>';
     if(scope==='source')h+='<h3 class="view-sub">关联指标</h3>'+(d.index_ids||[]).map(function(id){
       var index=graph.def('index',id);return '<div class="view-row">'+esc(index?index.name:('#'+id))+'</div>';
     }).join('');
@@ -501,7 +512,7 @@
     openEl('compute-view');
   }
 
-  // ---------- 全宽上游追溯工作台 ----------
+  // ---------- 全宽血缘追溯工作台 ----------
   function closeLineage(){
     lineageSeq++;lineageState=null;graph.selectNode(null);lineageGraph.selectNode(null);
   }
@@ -524,7 +535,7 @@
       if(out[item.scope].indexOf(x)<0)out[item.scope].push(x);
       if(item.scope==='document')(x.source_ids||[]).forEach(function(id){enqueue('source',id);});
       else if(item.scope==='source'){
-        full.document.filter(function(doc){return (doc.source_ids||[]).indexOf(x.id)>=0;})
+        if(scope!=='document')full.document.filter(function(doc){return (doc.source_ids||[]).indexOf(x.id)>=0;})
           .forEach(function(doc){queue.push({scope:'document',d:doc});});
       }else if(item.scope==='index'){
         full.source.filter(function(s){return (s.index_ids||[]).indexOf(x.id)>=0;})
@@ -537,7 +548,7 @@
     }
     return out;
   }
-  function directUpstreams(scope,d){
+  function directRelatedNodes(scope,d){
     var full=lineageGraph.defs;
     function refs(targetScope,refs,key){
       var out=[],seen={};
@@ -611,7 +622,7 @@
     return h;
   }
   function nodeResultHtml(scope,d){
-    return VFIELD[scope]?'<div class="lineage-result"><span>最新结果</span><strong>'+esc(valueText(d._latest?d._latest[VFIELD[scope]]:null))+'</strong></div>':'';
+    return VFIELD[scope]?'<div class="lineage-result"><span>最新结果</span><strong>'+esc(resultDisplay(scope,d)||'暂无结果')+'</strong></div>':'';
   }
   function tableCacheKey(source,fileId,page){
     return [source.datasource_id,source.source_table,fileId==null?'':fileId,page].join(':');
@@ -677,10 +688,10 @@
     host.innerHTML=h;
     if(scope==='source')loadTablePreview($('lineage-current-table'),d,null,1,$('lineage-current-table-meta'));
   }
-  function renderUpstreamNodes(scope,d){
-    var host=$('lineage-upstream'),nodes=directUpstreams(scope,d);
+  function renderRelatedNodes(scope,d){
+    var host=$('lineage-upstream'),nodes=directRelatedNodes(scope,d);
     if(!nodes.length){
-      host.innerHTML='<div class="lineage-empty">暂无直接上游节点</div>';return;
+      host.innerHTML='<div class="lineage-empty">'+(scope==='document'?'暂无直接下游节点':'暂无直接上游节点')+'</div>';return;
     }
     host.innerHTML=nodes.map(function(node){
       return '<details class="lineage-upstream-card scope-'+node._scope+'" data-lineage-upstream="'+node._scope+':'+node.id+'">'+
@@ -707,7 +718,10 @@
     var d=lineageGraph.def(scope,id);if(!d)return;
     lineageState.activeKey=scope+':'+id;lineageGraph.selectNode(scope,id);
     $('lineage-tag').className='tag tag-'+scope;$('lineage-tag').textContent=LABEL[scope];
-    renderCurrentNode(scope,d);renderUpstreamNodes(scope,d);
+    var relatedLabel=scope==='document'?'下游节点':'上游节点';
+    $('lineage-related-title').textContent=relatedLabel;
+    $('lineage-related-tab').textContent=relatedLabel;
+    renderCurrentNode(scope,d);renderRelatedNodes(scope,d);
   }
   function refreshLineage(){
     if(!lineageState)return;
@@ -715,17 +729,13 @@
     if(!d){closeLineage();closeEl('lineage');return;}
     var seq=lineageSeq;
     lineageGraph.setData(relatedDefs(scope,d),{});
-    Array.prototype.forEach.call($('lineage-nodes').querySelectorAll('.graph-node'),function(el){
-      var label=el.getAttribute('aria-label');
-      if(label)el.setAttribute('aria-label',label.replace('，双击查看详情','，单击查看节点数据'));
-    });
     renderLineageDetails(scope,id);
     requestAnimationFrame(function(){requestAnimationFrame(function(){if(seq===lineageSeq)lineageGraph.fit();});});
   }
   function openLineage(scope,id){
     var d=graph.def(scope,id);if(!d)return;
     closeEl('compute-view');graph.selectNode(scope,id);lineageSeq++;lineageState={activeKey:scope+':'+id};
-    $('lineage-title').textContent='上游追溯 · '+d.name;
+    $('lineage-title').textContent='血缘追溯 · '+d.name;
     openEl('lineage');setLineageTab('current');refreshLineage();
   }
 
@@ -759,9 +769,12 @@
       doc.row_count=Math.max(doc.row_count,Number(link.row_count)||0);
     });
     ['index','rule','frame'].forEach(function(s){
-      out[s]=defs[s].map(function(d){return Object.assign({},d,{_scope:s,_latest:d._latest,
-        _agg:aggLabel(d.aggregate),_combine:combineLabel(d.combine),
-        _value:d._latest?String(d._latest[VFIELD[s]]==null?'':d._latest[VFIELD[s]]):''});});
+      out[s]=defs[s].map(function(d){
+        var value=d._latest?d._latest[VFIELD[s]]:null,status=resultStatus(value);
+        return Object.assign({},d,{_scope:s,_latest:d._latest,
+          _agg:aggLabel(d.aggregate),_combine:combineLabel(d.combine),
+          _status:status,_value:status||String(value==null?'':value)});
+      });
     });
     return out;
   }

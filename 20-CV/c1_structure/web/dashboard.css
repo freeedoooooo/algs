@@ -1,4 +1,4 @@
-/* web/dashboard.css — 数据看板：资料筛选 + 分页表 + 右侧血缘回溯 */
+/* web/dashboard.css — 数据看板：资料筛选 + 分页表 + 右侧血缘追溯 */
 .dashsplit { display:flex; gap:var(--c1-space-3); align-items:stretch; min-width:0; }
 .dashmain { flex:1 1 auto; min-width:0; }
 .dashlineage { position:relative; flex:0 0 680px; min-width:640px;
