@@ -820,7 +820,7 @@
     btn.disabled=layoutSaving||!layoutAvailable;
     btn.textContent=layoutSaving?'保存中…':'保存布局';
     btn.classList.toggle('is-dirty',layoutDirty);
-    btn.title=layoutAvailable?(layoutDirty?'当前位置尚未保存到数据库':'将当前流程图位置保存到数据库'):'布局表未安装，无法保存到数据库';
+    btn.title=layoutAvailable?(layoutDirty?'当前位置尚未保存到数据库':'将当前血缘图位置保存到数据库'):'布局表未安装，无法保存到数据库';
   }
   function currentLayoutItems(){
     return Object.keys(graph.positions).map(function(k){return graph.positions[k];}).filter(function(p){

@@ -1,4 +1,4 @@
-/* web/compute_graph.js — 原生 Pointer Events 流程图；定义关系由调用方提供。 */
+/* web/compute_graph.js — 原生 Pointer Events 血缘图；定义关系由调用方提供。 */
 (function(){
   'use strict';
   var SCOPES=['document','source','index','rule','frame'];
@@ -46,8 +46,8 @@
     this.connect=null;
     this.bind();
   }
-  Graph.prototype.nodeW=function(){return this.compact?142:156;};
-  Graph.prototype.nodeH=function(){return this.compact?42:48;};
+  Graph.prototype.nodeW=function(){return 156;};
+  Graph.prototype.nodeH=function(){return 48;};
   Graph.prototype.key=function(scope,id){return scope+':'+id;};
   Graph.prototype.def=function(scope,id){
     return (this.defs[scope]||[]).filter(function(d){return d.id===id;})[0];

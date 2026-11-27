@@ -80,11 +80,11 @@
     </div>
     <section class="graph-panel" aria-label="计算流程配置区">
       <div class="graph-head">
-        <div class="graph-title"><b>流程图</b><span class="hint" tabindex="0" data-tip="单击节点查看详情；双击节点血缘追溯；拖动节点调整布局；从节点右侧端口拖出连线。&#10;空白处拖动平移，滚轮缩放。">?</span></div>
+        <div class="graph-title"><b>血缘图</b><span class="hint" tabindex="0" data-tip="单击节点查看详情；双击节点血缘追溯；拖动节点调整布局；从节点右侧端口拖出连线。&#10;空白处拖动平移，滚轮缩放。">?</span></div>
         <span class="spacer"></span>
         <div class="graph-tools">
           <button type="button" class="btn mini" id="graph-run-all">重新计算</button>
-          <button type="button" class="btn mini" id="layout-save" data-tip="将当前流程图位置保存到数据库">保存布局</button>
+          <button type="button" class="btn mini" id="layout-save" data-tip="将当前血缘图位置保存到数据库">保存布局</button>
           <button type="button" class="icon-btn" id="zoom-out" data-tip="缩小" aria-label="缩小">−</button>
           <span id="zoom-label">100%</span>
           <button type="button" class="icon-btn" id="zoom-in" data-tip="放大" aria-label="放大">＋</button>
@@ -93,7 +93,17 @@
           <button type="button" class="icon-btn" id="edge-del" data-tip="断开选中连线" aria-label="断开选中连线" hidden>×</button>
         </div>
       </div>
-      <div class="graph-canvas" id="graph-canvas" tabindex="0" aria-label="可拖动、缩放的计算流程图">
+      <div class="graph-canvas" id="graph-canvas" tabindex="0" aria-label="可拖动、缩放的血缘图">
+        <div class="graph-legend" aria-label="血缘图图例">
+          <span class="legend-item"><i class="legend-dot document"></i>资料</span>
+          <span class="legend-item"><i class="legend-dot source"></i>数据表</span>
+          <span class="legend-item"><i class="legend-dot index"></i>指标</span>
+          <span class="legend-item"><i class="legend-dot rule"></i>规则</span>
+          <span class="legend-item"><i class="legend-dot frame"></i>框架</span>
+          <span class="legend-sep"></span>
+          <span class="legend-item"><i class="legend-dot pass"></i>通过</span>
+          <span class="legend-item"><i class="legend-dot fail"></i>未通过</span>
+        </div>
         <div class="graph-world" id="graph-world">
           <svg class="graph-edges" id="graph-edges" aria-hidden="true"></svg>
           <div class="graph-nodes" id="graph-nodes"></div>
@@ -114,8 +124,8 @@
     </div>
     <div class="dbody lineage-body">
       <section class="lineage-mini-panel">
-        <div class="lineage-mini-head"><b>血缘流程</b></div>
-        <div class="graph-canvas lineage-mini-canvas" id="lineage-graph" tabindex="0" aria-label="血缘追溯流程图">
+        <div class="lineage-mini-head"><b>血缘图</b></div>
+        <div class="graph-canvas lineage-mini-canvas" id="lineage-graph" tabindex="0" aria-label="血缘追溯血缘图">
           <div class="graph-world" id="lineage-world"><svg class="graph-edges" id="lineage-edges" aria-hidden="true"></svg><div class="graph-nodes" id="lineage-nodes"></div></div>
           <div class="graph-empty" id="lineage-empty" hidden><b>没有可展示的节点</b></div>
         </div>

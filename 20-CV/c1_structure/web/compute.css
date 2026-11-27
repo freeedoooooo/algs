@@ -1,4 +1,4 @@
-/* web/compute.css — 计算资产库与流程图工作台。 */
+/* web/compute.css — 计算资产库与血缘图工作台。 */
 .drawer.wide .dpanel{width:min(680px,96vw)}
 .action-menu.compute-action-menu{width:96px;min-width:96px;max-width:96px;padding:3px;box-sizing:border-box}
 .compute-action-menu .menu-item{justify-content:center;min-height:28px;padding:3px 4px;gap:4px;font-size:12px;line-height:16px;text-align:center}
@@ -58,7 +58,7 @@
 .asset-item:hover .asset-more,.asset-item:focus-within .asset-more{opacity:1}
 .asset-empty{padding:8px;text-align:center;font-size:var(--c1-font-size-meta);color:var(--c1-text-faint);background:var(--c1-surface-subtle);border-radius:5px}
 
-/* ---- 流程图画布 ---- */
+/* ---- 血缘图画布 ---- */
 .graph-panel{position:relative;display:flex;flex-direction:column}
 .graph-head{display:flex;align-items:center;gap:var(--c1-space-2);padding:8px 10px;border-bottom:1px solid var(--c1-border);
   min-height:50px;background:var(--c1-surface)}
@@ -70,6 +70,15 @@
   background-color:var(--c1-surface-subtle);background-image:radial-gradient(#d7deea 1px,transparent 1px);
   background-size:20px 20px;cursor:grab}
 .graph-canvas:active{cursor:grabbing}
+.graph-legend{position:absolute;left:10px;top:10px;z-index:4;display:flex;align-items:center;flex-wrap:wrap;gap:5px 9px;
+  max-width:calc(100% - 20px);padding:6px 8px;border:1px solid var(--c1-border);border-radius:6px;
+  background:rgba(255,255,255,.92);box-shadow:0 2px 8px rgba(37,55,85,.08);pointer-events:none;user-select:none}
+.legend-item{display:inline-flex;align-items:center;gap:4px;color:var(--c1-text-muted);font-size:10px;line-height:14px;white-space:nowrap}
+.legend-dot{display:block;width:7px;height:7px;border-radius:2px;background:var(--c1-primary)}
+.legend-dot.document{background:var(--c1-cyan)}.legend-dot.source{background:#64748b}
+.legend-dot.rule{background:var(--c1-success)}.legend-dot.frame{background:var(--c1-purple)}
+.legend-dot.pass{background:var(--c1-success);border-radius:50%}.legend-dot.fail{background:var(--c1-danger);border-radius:50%}
+.legend-sep{width:1px;height:12px;background:var(--c1-border)}
 #layout-save{white-space:nowrap}
 #layout-save.is-dirty{border-color:var(--c1-primary);color:var(--c1-primary)}
 #layout-save:disabled{cursor:wait;opacity:.65}
@@ -132,8 +141,7 @@
 .lineage-mini-head{display:flex;align-items:center;gap:8px;flex:none;min-height:32px;padding:0 10px;
   border-bottom:1px solid var(--c1-border-subtle);font-size:12px;color:var(--c1-text-strong)}
 .lineage-mini-canvas{flex:1;min-height:0;background-color:#f8fafc;background-image:radial-gradient(#d7deea 1px,transparent 1px);background-size:18px 18px}
-.lineage-mini-canvas .graph-node{width:142px;height:42px;padding:5px 12px;cursor:pointer}
-.lineage-mini-canvas .node-name b{font-size:11px;line-height:15px}
+.lineage-mini-canvas .graph-node{width:156px;height:48px;padding:5px 12px 5px 30px;cursor:pointer}
 .lineage-mini-canvas .graph-edge{stroke-width:1.5}
 .lineage-detail-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;flex:1;min-height:0;margin-top:10px}
 .lineage-panel{display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;
