@@ -45,6 +45,33 @@ def launch(paths, params, warns, ctx, intent, *, rule_generator=None):
             'task_id': file_id, 'warnings': warns}
 
 
+def _find_reusable_rule(doc, intent, log):
+    from .agent import rule_reuse, validate
+    description = str(intent.get('description') or intent.get('prompt') or '')
+    try:
+        candidate = rule_reuse.best_candidate(description, catalog.list_rules())
+        if not candidate:
+            return None
+        version_id = candidate['current_version_id']
+        tpl = catalog.get_rule_version(version_id)
+        if not tpl or validate.validate_spec(tpl.get('mapping_json')):
+            return None
+        diag = validate.dry_run(tpl.get('mapping_json') or {}, doc)
+        resolved = service.resolve_rule(version_id) \
+            if rule_reuse.acceptable(diag) else None
+    except Exception as exc:
+        log.warn('rule', '规则复用检查失败，改为生成新规则：{}'.format(exc))
+        return None
+    if resolved is None:
+        log.info('rule', '复用候选 {} 未通过当前文档干跑，改为生成新规则'.format(
+            candidate.get('name') or version_id))
+        return None
+    log.info('rule', '复用规则 {} · v{}（相似度 {}%）'.format(
+        tpl.get('name') or version_id, tpl.get('version'),
+        round(candidate['reuse_score'] * 100)))
+    return resolved
+
+
 def _run(paths, params, log, task_ctx, intent, rule_generator):
     file_id = task_ctx['file_id']
     try:
@@ -56,45 +83,47 @@ def _run(paths, params, log, task_ctx, intent, rule_generator):
         if doc is None:
             raise RuntimeError('解析产物缺失，自动处理停止')
 
-        refs = {'target_table': intent.get('target_table') or intent.get('table'),
-                'datasource_id': intent.get('datasource_id')}
-        if rule_generator is None:
-            from .agent import rule_author
-            result = rule_author.generate_rule(
-                doc, user_prompt=intent.get('description') or intent.get('prompt'),
-                refs=refs, doc_type=f.get('doc_type'), content=content,
-                sample_file_id=file_id)
-        else:
-            result = rule_generator(doc, intent)
+        tpl = _find_reusable_rule(doc, intent, log)
+        if tpl is None:
+            refs = {'target_table': intent.get('target_table') or intent.get('table'),
+                    'datasource_id': intent.get('datasource_id')}
+            if rule_generator is None:
+                from .agent import rule_author
+                result = rule_author.generate_rule(
+                    doc, user_prompt=intent.get('description') or intent.get('prompt'),
+                    refs=refs, doc_type=f.get('doc_type'), content=content,
+                    sample_file_id=file_id)
+            else:
+                result = rule_generator(doc, intent)
 
-        spec = result.spec if hasattr(result, 'spec') else result
-        schema = result.schema if hasattr(result, 'schema') else {
-            'fields': [{'name': f.get('target'), 'type': f.get('type') or 'text'}
-                       for f in (spec or {}).get('fields') or []
-                       if isinstance(f, dict) and f.get('target')]}
-        if not spec or spec.get('_stub') or not (spec.get('fields') or []):
-            plan = {'status': 'rule_empty',
-                    'message': '规则生成为空占位；自动处理需要 live 模式或有效规则',
-                    'target': None, 'mapping': None,
-                    'recommendations': [], 'warnings': []}
-            load_planner.save_plan(file_id, plan)
-            catalog.set_state(file_id, 'to_review',
-                              '自动规则未生成有效字段，请检查模型配置')
-            _finish(plan['status'], None, '自动规则为空，已停止')
-            return
+            spec = result.spec if hasattr(result, 'spec') else result
+            schema = result.schema if hasattr(result, 'schema') else {
+                'fields': [{'name': f.get('target'), 'type': f.get('type') or 'text'}
+                           for f in (spec or {}).get('fields') or []
+                           if isinstance(f, dict) and f.get('target')]}
+            if not spec or spec.get('_stub') or not (spec.get('fields') or []):
+                plan = {'status': 'rule_empty',
+                        'message': '规则生成为空占位；自动处理需要 live 模式或有效规则',
+                        'target': None, 'mapping': None,
+                        'recommendations': [], 'warnings': []}
+                load_planner.save_plan(file_id, plan)
+                catalog.set_state(file_id, 'to_review',
+                                  '自动规则未生成有效字段，请检查模型配置')
+                _finish(plan['status'], None, '自动规则为空，已停止')
+                return
 
-        description = str(intent.get('description') or intent.get('prompt') or '')
-        rule_name = '自动规则-{}-{}'.format(file_id, int(time.time()))
-        version_id = catalog.create_rule(
-            rule_name, description=description[:200], schema=schema,
-            mapping=spec, transform={})
-        tpl = service.resolve_rule(version_id)
+            description = str(intent.get('description') or intent.get('prompt') or '')
+            rule_name = '自动规则-{}-{}'.format(file_id, int(time.time()))
+            version_id = catalog.create_rule(
+                rule_name, description=description[:200], schema=schema,
+                mapping=spec, transform={})
+            tpl = service.resolve_rule(version_id)
         recs = service.extract_records(doc, tpl)
         catalog.clear_load_logs(file_id)
         content.save_records(collect.build_records_doc(
             doc, recs, task_id=file_id, task_file_id=file_id, file_id=file_id,
             rule={'name': tpl['name'], 'version': tpl['version']}))
-        catalog.set_rule(file_id, version_id)
+        catalog.set_rule(file_id, tpl['version_id'])
         catalog.set_state(file_id, 'to_review', None)
 
         plan = load_planner.plan_for_file(file_id, intent)

@@ -33,6 +33,7 @@ class AutoServiceTests(unittest.TestCase):
                          return_value=self.recs),
             patch.object(auto_service.catalog, 'create_rule', return_value=99),
             patch.object(auto_service.catalog, 'clear_load_logs'),
+            patch.object(auto_service.catalog, 'list_rules', return_value=[]),
             patch.object(auto_service.content, 'save_records'),
             patch.object(auto_service.catalog, 'set_rule'),
             patch.object(auto_service.catalog, 'set_state'),
@@ -54,6 +55,26 @@ class AutoServiceTests(unittest.TestCase):
                               self.intent, lambda _doc, _intent: self.result)
             auto_service.create_and_load.assert_called_once_with(1, plan,
                                                                   background=False)
+        finally:
+            for p in reversed(patches):
+                p.stop()
+
+    def test_reusable_rule_skips_generation_and_new_version(self):
+        plan = {'status': 'waiting_target', 'message': 'choose table'}
+        patches = self._patches(plan)
+        for p in patches:
+            p.start()
+        generator = Mock()
+        try:
+            with patch.object(auto_service, '_find_reusable_rule',
+                              return_value=self.tpl):
+                auto_service._run(['a.pdf'], {}, self.log, self.task_ctx,
+                                  self.intent, generator)
+            generator.assert_not_called()
+            auto_service.catalog.create_rule.assert_not_called()
+            auto_service.catalog.set_rule.assert_called_once_with(1, 99)
+            auto_service.service.extract_records.assert_called_once_with(
+                self.doc, self.tpl)
         finally:
             for p in reversed(patches):
                 p.stop()
