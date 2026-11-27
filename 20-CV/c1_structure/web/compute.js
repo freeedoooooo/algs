@@ -916,7 +916,6 @@
     lineageState.activeKey=scope+':'+id;lineageState.activeCard=null;lineageState.activeTable=null;lineageState.linkSeq++;
     setLineageLinkStatus('');
     lineageGraph.selectNode(scope,id);
-    $('lineage-tag').className='tag tag-'+scope;$('lineage-tag').textContent=LABEL[scope];
     var relatedLabel=scope==='document'?'下游节点':'上游节点';
     $('lineage-related-title').textContent=relatedLabel;
     $('lineage-related-tab').textContent=relatedLabel;
@@ -937,6 +936,7 @@
     lineageState={activeKey:scope+':'+id,rootScope:scope,rootDef:d,activeCard:null,activeTable:null,linkSeq:0};
     setLineageLinkStatus('');
     $('lineage-title').textContent='血缘追溯 · '+d.name;
+    $('lineage-tag').className='tag tag-'+scope;$('lineage-tag').textContent=LABEL[scope];
     openEl('lineage');setLineageTab('current');refreshLineage();
   }
 
