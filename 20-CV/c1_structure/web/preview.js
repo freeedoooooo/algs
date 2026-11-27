@@ -689,7 +689,7 @@ function loadStaging(){
     mb.textContent='任务已入库 · 记录只读，修改、确认、拒绝操作已锁定';
   }else{
     mb.className='banner info';
-    mb.textContent='双击单元格修改取值，记录自动转为「已修改」；✓ 确认 · ✗ 拒绝；单击或悬停可查看血缘追溯；悬停列名/数据格/回溯框看字段映射';
+    mb.textContent='双击单元格修改取值，记录自动转为「已修改」；✓ 确认 · ✗ 拒绝\n单击或悬停查看血缘追溯；悬停列名 / 数据格 / 回溯框查看字段映射';
   }
   updateLoadButtons();
   updateExButton();

@@ -370,7 +370,7 @@
     $(PFX[scope]+'-count').textContent=defs[scope].length;
     host.innerHTML=defs[scope].map(function(d){
       return '<article class="asset-item" data-key="'+scope+':'+d.id+'">'+
-        '<button type="button" class="asset-main" data-id="'+d.id+'" title="单击查看详情，双击追溯：'+esc(d.name)+'" aria-label="查看'+esc(d.name)+'">'+
+        '<button type="button" class="asset-main" data-id="'+d.id+'" data-tip="单击查看详情&#10;双击血缘追溯&#10;名称：'+esc(d.name)+'" aria-label="查看'+esc(d.name)+'">'+
         scopeIcon(scope)+'<b>'+esc(d.name)+'</b></button>'+
         '<button type="button" class="icon-btn mini asset-more" data-action-menu="compute-action-menu" '+
         'data-scope="'+scope+'" data-id="'+d.id+'" data-tip="更多操作" aria-haspopup="menu" aria-expanded="false" '+

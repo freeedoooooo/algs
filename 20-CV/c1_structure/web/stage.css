@@ -112,4 +112,4 @@ td.cell.pin,th.cell.pin{background:#fff0d9!important;
 .lb-noboxes .lb-content .cellbox.all:not(.hv):not(.pin),
 .lb-noboxes .lb-content .stitchbox.all:not(.hv):not(.pin){display:none!important}
 .lb-noboxes .lb-content .box:not(.pin):not(.hl){display:none!important}
-.lb-hint{padding:8px 14px;background:#1d2330;color:#9aa6bd;font-size:12px;text-align:center}
+.lb-hint{padding:8px 14px;background:#1d2330;color:#9aa6bd;font-size:12px;line-height:1.6;text-align:center}

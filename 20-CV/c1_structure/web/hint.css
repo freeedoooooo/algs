@@ -5,8 +5,8 @@
   color:#8a94a6;font-size:11px;line-height:1;cursor:help;user-select:none;
   vertical-align:middle}
 .hint:hover,.hint:focus{border-color:#2563eb;color:#2563eb;outline:none}
-#hinttip{position:fixed;z-index:100000;max-width:340px;padding:7px 10px;
-  border-radius:7px;background:#1d2330;color:#e8ecf4;font-size:12px;line-height:1.55;
-  white-space:pre-line;
+#hinttip{position:fixed;z-index:100000;max-width:min(340px,calc(100vw - 16px));padding:7px 10px;
+  border-radius:7px;background:#1d2330;color:#e8ecf4;font-size:12px;line-height:1.6;text-align:left;
+  white-space:pre-line;overflow-wrap:anywhere;
   box-shadow:0 4px 16px rgba(0,0,0,.3);pointer-events:none}
 #hinttip[hidden]{display:none}

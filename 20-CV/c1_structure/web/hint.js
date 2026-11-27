@@ -3,9 +3,13 @@
 (function(){
   var tip=document.createElement('div');
   tip.id='hinttip'; tip.hidden=true; document.body.appendChild(tip);
+  function formatTip(text){
+    return String(text||'').replace(/\r\n?/g,'\n').replace(/[；;]\s*/g,'\n').replace(/。\s*/g,'。\n')
+      .split('\n').map(function(line){return line.trim();}).filter(Boolean).join('\n');
+  }
   function show(el){
     var t=el.getAttribute('data-tip'); if(!t) return;
-    tip.textContent=t; tip.hidden=false;
+    tip.textContent=formatTip(t); tip.hidden=false;
     var r=el.getBoundingClientRect();
     var tw=tip.offsetWidth, th=tip.offsetHeight;
     var left=Math.max(8,Math.min(r.left, innerWidth-tw-8));

@@ -40,6 +40,7 @@
 .lineage.collapsed .ltoggle{writing-mode:horizontal-tb;padding:2px 7px;
   font-size:14px;line-height:1}
 .lineage .stage{flex:1 1 auto;min-height:220px;overflow:visible;border-right:0}
+#modebanner{white-space:pre-line}
 .lhint{padding:6px var(--c1-space-3);font-size:var(--c1-font-size-meta);color:var(--c1-warning);background:var(--c1-warning-soft);
   border-top:1px solid var(--c1-border)}
 .lhint[hidden]{display:none}
