@@ -250,6 +250,12 @@ def rules_page():
     return HTMLResponse(asset('rules.html'))
 
 
+@app.get('/governance', response_class=HTMLResponse)
+def governance_page():
+    """原始业务表数据治理与全链路血缘追踪，当前为待实现占位页。"""
+    return HTMLResponse(asset('governance.html'))
+
+
 @app.get('/compute', response_class=HTMLResponse)
 def compute_page():
     """计算审计：指标→规则→框架 + 全链路追溯 + 复现校验。"""
