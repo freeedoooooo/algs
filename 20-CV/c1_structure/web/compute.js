@@ -70,6 +70,12 @@
     btn.onclick=function(){setLineageTab(btn.dataset.lineageTab);};
   });
 
+  function sendLineageTrace(frame,trace){
+    if(!frame||!frame.contentWindow)return;
+    frame.dataset.skipPin='1';
+    setTimeout(function(){delete frame.dataset.skipPin;},1200);
+    try{frame.contentWindow.postMessage({c1TraceKey:trace},location.origin);}catch(e){delete frame.dataset.skipPin;}
+  }
   function bindLineageFrame(frame){
     if(!frame||frame.dataset.bound==='1')return;
     frame.dataset.bound='1';
@@ -78,7 +84,7 @@
       var pending=frame.dataset.pendingTrace;
       if(!pending)return;
       delete frame.dataset.pendingTrace;
-      try{frame.contentWindow.postMessage({c1TraceKey:JSON.parse(pending)},location.origin);}catch(e){}
+      sendLineageTrace(frame,JSON.parse(pending));
     });
   }
   function lineageFrameByWindow(win){
@@ -93,6 +99,7 @@
     if(!lineageState||e.origin!==location.origin||!e.data||!e.data.c1PinField)return;
     var frame=lineageFrameByWindow(e.source);
     if(!frame||frame.hidden)return;
+    if(frame.dataset.skipPin==='1'){delete frame.dataset.skipPin;return;}
     handleSourcePin(frame,String(frame.dataset.file||''),e.data.c1PinField);
   });
 
@@ -755,7 +762,7 @@
       frame.src='/preview?embed=1&file='+encodeURIComponent(fileId)+'&index='+encodeURIComponent(index)+
         (key?('&key='+encodeURIComponent(key)):'');
     }else if(frame.dataset.ready==='1'&&frame.contentWindow){
-      try{frame.contentWindow.postMessage({c1TraceKey:trace},location.origin);}catch(e){}
+      sendLineageTrace(frame,trace);
     }else frame.dataset.pendingTrace=JSON.stringify(trace);
   }
   function loadLineageRecordMap(fileId){
