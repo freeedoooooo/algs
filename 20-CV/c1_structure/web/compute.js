@@ -943,9 +943,10 @@
       node=lineageGraph.def(nodeScope,id),area=card.querySelector('.lineage-upstream-data');
     if(!node||!area)return;
     if(nodeScope==='source'){
-      var active=activeLineageNode();
-      area.innerHTML='<div class="lineage-data-head"><b>数据列表</b></div><div class="lineage-table-host"></div>';
-      loadTablePreview(area.querySelector('.lineage-table-host'),node,active&&active.scope==='document'?active.def.id:null,1,null,null,false);
+      var active=activeLineageNode(),actionsId='lineage-card-actions-'+nodeScope+'-'+id;
+      area.innerHTML='<div class="lineage-data-head"><b>数据列表</b><div id="'+actionsId+'" class="lineage-data-actions"></div></div>'+
+        '<div class="lineage-table-host"></div>';
+      loadTablePreview(area.querySelector('.lineage-table-host'),node,active&&active.scope==='document'?active.def.id:null,1,null,area.querySelector('.lineage-data-actions'));
     }else if(nodeScope==='document'){
       area.innerHTML=documentPreviewHtml(node);var frame=area.querySelector('iframe');bindLineageFrame(frame);
       var pendingBatch=card.dataset.pendingBatch;
