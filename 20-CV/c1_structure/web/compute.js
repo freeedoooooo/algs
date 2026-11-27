@@ -703,7 +703,7 @@
   function traceSummary(data,result){
     var items=data.items||[],cols=traceColumns(data);
     if(!items.length)return '当前页暂无数据';
-    if(!result)return '标记当前页字段是否可追溯';
+    if(!result)return '';
     var map=traceResultMap(result),rows=0,fields=0;
     items.forEach(function(row){
       var item=map[String(row.record_id)],rowOk=false;
@@ -714,6 +714,15 @@
       if(rowOk)rows++;
     });
     return '可追溯 '+rows+'/'+items.length+' 行 · '+fields+'/'+(items.length*cols.length)+' 个字段';
+  }
+  function traceToolbar(host){
+    if(!host)return null;
+    var external=host.dataset.traceToolbar&&document.getElementById(host.dataset.traceToolbar);
+    return external||host.querySelector('.lineage-table-toolbar');
+  }
+  function setTraceSummary(host,text){
+    var toolbar=traceToolbar(host),summary=toolbar&&toolbar.querySelector('.lineage-trace-summary');
+    if(summary)summary.textContent=text||'';
   }
   function clearTableTrace(host){
     if(!host)return;
@@ -744,12 +753,11 @@
         }
       });
     });
-    var summary=host.querySelector('.lineage-trace-summary');
+    var toolbar=traceToolbar(host),summary=toolbar&&toolbar.querySelector('.lineage-trace-summary');
     if(summary)summary.textContent=traceSummary(data,result);
   }
   function updateTraceToggle(host,on,loading){
-    if(!host)return;
-    var btn=host.querySelector('[data-trace-toggle]');
+    var toolbar=traceToolbar(host),btn=toolbar&&toolbar.querySelector('[data-trace-toggle]');
     if(btn){btn.classList.toggle('is-on',!!on);btn.setAttribute('aria-pressed',String(!!on));btn.disabled=!!loading;}
   }
   function traceGroups(result,cols){
@@ -799,7 +807,7 @@
       .filter(function(rid){return rid!=null&&rid!=='';});
     var activeKey=lineageState&&lineageState.activeKey;
     host.dataset.traceOn='1';updateTraceToggle(host,true,true);
-    var summary=host.querySelector('.lineage-trace-summary');if(summary)summary.textContent='正在批量追溯…';
+    setTraceSummary(host,'正在批量追溯…');
     function done(result){
       lineageTraceCache[key]=result;
       if(host.isConnected&&host.dataset.traceOn==='1'&&lineageState&&lineageState.activeKey===activeKey){
@@ -817,21 +825,28 @@
     }).catch(function(e){
       if(host.isConnected&&host.dataset.traceOn==='1'){
         host.dataset.traceOn='0';clearTableTrace(host);updateTraceToggle(host,false,false);
-        if(summary)summary.textContent='追溯失败：'+e.message;
+        setTraceSummary(host,'追溯失败：'+e.message);
         setLineageLinkStatus('批量追溯失败：'+e.message,'warn');
       }
     }).then(function(){delete lineageTracePending[key];});
   }
-  function renderTablePreview(host,source,fileId,page,data,meta){
+  function renderTablePreview(host,source,fileId,page,data,meta,toolbarHost){
     var total=Number(data.total)||0,pages=Math.max(1,Math.ceil(total/Number(data.per_page||20))),current=Number(data.page)||page;
     if(meta)meta.textContent='共 '+total+' 行 · 第 '+current+' / '+pages+' 页';
     var cols=data.columns||[],items=data.items||[],locatable=lineageLocateEnabled(),on=host.dataset.traceOn==='1',
       cached=on?lineageTraceCache[tableCacheKey(source,fileId,page)]:null;
     host.dataset.tracePage=String(current);
     host.dataset.traceKey=tableCacheKey(source,fileId,page);
-    var h='<div class="lineage-table-toolbar"><button type="button" class="btn mini ghost trace-toggle'+(on?' is-on':'')+'" data-trace-toggle aria-pressed="'+on+'">一键追溯</button>'+
-      '<span class="lineage-trace-summary">'+esc(traceSummary(data,cached))+'</span></div>'+
-      '<div class="lineage-table-wrap"><table class="lineage-table"><thead><tr>'+
+    var toolbar='<div class="lineage-table-toolbar"><button type="button" class="btn mini ghost trace-toggle'+(on?' is-on':'')+'" data-trace-toggle aria-pressed="'+on+'">一键追溯</button>'+
+      '<span class="hint" tabindex="0" aria-label="一键追溯说明" data-tip="批量追溯当前页数据；橙色表示可追溯，灰色表示不可追溯。">?</span>'+
+      '<span class="lineage-trace-summary">'+esc(traceSummary(data,cached))+'</span></div>';
+    if(toolbarHost){
+      host.dataset.traceToolbar=toolbarHost.id;
+      toolbarHost.innerHTML=toolbar;
+    }else{
+      delete host.dataset.traceToolbar;
+    }
+    var h=(toolbarHost?'':toolbar)+'<div class="lineage-table-wrap"><table class="lineage-table"><thead><tr>'+
       cols.map(function(c){return '<th>'+esc(c)+'</th>';}).join('')+'</tr></thead><tbody>'+
       items.map(function(row){
         var rid=row.record_id==null?'':String(row.record_id);
@@ -845,31 +860,32 @@
       '<button type="button" class="btn mini ghost" data-page="'+Math.min(pages,current+1)+'"'+(current>=pages?' disabled':'')+'>下一页</button></div>';
     host.innerHTML=h;
     if(on&&cached)applyTableTrace(host,data,cached);
+    function toggleTrace(){
+      if(host.dataset.traceOn==='1'){
+        host.dataset.traceOn='0';clearTableTrace(host);clearLineageTraceFrames();updateTraceToggle(host,false,false);
+        setTraceSummary(host,'');
+      }else runTableTrace(host,source,fileId,current,data);
+    }
+    if(toolbarHost)toolbarHost.onclick=function(e){
+      if(e.target.closest&&e.target.closest('[data-trace-toggle]'))toggleTrace();
+    };
     host.onclick=function(e){
-      var toggle=e.target.closest?e.target.closest('[data-trace-toggle]'):null;
-      if(toggle){
-        if(host.dataset.traceOn==='1'){
-          host.dataset.traceOn='0';clearTableTrace(host);clearLineageTraceFrames();updateTraceToggle(host,false,false);
-          var summary=host.querySelector('.lineage-trace-summary');if(summary)summary.textContent=traceSummary(data,null);
-        }else runTableTrace(host,source,fileId,current,data);
-        return;
-      }
       var cell=e.target.closest?e.target.closest('td.cell[data-col]'):null;
       if(cell){if(locatable)handleTableCellClick(cell,host,source,fileId,cell.closest('.lineage-upstream-card'));return;}
       var btn=e.target.closest?e.target.closest('[data-page]'):null;if(!btn||btn.disabled)return;
-      loadTablePreview(host,source,fileId,Number(btn.dataset.page),meta);
+      loadTablePreview(host,source,fileId,Number(btn.dataset.page),meta,toolbarHost);
     };
   }
-  function loadTablePreview(host,source,fileId,page,meta){
+  function loadTablePreview(host,source,fileId,page,meta,toolbarHost){
     page=Math.max(1,Number(page)||1);
     delete host.dataset.traceOn;clearTableTrace(host);
     var key=tableCacheKey(source,fileId,page);
-    if(lineageTableCache[key]){renderTablePreview(host,source,fileId,page,lineageTableCache[key],meta);return;}
+    if(lineageTableCache[key]){renderTablePreview(host,source,fileId,page,lineageTableCache[key],meta,toolbarHost);return;}
     host.innerHTML='<div class="lineage-empty">数据加载中…</div>';
     if(meta)meta.textContent='加载中…';
     api(tableRowsUrl(source,fileId,page)).then(function(data){
       lineageTableCache[key]=data;
-      if(host.isConnected)renderTablePreview(host,source,fileId,page,data,meta);
+      if(host.isConnected)renderTablePreview(host,source,fileId,page,data,meta,toolbarHost);
     }).catch(function(e){
       if(host.isConnected){host.innerHTML='<div class="lineage-empty">数据加载失败：'+esc(e.message)+'</div>';if(meta)meta.textContent='加载失败';}
     });
@@ -1075,10 +1091,10 @@
       frame.hidden=true;frame.removeAttribute('src');frame.removeAttribute('data-file');delete frame.dataset.ready;
     }
     var h=nodeHeading(scope,d)+nodeSummaryHtml(scope,d)+nodeResultHtml(scope,d);
-    if(scope==='source')h+='<div class="lineage-current-data"><div class="lineage-data-head"><b>数据列表</b><span id="lineage-current-table-meta"></span></div>'+
+    if(scope==='source')h+='<div class="lineage-current-data"><div class="lineage-data-head"><b>数据列表</b><span id="lineage-current-table-meta" class="lineage-table-meta"></span><div id="lineage-current-table-toolbar" class="lineage-data-actions"></div></div>'+
       '<div id="lineage-current-table" class="lineage-table-host"></div></div>';
     host.innerHTML=h;
-    if(scope==='source')loadTablePreview($('lineage-current-table'),d,null,1,$('lineage-current-table-meta'));
+    if(scope==='source')loadTablePreview($('lineage-current-table'),d,null,1,$('lineage-current-table-meta'),$('lineage-current-table-toolbar'));
   }
   function renderRelatedNodes(scope,d){
     var host=$('lineage-upstream'),nodes=directRelatedNodes(scope,d);

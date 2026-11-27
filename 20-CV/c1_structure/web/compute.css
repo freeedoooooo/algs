@@ -170,12 +170,15 @@
 .lineage-current-panel.is-document .lineage-current{flex:none;max-height:45%;border-bottom:1px solid var(--c1-border-subtle)}
 .lineage-current-data{margin-top:10px;border-top:1px solid var(--c1-border-subtle);padding-top:8px}
 .lineage-data-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:11px;color:var(--c1-text-strong)}
-.lineage-data-head span{margin-left:auto;color:var(--c1-text-faint);font-size:10px}
+.lineage-data-head .lineage-table-meta{color:var(--c1-text-faint);font-size:10px;white-space:nowrap}
+.lineage-data-actions{margin-left:auto;min-width:0}
 .lineage-table-host{min-width:0}
 .lineage-table-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:10px;color:var(--c1-text-faint)}
+.lineage-data-actions .lineage-table-toolbar{margin-bottom:0}
 .lineage-table-toolbar .trace-toggle{flex:none}
 .lineage-table-toolbar .trace-toggle.is-on{border-color:var(--c1-primary);background:var(--c1-primary-soft);color:var(--c1-primary)}
 .lineage-trace-summary{min-width:0;line-height:1.5}
+.lineage-trace-summary:empty{display:none}
 .lineage-table-wrap{max-width:100%;overflow:auto;border:1px solid var(--c1-border-subtle);border-radius:6px}
 .lineage-table{width:100%;border-collapse:collapse;font-size:11px;line-height:1.45;white-space:nowrap}
 .lineage-table th,.lineage-table td{padding:5px 7px;border-right:1px solid var(--c1-border-subtle);border-bottom:1px solid var(--c1-border-subtle);text-align:left;vertical-align:top}
