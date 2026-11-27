@@ -59,6 +59,39 @@ class AutoServiceTests(unittest.TestCase):
             for p in reversed(patches):
                 p.stop()
 
+    def test_rule_reuse_rejects_failed_dry_run(self):
+        candidate = {'id': 7, 'name': '自动规则', 'current_version_id': 99,
+                     'description': self.intent['description']}
+        version = dict(self.tpl, mapping_json=self.spec)
+        with patch.object(auto_service.catalog, 'list_rules',
+                          return_value=[candidate]), \
+                patch.object(auto_service.catalog, 'get_rule_version',
+                             return_value=version), \
+                patch('c1_structure.agent.validate.dry_run',
+                      return_value={'records_n': 0, 'empty_fields': [],
+                                    'anchor_coverage': 0.0}), \
+                patch.object(auto_service.service, 'resolve_rule') as resolve:
+            self.assertIsNone(auto_service._find_reusable_rule(
+                self.doc, self.intent, self.log))
+            resolve.assert_not_called()
+
+    def test_rule_reuse_accepts_passed_dry_run(self):
+        candidate = {'id': 7, 'name': '自动规则', 'current_version_id': 99,
+                     'description': self.intent['description']}
+        version = dict(self.tpl, mapping_json=self.spec)
+        with patch.object(auto_service.catalog, 'list_rules',
+                          return_value=[candidate]), \
+                patch.object(auto_service.catalog, 'get_rule_version',
+                             return_value=version), \
+                patch('c1_structure.agent.validate.dry_run',
+                      return_value={'records_n': 1, 'empty_fields': [],
+                                    'anchor_coverage': 1.0}), \
+                patch.object(auto_service.service, 'resolve_rule',
+                             return_value=self.tpl) as resolve:
+            self.assertIs(auto_service._find_reusable_rule(
+                self.doc, self.intent, self.log), self.tpl)
+            resolve.assert_called_once_with(99)
+
     def test_reusable_rule_skips_generation_and_new_version(self):
         plan = {'status': 'waiting_target', 'message': 'choose table'}
         patches = self._patches(plan)

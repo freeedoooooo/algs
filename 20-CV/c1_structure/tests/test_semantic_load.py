@@ -66,6 +66,29 @@ class SemanticLoadTest(unittest.TestCase):
         self.assertEqual(result[0]['table'], 'equipment_inspection')
         self.assertGreaterEqual(result[0]['score'], 0.5)
 
+    def test_explicit_table_name_reranks_recommendation(self):
+        tables = [_table(), _table('equipment_repair', '设备维修记录')]
+        result = semantic_load.recommend_tables(
+            self.records, tables, intent='设备巡检，写入 equipment_repair')
+        self.assertEqual('equipment_repair', result[0]['table'])
+        self.assertIn('需求中明确提到目标表名', result[0]['reasons'])
+
+    def test_complete_mapping_adds_rerank_reason(self):
+        partial = _table('equipment_inspection_partial', '设备巡检记录')
+        partial['columns'] = [c for c in partial['columns']
+                              if c['name'] != 'abnormal_desc']
+        result = semantic_load.recommend_tables(
+            self.records, [_table(), partial], intent='设备巡检')
+        self.assertEqual('equipment_inspection', result[0]['table'])
+        self.assertIn('字段可完整映射', result[0]['reasons'])
+        self.assertNotIn('字段可完整映射', result[1]['reasons'])
+
+    def test_table_name_match_requires_token_boundary(self):
+        self.assertFalse(semantic_load._mentions_table(
+            '写入 equipment_repair_log', 'equipment_repair'))
+        self.assertTrue(semantic_load._mentions_table(
+            '写入 db.equipment_repair', 'equipment_repair'))
+
     def test_no_fields_means_no_recommendation(self):
         self.assertEqual(semantic_load.recommend_tables(
             _records([]), [_table()], intent='设备巡检'), [])

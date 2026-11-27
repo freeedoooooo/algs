@@ -56,6 +56,17 @@ def _terms(value):
     return {term for term in terms if term}
 
 
+def _mentions_table(intent, table_name):
+    raw_name = str(table_name or '').strip()
+    if not raw_name:
+        return False
+    if re.fullmatch(r'[A-Za-z][A-Za-z0-9_]*', raw_name):
+        return bool(re.search(r'(?<![A-Za-z0-9_])' + re.escape(raw_name)
+                              + r'(?![A-Za-z0-9_])', str(intent or ''),
+                              flags=re.IGNORECASE))
+    return normalize_text(raw_name) in normalize_text(intent)
+
+
 def _concepts(value):
     compact = normalize_text(value)
     return {i for i, (aliases, _weight) in enumerate(_ALIAS_GROUPS)
@@ -265,8 +276,12 @@ def recommend_tables(record_set, table_schemas, *, intent='', limit=5,
         intent_score = (len(intent_terms & table_terms) / len(intent_terms)
                         if intent_terms else 0.0)
         ambiguous_penalty = len(mapping['ambiguous_fields']) / len(field_names)
-        score = (0.50 * coverage + 0.30 * avg_conf + 0.15 * intent_score
-                 - 0.05 * ambiguous_penalty)
+        base_score = (0.50 * coverage + 0.30 * avg_conf + 0.15 * intent_score
+                      - 0.05 * ambiguous_penalty)
+        explicit_match = _mentions_table(intent, table.get('name'))
+        complete = not mapping['unmapped_fields'] and not mapping['ambiguous_fields']
+        score = base_score + (0.12 if explicit_match else 0.0) \
+            + (0.04 if complete else 0.0)
         score = round(max(0.0, min(1.0, score)), 4)
         if score < min_score:
             continue
@@ -278,14 +293,20 @@ def recommend_tables(record_set, table_schemas, *, intent='', limit=5,
             'missing_fields': mapping['unmapped_fields'],
             'ambiguous_fields': mapping['ambiguous_fields'],
             'suggested_mapping': mapping['field_map'],
-            'reasons': _recommendation_reasons(coverage, avg_conf, intent_score),
+            'reasons': _recommendation_reasons(
+                coverage, avg_conf, intent_score, explicit_match, complete),
         })
     results.sort(key=lambda item: (-item['score'], str(item['table'])))
     return results[:limit]
 
 
-def _recommendation_reasons(coverage, confidence, intent_score):
+def _recommendation_reasons(coverage, confidence, intent_score,
+                           explicit_match=False, complete=False):
     reasons = []
+    if explicit_match:
+        reasons.append('需求中明确提到目标表名')
+    if complete:
+        reasons.append('字段可完整映射')
     if coverage >= 0.8:
         reasons.append('中文字段覆盖率高')
     elif coverage >= 0.5:
