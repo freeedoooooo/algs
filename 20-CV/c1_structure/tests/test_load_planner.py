@@ -1,5 +1,7 @@
 import unittest
+from unittest.mock import patch
 
+from c1_structure.store import load_planner
 from c1_structure.store.load_planner import (build_plan, normalize_intent,
                                              snapshot_from_mapping)
 
@@ -43,6 +45,27 @@ class LoadPlannerTests(unittest.TestCase):
                           [schema()])
         self.assertEqual('waiting_target', plan['status'])
         self.assertEqual('inspection_record', plan['recommendations'][0]['table'])
+
+    def test_existing_binding_is_reused_when_result_is_reopened(self):
+        record_set = dict(self.record_set, extract_result_id=31, doc_id=1)
+        binding = {
+            'target_table': 'inspection_record', 'table_code': 'biz.inspection_record',
+            'datasource_code': 'biz', 'field_map_json': {'设备名称': 'device_name'},
+            'write_mode': 'insert', 'business_keys_json': [],
+        }
+        target_schema = schema()
+        target_schema.update(datasource_code='biz', table_code='biz.inspection_record')
+        with patch.object(load_planner.content_db, 'get_records', return_value=record_set), \
+                patch.object(load_planner.catalog, 'get_binding', return_value=binding), \
+                patch.object(load_planner.catalog, 'list_datasources',
+                             return_value=[{'id': 1, 'code': 'biz'}]), \
+                patch.object(load_planner.loader, 'list_table_schemas',
+                             return_value=[target_schema]), \
+                patch.object(load_planner, 'save_plan'):
+            plan = load_planner.plan_for_extract_result(31)
+        self.assertEqual('ready', plan['status'])
+        self.assertEqual('biz.inspection_record', plan['target']['table_code'])
+        self.assertEqual({'设备名称': 'device_name'}, plan['mapping']['field_map'])
 
     def test_recommendations_exclude_platform_configuration_tables(self):
         plan = build_plan(self.record_set, {'description': '设备巡检记录'},

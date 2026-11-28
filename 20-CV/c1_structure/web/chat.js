@@ -137,6 +137,13 @@
   function stateBadgeText(value){
     return {pending:'待确认',confirmed:'已确认',running:'入库中',ready:'已入库',failed:'失败',loading:'入库中',loaded:'已入库'}[value]||value||'未知';
   }
+  function showPlanStatus(plan){
+    var result=results.filter(function(r){return Number(r.id)===selectedResultId;})[0]||{};
+    var status=result.load_binding&&result.load_binding.status;
+    if(status==='ready'||status==='loaded'){stateBadge('已入库','green');return;}
+    if(status==='confirmed'||status==='running'||status==='loading'){stateBadge('入库中','cyan');return;}
+    stateBadge(statusNames[plan.status]||plan.status,plan.status==='ready'?'green':'yellow');
+  }
   function loadSourceResults(showCards){
     return api('/api/sources/'+fileId).then(function(detail){
       renderResults(resultList(detail));
@@ -152,8 +159,7 @@
     stateBadge('正在读取结果方案','blue');setBusy(true);
     api('/api/extract-results/'+id+'/load-plan',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({intent:currentIntent})}).then(function(plan){
-      currentPlan=plan;renderPlan(plan);
-      stateBadge(statusNames[plan.status]||plan.status,plan.status==='ready'?'green':'yellow');
+      currentPlan=plan;renderPlan(plan);showPlanStatus(plan);
     }).catch(function(err){
       addMessage('assistant','<div class="result-box err">'+escHtml(err.message)+'</div>');
       stateBadge('方案读取失败','red');
@@ -235,7 +241,7 @@
     api('/api/extract-results/'+resultId+'/load-plan',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({intent:currentIntent})}).then(function(plan){
       if(selectedResultId!==resultId)return;
-      currentPlan=plan;renderPlan(plan);stateBadge(statusNames[plan.status]||plan.status,plan.status==='ready'?'green':'yellow');
+      currentPlan=plan;renderPlan(plan);showPlanStatus(plan);
       setBusy(false);
     }).catch(function(err){
       setBusy(false);if(button)button.disabled=false;
@@ -300,14 +306,14 @@
         ' 条记录 · <a href="/preview?file='+fileId+'&amp;result='+selectedResultId+'" target="_blank">打开完整预览与血缘 →</a></p></div>';
     }
     var recs=plan.recommendations||[];
-    if(recs.length){
+    if(recs.length&&!locked){
       html+='<div class="plan-section"><h3>推荐目标表</h3><div class="rec-list">'+recs.map(function(r,i){
         return '<div class="rec-item"><div class="rec-info"><b>'+escHtml(r.table)+'</b><span>'+
           escHtml(r.table_code||r.datasource_code||('数据源 #'+r.datasource_id))+' · 匹配度 '+Math.round(Number(r.score||0)*100)+'%'+
           (r.comment?' · '+escHtml(r.comment):'')+'</span></div><button type="button" class="btn ghost mini" data-choose="'+i+'">选择此表</button></div>';
       }).join('')+'</div></div>';
     }
-    html+='<div class="plan-section other-tables"><h3>其他目标表</h3>'+
+    if(!locked)html+='<div class="plan-section other-tables"><h3>其他目标表</h3>'+
       '<p>推荐列表没有需要的表？可从业务库已有表中选择；平台产品配置表不会列出。</p>'+
       '<button type="button" class="btn ghost mini" data-other-tables>选择其他现有表</button>'+
       '<div class="other-table-panel" data-other-panel hidden>'+
@@ -408,6 +414,8 @@
     };
     var confirm=planNode.querySelector('[data-confirm]');
     if(confirm)confirm.onclick=confirmLoad;
+    var receipts=planNode.querySelector('[data-plan-receipts]');
+    if(receipts)receipts.onclick=function(){openReceiptDrawer(fileId,selectedResultId);};
     scrollBottom();
   }
   function confirmLoad(){
