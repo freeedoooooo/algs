@@ -72,7 +72,7 @@ class CollectLogicTest(unittest.TestCase):
                           {'op': 'regex', 'pattern': r'[\d,]+\.\d+'},
                           {'op': 'number', 'strip': ','}]},
         ]}
-        records = collect.build(doc, {'mapping_json': spec})
+        records = collect.build(doc, {'extraction_spec_json': spec})
         self.assertEqual(len(records), 2)
         r = records[0]
         self.assertEqual(set(r), {'index', 'values', 'original',
@@ -99,7 +99,7 @@ class CollectLogicTest(unittest.TestCase):
                 'fields': [{'target': '合计', 'pipeline': [
                     {'op': 'cell', 'source': 'sum',
                      'column': {'index': 0}, 'row': 0}]}]}
-        records = build_logic(doc, {'mapping_json': spec})
+        records = build_logic(doc, {'extraction_spec_json': spec})
         self.assertTrue(records)
         self.assertEqual(records[0]['values'], {'合计': '999'})
 
@@ -213,7 +213,7 @@ class RegionSelectionTest(unittest.TestCase):
                             'region': {'page': 1, 'rect': [0, 0.5, 1, 1]}}],
                 'fields': [{'target': '金额', 'pipeline': [
                     {'op': 'cell', 'column': {'name': '金额'}}]}]}
-        records = build_logic(doc, {'mapping_json': spec})
+        records = build_logic(doc, {'extraction_spec_json': spec})
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]['values']['金额'], '10')
         self.assertEqual(records[0]['lineage']['金额'][0]['cell_bbox'],
@@ -243,7 +243,7 @@ class RegionSelectionTest(unittest.TestCase):
                             'region': {'page': 1, 'rect': [0, 0.45, 1, 0.55]}}],
                 'fields': [{'target': '金额', 'pipeline': [
                     {'op': 'cell', 'column': {'name': '金额'}}]}]}
-        records = build_logic(doc, {'mapping_json': spec})
+        records = build_logic(doc, {'extraction_spec_json': spec})
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]['lineage']['金额'][0]['space'], 'rectified')
 
@@ -297,7 +297,7 @@ class RegionSelectionTest(unittest.TestCase):
                             'region': {'page': 2, 'rect': [0, 0.5, 1, 1]}}],
                 'fields': [{'target': '金额', 'pipeline': [
                     {'op': 'cell', 'column': {'name': '金额'}}]}]}
-        records = build_logic(doc, {'mapping_json': spec})
+        records = build_logic(doc, {'extraction_spec_json': spec})
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]['lineage']['金额'][0]['page'], 2)
 
@@ -313,7 +313,7 @@ class RegionSelectionTest(unittest.TestCase):
         spec = {'spec_version': 2, 'records': {'strategy': 'one_per_page'},
                 'fields': [{'target': '内容', 'pipeline': [
                     {'op': 'region_text', 'region': {'rect': [0, 0, 0.5, 0.2]}}]}]}
-        records = build_logic(doc, {'mapping_json': spec})
+        records = build_logic(doc, {'extraction_spec_json': spec})
         self.assertEqual([r['values']['内容'] for r in records],
                          ['第一页', '第二页'])
 

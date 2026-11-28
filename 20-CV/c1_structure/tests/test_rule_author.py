@@ -1,4 +1,5 @@
-"""P0-② generate_rule：生成草稿、中间层对拍、警告与显式失败。"""
+"""P0-② generate_rule：生成草稿、抽取结果对拍、警告与显式失败。"""
+import inspect
 import unittest
 from unittest import mock
 
@@ -19,21 +20,20 @@ def _doc(rows=None):
     }
 
 
-SPEC = {'spec_version': 2, 'fields': [
+SPEC = {'spec_version': 2,
+        'tables': [{'ref': 'main', 'role': 'record_source', 'index': 0}],
+        'records': {'strategy': 'row', 'source_ref': 'main'},
+        'fields': [
     {'target': '金额', 'pipeline': [
         {'op': 'cell', 'source': 'main',
          'column': {'name': '金额'}, 'row': 'current'}]}]}
 
 
-class FakeContent:
-    def __init__(self, states):
-        self.states = states
-
-    def get_records(self, file_id):
-        return {'files': [{'records': [
-            {'index': i, 'values': {'金额': v}, 'original': {'金额': v},
-             'review': {'state': s, 'at': None}}
-            for i, (v, s) in enumerate(self.states)]}]}
+def _result_records(states):
+    return {'extract_result_id': 7, 'records': [
+        {'index': i, 'values': {'金额': v}, 'original': {'金额': v},
+         'review': {'state': s, 'at': None}}
+        for i, (v, s) in enumerate(states)]}
 
 
 class RuleAuthorTest(unittest.TestCase):
@@ -53,18 +53,35 @@ class RuleAuthorTest(unittest.TestCase):
         self.assertIn('spec', d)
 
     def test_middle_states_only_confirmed_or_edited(self):
-        content = FakeContent([('10', 'confirmed'), ('20', 'pending'),
-                               ('30', 'rejected'), ('40', 'edited')])
-        targets = rule_author._targets_from_middle(content, 1)
+        from c1_structure.store import content_db
+        records = _result_records([('10', 'confirmed'), ('20', 'pending'),
+                                   ('30', 'rejected'), ('40', 'edited')])
+        with mock.patch.object(content_db, 'get_records',
+                               return_value=records) as get_records:
+            targets = rule_author._targets_from_middle(7)
+        get_records.assert_called_once_with(7)
         self.assertEqual([t['values']['金额'] for t in targets], ['10', '40'])
 
-    def test_auto_targets_from_middle(self):
-        content = FakeContent([('10', 'confirmed'), ('20', 'confirmed')])
-        result = rule_author.generate_rule(
-            _doc(), [{'target': '金额'}], llm_fn=lambda p, s: dict(SPEC),
-            content=content, sample_file_id=1)
+    def test_auto_targets_from_extract_result(self):
+        from c1_structure.store import content_db
+        records = _result_records([('10', 'confirmed'), ('20', 'confirmed')])
+        with mock.patch.object(content_db, 'get_records',
+                               return_value=records) as get_records:
+            result = rule_author.generate_rule(
+                _doc(), [{'target': '金额'}], llm_fn=lambda p, s: dict(SPEC),
+                sample_extract_result_id=7)
+        get_records.assert_called_once_with(7)
         self.assertEqual(result.diagnostics['compare']['targets_n'], 2)
         self.assertEqual(result.diagnostics['compare']['field_accuracy'], 1.0)
+        self.assertEqual(result.meta['sample_extract_result_id'], 7)
+        self.assertNotIn('sample_file_id', result.meta)
+
+    def test_sample_result_parameter_replaces_file_content_api(self):
+        for fn in (rule_author.generate_rule, rule_author.generate_rule_react):
+            params = inspect.signature(fn).parameters
+            self.assertIn('sample_extract_result_id', params)
+            self.assertNotIn('sample_file_id', params)
+            self.assertNotIn('content', params)
 
     def test_count_mismatch_warning(self):
         result = rule_author.generate_rule(

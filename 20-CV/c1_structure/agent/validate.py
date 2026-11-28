@@ -47,10 +47,29 @@ def validate_spec(spec):
     if not isinstance(fields, list) or not fields:
         issues.append('fields 须为非空数组')
         return issues
-    for i, sel in enumerate(spec.get('tables') or []):
+    table_refs = set()
+    record_sources = []
+    table_selectors = spec.get('tables') or []
+    if not table_selectors:
+        table_refs.add('main')
+    for i, sel in enumerate(table_selectors):
         if isinstance(sel, dict):
+            ref = str(sel.get('ref') or 'main')
+            if ref in table_refs:
+                issues.append('tables[{}].ref 重复: {}'.format(i, ref))
+            table_refs.add(ref)
+            if sel.get('role') == 'record_source':
+                record_sources.append(ref)
             issues.extend(_region_issues(
                 sel.get('region'), 'tables[{}].region'.format(i)))
+    records = spec.get('records') or {}
+    source_ref = records.get('source_ref') if isinstance(records, dict) else None
+    if source_ref and source_ref not in table_refs:
+        issues.append('records.source_ref 未在 tables 中声明: {}'.format(source_ref))
+    if record_sources and not source_ref:
+        issues.append('record_source 必须通过 records.source_ref 指定')
+    if len(record_sources) > 1:
+        issues.append('只能声明一个 record_source')
     seen = set()
     for i, f in enumerate(fields):
         if not isinstance(f, dict):
@@ -71,6 +90,10 @@ def validate_spec(spec):
             if op not in OPS:
                 issues.append('{} 未知算子: {}'.format(target, op))
             if isinstance(step, dict):
+                source = step.get('source')
+                if (source and op in ('cell', 'join', 'link', 'sum', 'count')
+                        and source not in table_refs):
+                    issues.append('{} 未知表 ref: {}'.format(target, source))
                 issues.extend(_region_issues(
                     step.get('region'), '{}.pipeline.region'.format(target)))
         for v in f.get('validate') or []:
@@ -83,7 +106,7 @@ def validate_spec(spec):
 
 def dry_run(spec, doc):
     """在内存里用生成规则跑 doc，返回字段命中/锚点诊断（不写库）。"""
-    tpl = {'mapping_json': spec}
+    tpl = {'extraction_spec_json': spec}
     try:
         recs = build_logic(doc, tpl)
     except Exception as exc:

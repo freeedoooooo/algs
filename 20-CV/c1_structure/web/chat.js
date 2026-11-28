@@ -1,8 +1,9 @@
 (function(){
   'use strict';
-  var file=null,currentIntent=null,currentPlan=null,fileId=null,phase='idle',timer=null;
+  var file=null,uploads=[],currentIntent=null,currentPlan=null,fileId=null,phase='idle',timer=null;
   var planNode=null,progressNode=null,seenLogs=0,busy=false,expanded=false;
-  var stageNodes={},stagePending={},tableOptions=null;
+  var stageNodes={},stagePending={},tableOptions=null,results=[],resultNode=null;
+  var selectedResultId=null,resultIntents={},descriptionIntent=null;
   var allowedFile=/\.(png|jpe?g|bmp|webp|tiff?|pdf|csv|txt|md)$/i,maxFileSize=20*1024*1024;
   var $=function(id){return document.getElementById(id);};
   var statusNames={ready:'等待确认',waiting_target:'等待选择目标表',target_missing:'目标表不存在',
@@ -29,20 +30,24 @@
     row.appendChild(avatar);row.appendChild(body);$('messages').appendChild(row);scrollBottom();return body;
   }
   function stateBadge(text,color){$('chatState').textContent=text;$('chatState').className='badge '+(color||'blue');}
-  function setFile(f){
-    file=f;$('fileChip').hidden=!f;
-    if(f){$('fileName').textContent=f.name;$('fileSize').textContent=fmtSize(f.size);}
+  function setFiles(list){
+    uploads=Array.prototype.slice.call(list||[]);file=uploads[0]||null;$('fileChip').hidden=!file;
+    if(file){$('fileName').textContent=file.name+(uploads.length>1?'（另 '+(uploads.length-1)+' 份参考）':'');$('fileSize').textContent=fmtSize(uploads.reduce(function(n,f){return n+f.size;},0));}
     else{$('fileInput').value='';}
     updateSend();
   }
-  function chooseFile(f){
-    if(!f)return;
-    if(!allowedFile.test(f.name)){addMessage('assistant','<div class="result-box err">仅支持 PDF、图片、CSV 或文本文件。</div>');$('fileInput').value='';return;}
-    if(!f.size||f.size>maxFileSize){addMessage('assistant','<div class="result-box err">附件不能为空，且大小不能超过 20MB。</div>');$('fileInput').value='';return;}
-    setFile(f);
+  function chooseFiles(list){
+    var files=Array.prototype.slice.call(list||[]);if(!files.length)return;
+    if(files.length>10){addMessage('assistant','<div class="result-box err">最多上传 10 份附件，首份作为主文档。</div>');$('fileInput').value='';return;}
+    for(var i=0;i<files.length;i++){
+      var f=files[i];
+      if(!allowedFile.test(f.name)){addMessage('assistant','<div class="result-box err">仅支持 PDF、图片、CSV 或文本文件。</div>');$('fileInput').value='';return;}
+      if(!f.size||f.size>maxFileSize){addMessage('assistant','<div class="result-box err">附件不能为空，且每份大小不能超过 20MB。</div>');$('fileInput').value='';return;}
+    }
+    setFiles(files);
   }
   function updateSend(){
-    $('send').disabled=busy||!file||!$('prompt').value.trim();
+    $('send').disabled=busy||!uploads.length||!$('prompt').value.trim();
     $('send').textContent=phase==='loading'?'入库中…':(phase==='processing'?'处理中…':'发送');
   }
   function setComposerExpanded(value){
@@ -98,24 +103,73 @@
         '<p class="muted">文本块 '+escHtml(data.blocks||0)+' · 文本约 '+escHtml(data.text_chars||0)+' 字'+report+'</p>';
       return;
     }
-    var fields=data.fields||[],samples=data.samples||[];
-    var html='<div class="stage-head"><span class="badge green">抽取完成</span><b>'+escHtml(data.record_count||0)+' 条记录</b></div>'+
-      '<div class="field-chips">'+fields.map(function(name){return '<span>'+escHtml(name)+'</span>';}).join('')+'</div>';
-    if(fields.length&&samples.length){
-      html+='<div class="tblscroll stage-sample"><table class="list"><thead><tr>'+fields.map(function(name){return '<th>'+escHtml(name)+'</th>';}).join('')+
-        '</tr></thead><tbody>'+samples.map(function(row){return '<tr>'+fields.map(function(name){var value=row[name];return '<td>'+escHtml(value===undefined||value===null||value===''?'—':value)+'</td>';}).join('')+'</tr>';}).join('')+
-        '</tbody></table></div><p class="muted">仅展示前 '+samples.length+' 条样例 · 有血缘记录 '+escHtml(data.anchored_records||0)+' 条</p>';
-    }else{html+='<p class="muted">没有可展示的抽取记录。</p>';}
-    html+='<p class="muted"><a href="/preview?file='+fileId+'" target="_blank">打开完整结果、血缘与复核 →</a></p>';
+    var summary=data.summary||data;
+    var fields=summary.fields||[];
+    var html='<div class="stage-head"><span class="badge green">多结果抽取完成</span><b>'+escHtml((data.extract_results||[]).length)+' 个独立结果</b></div>'+
+      '<p class="muted">解析产物仅生成一次；每个结果拥有自己的记录、快照、审核状态、表映射与入库回执。请选择下方一个结果进行规划。</p>';
+    if(fields.length&&summary.samples&&summary.samples.length){
+      html+='<div class="field-chips">'+fields.map(function(name){return '<span>'+escHtml(name)+'</span>';}).join('')+'</div>';
+    }
     body.innerHTML=html;
   }
+  function resultList(detail){
+    var f=detail.file||detail;
+    return (f.results||f.extract_results||[]).map(function(r){return Object.assign({},r,{load_binding:r.load_binding||null});});
+  }
+  function resultName(r){return r.rule_name||('规则 #'+r.rule_id);}
+  function renderResults(list){
+    results=list;resultNode=addMessage('assistant','','stage-card');
+    if(!results.length){
+      resultNode.innerHTML='<div class="stage-head"><span class="badge yellow">未生成抽取结果</span></div>'+
+        '<p class="muted">可打开处理页，为文档选择规则并显式执行抽取。</p>'+
+        '<p><a href="/process?file='+fileId+'" target="_blank">打开资料处理 →</a></p>';return;
+    }
+    resultNode.innerHTML='<div class="stage-head"><span class="badge green">抽取结果</span><b>选择一个结果继续</b></div>'+
+      '<div class="rec-list">'+results.map(function(r){
+        var b=r.load_binding,status=b?('入库：'+stateBadgeText(b.status)):('抽取：'+stateBadgeText(r.status));
+        return '<div class="rec-item"><div class="rec-info"><b>'+escHtml(resultName(r))+' · 结果 #'+escHtml(r.id)+'</b>'+
+          '<span>'+escHtml(r.record_count||0)+' 条记录 · '+escHtml(status)+'</span></div>'+
+          '<button type="button" class="btn ghost mini" data-result="'+escHtml(r.id)+'">规划此结果</button></div>';
+      }).join('')+'</div>';
+    resultNode.querySelectorAll('[data-result]').forEach(function(button){
+      button.onclick=function(){selectResult(Number(button.getAttribute('data-result')));};
+    });
+    scrollBottom();
+  }
+  function stateBadgeText(value){
+    return {pending:'待确认',confirmed:'已确认',running:'入库中',ready:'已入库',failed:'失败',loading:'入库中',loaded:'已入库'}[value]||value||'未知';
+  }
+  function loadSourceResults(showCards){
+    return api('/api/sources/'+fileId).then(function(detail){
+      renderResults(resultList(detail));
+      if(showCards)renderStageResult('extract',{extract_results:results});
+      return detail;
+    });
+  }
+  function selectResult(id){
+    if(busy||!results.some(function(r){return Number(r.id)===id}))return;
+    selectedResultId=id;currentPlan=null;
+    if(planNode)planNode.remove();planNode=null;
+    currentIntent=resultIntents[id]||baseIntent();
+    stateBadge('正在读取结果方案','blue');setBusy(true);
+    api('/api/extract-results/'+id+'/load-plan',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({intent:currentIntent})}).then(function(plan){
+      currentPlan=plan;renderPlan(plan);
+      stateBadge(statusNames[plan.status]||plan.status,plan.status==='ready'?'green':'yellow');
+    }).catch(function(err){
+      addMessage('assistant','<div class="result-box err">'+escHtml(err.message)+'</div>');
+      stateBadge('方案读取失败','red');
+    }).then(function(){setBusy(false);scrollBottom();});
+  }
+  function baseIntent(){return Object.assign({},descriptionIntent||{});}
   function loadStageResult(kind){
     if(stageNodes[kind])return Promise.resolve();
     if(kind==='extract'&&stagePending.parse)return stagePending.parse.then(function(){return loadStageResult('extract');});
     if(!fileId)return Promise.resolve();
     if(stagePending[kind])return stagePending[kind];
+    if(kind==='extract')return loadSourceResults(true);
     stagePending[kind]=api('/api/sources/'+fileId+'/stage-results').then(function(result){
-      renderStageResult(kind,result[kind]);
+      renderStageResult(kind,result.parse||result);
     }).catch(function(err){
       addMessage('assistant','<div class="result-box err">'+escHtml((kind==='parse'?'解析':'抽取')+'结果读取失败：'+err.message)+'</div>');
     }).finally(function(){stagePending[kind]=null;});
@@ -138,32 +192,33 @@
   }
   function finishPlan(status){
     phase='idle';
-    return api('/api/sources/'+fileId+'/load-plan').then(function(plan){
-      currentPlan=plan;renderPlan(plan);
-      stateBadge(statusNames[plan.status]||plan.status,plan.status==='ready'?'green':'yellow');
-      loadStageResult('parse');loadStageResult('extract');
+    return loadSourceResults(false).then(function(detail){
+      var list=resultList(detail);
+      loadStageResult('parse');
       if(status.error)addMessage('assistant','<div class="result-box err">'+escHtml(status.error)+'</div>');
-      setBusy(false);
+      if(list.length)selectResult(Number(list[0].id));
+      else{stateBadge('抽取完成，无结果','yellow');setBusy(false);}
     }).catch(function(err){
-      stateBadge('规划读取失败','red');setBusy(false);
+      stateBadge('结果读取失败','red');setBusy(false);
       addMessage('assistant','<div class="result-box err">'+escHtml(err.message)+'</div>');
     });
   }
   function send(){
-    if(busy||!file||!$('prompt').value.trim())return;
+    if(busy||!uploads.length||!$('prompt').value.trim())return;
     var description=$('prompt').value.trim();
     if(expanded)setComposerExpanded(false);
-    addMessage('user','<span class="file-ref">附件：'+escHtml(file.name)+'</span>'+escHtml(description));
-    var upload=file;setFile(null);$('prompt').value='';updateSend();
-    currentIntent={description:description,auto_load:false};currentPlan=null;fileId=null;planNode=null;
-    stageNodes={};stagePending={};tableOptions=null;
+    addMessage('user','<span class="file-ref">附件：'+escHtml(uploads.map(function(f){return f.name;}).join('、'))+'</span>'+escHtml(description));
+    var pending=uploads.slice();setFiles(null);$('prompt').value='';updateSend();
+    currentIntent={description:description};descriptionIntent=Object.assign({},currentIntent);currentPlan=null;fileId=null;planNode=null;
+    stageNodes={};stagePending={};tableOptions=null;results=[];resultNode=null;
+    selectedResultId=null;resultIntents={};
     setBusy(true);stateBadge('正在上传','blue');addProgress('正在提交附件与处理需求');
-    b64(upload).then(function(data){
+    Promise.all(pending.map(b64)).then(function(encoded){
       return api('/api/auto/process',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({files:[{name:upload.name,data:data}],intent:currentIntent})});
+        body:JSON.stringify({files:encoded.map(function(data,i){return {name:pending[i].name,data:data};}),intent:currentIntent})});
     }).then(function(result){
       fileId=result.file_id;currentIntent.file_id=fileId;phase='processing';
-      stateBadge('正在解析与抽取','blue');progressNode.body.querySelector('b').textContent='正在解析文档、生成规则并抽取字段';
+      stateBadge('正在解析并生成多个抽取结果','blue');progressNode.body.querySelector('b').textContent='正在解析文档、生成规则并抽取多个独立结果';
       poll();
     }).catch(function(err){
       stopProgress(err.message);phase='idle';setBusy(false);stateBadge('提交失败','red');
@@ -171,14 +226,17 @@
     });
   }
   function replan(patch,button){
-    if(!fileId||busy)return;
+    if(!selectedResultId||busy)return;
+    var resultId=selectedResultId;
     setBusy(true);if(button)button.disabled=true;
     var next=Object.assign({},currentIntent);
     Object.keys(patch).forEach(function(key){if(patch[key]===null)delete next[key];else next[key]=patch[key];});
-    currentIntent=Object.assign(next,{auto_load:false});
-    delete currentIntent.mapping;delete currentIntent.confirmed;
-    api('/api/sources/'+fileId+'/load-plan',{method:'POST',headers:{'Content-Type':'application/json'},
+    currentIntent=Object.assign({},next);
+    delete currentIntent.confirmed;
+    resultIntents[resultId]=currentIntent;
+    api('/api/extract-results/'+resultId+'/load-plan',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({intent:currentIntent})}).then(function(plan){
+      if(selectedResultId!==resultId)return;
       currentPlan=plan;renderPlan(plan);stateBadge(statusNames[plan.status]||plan.status,plan.status==='ready'?'green':'yellow');
       setBusy(false);
     }).catch(function(err){
@@ -218,7 +276,7 @@
     var old=planNode;planNode=addMessage('assistant','','plan-card');
     if(old)old.remove();
     var status=statusNames[plan.status]||plan.status;
-    var html='<div class="plan-head"><b>处理方案</b><span class="spacer"></span>'+
+    var html='<div class="plan-head"><b>结果 #'+escHtml(selectedResultId)+' · 入库方案</b><span class="spacer"></span>'+
       '<span class="badge '+(plan.status==='ready'?'green':'yellow')+'">'+escHtml(status)+'</span></div><div class="plan-body">'+
       '<p>'+escHtml(plan.message||'')+'</p>';
     var target=plan.target||{},mapping=plan.mapping||{};
@@ -233,7 +291,7 @@
         fields.map(function(f){return '<th>'+escHtml(f.name)+'</th>';}).join('')+
         '</tr></thead><tbody><tr>'+fields.map(function(f){return '<td>'+escHtml((f.samples||[])[0]||'—')+'</td>';}).join('')+
         '</tr></tbody></table></div><p style="margin:7px 0 0">共 '+escHtml(mapping.record_count||'—')+
-        ' 条记录 · <a href="/preview?file='+fileId+'" target="_blank">打开完整预览与血缘 →</a></p></div>';
+        ' 条记录 · <a href="/preview?file='+fileId+'&amp;result='+selectedResultId+'" target="_blank">打开完整预览与血缘 →</a></p></div>';
     }
     var recs=plan.recommendations||[];
     if(recs.length){
@@ -335,41 +393,48 @@
     scrollBottom();
   }
   function confirmLoad(){
-    if(busy||!fileId)return;
-    var button=planNode&&planNode.querySelector('[data-confirm]');
+    if(busy||!selectedResultId)return;
+    var resultId=selectedResultId,button=planNode&&planNode.querySelector('[data-confirm]');
     var plan=currentPlan||{},target=plan.target||{};
-    if(!window.confirm('确认将抽取结果写入 '+target.table+'（数据源 #'+target.datasource_id+'）？\n此操作会修改业务数据库。'))return;
-    setBusy(true);if(button)button.disabled=true;addProgress('正在创建入库映射并写入数据库');
-    api('/api/sources/'+fileId+'/load-plan/apply',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({intent:Object.assign({},currentIntent,{auto_load:false})})}).then(function(){
-      phase='loading';stateBadge('正在入库','cyan');poll();
+    if(!window.confirm('仅将抽取结果 #'+resultId+' 写入 '+target.table+'（数据源 #'+target.datasource_id+'）？\n此操作会修改业务数据库，其他结果不受影响。'))return;
+    setBusy(true);if(button)button.disabled=true;addProgress('正在确认映射并写入所选结果');
+    api('/api/extract-results/'+resultId+'/load-plan/apply',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({intent:Object.assign({},currentIntent,{confirmed:true})})}).then(function(){
+      phase='loading';stateBadge('所选结果正在入库','cyan');poll();
     }).catch(function(err){
       stopProgress(err.message);phase='idle';setBusy(false);if(button)button.disabled=false;stateBadge('入库未启动','red');
       addMessage('assistant','<div class="result-box err">'+escHtml(err.message)+'</div>');
     });
   }
   function finishLoad(status){
-    phase='idle';setBusy(false);stateBadge(status.error?'入库失败':'入库完成',status.error?'red':'green');
-    api('/api/sources/'+fileId).then(function(detail){
-      var f=detail.file||{},load=f.load||{};
-      var html='<div class="result-box '+(f.state==='failed'?'err':'')+'"><b>'+(f.state==='failed'?'入库失败':'入库完成')+'</b><br>'+
-        '目标：'+escHtml(load.target_table||'—')+'<br>资料状态：'+escHtml(f.state)+
-        '<br><a href="/preview?file='+fileId+'" target="_blank">查看记录与入库血缘 →</a></div>';
-      addMessage('assistant',html);
-      if(f.error)addMessage('assistant','<div class="result-box err">'+escHtml(f.error)+'</div>');
+    phase='idle';setBusy(false);stateBadge(status.error?'入库失败':'结果入库完成',status.error?'red':'green');
+    var resultId=selectedResultId;
+    Promise.all([api('/api/extract-results/'+resultId),api('/api/extract-results/'+resultId+'/load-log')]).then(function(values){
+      var result=values[0].result||values[0],logs=values[1];
+      var receipts=logs.items||logs.receipts||logs.load_logs||(Array.isArray(logs)?logs:[]);
+      var binding=values[0].load_binding||{},failed=(binding.status==='failed'||status.error);
+      var html='<div class="result-box '+(failed?'err':'')+'"><b>抽取结果 #'+escHtml(resultId)+(failed?' 入库失败':' 入库完成')+'</b><br>'+
+        '目标：'+escHtml(binding.target_table||'—')+'<br>回执：'+escHtml(receipts.length)+' 条<br>'+
+        '<button type="button" class="btn ghost mini" data-result-receipts>查看回执与隔离记录</button> '+
+        '<a href="/preview?file='+fileId+'&amp;result='+resultId+'" target="_blank">查看记录与入库血缘 →</a></div>';
+      var body=addMessage('assistant',html);
+      var receiptButton=body.querySelector('[data-result-receipts]');
+      if(receiptButton)receiptButton.onclick=function(){openReceiptDrawer(fileId,resultId);};
+      if(status.error)addMessage('assistant','<div class="result-box err">'+escHtml(status.error)+'</div>');
+      return loadSourceResults(false).then(function(){renderResults(results);});
     }).catch(function(err){addMessage('assistant','<div class="result-box err">'+escHtml(err.message)+'</div>');});
   }
   function newChat(){
     if(busy)return;
     if(expanded)setComposerExpanded(false);
-    clearTimeout(timer);fileId=null;currentIntent=null;currentPlan=null;phase='idle';planNode=null;progressNode=null;
-    stageNodes={};stagePending={};tableOptions=null;setFile(null);
+    clearTimeout(timer);fileId=null;currentIntent=null;descriptionIntent=null;currentPlan=null;phase='idle';planNode=null;progressNode=null;
+    stageNodes={};stagePending={};tableOptions=null;results=[];resultNode=null;selectedResultId=null;resultIntents={};setFiles(null);
     $('prompt').value='';$('messages').querySelectorAll('.msg').forEach(function(n){n.remove();});
     $('welcome').hidden=false;stateBadge('准备就绪','blue');updateSend();
   }
   $('pickFile').onclick=function(){$('fileInput').click();};
-  $('fileInput').onchange=function(){chooseFile(this.files[0]);};
-  $('removeFile').onclick=function(){setFile(null);};
+  $('fileInput').onchange=function(){chooseFiles(this.files);};
+  $('removeFile').onclick=function(){setFiles(null);};
   $('expandComposer').onclick=function(){setComposerExpanded(!expanded);};
   $('collapseComposer').onclick=function(){setComposerExpanded(false);};
   $('composerBackdrop').onclick=function(){setComposerExpanded(false);};
@@ -390,6 +455,6 @@
   });
   ['dragenter','dragover'].forEach(function(ev){$('dropZone').addEventListener(ev,function(e){e.preventDefault();if(!busy)$('dropZone').classList.add('on');});});
   ['dragleave','drop'].forEach(function(ev){$('dropZone').addEventListener(ev,function(e){e.preventDefault();$('dropZone').classList.remove('on');});});
-  $('dropZone').addEventListener('drop',function(e){var f=e.dataTransfer.files[0];if(f&&!busy)chooseFile(f);});
+  $('dropZone').addEventListener('drop',function(e){var files=e.dataTransfer.files;if(files.length&&!busy)chooseFiles(files);});
   stateBadge('准备就绪','blue');updateSend();
 })();

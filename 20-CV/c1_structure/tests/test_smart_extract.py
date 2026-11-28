@@ -30,7 +30,7 @@ def _doc():
 
 
 def _tpl():
-    return {'mapping_json': {
+    return {'extraction_spec_json': {
         'spec_version': 3,
         'records': {'strategy': 'all'},
         'fields': [
@@ -97,7 +97,7 @@ class SmartExtractTest(unittest.TestCase):
 
     def test_no_fields_returns_empty(self):
         self.assertEqual(smart_extract.build_smart(
-            _doc(), {'mapping_json': {'spec_version': 3}}), [])
+            _doc(), {'extraction_spec_json': {'spec_version': 3}}), [])
 
     def test_missing_config_fails_loudly(self):
         old = (config.LLM_BASE_URL, config.LLM_API_KEY, config.LLM_MODEL)

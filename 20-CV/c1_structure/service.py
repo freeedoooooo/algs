@@ -37,6 +37,7 @@ STATE = {
     'logs': [], 'progress': 0, 'stage': '',
     'log_file': None,
     'rule': None, 'file_id': None, 'task_id': None,
+    'extract_results': [],
 }
 LOCK = threading.Lock()
 
@@ -87,29 +88,35 @@ def register_file(name, data):
 
 
 def _passthrough_rule():
-    """内存默认：原始透传（空 mapping → collect.passthrough）。
-    不落库、不占 id；未指定/未绑定规则时恒用它，不受库内其他规则影响。"""
-    return {'name': '原始透传', 'version': 1,
-            'version_id': None, 'rule_id': None,
-            'schema_json': {'fields': []},
-            'mapping_json': {}, 'transform_json': None}
+    """内存默认：原始透传（空 mapping → collect.passthrough）。"""
+    return {'name': '原始透传', 'rule_id': None,
+            'output_schema_json': {'fields': []},
+            'extraction_spec_json': {}, 'transform_json': None}
 
 
-def resolve_rule(version_id=None):
-    """抽取规则版本解析；未指定版本恒用内存默认「原始透传」，
-    不再从库里取第一条（避免用户新建规则后悄悄变成默认）。
-    显式指定 version_id 找不到仍报错，避免静默替换用户选择。"""
-    if version_id is None:
+def resolve_rule(rule_id=None):
+    """按规则 ID 读取当前定义；规则没有版本，显式指定找不到时报错。"""
+    if rule_id is None:
         return _passthrough_rule()
     catalog = _load('store.catalog')
-    tv = catalog.get_rule_version(version_id=version_id)
-    if not tv:
-        raise RuntimeError('抽取规则版本不存在')
-    return {'name': tv['name'], 'version': tv['version'],
-            'version_id': tv['id'], 'rule_id': tv['rule_id'],
-            'schema_json': tv['schema_json'],
-            'mapping_json': tv['mapping_json'],
-            'transform_json': tv['transform_json']}
+    rule = catalog.get_rule(rule_id)
+    if not rule:
+        raise RuntimeError('抽取规则不存在')
+    return {'name': rule['name'], 'rule_id': rule['id'],
+            'output_schema_json': rule['output_schema_json'],
+            'extraction_spec_json': rule['extraction_spec_json'],
+            'transform_json': None}
+
+
+def resolve_rule_snapshot(snapshot):
+    """从抽取结果快照恢复执行模板，不依赖规则后续是否被修改。"""
+    snapshot = snapshot or {}
+    spec = snapshot.get('extraction_spec') or snapshot.get('extraction_spec_json')
+    schema = snapshot.get('output_schema') or snapshot.get('output_schema_json')
+    return {'name': snapshot.get('name') or '规则快照',
+            'rule_id': snapshot.get('rule_id'),
+            'output_schema_json': schema or {},
+            'extraction_spec_json': spec or {}, 'transform_json': None}
 
 
 def launch(paths, params, warns, ctx, tpl=None):
@@ -142,7 +149,7 @@ def launch(paths, params, warns, ctx, tpl=None):
                      logs=[], progress=0, stage='batch',
                      log_file=label + '.log',
                      rule=tpl, file_id=primary, task_id=primary,
-                     test_mode=False)
+                     test_mode=False, extract_results=[])
     log.stage('batch', '资料 {} · 收到 {} 个文件'.format(primary, len(paths)))
     log.info('params', '生效参数：{}'.format(
         ', '.join('{}={}'.format(k, v) for k, v in params.items()
@@ -312,109 +319,116 @@ def task_batch(paths, params=None, log=None, task_ctx=None, finalize=True):
 # ---- 抽取引擎（与解析解耦）：parse.json 纯投影 → staging 三表 ----
 
 def extract_records(doc, tpl):
-    """规则版本 → 记录列表；解析、抽取、入库可分别测试的纯编排边界。"""
-    spec = tpl.get('mapping_json') or {}
+    """规则当前定义或结果快照 → 记录列表；保持纯编排边界。"""
+    spec = tpl.get('extraction_spec_json') or {}
     if spec.get('spec_version') == 3:
         return _load('smart_extract').build_smart(doc, tpl)
     return _load('collect').build(doc, tpl)
 
 
-def run_extract(file_id, force=False, rule_version_id=None):
-    """执行抽取：回读 parse.json → 规则分流 → save_records。
-    spec_version 缺省/1/2 走 collect.build（纯函数）；=3 走 smart_extract。
-    rule_version_id=None/0：本次走内存默认「原始透传」，不回写配置；
-    正整数按版本 id 解析，抽取成功后回写资料绑定（M4，Agent 选规则可追溯）。
-    资料已配置 rule_version_id 不参与本次抽取（由 UI 显式传值）。
-
-    仅处理 to_extract；已有暂存记录（to_review/to_load）须 force=true——
-    重抽先删后插，校验结论清零。loading/loaded 拒绝；缺 parse.json 拒绝。"""
-    catalog = _load('store.catalog')
-    content = _load('store.content')
-    collect = _load('collect')
-    errors = _load('store.errors')
-    if STATE['running']:
-        raise errors.Conflict('解析进行中，请等待其完成后再抽取')
-    f = catalog.get_file(file_id)
-    if f is None:
-        raise errors.NotFound('资料不存在')
-    state = f['state']
-    if state in ('loading', 'loaded'):
-        raise errors.Conflict('资料入库中/已入库，不能再抽取')
-    if state not in ('to_extract', 'to_review', 'to_load'):
-        raise errors.Conflict('资料状态为 {}，无解析产物可抽取'.format(state))
-    if state != 'to_extract' and not force:
-        raise errors.Conflict('资料已有暂存记录，重新抽取将覆盖校验结论（须显式确认）')
-    vid = None if rule_version_id in (None, 0) else rule_version_id
-    tpl = resolve_rule(vid)
-    doc = content.get_extract(file_id)
-    if doc is None:
-        raise errors.Conflict('资料缺少解析产物，请重新解析')
-    logger.info('开始手动抽取：file_id=%s rule_version_id=%s force=%s',
-                file_id, vid, force)
-    try:
-        recs = extract_records(doc, tpl)
-        catalog.clear_load_logs(file_id)
-        content.save_records(collect.build_records_doc(
-            doc, recs, task_id=file_id,
-            task_file_id=file_id, file_id=file_id,
-            rule={'name': tpl['name'], 'version': tpl['version']}))
-        # 显式指定版本时回写绑定：抽取用的规则即资料当前规则（Agent 自动选规则可追溯）。
-        # rule_version_id=None/0 的透传调用不回写，保持 API 兼容与"不抹配置"语义。
-        if vid is not None:
-            catalog.set_rule(file_id, vid)
-        catalog.set_state(file_id, 'to_review', None)
-    except Exception:
-        logger.exception('手动抽取失败：file_id=%s rule_version_id=%s',
-                         file_id, vid)
-        raise
-    logger.info('手动抽取完成：file_id=%s records=%s rule=%s v%s',
-                file_id, len(recs), tpl.get('name'), tpl.get('version'))
-    return {'ok': True, 'file_id': file_id,
-            'files': [{'file_id': file_id, 'name': f['name'],
-                       'records_n': len(recs)}]}
+def _rule_snapshot(tpl):
+    return {'name': tpl.get('name'), 'rule_id': tpl.get('rule_id'),
+            'output_schema': tpl.get('output_schema_json') or {},
+            'extraction_spec': tpl.get('extraction_spec_json') or {}}
 
 
-def derive_review_state(file_id):
-    """校验动作提交后重算派生态：to_review ↔ to_load——
-    全部记录已定论（无 pending/edited/rejected 且有记录）→ to_load，
-    否则回 to_review。只动资料态，不碰记录。返回新状态。"""
+def run_extract(doc_id, force=False, rule_id=None, extract_result_id=None):
+    """执行一条规则并覆盖该文档对应的当前抽取结果。"""
     catalog = _load('store.catalog')
     content_db = _load('store.content_db')
-    f = catalog.get_file(file_id)
-    if f is None or f['state'] not in ('to_review', 'to_load'):
-        return None
-    c = content_db.gate_counts(file_id)
-    target = ('to_load'
-              if c['records_n'] and not (c['pending'] + c['edited']
-                                         + c['rejected'])
-              else 'to_review')
-    if target != f['state']:
-        catalog.set_state(file_id, target, None)
-    return target
-
-
-def approve_all(file_id):
-    """执行校验（全部通过）：把该资料所有待审(pending/edited)记录批量
-    设为 confirmed，推进到 to_load；拒绝的记录不动（须人工处理），
-    有 rejected 时保持 to_review。仅 to_review/to_load 可执行。"""
-    catalog = _load('store.catalog')
     content = _load('store.content')
     errors = _load('store.errors')
-    f = catalog.get_file(file_id)
+    if STATE['running']:
+        raise errors.Conflict('已有任务正在处理，请等待其完成')
+    f = catalog.get_file(doc_id)
     if f is None:
         raise errors.NotFound('资料不存在')
-    if f['state'] not in ('to_review', 'to_load'):
-        raise errors.Conflict('资料状态为 {}，无待校验记录'.format(f['state']))
-    doc = _load('store.content_db').get_records(file_id)
-    recs = (doc or {}).get('files', [{}])[0].get('records', [])
-    idxs = [r['index'] for r in recs
-            if (r.get('review') or {}).get('state') in ('pending', 'edited')]
-    n = content.set_review(file_id, idxs, 'confirmed') if idxs else 0
-    new_state = derive_review_state(file_id)
-    logger.info('记录复核完成：file_id=%s updated=%s file_state=%s',
-                file_id, n, new_state)
-    return {'ok': True, 'file_id': file_id, 'updated': n,
-            'file_state': new_state}
+    if f['state'] == 'parsing':
+        raise errors.Conflict('资料解析中，暂不能抽取')
+    if extract_result_id is not None:
+        current = catalog.get_extract_result(extract_result_id)
+        if not current or current['doc_id'] != doc_id:
+            raise errors.NotFound('抽取结果不存在')
+        if rule_id is not None and rule_id != current['rule_id']:
+            raise errors.BadRequest('rule_id 与抽取结果不一致')
+        tpl = resolve_rule_snapshot(current['rule_snapshot_json'])
+        rule_id = current['rule_id']
+        exists = bool(content_db.gate_counts(extract_result_id)['records_n'])
+    else:
+        if not isinstance(rule_id, int) or isinstance(rule_id, bool) or rule_id <= 0:
+            raise errors.BadRequest('请选择抽取规则')
+        tpl = resolve_rule(rule_id)
+        current = next((r for r in catalog.list_extract_results(doc_id)
+                        if r['rule_id'] == rule_id), None)
+        exists = bool(current and current['record_count'])
+    if exists and not force:
+        raise errors.Conflict('该规则已有抽取结果，重新抽取会覆盖记录与入库绑定')
+    doc = content.get_extract(doc_id)
+    if doc is None:
+        raise errors.Conflict('资料缺少解析产物，请重新解析')
+    result_id = catalog.ensure_extract_result(
+        doc_id, rule_id, _rule_snapshot(tpl), status='running')
+    logger.info('开始抽取：doc_id=%s rule_id=%s extract_result_id=%s force=%s',
+                doc_id, rule_id, result_id, force)
+    try:
+        recs = extract_records(doc, tpl)
+        spec = tpl.get('extraction_spec_json') or {}
+        if spec.get('spec_version') == 2:
+            from . import smart_extract
+            recs, fallback = smart_extract.build_row_fallback(doc, tpl, recs)
+            if fallback.get('attempted'):
+                logger.info('逐行兜底：extract_result_id=%s attempted=%s filled=%s failed=%s',
+                            result_id, fallback['attempted'], fallback['filled'],
+                            len(fallback['failed']))
+        content_db.save_records(result_id, recs)
+        catalog.finish_extract_result(result_id, status='ready')
+        catalog.set_state(doc_id, 'to_review', None)
+    except Exception as exc:
+        catalog.finish_extract_result(result_id, status='failed', error=str(exc))
+        logger.exception('抽取失败：doc_id=%s rule_id=%s result_id=%s',
+                         doc_id, rule_id, result_id)
+        raise
+    logger.info('抽取完成：doc_id=%s rule_id=%s result_id=%s records=%s',
+                doc_id, rule_id, result_id, len(recs))
+    return {'ok': True, 'doc_id': doc_id, 'rule_id': rule_id,
+            'extract_result_id': result_id, 'records_n': len(recs)}
+
+
+def derive_review_state(extract_result_id):
+    """按单个结果的复核结论更新资料汇总态。"""
+    catalog = _load('store.catalog')
+    result = catalog.get_extract_result(extract_result_id)
+    if result is None:
+        return None
+    counts = _load('store.content_db').gate_counts(extract_result_id)
+    results = catalog.list_extract_results(result['doc_id'])
+    total = sum(_load('store.content_db').gate_counts(r['id'])['records_n']
+                for r in results)
+    blocked = sum(sum(_load('store.content_db').gate_counts(r['id'])[k]
+                      for k in ('pending', 'edited', 'rejected')) for r in results)
+    state = 'to_load' if total and not blocked else 'to_review'
+    catalog.set_state(result['doc_id'], state, None)
+    return state
+
+
+def approve_all(extract_result_id):
+    """确认单个抽取结果中全部待审记录。"""
+    catalog = _load('store.catalog')
+    content_db = _load('store.content_db')
+    errors = _load('store.errors')
+    result = catalog.get_extract_result(extract_result_id)
+    if result is None:
+        raise errors.NotFound('抽取结果不存在')
+    records = content_db.get_records(extract_result_id) or {}
+    recs = records.get('records') or [
+        rec for group in records.get('files') or [] for rec in group['records']]
+    indexes = [r['index'] for r in recs
+               if (r.get('review') or {}).get('state') in ('pending', 'edited')]
+    n = content_db.set_review(extract_result_id, indexes, 'confirmed') if indexes else 0
+    state = derive_review_state(extract_result_id)
+    return {'ok': True, 'doc_id': result['doc_id'],
+            'extract_result_id': extract_result_id, 'updated': n,
+            'doc_state': state}
 
 
 def reparse(file_id, params=None, test_mode=False):
@@ -424,7 +438,6 @@ def reparse(file_id, params=None, test_mode=False):
     catalog = _load('store.catalog')
     content_db = _load('store.content_db')
     artifact = _load('store.artifact')
-    load = _load('store.catalog.load')
     errors = _load('store.errors')
     if STATE['running']:
         raise errors.Conflict('有解析正在进行，暂不能重放')
@@ -448,11 +461,8 @@ def reparse(file_id, params=None, test_mode=False):
         with open(path, 'wb') as fh:
             fh.write(src['data'])
         if not test_mode:
-            content_db.purge_records(file_id)
+            catalog.clear_document_results(file_id)
             artifact.delete_all(file_id)
-            load.clear_load_logs(file_id)
-            catalog.clear_quarantine(file_id)
-            catalog.set_rule(file_id, None)
             catalog.set_state(file_id, 'pending', '')
         ctx = [{'file_id': file_id, 'name': name, 'path': path,
                 'state': f['state']}]
@@ -475,7 +485,7 @@ def reparse(file_id, params=None, test_mode=False):
                          logs=[], progress=0, stage='batch',
                          log_file=label + '.log',
                          rule=None, file_id=file_id, task_id=file_id,
-                         test_mode=test_mode)
+                         test_mode=test_mode, extract_results=[])
         log.stage('batch', '资料 {} · {}'.format(
             file_id, '测试重解析（保留正式数据）' if test_mode else '重放解析（原地）'))
         threading.Thread(target=task_batch,
@@ -492,79 +502,40 @@ def reparse(file_id, params=None, test_mode=False):
 
 # ---- P2 入库引擎：手动闸门 → 后台逐条写入＋幂等回执 ----
 
-def _snapshot_names(snap):
-    """运行时只读映射快照；快照缺失即拒绝，不再回查抽取规则做契约校验。"""
-    errors = _load('store.errors')
-    names = [f.get('name') for f in (snap or {}).get('fields') or []
-             if isinstance(f, dict) and f.get('name')]
-    if not names:
-        raise errors.BadRequest('入库映射缺少抽取输出快照，请重新保存映射')
-    return names
-
-
-def launch_load(file_id, target=None, *, auto=False, background=True):
-    """POST /api/sources/{id}/load 的编排：入库时绑定目标。
-    未绑定须带 target={datasource_id,load_table_id}：归属/规则/预检/门禁
-    全过才登记绑定＋起线程，任何一步失败都不落绑定（下次可另选）。
-    已绑定沿用原绑定（带 target→409，回执语义）。
-    auto=True 用于自动处理：跳过人工 confirmed 门禁；background=False 同步执行。"""
+def launch_load(extract_result_id, *, background=True):
+    """执行已显式确认的单结果入库绑定；预检失败不写业务库。"""
     catalog = _load('store.catalog')
     errors = _load('store.errors')
-    if STATE['running'] and not auto:
-        raise errors.Conflict('已有资料正在处理，请等待其完成')
-    f = catalog.get_file(file_id)
-    if f is None:
-        raise errors.NotFound('资料不存在')
-    state = f['state']
-    if state == 'loaded':
-        raise errors.Conflict('资料已入库')
-    if state == 'loading':
-        raise errors.Conflict('入库进行中')
-    if not auto and state != 'to_load':
-        raise errors.Conflict(
-            '资料状态为 {}，未到「待入库」（须全部记录校验确认）'.format(state))
-    bound = (f['load_datasource_id'], f['load_table_id']) \
-        if f.get('load_table_id') else None
-    if bound:
-        if target:
-            raise errors.Conflict('已绑定入库目标，不可修改（重试将沿用原目标）')
-        ds_id, lt_id = bound
-    else:
-        if not target:
-            raise errors.BadRequest('请选择业务库与入库映射')
-        ds_id, lt_id = target['datasource_id'], target['load_table_id']
-    lt = catalog.get_load_table(lt_id)
-    if lt is None:
-        raise errors.NotFound('入库映射不存在')
-    ds = catalog.get_datasource(ds_id)
-    if ds is None:
-        raise errors.NotFound('业务库不存在')
-    if lt['datasource_id'] != ds_id:
-        raise errors.BadRequest('入库映射不属于所选业务库')
-    # 抽取规则仅作参考：契约来自映射快照；transform 仅存量 v1 规则仍需要
-    tpl = resolve_rule(f['rule_version_id']) if f.get('rule_version_id') else None
-    fields = _snapshot_names(lt.get('source_snapshot'))
+    if STATE['running']:
+        raise errors.Conflict('已有任务正在处理，请等待其完成')
+    result = catalog.get_extract_result(extract_result_id)
+    if result is None:
+        raise errors.NotFound('抽取结果不存在')
+    binding = catalog.get_binding(extract_result_id=extract_result_id)
+    if binding is None:
+        raise errors.BadRequest('该抽取结果尚未配置入库目标')
+    if binding['status'] != 'confirmed':
+        raise errors.Conflict('入库绑定尚未显式确认')
+    lt = catalog.get_load_table(binding['load_table_id'])
+    ds = catalog.get_datasource(binding['datasource_id'])
+    if lt is None or ds is None:
+        raise errors.NotFound('入库目标不存在')
     loader = _load('store.loader')
-    logger.info('入库预检开始：file_id=%s datasource_id=%s table=%s mode=%s',
-                file_id, ds_id, lt['target_table'], lt['write_mode'])
-    loader.preflight(ds, lt['target_table'], lt['fields'],
-                     lt['write_mode'], fields)
-    logger.info('入库预检通过：file_id=%s fields=%s', file_id, len(fields))
-    doc = _load('store.content').get_records(file_id)
-    recs = [r for fs in (doc['files'] if doc else []) for r in fs['records']]
+    loader.preflight(ds, lt['target_table'], binding['field_map_json'],
+                     binding['write_mode'], list(binding['field_map_json']),
+                     binding['business_keys_json'])
+    doc = _load('store.content_db').get_records(extract_result_id)
+    recs = [r for f in (doc or {}).get('files') or [] for r in f['records']]
     if not recs:
-        raise errors.Conflict('暂无暂存记录，无法入库')
-    if not auto:
-        c = loader.review_gate(recs)
-        blocked = c['pending'] + c['edited'] + c['rejected']
-        if blocked:
-            raise errors.Conflict(
-                '{} 条待校验 / {} 条已修改未确认 / {} 条已拒绝，'
-                '请先完成校验：仅当全部记录为「已确认」时才可入库'.format(
-                    c['pending'], c['edited'], c['rejected']))
-    if not bound:
-        catalog.set_load(file_id, ds_id, lt_id)
-    label = 'file_{}_load'.format(file_id)
+        raise errors.Conflict('暂无抽取记录，无法入库')
+    counts = loader.review_gate(recs)
+    blocked = counts['pending'] + counts['edited'] + counts['rejected']
+    if blocked:
+        raise errors.Conflict(
+            '{} 条待校验 / {} 条已修改未确认 / {} 条已拒绝，请先完成校验'.format(
+                counts['pending'], counts['edited'], counts['rejected']))
+    catalog.start_binding(binding['id'])
+    label = 'result_{}_load'.format(extract_result_id)
     tasklog = _load('tasklog')
     log = tasklog.TaskLog(label, log_path=os.path.join(config.LOG_DIR,
                                                        label + '.log'),
@@ -574,65 +545,59 @@ def launch_load(file_id, target=None, *, auto=False, background=True):
                      cases=[], started=time.time(), elapsed=0,
                      params={}, warnings=[], logs=[], progress=0,
                      stage='load', log_file=label + '.log',
-                     rule=tpl, file_id=file_id, task_id=file_id)
-    log.stage('load', '资料 {} 入库 → {}.{}（{} · 共 {} 条）'.format(
-        file_id, ds['db_name'], lt['target_table'], lt['write_mode'],
-        len(recs)))
+                     rule=None, file_id=result['doc_id'],
+                     task_id=extract_result_id, extract_results=[])
+    log.stage('load', '抽取结果 {} 入库 → {}.{}（{} · 共 {} 条）'.format(
+        extract_result_id, ds['db_name'], lt['target_table'],
+        binding['write_mode'], len(recs)))
     if background:
         threading.Thread(target=run_load,
-                         args=(file_id, ds, lt, tpl, log),
+                         args=(extract_result_id, binding, ds, lt, log),
                          daemon=True).start()
     else:
-        run_load(file_id, ds, lt, tpl, log)
-    return {'ok': True, 'file_id': file_id}
+        run_load(extract_result_id, binding, ds, lt, log)
+    return {'ok': True, 'doc_id': result['doc_id'],
+            'extract_result_id': extract_result_id,
+            'load_binding_id': binding['id']}
 
 
-def preview_load(file_id, table_id=None, draft=None):
-    """入库向导 dry-run：镜像 run_load 的分类（回执跳过→转换→去重依据 SELECT），
-    只读目标库，不写、不绑定、不动 STATE。"""
+def preview_load(extract_result_id, draft=None):
+    """单结果入库 dry-run；只读目标库，不创建绑定、不写记录。"""
     catalog = _load('store.catalog')
     errors = _load('store.errors')
     loader = _load('store.loader')
-    f = catalog.get_file(file_id)
-    if f is None:
-        raise errors.NotFound('资料不存在')
-    bound = f.get('load_table_id')
-    if bound:
+    result = catalog.get_extract_result(extract_result_id)
+    if result is None:
+        raise errors.NotFound('抽取结果不存在')
+    binding = catalog.get_binding(extract_result_id=extract_result_id)
+    if binding:
         if draft is not None:
-            raise errors.Conflict('资料已绑定入库目标，预览不再接受草稿')
-        table_id = bound
-    elif table_id is None and draft is None:
-        raise errors.BadRequest('请选择业务库与入库映射')
-    if table_id is not None and draft is not None:
-        raise errors.BadRequest('预览只认一种目标：规则 id 或草稿')
-    if table_id is not None:
-        lt = catalog.get_load_table(int(table_id))
-        if lt is None:
-            raise errors.NotFound('入库映射不存在')
-        ds = catalog.get_datasource(lt['datasource_id'])
-        field_rows, table, wm = lt['fields'], lt['target_table'], lt['write_mode']
-        fields = _snapshot_names(lt.get('source_snapshot'))
-        tpl = resolve_rule(f['rule_version_id']) if f.get('rule_version_id') else None
+            raise errors.Conflict('已有入库绑定，预览不再接受草稿')
+        ds = catalog.get_datasource(binding['datasource_id'])
+        lt = catalog.get_load_table(binding['load_table_id'])
+        cm, bk = binding['field_map_json'], binding['business_keys_json']
+        table, wm = lt['target_table'], binding['write_mode']
     else:
-        ds = catalog.get_datasource(int(draft.get('datasource_id') or 0))
-        field_rows = draft.get('fields') or []
-        table = str(draft.get('target_table') or '')
+        if not isinstance(draft, dict):
+            raise errors.BadRequest('请选择业务库与目标表')
+        try:
+            ds_id = int(draft.get('datasource_id'))
+        except (TypeError, ValueError):
+            raise errors.BadRequest('请选择业务库')
+        ds = catalog.get_datasource(ds_id)
+        table = str(draft.get('target_table') or '').strip()
         wm = str(draft.get('write_mode') or 'upsert')
-        tpl = resolve_rule(f.get('rule_version_id')) if f.get('rule_version_id') else None
-        fields = ([fr.get('rule_field') for fr in field_rows
-                   if isinstance(fr, dict) and fr.get('rule_field')])
-        if isinstance(draft.get('snapshot'), dict):
-            fields = _snapshot_names(draft['snapshot'])
+        cm = draft.get('field_map') if isinstance(draft.get('field_map'), dict) else {}
+        bk = draft.get('business_keys') or draft.get('business_key') or []
     if ds is None:
         raise errors.NotFound('业务库不存在')
-    loader.preflight(ds, table, field_rows, wm, fields)
-    doc = _load('store.content').get_records(file_id)
-    recs = [r for fs in (doc['files'] if doc else []) for r in fs['records']]
+    loader.preflight(ds, table, cm, wm, list(cm), bk)
+    doc = _load('store.content_db').get_records(extract_result_id)
+    recs = [r for f in (doc or {}).get('files') or [] for r in f['records']]
     if not recs:
-        raise errors.Conflict('无暂存记录')
-    cm, bk = loader.fields_to_map(field_rows)
-    transform = (tpl or {}).get('transform_json')
-    receipts = {(r['record_index']) for r in catalog.list_load_logs(file_id)}
+        raise errors.Conflict('无抽取记录')
+    receipts = {r['record_index'] for r in
+                catalog.list_receipts(load_binding_id=binding['id'])} if binding else set()
     counts = {'insert': 0, 'update': 0, 'skip': 0, 'quarantine': 0}
     conn = loader.connect_datasource(ds)
     try:
@@ -642,20 +607,21 @@ def preview_load(file_id, table_id=None, draft=None):
                 continue
             selected = {name: value for name, value in rec['values'].items()
                         if name in cm}
-            vals, errs = loader.apply_transform(selected, transform)
-            if errs:
+            if not selected:
                 counts['quarantine'] += 1
                 continue
             if wm == 'insert':
                 counts['insert'] += 1
                 continue
-            mapped = {cm[k]: v for k, v in vals.items() if k in cm}
-            where = ' AND '.join(
-                '{}=%s'.format(loader._ident(c)) for c in bk)
+            mapped = {cm[k]: v for k, v in selected.items()}
+            missing = [key for key in bk if key not in mapped]
+            if missing:
+                counts['quarantine'] += 1
+                continue
+            where = ' AND '.join('{}=%s'.format(loader._ident(c)) for c in bk)
             with conn.cursor() as cur:
                 cur.execute('SELECT 1 FROM {} WHERE {} LIMIT 1'.format(
-                    loader._ident(table), where),
-                    [mapped[c] for c in bk])
+                    loader._ident(table), where), [mapped[c] for c in bk])
                 found = cur.fetchone() is not None
             if found:
                 counts['update'] += 1
@@ -668,119 +634,122 @@ def preview_load(file_id, table_id=None, draft=None):
     return dict(counts, total=len(recs), write_mode=wm, ok=True)
 
 
-def run_load(file_id, ds, lt, tpl, log):
-    """后台线程：逐记录 回执跳过→transform→写目标库→回执/隔离。
-    单条数据级错误→隔离继续；连接级失败→中止（已写回执保留）→to_load＋说明。
-    平台库写失败→整资料 failed（DB 必选）。完成态最后发布。"""
+def _refresh_doc_load_state(doc_id):
     catalog = _load('store.catalog')
-    content = _load('store.content')
+    results = catalog.list_extract_results(doc_id)
+    bindings = [catalog.get_binding(extract_result_id=r['id']) for r in results]
+    bindings = [b for b in bindings if b]
+    if bindings and all(b['status'] == 'ready' for b in bindings) \
+            and len(bindings) == len(results):
+        catalog.set_state(doc_id, 'loaded', None)
+    elif any(b and b['status'] == 'running' for b in bindings):
+        catalog.set_state(doc_id, 'loading', None)
+    else:
+        catalog.set_state(doc_id, 'to_load', None)
+
+
+def run_load(extract_result_id, binding, ds, lt, log):
+    """逐记录执行已确认绑定；回执、隔离与业务键均按绑定隔离。"""
+    catalog = _load('store.catalog')
     loader = _load('store.loader')
     import pymysql
-    datasource_id = ds['id']
+    binding_id = binding['id']
+    doc_id = binding['doc_id']
     table = lt['target_table']
-    cm, bk = loader.fields_to_map(lt['fields'])
-    wm = lt['write_mode']
-    transform = (tpl or {}).get('transform_json')
+    cm = binding['field_map_json']
+    bk = binding['business_keys_json']
+    wm = binding['write_mode']
     try:
-        catalog.set_state(file_id, 'loading', None)
-        doc = content.get_records(file_id)
-        rid_map = content.record_id_map(file_id)
-        receipts = {r['record_index'] for r in catalog.list_load_logs(file_id)}
-        total = sum(len(f['records']) for f in doc['files'])
+        catalog.set_state(doc_id, 'loading', None)
+        doc = _load('store.content_db').get_records(extract_result_id)
+        rid_map = _load('store.content_db').record_id_map(extract_result_id)
+        receipts = {r['record_index'] for r in
+                    catalog.list_receipts(load_binding_id=binding_id)}
+        recs = [r for f in (doc or {}).get('files') or [] for r in f['records']]
+        total = len(recs)
         written = skipped = quarantined = done = 0
         aborted = None
         conn = loader.connect_datasource(ds)
         try:
-            for f in doc['files']:
-                for rec in f['records']:
-                    done += 1
-                    with LOCK:
-                        STATE['progress'] = int(done / total * 100) if total else 100
-                    if rec['index'] in receipts:
-                        skipped += 1
-                        continue
-                    selected = {name: value for name, value in rec['values'].items()
-                                if name in cm}
-                    vals, errs = loader.apply_transform(selected, transform)
-                    if errs:
+            for rec in recs:
+                done += 1
+                with LOCK:
+                    STATE['progress'] = int(done / total * 100) if total else 100
+                if rec['index'] in receipts:
+                    skipped += 1
+                    continue
+                selected = {name: value for name, value in rec['values'].items()
+                            if name in cm}
+                try:
+                    with conn.cursor() as cur:
+                        action, pk = loader.write_record(
+                            cur, table, cm, selected, wm, bk,
+                            extra_values={'file_id': doc_id,
+                                          'record_id': rid_map.get(
+                                              (extract_result_id, rec['index']))})
+                    conn.commit()
+                except loader.LoadRecordError as exc:
+                    conn.rollback()
+                    catalog.add_quarantine(
+                        doc_id, rec['index'], 'load', exc.msg,
+                        {'values': rec['values']}, extract_result_id=extract_result_id,
+                        load_binding_id=binding_id)
+                    quarantined += 1
+                    log.warn('load', '记录 {} 隔离：{}'.format(rec['index'], exc.msg))
+                    continue
+                except pymysql.MySQLError as exc:
+                    conn.rollback()
+                    if isinstance(exc, (pymysql.IntegrityError,
+                                        pymysql.DataError,
+                                        pymysql.ProgrammingError)):
                         catalog.add_quarantine(
-                            file_id, rec['index'], 'load',
-                            '；'.join(e['reason'] for e in errs),
-                            {'values': rec['values'], 'errors': errs})
+                            doc_id, rec['index'], 'load', str(exc),
+                            {'values': rec['values']},
+                            extract_result_id=extract_result_id,
+                            load_binding_id=binding_id)
                         quarantined += 1
-                        log.warn('load', '记录 {} 隔离：{}'.format(
-                            rec['index'], errs[0]['reason']))
+                        log.warn('load', '记录 {} 隔离：{}'.format(rec['index'], exc))
                         continue
-                    try:
-                        with conn.cursor() as cur:
-                            action, pk = loader.write_record(
-                                cur, table, cm, vals, wm, bk,
-                                extra_values={
-                                    'file_id': file_id,
-                                    'record_id': rid_map.get((file_id, rec['index']))})
-                        conn.commit()
-                    except loader.LoadRecordError as e:
-                        conn.rollback()
-                        catalog.add_quarantine(
-                            file_id, rec['index'], 'load',
-                            e.msg, {'values': rec['values']})
-                        quarantined += 1
-                        log.warn('load', '记录 {} 隔离：{}'.format(
-                            rec['index'], e.msg))
-                        continue
-                    except pymysql.MySQLError as e:
-                        try:
-                            conn.rollback()
-                        except Exception:
-                            pass
-                        if isinstance(e, (pymysql.IntegrityError,
-                                          pymysql.DataError,
-                                          pymysql.ProgrammingError)):
-                            catalog.add_quarantine(
-                                file_id, rec['index'],
-                                'load', str(e), {'values': rec['values']})
-                            quarantined += 1
-                            log.warn('load', '记录 {} 隔离：{}'.format(
-                                rec['index'], e))
-                            continue
-                        aborted = '{}: {}'.format(type(e).__name__, e)
-                        log.error('load', '目标库连接中断，中止：{}'.format(aborted))
-                        break
-                    except OSError as e:
-                        aborted = '{}: {}'.format(type(e).__name__, e)
-                        log.error('load', '目标库连接中断，中止：{}'.format(aborted))
-                        break
-                    catalog.add_load_log(file_id, rec['index'], datasource_id,
-                                         table, pk, action)
-                    written += 1
-                if aborted:
+                    aborted = '{}: {}'.format(type(exc).__name__, exc)
+                    log.error('load', '目标库连接中断，中止：{}'.format(aborted))
                     break
+                except OSError as exc:
+                    aborted = '{}: {}'.format(type(exc).__name__, exc)
+                    log.error('load', '目标库连接中断，中止：{}'.format(aborted))
+                    break
+                catalog.add_receipt(binding_id, rec['index'], pk, action)
+                written += 1
         finally:
-            try:
-                conn.close()
-            except Exception:
-                pass
+            conn.close()
         if aborted:
+            catalog.finish_binding(binding_id, status='failed', error=aborted)
             state, err = 'to_load', '目标库连接中断：{}'.format(aborted)
         elif quarantined:
+            catalog.finish_binding(binding_id, status='failed',
+                                   error='{} 条隔离'.format(quarantined))
             state, err = 'to_load', '{} 条隔离（详见隔离区）'.format(quarantined)
         else:
-            state, err = 'loaded', None
-        catalog.set_state(file_id, state, err)
+            catalog.finish_binding(binding_id, status='ready')
+            state, err = None, None
+        if state:
+            catalog.set_state(doc_id, state, err)
+        else:
+            _refresh_doc_load_state(doc_id)
         log.ok('done', '入库完成：写入 {} · 回执跳过 {} · 隔离 {}'.format(
             written, skipped, quarantined))
         with LOCK:
-            STATE.update(running=False, ready=True, error=err,
+            STATE.update(running=False, ready=err is None, error=err,
                          elapsed=round(time.time()
                                        - (STATE['started'] or time.time()), 1),
                          progress=100, stage='done')
-    except Exception as e:
-        log.error('error', '出错：' + str(e))
+    except Exception as exc:
+        log.error('error', '出错：{}'.format(exc))
         log.error('error', traceback.format_exc(limit=3).strip())
         try:
-            catalog.set_state(file_id, 'failed', str(e))
-        except Exception as e2:
-            log.warn('store', '资料状态写入失败：{}'.format(e2))
+            catalog.finish_binding(binding_id, status='failed', error=str(exc))
+            catalog.set_state(doc_id, 'failed', str(exc))
+        except Exception as store_exc:
+            log.warn('store', '资料状态写入失败：{}'.format(store_exc))
         with LOCK:
-            STATE.update(running=False, ready=False, error=str(e),
+            STATE.update(running=False, ready=False, error=str(exc),
                          stage='error')

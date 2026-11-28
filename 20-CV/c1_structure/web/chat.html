@@ -26,7 +26,7 @@
       <b>智能文档处理</b>
       <button type="button" class="btn ghost mini" id="newChat">新对话</button>
     </div>
-    <p>上传附件并描述信息位置、中文字段和目标表。助手先给出处理方案，数据库写入必须由你确认。</p>
+    <p>上传一份主文档，并可添加多份参考附件。系统先解析一次，再生成多个独立抽取结果；每个结果单独选择目标表和映射，写入数据库必须由你确认。</p>
     <div class="chat-example">
       <b>示例</b>
       <button type="button" data-example="提取设备巡检表中的设备名称、巡检日期和异常描述，目标表为 inspection_record。">设备巡检表 → inspection_record</button>
@@ -36,15 +36,15 @@
   </aside>
   <section class="chat-main">
     <header class="chat-head">
-      <div><h1>今天需要处理什么文档？</h1><p>解析、抽取与入库规划会依次执行，可随时停止在确认环节。</p></div>
+      <div><h1>今天需要处理什么文档？</h1><p>先解析文档，再生成多个独立抽取结果；每次只规划、确认并入库一个结果。</p></div>
       <span class="badge blue" id="chatState">准备就绪</span>
     </header>
     <div class="chat-scroll" id="messages" aria-live="polite">
       <div class="welcome" id="welcome">
         <div class="welcome-icon">AI</div>
         <h2>把文档和处理要求交给我</h2>
-        <p>我会先识别内容并生成中文字段，再推荐目标表和字段映射。<br>你确认方案后，我才会写入数据库。</p>
-        <div class="welcome-steps"><span>1 上传文件</span><span>2 描述需求</span><span>3 确认方案</span></div>
+        <p>我会先解析文档并生成中文字段，再按规则产出多个独立结果。<br>你选择一个结果、确认其目标表和字段映射后，我才会写入数据库。</p>
+        <div class="welcome-steps"><span>1 上传文件</span><span>2 生成多结果</span><span>3 选择并确认</span></div>
       </div>
     </div>
     <div class="composer-backdrop" id="composerBackdrop" hidden></div>
@@ -75,13 +75,13 @@
         <div class="composer-actions">
           <div class="composer-left">
             <button type="button" class="btn ghost mini" id="pickFile">添加附件</button>
-            <input type="file" id="fileInput" hidden accept=".png,.jpg,.jpeg,.bmp,.webp,.tif,.tiff,.pdf,.csv,.txt,.md">
-            <span class="muted" id="composerHint">PDF / 图片 / CSV / 文本，最大 20MB</span>
+            <input type="file" id="fileInput" hidden multiple accept=".png,.jpg,.jpeg,.bmp,.webp,.tif,.tiff,.pdf,.csv,.txt,.md">
+            <span class="muted" id="composerHint">最多 10 份，首份为主文档；每份最大 20MB</span>
           </div>
           <button type="button" class="btn" id="send" disabled>发送</button>
         </div>
       </div>
-      <p class="composer-note">助手生成的规则和字段映射可在传统「抽取」「入库」页面继续检查与调整。</p>
+      <p class="composer-note">规则在「抽取」页维护；每个结果的目标表、字段映射、审核与回执相互独立。</p>
     </div>
   </section>
 </main>

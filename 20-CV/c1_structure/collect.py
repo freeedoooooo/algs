@@ -146,30 +146,24 @@ def apply_mapping(doc, mapping):
 
 
 def build(doc, tpl=None):
-    """按抽取规则分发：mapping 空/无 fields＝passthrough（现状不变），否则选择器消费。
-
-    spec_version=2 → collect_logic.build_logic；缺省/1 走下面两行原分支，
-    一行不改，保证存量规则与任务的逐字段输出完全不变。
-    """
-    mapping = (tpl or {}).get('mapping_json') or {}
-    if mapping.get('spec_version') == 2:
+    """按抽取规则当前定义或结果快照执行。"""
+    spec = (tpl or {}).get('extraction_spec_json') or {}
+    if spec.get('spec_version') == 2:
         from .collect_logic import build_logic
         return build_logic(doc, tpl)
-    if not mapping.get('fields'):
+    if not spec.get('fields'):
         return passthrough(doc)
-    return apply_mapping(doc, mapping)
+    return apply_mapping(doc, spec)
 
 
-def build_records_doc(doc, records, task_id=None, task_file_id=None,
-                      file_id=None, rule=None):
-    """records.json 信封（L2 事实源形态）。"""
+def build_records_doc(doc, records, *, extract_result_id=None, rule=None):
+    """按抽取结果构造 records 信封。"""
     return {
         'schema': RECORDS_SCHEMA,
-        'task_id': task_id,
-        'rule': rule or {'name': '原始透传', 'version': 1},
+        'extract_result_id': extract_result_id,
+        'rule': rule or {'name': '规则结果'},
         'files': [{
-            'task_file_id': task_file_id,
-            'file_id': file_id,
+            'file_id': (doc.get('file') or {}).get('file_id'),
             'name': (doc.get('file') or {}).get('name'),
             'records': records,
         }],

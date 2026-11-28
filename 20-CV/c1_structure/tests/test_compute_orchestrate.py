@@ -115,11 +115,18 @@ class SourceLoader:
 class SourceCatalogLoad:
     def get_datasource(self, ds_id):
         return {'id': ds_id}
-    def list_loaded_documents(self):
-        return [{'datasource_id': 1, 'target_table': 'orders',
-                 'file_id': 6, 'name': '四月.pdf', 'row_count': 2},
-                {'datasource_id': 1, 'target_table': 'orders',
-                 'file_id': 7, 'name': '五月.pdf', 'row_count': 1}]
+    def list_loaded_results(self):
+        return [
+            {'datasource_id': 1, 'target_table': 'orders',
+             'doc_id': 6, 'name': '四月.pdf', 'extract_result_id': 61,
+             'load_binding_id': 601, 'row_count': 2},
+            {'datasource_id': 1, 'target_table': 'orders',
+             'doc_id': 6, 'name': '四月.pdf', 'extract_result_id': 62,
+             'load_binding_id': 602, 'row_count': 3},
+            {'datasource_id': 1, 'target_table': 'orders',
+             'doc_id': 7, 'name': '五月.pdf', 'extract_result_id': 71,
+             'load_binding_id': 701, 'row_count': 1},
+        ]
 
 
 appmod = _load('app')
@@ -132,9 +139,12 @@ orig_load = appmod._load
 appmod._load = lambda name: source_modules[name]
 try:
     source_out = appmod.api_compute_source_documents()
-    check('来源文档按入库回执返回', len(source_out['items']) == 4)
+    check('同资料多个结果按回执独立展开', len(source_out['items']) == 6)
     check('来源文档保留指标关联',
           {x['index_id'] for x in source_out['items']} == {1, 2})
+    check('来源文档按结果回执汇总行数',
+          sorted((x['file_id'], x['row_count']) for x in source_out['items']) ==
+          [(6, 2), (6, 2), (6, 3), (6, 3), (7, 1), (7, 1)])
     check('来源文档表注释只读一次',
           len(source_out['tables']) == 1
           and source_out['tables'][0]['table_comment'] == '销售订单')

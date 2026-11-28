@@ -6,8 +6,9 @@ validate_spec 做"实际返回是否合法"的硬校验（op 词表来自 OPS，
 import json
 
 FIELD_SCHEMA = {
-    'target': '目标列名（必须与用户给的 fields.target 完全一致）',
+    'target': '逻辑字段名（使用中文语义名，不使用数据库物理列名）',
     'type': 'string | number | date | bool',
+    'description': '可选：字段语义说明，不包含数据库列映射',
     'pipeline': [
         {'op': 'cell | kv | row | block | page_text | region_text',
          'source': '表 ref（如 t0），source 算子必填',
@@ -21,16 +22,26 @@ FIELD_SCHEMA = {
 }
 
 
-def generation_schema():
+def generation_schema(multiple_rules=False):
     """模型输出契约（供 prompt 展示；实际校验在 agent.validate.validate_spec）。"""
-    return {
+    spec = {
         'spec_version': 2,
-        'tables': [{'ref': 't0', 'index': 0,
+        'tables': [{'ref': 't0', 'role': 'record_source',
+                    'index': 0,
                     'region': '可选：{page: 1, rect: [x0,y0,x1,y1]}'}],
-        'records': {'strategy': 'row | key_value | group_by | one_per_page'},
+        'records': {'strategy': 'row | key_value | group_by | one_per_page',
+                    'source_ref': '记录驱动表 ref，必须指向 role=record_source'},
         'fields': [FIELD_SCHEMA],
     }
+    if not multiple_rules:
+        return spec
+    return {'rules': [{
+        'name': '规则名称（中文，不含版本号）',
+        'description': '可选：规则用途说明',
+        'spec': spec,
+        'schema': '可选：字段契约；最终以 spec 推导的逻辑字段 schema 为准',
+    }]}
 
 
-def schema_text():
-    return json.dumps(generation_schema(), ensure_ascii=False, indent=2)
+def schema_text(multiple_rules=False):
+    return json.dumps(generation_schema(multiple_rules), ensure_ascii=False, indent=2)

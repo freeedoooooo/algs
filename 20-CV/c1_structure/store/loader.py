@@ -80,7 +80,8 @@ def list_tables(ds):
 
 def is_business_table(name):
     """c1_ 前缀为平台产品配置/元数据表，不作为业务入库目标。"""
-    return bool(str(name or '').strip()) and not str(name).strip().casefold().startswith('c1_')
+    name = str(name or '').strip()
+    return bool(name) and not name.casefold().startswith('c1_')
 
 
 def list_business_tables(ds):
@@ -215,79 +216,85 @@ def list_table_schemas(ds, tables=None):
             for s in out]
 
 
-def validate_fields(fields, field_rows, write_mode='upsert', columns=None):
-    """映射契约校验（建映射/编辑/预检共用）。columns=None 跳过存在性检查。
-    field_rows=[{rule_field,target_column,is_business_key}]。"""
+def validate_fields(fields, field_map, write_mode='insert', business_keys=None,
+                   columns=None):
+    """校验 binding 的部分字段映射。
+
+    field_map={中文字段: 目标列}，只要求是抽取字段的子集；额外抽取字段
+    自动忽略。columns=None 跳过目标列存在性检查。
+    """
     if write_mode not in ('insert', 'upsert', 'update'):
         raise BadRequest('非法写入方式：{}'.format(write_mode))
-    if not isinstance(field_rows, list) or not field_rows:
-        raise BadRequest('字段对齐行不能为空')
-    cm, seen_f, seen_c = {}, set(), set()
-    for f in field_rows:
-        if not isinstance(f, dict):
-            raise BadRequest('字段对齐配置格式不正确')
-        tf, tc = f.get('rule_field'), f.get('target_column')
-        if not isinstance(tf, str) or not tf.strip():
-            raise BadRequest('抽取规则字段名不能为空')
-        if not isinstance(tc, str) or not tc.strip():
-            raise BadRequest('字段「{}」的目标列名为空'.format(tf))
-        if tf in seen_f:
-            raise BadRequest('抽取规则字段重复：{}'.format(tf))
-        if tc in seen_c:
-            raise BadRequest('多个字段指向同一目标列')
-        seen_f.add(tf)
-        seen_c.add(tc)
-        cm[tf] = tc
-    missing = [f for f in fields if f not in cm]
-    if missing:
-        raise BadRequest('以下字段尚未对齐目标列：{}'.format('、'.join(missing)))
-    extra = set(cm) - set(fields)
+    if not isinstance(field_map, dict) or not field_map:
+        raise BadRequest('字段映射不能为空')
+    cm = {}
+    for source, target in field_map.items():
+        if not isinstance(source, str) or not source.strip():
+            raise BadRequest('抽取字段名不能为空')
+        if not isinstance(target, str) or not target.strip():
+            raise BadRequest('字段「{}」的目标列名为空'.format(source))
+        cm[source] = target
+    if len(set(cm.values())) != len(cm):
+        raise BadRequest('多个字段不能指向同一目标列')
+    extra = set(cm) - set(fields or [])
     if extra:
-        raise BadRequest('未知字段：{}'.format('、'.join(sorted(extra))))
-    bk = [f['target_column'] for f in field_rows if f.get('is_business_key')]
+        raise BadRequest('未知抽取字段：{}'.format('、'.join(sorted(extra))))
+    if business_keys is None:
+        business_keys = []
+    if not isinstance(business_keys, (list, tuple)):
+        raise BadRequest('业务键须为目标列数组')
+    raw_keys = list(business_keys)
+    if any(not isinstance(key, str) or not key for key in raw_keys):
+        raise BadRequest('业务键须为目标列数组')
+    bk = list(dict.fromkeys(raw_keys))
+    unmapped_keys = set(bk) - set(cm.values())
+    if unmapped_keys:
+        raise BadRequest('业务键不在字段映射中：{}'.format(
+            '、'.join(sorted(unmapped_keys))))
     if write_mode in ('upsert', 'update') and not bk:
         raise BadRequest('{} 方式须至少选择一列作为去重依据'.format(write_mode))
+    validate_trace_columns(list(cm.values()))
     if columns is not None:
         cols = set(columns)
-        bad = [c for c in list(cm.values()) + bk if c not in cols]
+        bad = set(cm.values()) - cols
         if bad:
-            raise BadRequest('目标列不存在：{}'.format('、'.join(sorted(set(bad)))))
+            raise BadRequest('目标列不存在：{}'.format('、'.join(sorted(bad))))
     return True
 
 
-def fields_to_map(field_rows):
-    """字段行 → (column_map, business_key)，供 write_record 消费。"""
-    cm = {f['rule_field']: f['target_column'] for f in field_rows}
-    bk = [f['target_column'] for f in field_rows if f.get('is_business_key')]
-    return cm, bk
+def binding_to_map(binding):
+    """binding → (column_map, business_keys)；写模式与业务键来自 binding。"""
+    binding = binding or {}
+    return dict(binding.get('field_map_json') or {}), \
+        list(binding.get('business_keys_json') or [])
 
 
 TRACE_COLS = ('file_id', 'record_id')
 
 
-def validate_trace_columns(cols, field_rows=None):
-    """溯源列预检：目标表须预建 file_id/record_id 两列
-    （平台禁止自动 DDL）；规则字段不得占用这些列名。"""
+def validate_trace_columns(targets):
+    """溯源列由平台写入，任何抽取字段（含业务键）都不得占用。"""
+    if isinstance(targets, dict):
+        targets = targets.values()
+    used = [target for target in targets if target in TRACE_COLS]
+    if used:
+        raise BadRequest('抽取字段不能映射到溯源列：{}'.format(
+            '、'.join(sorted(set(used)))))
+
+
+def preflight(ds, target_table, field_map, write_mode, fields,
+              business_keys=None):
+    """预检现有业务表、溯源列和 binding 的部分映射，不自动建表/改表。"""
+    if not is_business_table(target_table):
+        raise BadRequest('只能选择现有业务表，不能写入平台 c1_ 表')
+    cols = [c['name'] for c in list_columns(ds, target_table)]
+    if not cols:
+        raise BadRequest('目标表不存在或无列：{}'.format(target_table))
     missing = [c for c in TRACE_COLS if c not in cols]
     if missing:
         raise BadRequest('目标表缺少溯源列：{}（须由业务系统预建，平台不自动建表/改表）'.format(
             '、'.join(missing)))
-    if field_rows:
-        used = [f.get('target_column') for f in field_rows
-                if f.get('target_column') in TRACE_COLS]
-        if used:
-            raise BadRequest('规则字段不能映射到溯源列：{}'.format(
-                '、'.join(sorted(set(used)))))
-
-
-def preflight(ds, target_table, field_rows, write_mode, fields):
-    """预检：目标表/列存在＋溯源列＋映射覆盖（上传预登记与点入库各跑一次）。
-    连接级失败（pymysql/OSError）原样上抛→503；配置问题→400。"""
-    cols = [c['name'] for c in list_columns(ds, target_table)]
-    if not cols:
-        raise BadRequest('目标表不存在或无列：{}'.format(target_table))
-    validate_trace_columns(cols, field_rows)
-    validate_fields(fields, field_rows, write_mode, cols)
+    validate_fields(fields, field_map, write_mode, business_keys, cols)
     return cols
 
 
@@ -347,12 +354,25 @@ def write_record(cur, table, column_map, values, write_mode, business_key,
     update 目标行不存在→LoadRecordError（调用方隔离）。
     extra_values＝溯源列（file_id/record_id），非业务键，
     upsert 时随其余非键列一起覆盖为最近写入者。"""
+    if write_mode not in ('insert', 'upsert', 'update'):
+        raise BadRequest('非法写入方式：{}'.format(write_mode))
+    if not is_business_table(table):
+        raise BadRequest('只能写入现有业务表，不能写入平台 c1_ 表')
+    validate_fields(list(column_map or {}), column_map, write_mode, business_key)
+    validate_trace_columns(column_map)
     mapped = {column_map[k]: v for k, v in values.items() if k in column_map}
+    if not mapped:
+        raise LoadRecordError('没有可写入的抽取字段')
     mapped.update(extra_values or {})
     if write_mode == 'insert':
         _insert(cur, table, mapped)
         return 'insert', str(cur.lastrowid)
     bk = list(business_key or [])
+    if not bk:
+        raise BadRequest('{} 方式须由 binding 提供业务键'.format(write_mode))
+    missing = [key for key in bk if key not in mapped or mapped[key] in (None, '')]
+    if missing:
+        raise LoadRecordError('业务键缺少映射值：{}'.format('、'.join(missing)))
     where = ' AND '.join('{}=%s'.format(_ident(c)) for c in bk)
     bvals = [mapped[c] for c in bk]
     cur.execute('SELECT 1 FROM {} WHERE {} LIMIT 1'.format(
@@ -382,6 +402,8 @@ def query_rows(ds, table, page=1, per_page=100, trace_cols=None, file_id=None):
     file_id＝按平台溯源列 file_id 精确过滤（值参数化），避免多文件数据混杂。
     返回 {'items':[dict], 'total':int, 'columns':[str], 'page', 'per_page'}。
     """
+    if not is_business_table(table):
+        raise BadRequest('只能查询现有业务表，不能查询平台 c1_ 表')
     if table not in list_tables(ds):
         raise BadRequest('表不在白名单内：{}'.format(table))
     cols = [c['name'] for c in list_columns(ds, table)]

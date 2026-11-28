@@ -4,9 +4,12 @@
    窗口式翻页（全页预渲染、切页只切显隐，与报告同架构）、原图/矫正图切换、
    叠加框开关、光标跟随提示、全屏浮层、左右方向键翻页。
    匹配键用 data-i（记录序）/data-key（字段）。单击=血缘钉住，双击=改值（P1）。
-   数据经 /api/sources/<id>/staging|parse 读 DB；图片经 /files/<file_id>/…。 */
-var file=new URLSearchParams(location.search).get('file')||'';
+   数据经 /api/extract-results/<id>/staging|/api/sources/<id>/parse 读 DB；图片经 /files/<file_id>/…。 */
+var params=new URLSearchParams(location.search);
+var file=params.get('file')||'';
 var curFile=file;
+var resultId=params.get('result')||'';
+var resultDoc=null;
 var traceRecord=new URLSearchParams(location.search).get('index')||'';
 var traceKey=new URLSearchParams(location.search).get('key')||'';
 var pendingTrace=null,pendingBatch=null,batchOn=false,batchItems=[];
@@ -25,8 +28,27 @@ function imgUrl(rel){
     String(rel).split('/').map(encodeURIComponent).join('/');
 }
 function renderTabs(){
-  document.getElementById('filetabs').hidden=true;
+  var tabs=document.getElementById('filetabs');
+  var list=((fileDoc&&(fileDoc.results||fileDoc.extract_results))||[]);
+  tabs.innerHTML=list.map(function(r){
+    var b=r.load_binding, label=(r.rule_name||'规则 #'+r.rule_id)+' · 结果 #'+r.id;
+    return '<button type="button" class="ftab'+(String(r.id)===String(resultId)?' on':'')+
+      '" data-result-tab="'+escHtml(r.id)+'">'+escHtml(label)+' · '+escHtml(r.record_count||0)+' 条'+
+      (b?' · '+escHtml({confirmed:'已确认',running:'入库中',ready:'已入库',failed:'失败'}[b.status]||b.status):'')+'</button>';
+  }).join('');
+  tabs.hidden=list.length<2;
 }
+function selectResult(id){
+  if(!id)return;
+  if(String(id)===String(resultId)){resultDoc=null;gateCache=null;records=[];loadStaging();return;}
+  var next=new URLSearchParams(location.search);next.set('result',String(id));
+  history.replaceState(null,'',location.pathname+'?'+next.toString());resultId=String(id);
+  resultDoc=null;records=[];loadStaging();
+}
+document.getElementById('filetabs').addEventListener('click',function(e){
+  var b=e.target.closest?e.target.closest('[data-result-tab]'):null;
+  if(b)selectResult(b.getAttribute('data-result-tab'));
+});
 function collectKeys(){
   var seen={}, out=[];
   records.forEach(function(r){
@@ -37,7 +59,8 @@ function collectKeys(){
   return out;
 }
 function readOnly(){
-  return !!(fileDoc&&['loading','loaded'].indexOf(fileDoc.state)>=0);
+  var b=resultDoc&&(resultDoc.load_binding||(resultDoc.binding));
+  return !!(resultDoc&&resultDoc.status!=='ready')||!!(b&&['confirmed','running','ready','loading','loaded'].indexOf(b.status)>=0);
 }
 function recState(r){ return (r.review||{}).state||'pending'; }
 /* 记录级徽标：pending 是「待校验」（与筛选 chips 一致），区别于资料级「待解析」 */
@@ -87,9 +110,7 @@ function renderTable(){
   var em=document.getElementById('empty');
   em.hidden=records.length>0;
   if(records.length===0)
-    em.innerHTML=(fileState()==='to_extract')?
-      '<b>已解析 · 尚未抽取</b>该文件还没有生成暂存记录，点右上角「执行抽取」。':
-      '<b>暂无解析记录</b>该文件尚无解析产物，或解析未完成。';
+    em.innerHTML='<b>当前抽取结果暂无记录</b>请确认解析已完成，并执行所选单行规则；其他结果互不影响。';
   document.getElementById('summary').textContent=
     '共 '+records.length+' 条记录 · '+keys.length+' 个字段'+
     (stateFilter?(' · 筛选后 '+shown+' 条'):'')+
@@ -286,7 +307,7 @@ function clearTraceBoxes(){
 }
 function applyTraceBatch(batch){
   batchItems=((batch&&batch.items)||[]).filter(function(x){
-    return x&&x.record_index!=null;
+    return x&&x.record_index!=null&&(!x.extract_result_id||String(x.extract_result_id)===String(resultId));
   });
   batchOn=batchItems.length>0;
   clearTraceBoxes();
@@ -370,7 +391,7 @@ function pinField(key,i){
   clearPin(); clearHover(); applySelection(); markLeft(); updateHead();
   /* embed=1：原图格子 → 数据看板左侧业务表的反向定位 */
   if(embedMode&&window.parent!==window){
-    try{ window.parent.postMessage({c1PinField:{key:key,record_index:i}},'*'); }catch(e){}
+    try{ window.parent.postMessage({c1PinField:{key:key,record_index:(records[i]||{}).index,extract_result_id:resultId}},'*'); }catch(e){}
   }
 }
 /* 点左侧行（非具体格）：加重该行全部框；若不在当前页则导航过去 */
@@ -455,7 +476,7 @@ function startEdit(td){
   inp.addEventListener('click',function(ev){ ev.stopPropagation(); });
 }
 function reviewBase(){
-  return '/api/sources/'+encodeURIComponent(file)+'/staging';
+  return '/api/extract-results/'+encodeURIComponent(resultId)+'/staging';
 }
 function patchCell(i,key,val){
   var body={values:{}}; body.values[key]=val;
@@ -468,7 +489,7 @@ function patchCell(i,key,val){
     else{
       records[i]=o.j.record;
       toast('已保存，记录转为「已修改」，请重新确认');
-      if(o.j.file_state&&fileDoc) fileDoc.state=o.j.file_state;
+      if(o.j.doc_state&&resultDoc) resultDoc.status='ready';
       updateLoadButtons();
     }
     renderTable(); applySelection();
@@ -505,7 +526,7 @@ document.getElementById('bulk-confirm').addEventListener('click',function(){
     var s=recState(r); if(s==='pending'||s==='edited') idxs.push(i);
   });
   if(!idxs.length||readOnly()) return;
-  if(!confirm('确认当前文件全部待审记录（'+idxs.length+' 条）？\n含已修改但未确认的记录。')) return;
+  if(!confirm('确认当前抽取结果全部待审记录（'+idxs.length+' 条）？\n含已修改但未确认的记录；其他结果不受影响。')) return;
   reviewRows(idxs,'confirmed');
 });
 /* 右侧图框：可见态（悬停/钉住/整表网格）才可交互；悬停同步高亮，点击定位左侧 */
@@ -712,41 +733,63 @@ views.addEventListener('click',function(e){
   stagingLb.open(img);
 });
 
+function sourceMapOf(result){
+  var spec=result.rule_snapshot_json||result.snapshot_json||{},out={};
+  (spec.fields||[]).forEach(function(f){
+    var cell=(f.pipeline||[]).filter(function(step){return step&&step.op==='cell';})[0];
+    var col=cell&&cell.column;
+    out[f.target]=col&&typeof col==='object'?
+      (col.name||col.header_contains||('第 '+(col.index+1)+' 列')):col;
+  });
+  return out;
+}
 /* ---- 加载 ---- */
 function loadStaging(){
   document.getElementById('err').hidden=true;
-  var mb=document.getElementById('modebanner');
-  var st=fileDoc&&fileDoc.state;
-  if(st==='loading'){
+  var b=resultDoc&&(resultDoc.load_binding||resultDoc.binding),st=resultDoc&&resultDoc.status;
+  if(b&&b.status==='running'){
     mb.className='banner info';
-    mb.textContent='入库进行中 · 记录只读（完成后自动刷新）';
-  }else if(st==='to_load'&&fileDoc&&fileDoc.error){
+    mb.textContent='所选结果入库进行中 · 记录只读（完成后自动刷新）';
+  }else if(b&&b.status==='failed'){
     mb.className='banner warn';
-    mb.textContent='上次入库未完成：'+fileDoc.error+' · 可点击「重新入库」重试';
-  }else if(readOnly()){
+    mb.textContent='所选结果上次入库未完成：'+(b.error||'未知错误')+' · 可重新规划并确认';
+  }else if(b&&b.status==='ready'){
     mb.className='banner warn';
-    mb.textContent='任务已入库 · 记录只读，修改、确认、拒绝操作已锁定';
+    mb.textContent='所选结果已入库 · 记录只读；回执与业务写入互不混用其他结果';
   }else{
     mb.className='banner info';
-    mb.textContent='双击单元格修改取值，记录自动转为「已修改」；✓ 确认 · ✗ 拒绝\n单击或悬停查看血缘追溯；悬停列名 / 数据格 / 回溯框查看字段映射';
+    mb.textContent='当前仅操作抽取结果 #'+resultId+'。双击单元格修改取值，记录自动转为「已修改」；✓ 确认 · ✗ 拒绝\n单击或悬停查看血缘追溯；悬停列名 / 数据格 / 回溯框查看字段映射';
   }
   updateLoadButtons();
   updateExButton();
-  var u='/api/sources/'+encodeURIComponent(file)+'/staging';
+  if(!resultId){showErr('缺少 result 参数');return;}
+  var u='/api/extract-results/'+encodeURIComponent(resultId)+'/staging';
   var eu='/api/sources/'+encodeURIComponent(file)+'/parse';
   Promise.all([
     fetch(u).then(function(r){
       if(!r.ok) return r.json().then(function(j){throw new Error(j.error||('HTTP '+r.status));});
       return r.json();
     }),
+    fetch('/api/extract-results/'+encodeURIComponent(resultId)).then(function(r){
+      if(!r.ok) throw new Error('抽取结果不存在');return r.json();
+    }),
     fetch(eu).then(function(r){ return r.ok?r.json():null; }).catch(function(){return null;})
   ]).then(function(res){
-    var doc=res[0], ex=res[1];
+    var doc=res[0], ex=res[2], detail=res[1];
+    resultDoc=detail.result||detail;
+    resultDoc.load_binding=detail.load_binding||resultDoc.load_binding||null;
+    if(fileDoc){
+      var list=(fileDoc.results||fileDoc.extract_results||[]).map(function(r){
+        return String(r.id)===String(resultId)?Object.assign({},r,resultDoc,{load_binding:resultDoc.load_binding}):r;
+      });
+      if(fileDoc.results)fileDoc.results=list;else fileDoc.extract_results=list;
+    }
+    renderTabs();
     pageMap={};
     ((ex&&ex.pages)||[]).forEach(function(p){ pageMap[p.index]=p; });
     var f=(doc.files||[])[0]||{};
     records=f.records||[];
-    srcMap=(doc.rule||{}).field_sources||{};
+    srcMap=sourceMapOf(resultDoc);
     if(reviewView&&!stateFilter){
       var rc={pending:0,edited:0,rejected:0};
       records.forEach(function(r){ var s=recState(r); if(rc[s]!=null) rc[s]++; });
@@ -754,6 +797,9 @@ function loadStaging(){
       reviewView=false;   // 只做初始定位；后续由用户自由切筛选
     }
     renderTable(); buildAnchors(); initViewer();
+    updateLoadButtons();updateExButton();
+    fetch('/api/extract-results/'+encodeURIComponent(resultId)+'/gate').then(function(r){return r.json();})
+      .then(function(g){gateCache=g;updateLoadButtons();}).catch(function(){});
     var wantIndex=traceRecord;
     if(traceRecord){
       var ti=records.findIndex(function(r){return String(r.index)===String(traceRecord);});
@@ -761,7 +807,7 @@ function loadStaging(){
       else toast('该 record_id 不在当前资料中');
       traceRecord='';
       history.replaceState(null,'',location.pathname+
-        '?file='+encodeURIComponent(file)+
+        '?file='+encodeURIComponent(file)+'&result='+encodeURIComponent(resultId)+
         (embedMode?'&embed=1':'')+
         (reviewView?'&view=review':''));
     }
@@ -786,127 +832,118 @@ function loadStaging(){
       links.innerHTML='<a class="btn mini" target="_blank" href="'+
         fileUrl(curFile,'对照报告.html')+'">对照报告</a>';
     }else links.innerHTML='';
-    var t=doc.rule||{};
     document.getElementById('tplbadge').innerHTML=
-      '<span class="badge blue">'+escHtml((t.name||'原始透传')+' v'+(t.version||1))+'</span>';
+      '<span class="badge blue">'+escHtml((resultDoc.rule_name||'抽取结果')+' · #'+resultId)+'</span>';
   }).catch(function(e){
     records=[]; srcMap={}; renderTable(); buildAnchors(); initViewer();
     showErr('读取预览数据失败：'+e.message);
   });
 }
 
-/* ---- P2c 手动入库闸门：to_load（派生态，全部记录已确认）可见；未绑定打开库向导（入库时
-   选业务库＋规则），已绑定直接提交。入库前预检由后端 409 兜底，点击后轮询
-   任务态直至入库完成自动刷新。 ---- */
-var loadPoll=null;
+/* ---- 单结果入库：门禁通过后打开向导，保存映射与显式确认由向导负责 ---- */
+var gateCache=null;
+function gatePassed(counts){
+  return !!(counts&&counts.records_n&&counts.confirmed===counts.records_n&&!counts.rejected);
+}
 function updateLoadButtons(){
   var lb=document.getElementById('loadbtn'), rb=document.getElementById('rcbtn');
-  var t=fileDoc||{}, hasLoad=!!t.load;
-  lb.hidden=!(t.state==='to_load');
-  lb.textContent=t.error?'重新入库':'入库';
-  rb.hidden=!(hasLoad&&(t.state==='loaded'||t.state==='to_load'));
+  var b=resultDoc&&(resultDoc.load_binding||resultDoc.binding);
+  lb.hidden=!resultId||readOnly()||!gatePassed(gateCache);
+  lb.textContent=b&&b.status==='failed'?'重新规划入库':'入库';
+  rb.hidden=!resultId;
+  var rerun=document.getElementById('rerunbtn'),del=document.getElementById('delbtn');
+  var locked=!!(b&&['confirmed','running','ready','loading','loaded'].indexOf(b.status)>=0);
+  rerun.hidden=!resultId||locked||(resultDoc&&resultDoc.status==='running');
+  del.hidden=!resultId||locked||(resultDoc&&resultDoc.status==='running');
 }
-
-/* ---- 抽取入口（数据预览页）：to_extract=执行抽取；to_review/to_load=
-   重新抽取（先删后插覆盖校验结论，须确认）。按钮只作用当前文件页签。 ---- */
-function fileState(){
-  var f=(fileDoc&&fileDoc.files||[]).find(function(x){
-    return String(x.file_id)===curFile;});
-  return f&&f.state;
-}
+/* 抽取入口：选择单行规则；同资料同规则覆盖该结果，其他结果保持不变。 */
 function updateExButton(){
-  var b=document.getElementById('exbtn'), st=fileState();
-  if(!curFile||['to_extract','to_review','to_load'].indexOf(st)<0||
-     readOnly()){ b.hidden=true; renderExRule(true); return; }
-  b.hidden=false;
-  b.textContent=st==='to_extract'?'执行抽取':'重新抽取';
+  var b=document.getElementById('exbtn');
+  if(!resultId||readOnly()){b.hidden=true;document.getElementById('exrule').hidden=true;return;}
+  b.hidden=false;b.textContent='执行 / 重新抽取';
   renderExRule();
 }
-/* 抽取规则版本下拉（方案A）：默认＝任务已绑规则（未绑=原始透传）；
-   选其他版本则本次抽取时后端改绑任务（set_rule）。 */
 var rulesList=null, rulesLoading=false;
-function renderExRule(hide){
+function renderExRule(){
   var sel=document.getElementById('exrule');
-  if(hide){ sel.hidden=true; return; }
-  sel.hidden=false;
-  var bound=String((fileDoc&&fileDoc.rule||{}).version_id||'');
   if(!rulesList){
     if(!rulesLoading){ rulesLoading=true;
       fetch('/api/extract-rules').then(function(r){return r.json();})
         .then(function(j){ rulesList=j.items||[]; renderExRule(); })
         .catch(function(){ rulesList=[]; renderExRule(); });
     }
-    sel.innerHTML='<option value="">默认（已绑定规则）</option>';
     return;
   }
-  sel.innerHTML='<option value="">默认（已绑定规则）</option>'+
-    rulesList.map(function(t){
-      return '<option value="'+(t.current_version_id||'')+'">'+
-        escHtml((t.name||'原始透传')+' v'+(t.current_version||1))+'</option>';
-    }).join('');
-  sel.value=bound;
-  if(sel.selectedIndex<0) sel.selectedIndex=0;
+  var bound=String((resultDoc&&resultDoc.rule_id)||'');
+  sel.innerHTML='<option value="">选择单行规则</option>'+rulesList.map(function(t){
+    return '<option value="'+t.id+'">'+escHtml(t.name||('规则 #'+t.id))+'</option>';
+  }).join('');
+  sel.hidden=false;
+  if(bound&&Array.prototype.some.call(sel.options,function(o){return o.value===bound;}))sel.value=bound;
 }
 document.getElementById('exbtn').onclick=function(){
-  var b=this, st=fileState(), rv=document.getElementById('exrule').value;
-  if(st!=='to_extract'&&!confirm('重新抽取将按所选抽取规则覆盖该文件全部暂存记录，已做的校验确认会清零。继续？'))return;
+  var b=this, ruleId=Number(document.getElementById('exrule').value);
+  if(!ruleId){showErr('请选择抽取规则');return;}
+  var same=resultDoc&&Number(resultDoc.rule_id)===ruleId;
+  if(same&&!confirm('将用所选规则的当前定义重新生成此结果，覆盖当前记录、复核状态与未确认的入库绑定。\n已写入业务数据库的数据不会回滚。继续？'))return;
   b.disabled=true;
   fetch('/api/sources/'+encodeURIComponent(file)+'/extract',{
     method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({
-                         force:st!=='to_extract',
-                         rule_version_id:rv?Number(rv):null})
+    body:JSON.stringify({rule_id:ruleId,force:same})
   }).then(function(r){
     return r.json().then(function(j){
       if(!r.ok) throw new Error(j.error||('HTTP '+r.status)); return j;});
   }).then(function(j){
-    var n=(j.files||[]).reduce(function(s,f){return s+(f.records_n||0);},0);
-    toast('抽取完成：生成 '+n+' 条记录');
-    return fetch('/api/sources/'+encodeURIComponent(file)).then(function(r){
-      return r.json();});
+    toast('抽取完成：结果 #'+j.extract_result_id+' 生成 '+j.records_n+' 条记录');
+    return fetch('/api/sources/'+encodeURIComponent(file)).then(function(r){return r.json();});
   }).then(function(j){
-    fileDoc=j.file; loadStaging();
+    fileDoc=j.file;
+    selectResult(j.extract_result_id);
   }).catch(function(e){ showErr('抽取失败：'+e.message); })
   .then(function(){ b.disabled=false; });
 };
 document.getElementById('loadbtn').onclick=function(){
-  var t=fileDoc||{};
-  if(!t.load){
-    openLoadWizard({fileId:file, ruleId:(t.rule||{}).rule_id,
-      getSample:function(){ return Promise.resolve(records.slice(0,3)); },
-      onDone:function(){ loadStaging(); }});
-    return;
-  }
-  var lb=this; lb.disabled=true;
-  fetch('/api/sources/'+encodeURIComponent(file)+'/load',{method:'POST'})
-    .then(function(r){
-      return r.json().catch(function(){return {};}).then(function(j){
-        return {s:r.status,j:j};
-      });
-    }).then(function(o){
-      lb.disabled=false;
-      if(!o.j.ok){ showErr('无法入库：'+(o.j.error||('HTTP '+o.s))); return; }
-      document.getElementById('err').hidden=true;
-      var mb=document.getElementById('modebanner');
-      mb.className='banner info';
-      mb.textContent='入库进行中 · 记录只读（完成后自动刷新）';
-      fileDoc.state='loading'; renderTable(); updateLoadButtons();
-      clearInterval(loadPoll);
-      loadPoll=setInterval(function(){
-        fetch('/api/sources/'+encodeURIComponent(file)).then(function(r){
-          return r.json();
-        }).then(function(j){
-          if(!j.file) return;
-          fileDoc=j.file;
-          if(fileDoc.state!=='loading'){
-            clearInterval(loadPoll); loadPoll=null;
-            loadStaging();
-          }
-        }).catch(function(){});
-      },1500);
-    }).catch(function(){ lb.disabled=false; showErr('入库请求失败：平台库不可用'); });
+  var button=this;button.disabled=true;
+  fetch('/api/extract-results/'+encodeURIComponent(resultId)+'/gate').then(function(r){return r.json();})
+    .then(function(g){
+      gateCache=g;
+      if(!gatePassed(g))throw new Error('请先确认当前结果的全部记录，并处理被拒绝记录');
+      openLoadWizard({fileId:file,extractResultId:resultId,result:resultDoc,
+        gate:g,onDone:refreshResult});
+    }).catch(function(e){showErr('无法入库：'+e.message);})
+    .then(function(){button.disabled=false;});
 };
-document.getElementById('rcbtn').onclick=function(){ openReceiptDrawer(file); };
+document.getElementById('rcbtn').onclick=function(){ openReceiptDrawer(file,resultId); };
+document.getElementById('rerunbtn').onclick=function(){
+  if(!confirm('按此结果自己的规则快照重跑，并覆盖其暂存记录与复核状态？\n规则后续修改不会影响本次快照；已写入业务数据库的数据不会回滚。'))return;
+  var b=this;b.disabled=true;
+  fetch('/api/extract-results/'+encodeURIComponent(resultId)+'/rerun',{
+    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({force:true})
+  }).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j;});})
+    .then(function(){return refreshResult();})
+    .then(function(){toast('已按快照重跑当前结果');})
+    .catch(function(e){showErr('重跑失败：'+e.message);})
+    .then(function(){b.disabled=false;});
+};
+document.getElementById('delbtn').onclick=function(){
+  if(!confirm('删除抽取结果 #'+resultId+' 及其平台侧记录、绑定与回执？\n此操作不会回滚已写入业务数据库的数据。'))return;
+  var b=this;b.disabled=true;
+  fetch('/api/extract-results/'+encodeURIComponent(resultId),{method:'DELETE'})
+    .then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j;});})
+    .then(function(){return fetch('/api/sources/'+encodeURIComponent(file)).then(function(r){return r.json();});})
+    .then(function(j){
+      fileDoc=j.file;var next=(fileDoc.results||fileDoc.extract_results||[])[0];
+      if(next)selectResult(next.id);else location.href='/process?file='+encodeURIComponent(file);
+    }).catch(function(e){showErr('删除失败：'+e.message);})
+    .then(function(){b.disabled=false;});
+};
+function refreshResult(){
+  return fetch('/api/extract-results/'+encodeURIComponent(resultId)).then(function(r){return r.json();})
+    .then(function(j){
+      resultDoc=j.result||j;resultDoc.load_binding=j.load_binding||resultDoc.load_binding;
+      gateCache=null;loadStaging();
+    });
+}
 
 var filetag=document.getElementById('filetag');
 filetag.textContent=file?('资料 #'+file):'';
@@ -923,7 +960,7 @@ window.addEventListener('message',function(e){
   if(e.origin!==location.origin||!e.data)return;
   if(e.data.c1TraceBatchClear){clearTraceBatch();return;}
   if(e.data.c1TraceBatch){applyTraceBatch(e.data.c1TraceBatch);return;}
-  if(!e.data.c1TraceKey) return;
+  if(!e.data.c1TraceKey||(e.data.c1TraceKey.extract_result_id&&String(e.data.c1TraceKey.extract_result_id)!==String(resultId))) return;
   if(!records.length){ pendingTrace=e.data.c1TraceKey; return; }
   var ti=records.findIndex(function(r){
     return String(r.index)===String(e.data.c1TraceKey.index);
@@ -942,6 +979,8 @@ if(embedMode&&!file){
     return r.json();
   }).then(function(j){
     fileDoc=j.file;
+    var list=fileDoc.results||fileDoc.extract_results||[];
+    if(!resultId&&list.length){resultId=String(list[0].id);renderTabs();}
     loadStaging();
   }).catch(function(e){ showErr(e.message); });
 }

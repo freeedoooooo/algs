@@ -1,6 +1,6 @@
 /* web/sources.js — 资料清单（唯一功能入口）：列表/筛选/分页 + 上传登记 +
-   处理/删除；文件名即下载原件。处理入口跳转 /static/process.html?file=<id>。
-   模型：一条资料 = 一次运行（file_id 为键）。 */
+   处理/删除；文件名即下载原件。处理入口跳转 /process?file=<id>。
+   模型：一条资料包含一份解析产物、多个独立抽取结果与各自入库绑定。 */
 var page=1, total=0, q='', kind='', fstate='', size=getListPer(), qTimer=null;
 var itemsCache=[];
 var rows=document.getElementById('rows'),empty=document.getElementById('empty');
@@ -24,8 +24,10 @@ function render(items){
       '<td>'+st+'</td>'+
       '<td class="num">'+fmtTime(r.created_at)+'</td>'+
       '<td class="col-act" style="white-space:nowrap">'+
-        '<a class="linkbtn" href="/static/process.html?file='+r.id+
-        '" title="配置并重新执行解析/抽取/校验/入库">处理</a>'+
+        '<button type="button" class="linkbtn" data-pipe="'+r.id+
+        '" data-name="'+escHtml(r.name)+'" title="查看解析、全部抽取结果与独立入库绑定">详情</button>'+
+        '<a class="linkbtn" href="/process?file='+r.id+
+        '" title="配置解析、选择规则、复核单结果并确认入库">处理</a>'+
         '<button type="button" class="linkbtn danger" data-del="'+r.id+
         '" data-name="'+escHtml(r.name)+'">删除</button>'+
       '</td></tr>';
@@ -57,6 +59,8 @@ function api(method,path,body){
 }
 
 rows.addEventListener('click',function(e){
+  var pipe=e.target.closest?e.target.closest('[data-pipe]'):null;
+  if(pipe){openPipe(Number(pipe.getAttribute('data-pipe')),pipe.getAttribute('data-name'));return;}
   var b=e.target.closest?e.target.closest('[data-del]'):null;
   if(b){
     var id=b.getAttribute('data-del'),name=b.getAttribute('data-name');
@@ -111,9 +115,9 @@ document.getElementById('picker').onchange=async function(){
   page=1; load();
 };
 
-/* ---- 资料详情弹窗：一资料=单链路，四节点，点节点左列表右详情 ---- */
+/* ---- 资料详情：文档级解析 + 多结果抽取 + 逐结果校验/入库 ---- */
 var pipeData=null, pipeNode='parse';
-var NODES=[['parse','解析'],['extract','抽取'],['review','校验'],['load','入库']];
+var NODES=[['parse','解析'],['extract','多结果抽取'],['review','逐结果校验'],['load','逐结果入库']];
 
 function nodeState(st,key){
   st=String(st||'');
@@ -127,17 +131,19 @@ function nodeState(st,key){
   if(st==='loading'&&key==='load') return 'doing';
   return rank>=need?'done':'';
 }
+function resultList(p){return p.results||p.extract_results||[];}
 function nodeDesc(key,p){
   if(key==='parse') return (p.parse_artifacts||[]).indexOf('对照报告.html')>=0
-    ? '对照报告已生成' : '尚未解析';
-  if(key==='extract') return p.rule?((p.rule.name||'规则')+' v'+(p.rule.version||1)):'未绑定规则';
+    ? '对照报告已生成 · 文档级解析' : '尚未解析';
+  var list=resultList(p);
+  if(key==='extract') return list.length?(list.length+' 个独立抽取结果'):'未生成抽取结果';
   if(key==='review'){
-    var c=p.review_counts||{}, n=Object.keys(c).reduce(function(a,k){return a+c[k];},0);
-    return n?(n+' 条 · 确认 '+(c.confirmed||0)):'暂无记录';
+    var total=list.reduce(function(n,r){return n+Number(r.record_count||0);},0);
+    var confirmed=list.reduce(function(n,r){return n+Number((r.review_counts||{}).confirmed||0);},0);
+    return total?(total+' 条 · 已确认 '+confirmed):'暂无记录';
   }
-  var l=p.load||{}, acts=p.load_actions||{};
-  return l.target_table?((l.target_table)+' · '+((acts.insert||0)+(acts.update||0))+' 条')
-    :'未入库';
+  var loaded=resultList(p).filter(function(r){return r.load_binding;}).length;
+  return loaded?(loaded+' 个结果拥有独立绑定'):'未绑定入库目标';
 }
 function pipeItems(key,p){
   var out=[];
@@ -145,43 +151,44 @@ function pipeItems(key,p){
     (p.parse_artifacts||[]).forEach(function(n){
       out.push({label:n,kind:'artifact',url:'/files/'+p.file_id+'/'+encodeURIComponent(n)});
     });
-  }else if(key==='extract'){
-    if(p.rule) out.push({label:(p.rule.name||'规则')+' v'+(p.rule.version||1),kind:'version',rule:p.rule});
-  }else if(key==='review'){
-    var c=p.review_counts||{};
-    ['confirmed','edited','rejected','pending'].forEach(function(k){
-      if(c[k]) out.push({label:k,kind:'review',state:k,n:c[k]});
+  }else if(key==='extract'||key==='review'){
+    resultList(p).forEach(function(r){
+      out.push({label:(r.rule_name||'规则 #'+r.rule_id)+' · 结果 #'+(r.extract_result_id||r.id),
+        kind:'result',result:r});
     });
-  }else if(key==='load'){
-    var l=p.load||{};
-    if(l.target_table) out.push({label:l.target_table,kind:'table',load:l,actions:p.load_actions||{}});
+  }else{
+    resultList(p).forEach(function(r){
+      if(r.load_binding)out.push({label:(r.load_binding.target_table||'目标表')+' · 结果 #'+(r.extract_result_id||r.id),
+        kind:'table',result:r,load:r.load_binding});
+    });
   }
   return out;
 }
 function pipeDetail(key,item,p){
   if(!item) return '<div class="empty">暂无内容</div>';
   var h='';
-  if(item.kind==='version'){
+  if(item.kind==='result'){
+    var r=item.result,id=r.extract_result_id||r.id,c=r.review_counts||{};
     h='<h4>'+escHtml(item.label)+'</h4>'+
-      '<div class="kv"><b>规则 ID</b>'+escHtml(item.rule.rule_id)+'</div>'+
-      '<div class="kv"><b>版本 ID</b>'+escHtml(item.rule.version_id)+'</div>'+
-      '<a class="linkbtn" href="/extract?rule='+encodeURIComponent(item.rule.rule_id)+
-      '" target="_blank" rel="noopener">打开抽取规则 →</a>';
-  }else if(item.kind==='review'){
-    var label={confirmed:'已确认',edited:'已修改',rejected:'已拒绝',pending:'待校验'}[item.state]||item.state;
-    h='<h4>'+escHtml(label)+' · '+item.n+' 条</h4>'+
-      '<a class="linkbtn" href="/preview?file='+p.file_id+
-      '" target="_blank" rel="noopener">打开数据预览 →</a>';
+      '<div class="kv"><b>结果 ID</b>'+escHtml(id)+'</div>'+
+      '<div class="kv"><b>规则 ID</b>'+escHtml(r.rule_id)+'</div>'+
+      '<div class="kv"><b>抽取状态</b>'+escHtml(r.status||'—')+'</div>'+
+      '<div class="kv"><b>记录 / 已确认</b>'+escHtml(r.record_count||0)+' / '+escHtml(c.confirmed||0)+'</div>'+
+      '<a class="linkbtn" href="/preview?file='+p.file_id+'&amp;result='+id+
+      '" target="_blank" rel="noopener">打开此结果预览 →</a> '+
+      '<a class="linkbtn" href="/extract?rule='+encodeURIComponent(r.rule_id)+
+      '" target="_blank" rel="noopener">打开单行规则 →</a>';
   }else if(item.kind==='table'){
-    var acts=item.actions||{};
+    var load=item.load,r=item.result,id=r.extract_result_id||r.id;
     h='<h4>'+escHtml(item.label)+'</h4>'+
-      '<div class="kv"><b>业务库</b>'+escHtml(item.load.db_name||'—')+'</div>'+
-      '<div class="kv"><b>写入方式</b>'+escHtml(item.load.write_mode||'—')+'</div>'+
-      '<div class="kv"><b>新增/覆盖</b>'+(acts.insert||0)+' / '+(acts.update||0)+'</div>'+
-      '<a class="linkbtn" href="/dashboard?ds='+encodeURIComponent(item.load.datasource_id||'')+
-      '&table='+encodeURIComponent(item.label)+
+      '<div class="kv"><b>业务库</b>'+escHtml(load.datasource_name||load.db_name||'—')+'</div>'+
+      '<div class="kv"><b>写入方式</b>'+escHtml(load.write_mode||'—')+'</div>'+
+      '<div class="kv"><b>绑定状态</b>'+escHtml(load.status||'—')+'</div>'+
+      '<a class="linkbtn" href="/dashboard?ds='+encodeURIComponent(load.datasource_id||'')+
+      '&table='+encodeURIComponent(load.target_table||'')+
       '&file='+encodeURIComponent(p.file_id||'')+
-      '&lt='+encodeURIComponent(item.load.load_table_id||'')+
+      '&lt='+encodeURIComponent(load.load_table_id||'')+
+      '&result='+encodeURIComponent(id||'')+
       '" target="_blank" rel="noopener">查看数据看板 →</a>';
   }else{
     h='<h4>'+escHtml(item.label)+'</h4>'+
@@ -192,38 +199,13 @@ function pipeDetail(key,item,p){
 /* 节点操作区：每个节点下都有「执行X」按钮，说明走 ? tips，按状态控制可用 */
 function nodeActionHtml(key,p){
   var st=String(p.state||''), fid=p.file_id;
-  var btn=function(id,label,dis,tip){
-    return '<button type="button" class="btn mini" id="'+id+'" data-fid="'+fid+'"'+
-      (dis?' disabled':'')+'>'+label+'</button>'+
-      '<span class="hint" tabindex="0" data-tip="'+escHtml(tip||'')+'">?</span>';
-  };
-  var busy=st==='parsing'||st==='loading';
   if(key==='parse'){
-    return btn('actParse','执行解析',busy,
-      busy?'正在解析中，请稍候。':(st==='loaded'
-        ?'仅重新运行解析并生成 test/ 下的新报告；业务数据、正式产物、暂存、回执和已入库状态全部保留。'
-        :'清空该资料的暂存、产物、回执与校验结论，按当前配置原地重新解析。'));
+    var busy=st==='parsing';
+    return '<button type="button" class="btn mini" id="actParse" data-fid="'+fid+'"'+(busy?' disabled':'')+'>执行解析</button>'+
+      '<span class="hint" tabindex="0" data-tip="'+escHtml(busy?'正在解析中，请稍候。':'重新解析会替换文档级解析产物，并清除该资料的全部抽取结果；已写入业务数据库的数据不会回滚。')+'">?</span>';
   }
-  if(key==='extract'){
-    var canE=st==='to_extract'||st==='to_review'||st==='to_load';
-    return btn('actExtract','执行抽取',!canE||busy,
-      st==='to_extract'?'按已配置的抽取规则，从解析产物生成暂存记录。'
-        :(canE?'已有暂存记录，重新抽取将覆盖校验结论。':'请先执行解析，生成解析产物。'));
-  }
-  if(key==='review'){
-    var canR=st==='to_review'||st==='to_load';
-    var c=p.review_counts||{}, pend=(c.pending||0)+(c.edited||0);
-    return btn('actReview','执行校验',!canR||busy||!pend,
-      canR?(pend?('将全部 '+pend+' 条待审记录设为通过。'
-        +(c.rejected?'另有 '+c.rejected+' 条已拒绝记录需人工处理。':'')):'暂无待审记录。')
-        :'请先执行抽取，生成暂存记录。');
-  }
-  var canL=st==='to_load' && !!(p.load&&p.load.load_table_id);
-  return btn('actLoad','执行入库',!canL||busy,
-    st!=='to_load'?'请先完成校验，全部记录通过后才能入库。'
-      :(p.load&&p.load.load_table_id
-        ?('按已配置的入库映射写入 '+escHtml(p.load.target_table||'')+'。')
-        :'请先在「配置」里绑定入库映射。'));
+  return '<a class="btn mini" href="/process?file='+fid+'" target="_blank" rel="noopener">打开处理页</a>'+
+    '<span class="muted">选择具体抽取结果后操作；不在资料级直接执行。</span>';
 }
 function bindNodeActions(p){
   var fid=p&&p.file_id;
@@ -246,19 +228,6 @@ function bindNodeActions(p){
       ?'确认重新执行解析？\n仅生成 test/ 下的新产物；业务数据、正式产物、暂存、回执和已入库状态全部保留。'
       :'确认执行解析？\n将清空暂存、产物、回执与校验结论，原地重新解析。')) return {cancel:true};
     return api('POST','/api/sources/'+fid+'/reparse',test?{test_mode:true}:{});
-  });
-  bind('actExtract',function(){
-    var force=(String(p.state||'')==='to_review'||String(p.state||'')==='to_load');
-    if(force&&!confirm('已有暂存记录，重新抽取将覆盖校验结论。确认继续？')) return {cancel:true};
-    return api('POST','/api/sources/'+fid+'/extract',force?{force:true}:{});
-  });
-  bind('actReview',function(){
-    if(!confirm('确认将全部待审记录设为通过？')) return {cancel:true};
-    return api('POST','/api/sources/'+fid+'/approve-all',{});
-  });
-  bind('actLoad',function(){
-    if(!confirm('确认按已配置的入库映射执行入库？')) return {cancel:true};
-    return api('POST','/api/sources/'+fid+'/load',{});
   });
 }
 function renderPipeDetail(){
@@ -344,9 +313,8 @@ document.addEventListener('keydown',function(e){
   }
 });
 
-/* ---- 资料配置弹窗：四节点（解析参数/抽取规则/校验规则/入库映射）---- */
-var CFG_NODES=[['params','解析参数'],['extract','抽取规则'],
-               ['review','校验规则'],['load','入库映射']];
+/* ---- 资料配置：仅维护文档级解析参数；规则和入库绑定属于结果工作流 ---- */
+var CFG_NODES=[['params','解析参数']];
 var cfgData=null, cfgFileId=null, cfgNode='params', cfgDirty=false, cfgPending={};
 
 function cfgMsg(t,bad){
@@ -392,22 +360,12 @@ function collectCfgNode(){
       pv[key]=v;
     });
     cfgPending.params=pv;
-  }else if(cfgNode==='extract'){
-    var rv=document.getElementById('cfgRule');
-    if(rv) cfgPending.rule_version_id=rv.value?parseInt(rv.value,10):null;
-  }else if(cfgNode==='load'){
-    var ds=document.getElementById('cfgDs'),lt=document.getElementById('cfgLt');
-    if(ds&&lt) cfgPending.load=(ds.value&&lt.value)
-      ?{datasource_id:parseInt(ds.value,10),load_table_id:parseInt(lt.value,10)}
-      :{datasource_id:null,load_table_id:null};
   }
 }
 function renderCfg(){
   if(!cfgData) return;
   // 节点条（复用 pipe-node 样式）
-  var done={params:!!(cfgData.schema&&cfgData.schema.length),
-            extract:!!cfgData.rule_version_id, review:false,
-            load:!!(cfgData.load&&cfgData.load.load_table_id)};
+  var done={params:!!(cfgData.schema&&cfgData.schema.length)};
   document.getElementById('cfgFlow').innerHTML=CFG_NODES.map(function(n){
     var d=done[n[0]]?' done':'';
     return '<button type="button" class="pipe-node '+d+(cfgNode===n[0]?' on':'')+
@@ -455,59 +413,12 @@ function renderCfg(){
       if(p.unit) h+='<span class="cfg-unit">'+escHtml(p.unit)+'</span>';
       h+='</div>';
     });
-  }else if(cfgNode==='extract'){
-    h+=head('抽取规则','在「执行抽取」时按此规则生成记录；改配置不会重抽已有记录。');
-    h+='<div class="cfg-row"><label>规则版本</label>'+spacer+
-      '<select id="cfgRule"><option value="">（不绑定 · 执行抽取时用默认原始透传）</option>';
-    (cfgData.rules||[]).forEach(function(v){
-      h+='<option value="'+v.version_id+'"'+
-        (cfgData.rule_version_id===v.version_id?' selected':'')+'>'+
-        escHtml(v.name+' v'+v.version+(v.current?'（当前）':''))+'</option>';
-    });
-    h+='</select></div>';
-  }else if(cfgNode==='review'){
-    h+=head('校验规则','当前校验为逐条人工改值 / 确认 / 拒绝；详情的「执行校验」可一键将全部待审记录设为通过。');
-    h+='<div class="empty" style="padding:20px"><b>自动化校验规则：待实现</b></div>';
-  }else{
-    h+=head('入库映射','目标在「执行入库」时消费；入库映射须与资料的抽取规则匹配，配置仅登记目标，真正写入在执行入库时。');
-    h+='<div class="cfg-row"><label>业务库</label>'+spacer+'<select id="cfgDs">'+
-      '<option value="">（未选择）</option>';
-    (cfgData.datasources||[]).forEach(function(d){
-      h+='<option value="'+d.id+'"'+
-        (cfgData.load&&cfgData.load.datasource_id===d.id?' selected':'')+'>'+
-        escHtml(d.name+' · '+d.host+'/'+d.db_name)+'</option>';
-    });
-    h+='</select></div>'+
-      '<div class="cfg-row"><label>入库映射</label>'+spacer+'<select id="cfgLt">'+
-      '<option value="">（未选择）</option>';
-    (cfgData.load_tables||[]).forEach(function(t){
-      h+='<option value="'+t.id+'" data-ds="'+t.datasource_id+'"'+
-        (cfgData.load&&cfgData.load.load_table_id===t.id?' selected':'')+'>'+
-        escHtml(t.target_table+' · '+t.write_mode)+'</option>';
-    });
-    h+='</select></div>';
   }
+  h+='<p class="msg">此配置只影响文档解析。多规则抽取、逐结果复核、目标表映射与显式确认入库，请在「处理」页选择具体结果后操作。</p>';
   h+='</div>';
   box.innerHTML=h;
-  // 数据源变化时过滤入库映射
-  var ds=document.getElementById('cfgDs'), lt=document.getElementById('cfgLt');
-  if(ds&&lt){
-    ds.onchange=function(){
-      var did=this.value;
-      Array.prototype.forEach.call(lt.options,function(o){
-        if(!o.value) return;
-        o.hidden=!!did&&o.getAttribute('data-ds')!==did;
-      });
-      lt.value='';
-    };
-    if(cfgData.load&&cfgData.load.datasource_id) ds.onchange();
-  }
   document.querySelectorAll('#cfgDetail [data-cp]').forEach(function(el){
     el.onchange=function(){ cfgDirty=true; cfgMsg('有未保存的修改'); };
-  });
-  ['cfgRule','cfgDs','cfgLt'].forEach(function(id){
-    var el=document.getElementById(id);
-    if(el) el.onchange=function(){ cfgDirty=true; cfgMsg('有未保存的修改'); };
   });
 }
 document.getElementById('cfgSave').onclick=function(){

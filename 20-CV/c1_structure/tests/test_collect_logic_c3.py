@@ -93,7 +93,7 @@ class CollectLogicC3Test(unittest.TestCase):
                         {'op': 'count', 'source': 'all',
                          'column': {'name': '客户ID'}}]},
                 ]}
-        records = build_logic(_doc(), {'mapping_json': spec})
+        records = build_logic(_doc(), {'extraction_spec_json': spec})
         self.assertEqual(len(records), 4)
         self.assertEqual(records[0]['values'], {'总额': 3300, '行数': 4})
         self.assertEqual(len(records[0]['lineage']['总额']), 4)
@@ -110,7 +110,7 @@ class CollectLogicC3Test(unittest.TestCase):
                          'right': {'column': {'name': '客户ID'}},
                          'take': {'name': '合计金额'}}]},
                 ]}
-        records = build_logic(_doc(), {'mapping_json': spec})
+        records = build_logic(_doc(), {'extraction_spec_json': spec})
         first = records[0]
         self.assertEqual(first['values']['客户ID'], 'C1')
         self.assertEqual(first['values']['合计'], '1,000')
@@ -134,7 +134,7 @@ class CollectLogicC3Test(unittest.TestCase):
                          'fields': [{'target': '对账合计',
                                      'column': {'name': '合计金额'}}]}]},
                 ]}
-        records = build_logic(_doc(), {'mapping_json': spec})
+        records = build_logic(_doc(), {'extraction_spec_json': spec})
         first = records[0]
         self.assertEqual(first['values']['对账合计'], '1,000')
         self.assertNotIn('link', first['values'])

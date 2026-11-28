@@ -1,22 +1,24 @@
 /* web/process.js — 资料处理独立页：左侧纵向四节点，右侧「配置细条 + 产物」
    红线：保存配置只写配置，不自动重跑；执行动作必须显式点击并二次确认。 */
 var pfId=null, pfName='', pfNode='parse', pfData=null, pfCfg=null, pfRecords=[];
+var pfResultId=null, pfResults=[], pfRules=null, pfRulesLoading=false, pfRulesError='';
 var pfPending={}, pfCfgOpen=false, pfPreResult=null, pfPreError='', pfRuleDetail=null, pfRows=null;
 var pfFileNames={};
 var pfLineageOpen=true, pfLinRidByIndex={}, pfLinFieldMap={};
+var pfWizardLoading=null;
 var PF_NODES=[['parse','解析'],['extract','抽取'],['review','校验'],['load','入库']];
 var PF_TITLE={parse:'解析参数',extract:'抽取规则',review:'校验规则',load:'入库映射'};
 var PF_PRODUCT={parse:'解析报告',extract:'数据记录',review:'校验记录',load:'入库表'};
 var PF_CFG_TIP={
   parse:'仅对本次资料的解析生效；保存后需显式点击「执行解析」才重放。',
-  extract:'执行抽取时按此规则生成暂存记录；保存配置不会重抽已有记录。',
+  extract:'选择单行规则后显式执行抽取；同资料同规则覆盖自己的结果，其他结果不受影响。',
   review:'当前校验为逐条人工改值 / 确认 / 拒绝，暂无可调参数；自动化校验规则待实现。',
-  load:'入库映射在执行入库时消费，须与抽取规则匹配；保存配置不会执行入库。'
+  load:'入库映射按抽取结果独立绑定；配置、预检与执行均不会影响其他结果。'
 };
 var PF_RES_TIP={
   parse:'页面图与结构化结果逐项对照。',
-  extract:'暂存记录内联展示；编辑与确认请打开数据预览。',
-  review:'优先展示待审记录；校验与抽取共用同一份暂存记录。',
+  extract:'展示所选抽取结果的暂存记录；编辑与确认请打开数据预览。',
+  review:'优先展示所选结果的待审记录；校验与抽取共用同一份暂存记录。',
   load:'预检只读；已有回执的记录在重新入库时自动跳过。'
 };
 var PF_STATE={pending:'待校验',edited:'已修改',confirmed:'已确认',rejected:'已拒绝'};
@@ -49,18 +51,42 @@ function pfNodeState(st,key){
 function pfNodeDesc(key,p){
   if(key==='parse') return (p.parse_artifacts||[]).indexOf('对照报告.html')>=0
     ? '对照报告已生成' : '尚未解析';
-  if(key==='extract') return p.rule?((p.rule.name||'规则')+' v'+(p.rule.version||1)):'未绑定规则';
+  if(key==='extract') return pfResults.length
+    ? (pfResults.length+' 个抽取结果') : '尚无抽取结果';
   if(key==='review'){
-    var c=p.review_counts||{}, n=Object.keys(c).reduce(function(a,k){return a+c[k];},0);
+    var r=pfCurrentResult(), c=r&&r.review_counts||{};
+    var n=Object.keys(c).reduce(function(a,k){return a+(Number(c[k])||0);},0);
     return n?(n+' 条 · 确认 '+(c.confirmed||0)):'暂无记录';
   }
-  var l=p.load||{}, acts=p.load_actions||{};
-  return l.target_table?((l.target_table)+' · '+((acts.insert||0)+(acts.update||0))+' 条')
-    :'未入库';
+  var b=pfCurrentBinding();
+  return b&&b.target_table?b.target_table:'未绑定入库目标';
+}
+function pfResultNum(r){ return r&&(r.extract_result_id||r.id); }
+function pfCurrentResult(){
+  if(pfResultId==null) return null;
+  return pfResults.filter(function(r){return String(pfResultNum(r))===String(pfResultId);})[0]||null;
+}
+function pfCurrentBinding(){
+  var r=pfCurrentResult();
+  return r&&(r.load_binding||r.binding)||null;
+}
+function pfResultLabel(r){
+  return (r.rule_name||'规则 #'+r.rule_id)+' · 结果 #'+pfResultNum(r)+
+    ' · '+(r.record_count||0)+' 条';
+}
+function pfResultPicker(){
+  return '<div class="cfg-row"><label>抽取结果</label><span class="hint-spacer"></span>'+
+    '<select id="pfResult"'+(pfResults.length?'':' disabled')+'>'+
+    (pfResults.length?'':'<option value="">（尚无抽取结果）</option>')+
+    pfResults.map(function(r){return '<option value="'+pfResultNum(r)+'"'+
+      (String(pfResultNum(r))===String(pfResultId)?' selected':'')+'>'+
+      escHtml(pfResultLabel(r))+'</option>';}).join('')+'</select></div>';
 }
 function pfInit(){
   var qs=new URLSearchParams(location.search);
   pfId=parseInt(qs.get('file'),10);
+  var rid=parseInt(qs.get('result'),10);
+  if(rid>0) pfResultId=rid;
   var n=qs.get('node');
   if(['parse','extract','review','load'].indexOf(n)>=0) pfNode=n;
   if(!pfId){
@@ -72,40 +98,62 @@ function pfInit(){
   pfLoad();
 }
 function pfLoad(){
-  pfPreResult=null; pfPreError=''; pfCfgOpen=false; pfRows=null;
+  pfPreResult=null; pfPreError=''; pfCfgOpen=false; pfRows=null; pfRecords=[];
+  pfLinRidByIndex={}; pfLinFieldMap={};
   document.getElementById('procBody').innerHTML='<div class="empty">加载中…</div>';
   Promise.all([
     pfApi('GET','/api/sources/'+pfId+'/pipeline'),
     pfApi('GET','/api/sources/'+pfId+'/config'),
-    pfApi('GET','/api/sources/'+pfId+'/staging'),
-    pfApi('GET','/api/sources/state'),
-    pfApi('GET','/api/sources/'+pfId+'/record-ids')
+    pfApi('GET','/api/sources/'+pfId+'/extract-results'),
+    pfApi('GET','/api/sources/state')
   ]).then(function(rs){
     if(!(rs[0].s===200&&rs[0].j&&rs[0].j.ok))
       throw new Error((rs[0].j&&rs[0].j.error)||('HTTP '+rs[0].s));
     if(!(rs[1].s===200&&rs[1].j&&rs[1].j.ok))
       throw new Error((rs[1].j&&rs[1].j.error)||('HTTP '+rs[1].s));
+    if(!(rs[2].s===200&&rs[2].j&&rs[2].j.ok))
+      throw new Error((rs[2].j&&rs[2].j.error)||('HTTP '+rs[2].s));
     pfData=rs[0].j.pipeline||{};
     pfName=(rs[0].j.file&&rs[0].j.file.name)||('资料 '+pfId);
     pfCfg=rs[1].j;
-    var doc=rs[2].s===200?rs[2].j:{};
-    pfRecords=((doc&&doc.files||[])[0]||{}).records||[];
+    pfResults=rs[2].j.items||[];
+    var summary={};
+    (pfData.results||[]).forEach(function(r){ summary[pfResultNum(r)]=r; });
+    pfResults.forEach(function(r){
+      var s=summary[pfResultNum(r)];
+      if(s&&s.review_counts) r.review_counts=s.review_counts;
+    });
+    if(pfResultId!=null&&!pfResults.some(function(r){
+      return String(pfResultNum(r))===String(pfResultId);})) pfResultId=null;
+    if(pfResultId==null&&pfResults.length) pfResultId=pfResultNum(pfResults[0]);
+    var resultUrl=new URL(location.href);
+    if(pfResultId!=null) resultUrl.searchParams.set('result',String(pfResultId));
+    else resultUrl.searchParams.delete('result');
+    history.replaceState(null,'',resultUrl.pathname+resultUrl.search);
     pfFileNames={};
     ((rs[3].j||{}).items||[]).forEach(function(f){ pfFileNames[f.id]=f.name; });
-    pfLinRidByIndex={};
-    ((rs[4].j||{}).items||[]).forEach(function(x){
-      pfLinRidByIndex[x.index]=x.record_id;
+    var extra=[];
+    if(pfResultId!=null){
+      var base='/api/extract-results/'+encodeURIComponent(pfResultId);
+      extra=[pfApi('GET',base+'/staging'),pfApi('GET',base+'/record-ids')];
+    }
+    return Promise.all(extra).then(function(docs){
+      var doc=docs[0]&&docs[0].s===200?docs[0].j:{};
+      pfRecords=(doc.records||((doc.files||[])[0]||{}).records||[]);
+      ((docs[1]&&docs[1].j||{}).items||[]).forEach(function(x){
+        pfLinRidByIndex[x.index]=x.record_id;
+      });
+      document.getElementById('procBody').innerHTML=
+        '<div class="proc-layout">'+
+          '<aside class="proc-side"><div class="proc-side-t">处理流程</div>'+
+            '<div class="proc-flow-v" id="procFlow"></div></aside>'+
+          '<main class="proc-main">'+
+            '<div class="proc-sec" id="procConfig"></div>'+
+            '<div class="proc-sec" id="procResult"></div>'+
+          '</main>'+
+        '</div>';
+      pfRender();
     });
-    document.getElementById('procBody').innerHTML=
-      '<div class="proc-layout">'+
-        '<aside class="proc-side"><div class="proc-side-t">处理流程</div>'+
-          '<div class="proc-flow-v" id="procFlow"></div></aside>'+
-        '<main class="proc-main">'+
-          '<div class="proc-sec" id="procConfig"></div>'+
-          '<div class="proc-sec" id="procResult"></div>'+
-        '</main>'+
-      '</div>';
-    pfRender();
   }).catch(function(e){
     document.getElementById('procBody').innerHTML=
       '<div class="empty">读取失败：'+escHtml(String(e&&e.message||e))+
@@ -130,6 +178,8 @@ function pfRender(){
     pfNode=b.getAttribute('data-pn');
     var u=new URL(location.href);
     u.searchParams.set('node',pfNode);
+    if(pfResultId!=null) u.searchParams.set('result',String(pfResultId));
+    else u.searchParams.delete('result');
     history.replaceState(null,'',u.pathname+u.search);
     pfRender();
   };
@@ -150,14 +200,6 @@ function pfCollect(){
       pv[key]=v;
     });
     pfPending.params=pv;
-  }else if(pfNode==='extract'){
-    var rv=document.getElementById('pfRule');
-    if(rv) pfPending.rule_version_id=rv.value?parseInt(rv.value,10):null;
-  }else if(pfNode==='load'){
-    var ds=document.getElementById('pfDs'), lt=document.getElementById('pfLt');
-    if(ds&&lt) pfPending.load=(ds.value&&lt.value)
-      ?{datasource_id:parseInt(ds.value,10),load_table_id:parseInt(lt.value,10)}
-      :{datasource_id:null,load_table_id:null};
   }
 }
 function pfRenderConfig(){
@@ -207,34 +249,42 @@ function pfRenderConfig(){
       '<details class="proc-advanced"><summary>高级配置</summary>'+
       '<div class="proc-advanced-body">'+advBody+'</div></details>';
   }else if(pfNode==='extract'){
-    fields='<div class="cfg-row"><label>抽取规则</label>'+spacer+
-      '<select id="pfRule"'+dis+'><option value="">（不绑定 · 默认原始透传）</option>';
-    (pfCfg.rules||[]).forEach(function(v){
-      fields+='<option value="'+v.version_id+'"'+
-        (pfCfg.rule_version_id===v.version_id?' selected':'')+'>'+
-        escHtml(v.name+' v'+v.version+(v.current?'（当前）':''))+'</option>';
+    var current=pfCurrentResult(), bound=current&&String(current.rule_id)||'';
+    fields=pfResultPicker()+'<div class="cfg-row"><label>抽取规则</label>'+spacer+
+      '<select id="pfRule"'+dis+'><option value="">（请选择规则）</option>';
+    (pfRules||[]).forEach(function(v){
+      fields+='<option value="'+v.id+'"'+
+        (bound===String(v.id)?' selected':'')+'>'+escHtml(v.name||('规则 #'+v.id))+'</option>';
     });
     fields+='</select></div>'+
-      '<div class="proc-ruledetail" id="pfRuleDetail">加载规则详情…</div>';
+      '<div class="proc-ruledetail" id="pfRuleDetail">'+
+      (pfRules?'选择规则查看定义':(pfRulesError||'加载规则详情…'))+'</div>';
   }else if(pfNode==='review'){
-    fields='<div class="msg">自动化校验规则待实现（当前为逐条人工改值 / 确认 / 拒绝）</div>';
+    fields=pfResultPicker()+
+      '<div class="msg">逐条人工改值 / 确认 / 拒绝；批量确认仅作用于所选抽取结果。</div>';
   }else{
-    fields='<div class="cfg-row"><label>业务库</label>'+spacer+'<select id="pfDs"'+dis+'>'+
-      '<option value="">（未选择）</option>';
-    (pfCfg.datasources||[]).forEach(function(d){
-      fields+='<option value="'+d.id+'"'+
-        (pfCfg.load&&pfCfg.load.datasource_id===d.id?' selected':'')+'>'+
-        escHtml(d.name+' · '+d.host+'/'+d.db_name)+'</option>';
-    });
-    fields+='</select></div>'+
-      '<div class="cfg-row"><label>入库映射</label>'+spacer+'<select id="pfLt"'+dis+'>'+
-      '<option value="">（未选择）</option>';
-    (pfCfg.load_tables||[]).forEach(function(t){
-      fields+='<option value="'+t.id+'" data-ds="'+t.datasource_id+'"'+
-        (pfCfg.load&&pfCfg.load.load_table_id===t.id?' selected':'')+'>'+
-        escHtml(t.target_table+' · '+t.write_mode)+'</option>';
-    });
-    fields+='</select></div>';
+    var binding=pfCurrentBinding(), result=pfCurrentResult();
+    fields=pfResultPicker();
+    if(!result){
+      fields+='<div class="msg">请先完成抽取，再为该结果配置入库映射。</div>';
+    }else if(!binding){
+      fields+='<div class="msg">所选结果尚未绑定入库目标。</div>'+
+        '<button type="button" class="btn mini" id="pfLoadWizard">配置入库映射</button>';
+    }else{
+      var map=binding.field_map_json||binding.field_map||{};
+      var pairs=Object.keys(map).map(function(k){return k+' → '+map[k];}).join('；')||'—';
+      fields+='<div class="cfg-row"><label>业务库</label>'+spacer+
+        '<span class="cfg-static">'+escHtml(binding.datasource_name||binding.db_name||('业务库 #'+binding.datasource_id))+'</span></div>'+
+        '<div class="cfg-row"><label>目标表</label>'+spacer+
+        '<span class="cfg-static">'+escHtml(binding.target_table)+'</span></div>'+
+        '<div class="cfg-row"><label>写入方式</label>'+spacer+
+        '<span class="cfg-static">'+escHtml(modeLabel(binding.write_mode))+'</span></div>'+
+        '<div class="cfg-row"><label>字段映射</label>'+spacer+
+        '<span class="cfg-static">'+escHtml(pairs)+'</span></div>'+
+        '<button type="button" class="btn mini" id="pfLoadWizard"'+
+        (['confirmed','running','ready'].indexOf(binding.status)>=0?' disabled':'')+'>'+
+        (binding.status==='failed'?'重新规划入库':'配置入库映射')+'</button>';
+    }
   }
   box.innerHTML='<div class="proc-bar">'+
     '<div class="proc-bar-l">'+
@@ -243,7 +293,7 @@ function pfRenderConfig(){
     '</div><div class="proc-bar-r">'+
       '<button type="button" class="proc-toggle" id="pfCfgToggle" '+
         'aria-label="展开或收起配置">'+(pfCfgOpen?'▾':'▸')+'</button>'+
-      (pfNode==='review'?'':'<button type="button" class="btn mini" id="pfCfgSave">保存配置</button>')+
+      (pfNode==='parse'?'<button type="button" class="btn mini" id="pfCfgSave">保存配置</button>':'')+
     '</div></div>'+
     '<div class="proc-cfgbody" id="pfCfgBody"'+(pfCfgOpen?'':' hidden')+'>'+fields+'</div>';
   document.getElementById('pfCfgToggle').onclick=function(){
@@ -251,34 +301,22 @@ function pfRenderConfig(){
     document.getElementById('pfCfgBody').hidden=!pfCfgOpen;
     this.textContent=pfCfgOpen?'▾':'▸';
   };
-  var ds=document.getElementById('pfDs'), lt=document.getElementById('pfLt');
-  if(ds&&lt){
-    ds.onchange=function(keep){
-      var did=this.value;
-      Array.prototype.forEach.call(lt.options,function(o){
-        if(!o.value) return;
-        o.hidden=!!did&&o.getAttribute('data-ds')!==did;
-      });
-      /* 初始化时保留已绑定的入库映射；用户主动换业务库才清空 */
-      if(keep&&Array.prototype.some.call(lt.options,function(o){
-        return o.value===String(keep)&&!o.hidden;})) lt.value=String(keep);
-      else lt.value='';
-    };
-    if(pfCfg.load&&pfCfg.load.datasource_id)
-      ds.onchange(pfCfg.load.load_table_id);
-  }
-  var dsFilter=ds&&ds.onchange;
+  var resultSel=document.getElementById('pfResult');
+  if(resultSel) resultSel.onchange=function(){
+    pfResultId=this.value?parseInt(this.value,10):null;
+    var u=new URL(location.href);
+    if(pfResultId!=null) u.searchParams.set('result',String(pfResultId));
+    else u.searchParams.delete('result');
+    history.replaceState(null,'',u.pathname+u.search);
+    pfLoad();
+  };
   var mark=function(){ pfCfgMsg('有未保存的修改'); };
   document.querySelectorAll('#procConfig [data-cp]').forEach(function(el){ el.onchange=mark; });
-  ['pfRule','pfDs','pfLt'].forEach(function(id){
-    var el=document.getElementById(id);
-    if(!el) return;
-    el.onchange=function(){
-      mark();
-      if(id==='pfRule') pfLoadRuleDetail();
-      else if(id==='pfDs'&&dsFilter) dsFilter();
-    };
-  });
+  var ruleSel=document.getElementById('pfRule');
+  if(ruleSel) ruleSel.onchange=function(){
+    pfLoadRuleDetail();
+    pfCfgMsg('规则将在点击「执行抽取」时使用');
+  };
   var save=document.getElementById('pfCfgSave');
   if(save) save.onclick=function(){
     pfCollect();
@@ -292,39 +330,64 @@ function pfRenderConfig(){
       pfPending={}; pfLoad();
     }).catch(function(){ btn.disabled=false; pfCfgMsg('保存失败：平台库不可用',true); });
   };
-  if(pfNode==='extract') pfLoadRuleDetail();
+  var wizard=document.getElementById('pfLoadWizard');
+  if(wizard) wizard.onclick=pfOpenLoadWizard;
+  if(pfNode==='extract'){
+    pfLoadRuleDetail();
+    pfEnsureRules().then(pfFillRules);
+  }
+}
+function pfEnsureRules(){
+  if(pfRules) return Promise.resolve(pfRules);
+  if(pfRulesLoading) return pfRulesLoading;
+  pfRulesLoading=pfApi('GET','/api/extract-rules').then(function(o){
+    if(!(o.s===200&&o.j&&Array.isArray(o.j.items))){
+      throw new Error((o.j&&o.j.error)||('HTTP '+o.s));
+    }
+    pfRules=o.j.items; pfRulesError=''; return pfRules;
+  }).catch(function(e){
+    pfRules=[]; pfRulesError='规则读取失败：'+(e.message||e);
+    return pfRules;
+  }).then(function(rules){
+    pfRulesLoading=null; return rules;
+  });
+  return pfRulesLoading;
+}
+function pfFillRules(){
+  var sel=document.getElementById('pfRule');
+  if(!sel||pfNode!=='extract') return;
+  var previous=sel.value, current=pfCurrentResult();
+  var bound=current&&String(current.rule_id)||'';
+  sel.innerHTML='<option value="">（请选择规则）</option>'+pfRules.map(function(r){
+    return '<option value="'+r.id+'">'+escHtml(r.name||('规则 #'+r.id))+'</option>';
+  }).join('');
+  var value=previous&&pfRules.some(function(r){return String(r.id)===previous;})?previous:bound;
+  if(value) sel.value=value;
+  pfLoadRuleDetail();
 }
 function pfLoadRuleDetail(){
   var sel=document.getElementById('pfRule');
   if(!sel) return;
-  var vid=sel.value?parseInt(sel.value,10):null;
-  var meta=(pfCfg.rules||[]).filter(function(r){return r.version_id===vid;})[0]||null;
+  var ruleId=sel.value?parseInt(sel.value,10):null;
+  var meta=(pfRules||[]).filter(function(r){return r.id===ruleId;})[0]||null;
   var box=document.getElementById('pfRuleDetail');
   if(!box) return;
   if(!meta){
     pfRuleDetail=null;
-    box.innerHTML='<span class="msg">未绑定抽取规则（执行时使用默认原始透传）</span>';
+    box.innerHTML='<span class="msg'+(pfRulesError?' err':'')+'">'+
+      escHtml(pfRulesError||'请选择抽取规则')+'</span>';
     return;
   }
-  pfApi('GET','/api/extract-rules/'+meta.rule_id+'/versions/'+meta.version_id)
-    .then(function(o){
-      if(!(o.s===200&&o.j&&o.j.id)){
-        box.innerHTML='<span class="msg err">规则详情读取失败</span>';
-        return;
-      }
-      pfRuleDetail=o.j;
-      pfRenderRuleDetail(meta);
-    }).catch(function(){
-      box.innerHTML='<span class="msg err">规则详情读取失败</span>';
-    });
+  pfRuleDetail=meta;
+  pfRenderRuleDetail(meta);
 }
 function pfRenderRuleDetail(meta){
   var box=document.getElementById('pfRuleDetail');
   if(!box) return;
-  var d=pfRuleDetail||{}, schema=d.schema_json||{}, mapping=d.mapping_json||{};
+  var d=pfRuleDetail||meta, schema=d.output_schema_json||{}, mapping=d.extraction_spec_json||{};
   var fields=(schema.fields||[]).map(function(f){
     return (f.name||'')+(f.type?'（'+f.type+'）':'');
-  }).join('、')||'—';
+  }).join('、')||(mapping.fields||[]).map(function(f){return f.target||'';}).join('、')||'—';
   var fxLabel={trim:'去空格',replace:'替换',number:'转数字',lower:'小写',upper:'大写'};
   var maps=(mapping.fields||[]).map(function(f){
     var pipe=f.pipeline||[];
@@ -334,22 +397,16 @@ function pfRenderRuleDetail(meta){
     var fx=pipe.filter(function(x){return x.op!=='cell';}).map(function(x){
       return fxLabel[x.op]||x.op;
     }).join('、');
-    return (src?'原始列「'+src+'」 → ':'')+'目标列「'+(f.target||'')+'」'+
+    return (src?'原始列「'+src+'」 → ':'')+'逻辑字段「'+(f.target||'')+'」'+
       (fx?'（'+fx+'）':'');
   }).join('；')||'—';
   var tb=(mapping.tables||[])[0]||mapping.table||{};
   var tbl=(tb.index!=null?('表 '+(Number(tb.index)+1)):'')+
     (tb.header_contains?('表头含 '+tb.header_contains):'')||'—';
-  var trans=((d.transform_json||{}).fields||[]).length;
-  var refs=mapping.refs||{};
-  var refFile=refs.file_id?('#'+refs.file_id+
-    (pfFileNames[refs.file_id]?' · '+pfFileNames[refs.file_id]:'')):'—';
-  var ds=(pfCfg.datasources||[]).filter(function(x){
-    return x.id===refs.datasource_id;
-  })[0];
-  var refBiz=(refs.datasource_id||refs.table)
-    ?((ds?ds.name:('业务库 '+refs.datasource_id))+
-      (refs.table?' / '+refs.table:'')):'—';
+  var refs=d.reference_doc_ids_json||mapping.refs||{};
+  var refIds=Array.isArray(refs)?refs:(refs.reference_doc_ids||[]).concat(refs.file_id?[refs.file_id]:[]);
+  var refFile=refIds.map(function(id){return '#'+id+
+    (pfFileNames[id]?' · '+pfFileNames[id]:'');}).join('、')||'—';
   var row=function(label,value){
     return '<div class="cfg-row"><label>'+escHtml(label)+'</label>'+
       '<span class="hint-spacer"></span><span class="cfg-static">'+
@@ -357,24 +414,26 @@ function pfRenderRuleDetail(meta){
   };
   box.innerHTML='<div class="msg">只读展示 · '+
     '<a class="linkbtn" target="_blank" rel="noopener" href="/extract?rule='+
-    meta.rule_id+'">打开详情编辑 →</a></div>'+
+    meta.id+'">打开详情编辑 →</a></div>'+
     row('规则名称',d.name||meta.name)+
-    row('版本','v'+(d.version||meta.version))+
-    row('规格',d.spec_version?('v'+d.spec_version):'v1（默认）')+
+    row('抽取规格',mapping.spec_version?('v'+mapping.spec_version):'v1（默认）')+
     row('参考文件',refFile)+
-    row('参考业务表',refBiz)+
     row('表定位',tbl)+
     row('输出字段',fields)+
-    row('字段映射',maps)+
-    row('转换字段',trans?String(trans)+' 项':'无');
+    row('字段映射',maps);
 }
 function pfPreviewUrl(){
-  return pfNode==='review'
-    ? '/preview?file='+pfId+'&view=review'
-    : '/preview?file='+pfId;
+  var u='/preview?file='+pfId;
+  if(pfResultId!=null) u+='&result='+encodeURIComponent(pfResultId);
+  if(pfNode==='review') u+='&view=review';
+  return u;
 }
 /* ---- 产物区内联血缘追溯 ---- */
-function pfLinBaseSrc(){ return '/preview?embed=1&file='+pfId; }
+function pfLinBaseSrc(){
+  var u='/preview?embed=1&file='+pfId;
+  if(pfResultId!=null) u+='&result='+encodeURIComponent(pfResultId);
+  return u;
+}
 function pfLinClear(){
   document.querySelectorAll('#procResult tr.pf-sel').forEach(function(tr){
     tr.classList.remove('pf-sel');});
@@ -408,6 +467,7 @@ function pfLinHighlight(key,index,rid,col){
   if(td) td.classList.add('pf-pin');
 }
 function pfLinSelect(key,index,rid,col){
+  if(pfResultId==null) return;
   var wasOpen=pfLineageOpen;
   if(!wasOpen){ pfLineageOpen=true; pfRenderResult(); }
   var frame=document.getElementById('pfLinFrame');
@@ -420,7 +480,7 @@ function pfLinSelect(key,index,rid,col){
     frame.src=first;
   }else if(frame.getAttribute('data-src')===base){
     if(frame.contentWindow) frame.contentWindow.postMessage(
-      {c1TraceKey:{key:key,index:index}},'*');
+      {c1TraceKey:{key:key,index:index,extract_result_id:pfResultId}},'*');
   }else{
     frame.setAttribute('data-src',base);
     frame.src=first;
@@ -441,6 +501,7 @@ function pfBindLinCells(){
       pfApi('GET','/api/staging/locate/'+encodeURIComponent(rid)+
         '?key='+encodeURIComponent(col)).then(function(o){
         if(!(o.s===200&&o.j&&o.j.ok)) return;
+        if(String(o.j.extract_result_id)!==String(pfResultId)) return;
         pfLinFieldMap=o.j.field_map||{};
         pfLinSelect(o.j.field||col,o.j.record_index,rid,col);
       });
@@ -454,7 +515,9 @@ function pfOnLinMessage(e){
     if(panel) panel.classList.toggle('collapsed',e.data.c1LineageCollapsed);
     return;
   }
-  if(!e.data.c1PinField||!pfLineageOpen) return;
+  if(!e.data.c1PinField||!pfLineageOpen||pfResultId==null) return;
+  if(e.data.c1PinField.extract_result_id!=null&&
+    String(e.data.c1PinField.extract_result_id)!==String(pfResultId)) return;
   var key=e.data.c1PinField.key, idx=e.data.c1PinField.record_index;
   pfLinHighlight(key,idx,pfLinRidByIndex[idx],null);
 }
@@ -492,33 +555,33 @@ function pfRecordsHtml(){
   return h+'</tbody></table>';
 }
 function pfActionHtml(){
-  var p=pfData||{}, st=String(p.state||'');
-  var busy=st==='parsing'||st==='loading', label='', dis=false, tip='';
+  var p=pfData||{}, st=String(p.state||''), result=pfCurrentResult(), binding=pfCurrentBinding();
+  var busy=st==='parsing'||st==='loading'||(result&&result.status==='running'), label='', dis=false, tip='';
   if(pfNode==='parse'){
     label='执行解析'; dis=busy;
     tip=busy?'正在处理中，请稍候。'
       :(st==='loaded'
         ?'仅重新运行解析并生成 test/ 下的新报告；业务数据、正式产物、暂存、回执和已入库状态全部保留。'
-        :'按当前解析参数执行解析；已有暂存、产物、回执与校验结论会被覆盖。');
+        :'按当前解析参数执行解析；已有全部抽取结果、产物、回执与校验结论会被清除。');
   }else if(pfNode==='extract'){
     label='执行抽取'; dis=busy;
     tip=busy?'正在处理中，请稍候。'
-      :'按当前抽取规则执行抽取；已有记录与校验结论会被覆盖。';
+      :'按所选单行规则执行；同资料同规则覆盖自己的结果与绑定，其他结果不变。';
   }else if(pfNode==='review'){
-    var c=p.review_counts||{}, pend=(c.pending||0)+(c.edited||0);
-    label='执行校验'; dis=busy;
-    tip=busy?'正在处理中，请稍候。'
-      :('将全部 '+pend+' 条待审记录设为通过。'+
-        (c.rejected?'另有 '+c.rejected+' 条已拒绝记录需人工处理。':''));
+    var c=result&&result.review_counts||{}, pend=(c.pending||0)+(c.edited||0);
+    label='执行校验'; dis=busy||!result;
+    tip=busy?'正在处理中，请稍候。':(!result?'请先完成抽取。':
+      ('将所选结果全部 '+pend+' 条待审记录设为通过。'+
+        (c.rejected?'另有 '+c.rejected+' 条已拒绝记录需人工处理。':'')));
   }else{
-    var bound=!!(p.load&&p.load.load_table_id);
-    label='执行入库'; dis=busy||!bound;
-    tip=busy?'正在处理中，请稍候。':(bound
-      ?('按已配置的入库映射写入 '+p.load.target_table+'。')
-      :'请先在配置里绑定入库映射。');
+    var confirmed=binding&&binding.status==='confirmed';
+    label='执行入库'; dis=busy||!confirmed;
+    tip=busy?'正在处理中，请稍候。':(!binding?'请先为所选结果配置入库映射。':
+      (confirmed?('按所选结果已确认的映射写入 '+binding.target_table+'。')
+        :'入库绑定尚未显式确认，请通过入库向导完成预检与确认。'));
   }
-  return '<button type="button" class="btn mini" id="pfAct"'+(dis?' disabled':'')+'>'+
-    label+'</button>';
+  return '<button type="button" class="btn mini" id="pfAct" title="'+escHtml(tip)+'"'+
+    (dis?' disabled':'')+'>'+label+'</button>';
 }
 function pfRenderResult(){
   var p=pfData||{}, box=document.getElementById('procResult');
@@ -538,17 +601,18 @@ function pfRenderResult(){
       pfPreviewUrl()+'">'+(pfNode==='review'?'打开校验视图':'打开数据预览')+' →</a>';
     body=pfRecordsHtml();
   }else{
-    var l=p.load||{}, acts=p.load_actions||{};
-    if(l.target_table){
+    var l=pfCurrentBinding();
+    if(l){
       openLink='<a class="proc-open" target="_blank" rel="noopener" href="/dashboard?ds='+
         encodeURIComponent(l.datasource_id||'')+'&table='+encodeURIComponent(l.target_table)+
-        '&file='+pfId+'">打开数据看板 →</a>';
+        '&lt='+encodeURIComponent(l.load_table_id||'')+'&file='+pfId+
+        '&result='+encodeURIComponent(pfResultId)+'">打开数据看板 →</a>';
       tools='<button type="button" class="btn mini" id="pfPreflight">预检</button>'+
-        '<button type="button" class="btn mini" id="pfReceipt">回执</button>';
-      body='<div class="proc-kv"><span><b>目标表</b>'+escHtml(l.target_table)+'</span>'+
-        '<span><b>写入</b>'+escHtml(l.write_mode||'—')+'</span>'+
-        '<span><b>新增</b>'+(acts.insert||0)+'</span>'+
-        '<span><b>覆盖</b>'+(acts.update||0)+'</span></div>'+
+        '<button type="button" class="btn mini" id="pfReceipt">回执 / 隔离</button>';
+      body='<div class="proc-kv"><span><b>抽取结果</b>#'+pfResultId+'</span>'+
+        '<span><b>目标表</b>'+escHtml(l.target_table)+'</span>'+
+        '<span><b>写入</b>'+escHtml(modeLabel(l.write_mode))+'</span>'+
+        '<span><b>绑定</b>'+escHtml(l.status||'—')+'</span></div>'+
         '<div class="msg" id="pfPreMsg">'+
         escHtml(pfPreResult?('预检 '+pfPreResult.total+' 条 · 新增 '+pfPreResult.insert+
           ' · 覆盖 '+pfPreResult.update+' · 跳过 '+pfPreResult.skip+
@@ -558,7 +622,7 @@ function pfRenderResult(){
       body='<div class="empty">尚未绑定入库映射</div>';
     }
   }
-  var linPanel=pfNode==='parse'?'':
+  var linPanel=pfNode==='parse'||pfResultId==null?'':
     '<div class="proc-lineage" id="pfLineage"'+(pfLineageOpen?'':' hidden')+'>'+
       '<iframe id="pfLinFrame" title="血缘追溯" loading="lazy"></iframe></div>';
   box.innerHTML='<div class="proc-bar"><div class="proc-bar-l">'+
@@ -589,15 +653,15 @@ function pfRenderResult(){
     var pb=document.getElementById('pfPreflight');
     if(pb) pb.onclick=pfRunPreflight;
     var rb=document.getElementById('pfReceipt');
-    if(rb) rb.onclick=function(){ openReceiptDrawer(pfId); };
-    if((pfData.load||{}).target_table) pfLoadRows();
+    if(rb) rb.onclick=pfOpenReceiptDrawer;
+    if(pfCurrentBinding()) pfLoadRows();
   }
   pfBindLinCells();
 }
 function pfLoadRows(){
   var box=document.getElementById('pfRowsBox');
   if(!box) return;
-  var l=pfData.load||{};
+  var l=pfCurrentBinding()||{};
   if(pfRows){
     box.innerHTML=pfRowsHtml(); pfBindLinCells(); return;
   }
@@ -634,65 +698,73 @@ function pfRowsHtml(){
 }
 function pfRunPreflight(){
   var m=document.getElementById('pfPreMsg');
-  var sel=document.getElementById('pfLt');
-  var bound=pfData.load&&pfData.load.load_table_id;
-  var tid=bound||(sel&&sel.value?parseInt(sel.value,10)
-    :((pfCfg&&pfCfg.load&&pfCfg.load.load_table_id)||null));
-  if(!tid){ if(m) m.textContent='请先选择入库映射'; return; }
-  var btn=document.getElementById('pfPreflight');
+  if(pfResultId==null){ if(m) m.textContent='请先选择抽取结果'; return; }
+  var resultId=pfResultId, btn=document.getElementById('pfPreflight');
   if(btn) btn.disabled=true;
-  if(m) m.textContent='预检中（只读'+(bound?' · 按已绑定目标':'')+'）…';
-  pfApi('POST','/api/sources/'+pfId+'/load-preview',{load_table_id:tid}).then(function(o){
-    if(btn) btn.disabled=false;
-    if(!(o.s===200&&o.j&&o.j.ok)){
-      pfPreResult=null;
-      pfPreError='预检失败：'+((o.j&&o.j.error)||o.s);
+  if(m) m.textContent='预检中（只读 · 按所选结果已绑定目标）…';
+  pfApi('POST','/api/extract-results/'+encodeURIComponent(resultId)+'/load-preview',{})
+    .then(function(o){
+      if(String(pfResultId)!==String(resultId)) return;
+      if(btn) btn.disabled=false;
+      if(!(o.s===200&&o.j&&o.j.ok)){
+        pfPreResult=null;
+        pfPreError='预检失败：'+((o.j&&o.j.error)||o.s);
+        if(m) m.textContent=pfPreError;
+        return;
+      }
+      pfPreError=''; pfPreResult=o.j;
+      if(m) m.textContent='预检 '+o.j.total+' 条 · 新增 '+o.j.insert+
+        ' · 覆盖 '+o.j.update+' · 跳过 '+o.j.skip+' · 隔离 '+o.j.quarantine;
+    }).catch(function(e){
+      if(String(pfResultId)!==String(resultId)) return;
+      if(btn) btn.disabled=false;
+      pfPreResult=null; pfPreError='预检失败：'+(e&&e.message||'平台库不可用');
       if(m) m.textContent=pfPreError;
-      return;
-    }
-    pfPreError=''; pfPreResult=o.j;
-    if(m) m.textContent='预检 '+o.j.total+' 条 · 新增 '+o.j.insert+
-      ' · 覆盖 '+o.j.update+' · 跳过 '+o.j.skip+' · 隔离 '+o.j.quarantine;
-  }).catch(function(e){
-    if(btn) btn.disabled=false;
-    pfPreResult=null; pfPreError='预检失败：'+(e&&e.message||'平台库不可用');
-    if(m) m.textContent=pfPreError;
-  });
+    });
 }
 function pfBindAction(){
   var b=document.getElementById('pfAct');
   if(!b) return;
   var st=String((pfData||{}).state||'');
   b.onclick=function(){
-    var btn=this, msg='';
-    if(pfNode==='parse'){
+    var btn=this, msg='', action=pfNode, resultId=pfResultId;
+    var result=pfCurrentResult(), binding=pfCurrentBinding();
+    var m=document.getElementById('pfActMsg');
+    if(action==='parse'){
       msg=st==='loaded'
         ?'确认重新执行解析？\n仅生成 test/ 下的新产物；业务数据、正式产物、暂存、回执和已入库状态全部保留。'
-        :'确认按当前解析参数执行解析？\n将清空暂存、产物、回执与校验结论。';
-    }else if(pfNode==='extract'){
-      msg=(st==='to_review'||st==='to_load')
-        ?'已有暂存记录，重新抽取将覆盖校验结论。确认继续？'
-        :'确认按当前抽取规则执行抽取？';
-    }else if(pfNode==='review'){
-      msg='确认将全部待审记录设为通过？';
+        :'确认按当前解析参数执行解析？\n将清空全部抽取结果、暂存、产物、回执与校验结论。';
+    }else if(action==='extract'){
+      var rv=document.getElementById('pfRule');
+      var ruleId=rv&&rv.value?parseInt(rv.value,10):null;
+      if(!ruleId){
+        if(m) m.textContent='失败：请先选择抽取规则'; return;
+      }
+      var same=!!(result&&Number(result.rule_id)===ruleId);
+      msg=same?'所选规则已有抽取结果；重新抽取将覆盖该结果的记录、校验结论与未确认绑定。\n已写入业务数据库的数据不会回滚，其他结果不受影响。确认继续？'
+        :'确认按所选抽取规则执行抽取？';
+    }else if(action==='review'){
+      if(!result){ if(m) m.textContent='失败：请先完成抽取'; return; }
+      var c=result.review_counts||{}, pend=(c.pending||0)+(c.edited||0);
+      msg='确认将抽取结果 #'+resultId+' 的全部 '+pend+' 条待审记录设为通过？\n其他结果不受影响。';
     }else{
-      msg='确认按已配置的入库映射执行入库？';
+      if(!binding||binding.status!=='confirmed'){
+        if(m) m.textContent='失败：请先通过入库向导完成映射预检与显式确认'; return;
+      }
+      msg='确认将抽取结果 #'+resultId+' 按已确认映射写入 '+binding.target_table+'？\n其他结果不受影响。';
     }
     if(!confirm(msg)) return;
     btn.disabled=true;
     var req;
-    if(pfNode==='parse') req=pfApi('POST','/api/sources/'+pfId+'/reparse',
+    if(action==='parse') req=pfApi('POST','/api/sources/'+pfId+'/reparse',
       st==='loaded'?{test_mode:true}:{});
-    else if(pfNode==='extract'){
-      var body=(st==='to_review'||st==='to_load')?{force:true}:{};
-      var rv=document.getElementById('pfRule');
-      /* 配置由 UI 显式传；空体在服务端恒为原始透传 */
-      if(rv&&rv.value) body.rule_version_id=parseInt(rv.value,10);
-      req=pfApi('POST','/api/sources/'+pfId+'/extract',body);
+    else if(action==='extract'){
+      req=pfApi('POST','/api/sources/'+pfId+'/extract',{rule_id:ruleId,force:same});
+    }else if(action==='review'){
+      req=pfApi('POST','/api/extract-results/'+encodeURIComponent(resultId)+'/approve-all',{});
+    }else{
+      req=pfApi('POST','/api/extract-results/'+encodeURIComponent(resultId)+'/load',{});
     }
-    else if(pfNode==='review') req=pfApi('POST','/api/sources/'+pfId+'/approve-all',{});
-    else req=pfApi('POST','/api/sources/'+pfId+'/load',{});
-    var m=document.getElementById('pfActMsg');
     if(m) m.textContent='执行中…';
     req.then(function(o){
       if(!(o.s===200&&o.j&&o.j.ok)){
@@ -700,7 +772,7 @@ function pfBindAction(){
         if(m) m.textContent='失败：'+((o.j&&o.j.error)||o.s);
         return;
       }
-      if(pfNode==='parse'){
+      if(action==='parse'){
         if(m){
           m.textContent=st==='loaded'
             ?'已启动解析；正式数据保持不变。':'已启动解析。';
@@ -713,11 +785,85 @@ function pfBindAction(){
         }
         return;
       }
+      if(action==='extract'&&o.j.extract_result_id) pfResultId=o.j.extract_result_id;
       pfLoad();
     }).catch(function(e){
       btn.disabled=false;
       if(m) m.textContent='失败：'+(e&&e.message||'平台库不可用');
     });
   };
+}
+/* ---- 单结果入库：沿用现有向导，依赖按需加载，HTML 无需改动 ---- */
+function pfEnsureWizard(){
+  if(typeof window.openLoadWizard==='function') return Promise.resolve();
+  if(pfWizardLoading) return pfWizardLoading;
+  pfWizardLoading=new Promise(function(resolve,reject){
+    if(!document.querySelector('link[href="/static/wizard.css"]')){
+      var link=document.createElement('link');
+      link.rel='stylesheet'; link.href='/static/wizard.css';
+      document.head.appendChild(link);
+    }
+    var script=document.createElement('script');
+    script.src='/static/wizard.js';
+    script.onload=function(){ pfWizardLoading=null; resolve(); };
+    script.onerror=function(){ pfWizardLoading=null; reject(new Error('入库向导加载失败')); };
+    document.body.appendChild(script);
+  });
+  return pfWizardLoading;
+}
+function pfOpenLoadWizard(){
+  var result=pfCurrentResult(), resultId=pfResultId, btn=document.getElementById('pfLoadWizard');
+  if(!result||result.status!=='ready'){
+    pfCfgMsg('仅已完成的抽取结果可配置入库',true); return;
+  }
+  if(btn) btn.disabled=true;
+  pfEnsureWizard().then(function(){
+    return pfApi('GET','/api/extract-results/'+encodeURIComponent(resultId)+'/gate');
+  }).then(function(o){
+    if(!(o.s===200&&o.j&&o.j.ok)) throw new Error((o.j&&o.j.error)||('HTTP '+o.s));
+    openLoadWizard({fileId:pfId,extractResultId:resultId,result:result,
+      gate:o.j,onDone:pfLoad});
+  }).catch(function(e){ pfCfgMsg('无法打开入库向导：'+(e.message||e),true); })
+    .then(function(){ if(btn&&btn.isConnected) btn.disabled=false; });
+}
+/* ---- 当前结果专属回执与隔离，避免资料级旧聚合接口 ---- */
+function pfOpenReceiptDrawer(){
+  if(pfResultId==null) return;
+  var resultId=pfResultId, drawer=document.getElementById('receipt');
+  if(!drawer) return;
+  document.getElementById('rctitle').textContent='抽取结果 #'+resultId+' · 入库回执 / 隔离';
+  document.getElementById('rcbody').innerHTML='<div class="empty">加载中…</div>';
+  animDrawerOpen(drawer);
+  var base='/api/extract-results/'+encodeURIComponent(resultId);
+  Promise.all([pfApi('GET',base+'/load-log'),pfApi('GET',base+'/quarantine')])
+    .then(function(res){
+      if(res[0].s!==200||res[1].s!==200) throw new Error('读取失败');
+      var logs=res[0].j.items||[], qs=(res[1].j.items||[]).filter(function(q){
+        return q.stage==='load';
+      });
+      var html='<div class="msg" style="margin-bottom:6px">当前结果回执 '+logs.length+
+        ' 条（重新入库时，已有回执的记录将自动跳过）</div>';
+      html+=logs.length?
+        '<table class="list"><thead><tr><th>记录</th><th>动作</th>'+
+        '<th>目标主键</th><th>时间</th></tr></thead><tbody>'+
+        logs.map(function(l){
+          return '<tr><td class="num">'+(l.record_index+1)+'</td>'+
+            '<td>'+escHtml({insert:'新增',update:'覆盖'}[l.action]||l.action)+'</td>'+
+            '<td><code class="mono">'+escHtml(l.target_pk)+'</code></td>'+
+            '<td class="num">'+fmtTime(l.loaded_at)+'</td></tr>';
+        }).join('')+'</tbody></table>':'<div class="empty">暂无回执记录</div>';
+      html+='<div class="msg" style="margin:12px 0 6px">当前结果隔离 '+qs.length+
+        ' 条（只读；重新入库将重试未写入的记录）</div>';
+      html+=qs.length?
+        '<table class="list"><thead><tr><th>记录</th><th>原因</th><th>时间</th></tr></thead><tbody>'+
+        qs.map(function(q){
+          return '<tr><td class="num">'+(q.record_index+1)+'</td>'+
+            '<td>'+escHtml(q.reason)+'</td><td class="num">'+fmtTime(q.created_at)+'</td></tr>';
+        }).join('')+'</tbody></table>':'<div class="empty">暂无隔离记录</div>';
+      document.getElementById('rcbody').innerHTML=html;
+    }).catch(function(){
+      document.getElementById('rcbody').innerHTML=
+        '<div class="empty">读取失败：平台库不可用或结果已变更</div>';
+    });
 }
 pfInit();

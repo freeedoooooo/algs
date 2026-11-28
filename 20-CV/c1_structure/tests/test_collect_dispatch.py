@@ -89,20 +89,20 @@ class CollectDispatchTest(unittest.TestCase):
         self.doc = _doc()
 
     def test_passthrough_golden(self):
-        """无 mapping_json：老透传输出逐字段等于 C1 前的 golden。"""
+        """无 extraction_spec_json：老透传输出逐字段等于 C1 前的 golden。"""
         self.assertEqual(collect.build(self.doc), GOLDEN_PASSTHROUGH)
 
     def test_explicit_v1_golden(self):
         """spec_version=1 与缺省 v1 映射输出均等于 golden。"""
         for mapping in (MAPPING_V1,
                         dict(MAPPING_V1, spec_version=1)):
-            got = collect.build(self.doc, {'mapping_json': mapping})
+            got = collect.build(self.doc, {'extraction_spec_json': mapping})
             self.assertEqual(got, GOLDEN_MAPPING)
 
     def test_v2_dispatches_to_build_logic(self):
         """spec_version=2 只走新引擎，不碰老分支。"""
         sentinel = [{'sentinel': True}]
-        tpl = {'mapping_json': {'spec_version': 2, 'fields': []}}
+        tpl = {'extraction_spec_json': {'spec_version': 2, 'fields': []}}
         with patch.object(collect_logic, 'build_logic',
                           return_value=sentinel) as stub:
             got = collect.build(self.doc, tpl)
@@ -111,7 +111,7 @@ class CollectDispatchTest(unittest.TestCase):
 
     def test_v2_empty_spec_is_passthrough(self):
         """C4 起默认 row 策略在无 fields 时与老 passthrough 逐字段相等。"""
-        records = collect.build(self.doc, {'mapping_json': {'spec_version': 2}})
+        records = collect.build(self.doc, {'extraction_spec_json': {'spec_version': 2}})
         self.assertEqual(records, GOLDEN_PASSTHROUGH)
 
 

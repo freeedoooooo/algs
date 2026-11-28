@@ -1,26 +1,20 @@
 """store/catalog — 目录元数据 repo（MySQL）。
 
-按业务域拆分子模块，本 __init__ 全量重导出公共函数——调用方一律
-`from . import catalog` 后 `catalog.xxx()`，不感知子模块边界：
-
-    _common.py   行投影 / JSON 反序列化共享小工具
-    files.py     资料域（c1_doc_file ＝ 原件 ＋ 运行状态 ＋ 隔离区）
-    rules.py     抽取规则域（c1_extract_rule / c1_extract_rule_version）
-    load.py      入库域（c1_load_datasource / load_table(_field) / load_log）
-
-只经 db.connect 拿 DB-API 连接，SQL 全部收敛在本包；DB 必选，错误上抛。
-JSON 列：写入 json.dumps，读出 json.loads（驱动无关，不依赖 MySQL JSON 函数）。
-无外键约束：引用完整性归应用层（delete_file 引用守卫；级联删除见设计稿 §2）。
+按领域导出：文档 files、单行规则 rules、当前抽取结果 results、入库配置/
+绑定/回执 load。所有 SQL 收敛在本包，引用完整性由应用层显式维护。
 """
 from .files import (register_file, list_files, get_file, get_file_content,
-                    delete_file, update_file_meta,
-                    set_state, set_rule, set_load, set_params,
-                    add_quarantine, clear_quarantine, list_quarantine)
-from .rules import (list_rules, get_rule_version, get_rule,
-                        create_rule, create_version, update_rule,
-                        delete_rule, list_versions)
+                    delete_file, clear_document_results, update_file_meta,
+                    set_state, set_params, add_quarantine, clear_quarantine,
+                    list_quarantine)
+from .rules import (list_rules, get_rule, create_rule, update_rule, delete_rule)
+from .results import (list_extract_results, get_extract_result,
+                      ensure_extract_result, finish_extract_result,
+                      purge_extract_result)
 from .load import (list_datasources, get_datasource, create_datasource,
                    update_datasource, delete_datasource,
                    ensure_default_datasource, list_load_tables, get_load_table,
                    create_load_table, update_load_table, delete_load_table,
-                   add_load_log, list_load_logs, clear_load_logs)
+                   create_binding, update_binding, get_binding, list_bindings,
+                   confirm_binding, start_binding, finish_binding, add_receipt,
+                   list_receipts, purge_receipts, list_loaded_results)

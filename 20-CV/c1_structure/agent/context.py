@@ -229,6 +229,48 @@ def doc_to_context(doc, budget=DEFAULT_BUDGET):
     }
 
 
+def normalize_reference_docs(reference_docs):
+    """规范化参考附件：接受带元数据的信封或直接解析 doc 列表。"""
+    if reference_docs is None:
+        return []
+    if not isinstance(reference_docs, (list, tuple)):
+        raise ValueError('reference_docs 须为列表')
+    out = []
+    for i, item in enumerate(reference_docs, 1):
+        if not isinstance(item, dict):
+            raise ValueError('reference_docs[{}] 须为解析 doc 或附件对象'.format(i))
+        if 'doc' in item:
+            doc = item.get('doc')
+            meta = item
+        else:
+            doc = item
+            meta = {}
+        if not isinstance(doc, dict):
+            raise ValueError('reference_docs[{}].doc 须为解析对象'.format(i))
+        file_info = doc.get('file') or {}
+        out.append({
+            'ref': 'ref{}'.format(i),
+            'file_id': meta.get('file_id'),
+            'name': str(meta.get('name') or file_info.get('name')
+                        or '参考附件{}'.format(i)),
+            'doc_type': meta.get('doc_type') or file_info.get('kind'),
+            'doc': doc,
+        })
+    return out
+
+
+def render_reference_docs(reference_docs, budget=DEFAULT_BUDGET):
+    """逐份渲染参考附件，每份独立预算，避免附件之间争抢或静默丢失。"""
+    sections = []
+    for item in normalize_reference_docs(reference_docs):
+        ctx = doc_to_context(item['doc'], budget=budget)
+        sections.append(
+            '参考附件 {}（file_id={}, name={}, doc_type={}）：\n{}'.format(
+                item['ref'], item.get('file_id'), item['name'],
+                item.get('doc_type'), render_context(ctx)))
+    return '\n\n'.join(sections)
+
+
 def render_context(ctx):
     """上下文渲染为 prompt 文本片段（与 doc_to_context 配套，纯函数）。"""
     lines = ['文档形状：{}'.format(ctx.get('shape') or {})]

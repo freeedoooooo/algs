@@ -47,9 +47,6 @@ def main():
             cur.execute('SHOW TABLES')
             tables = sorted(r[0] for r in cur.fetchall())
             print('tables({}): {}'.format(len(tables), ', '.join(tables)))
-            cur.execute('SHOW INDEX FROM c1_doc_file')
-            print('c1_doc_file indexes: {}'.format(
-                ', '.join(sorted(set(r[2] for r in cur.fetchall())))))
         conn.commit()
     finally:
         conn.close()

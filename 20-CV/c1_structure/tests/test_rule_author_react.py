@@ -1,5 +1,6 @@
-"""P0.5-② generate_rule_react：样本触发 + 受限迭代 + 达标判定。"""
+"""P0.5-② generate_rule_react：抽取结果触发 + 受限迭代 + 达标判定。"""
 import unittest
+from unittest import mock
 
 from c1_structure.agent import llm, rule_author
 from c1_structure.agent.rule_author import is_acceptable
@@ -17,7 +18,10 @@ def _doc(rows=None):
 
 
 def _spec(target, column):
-    return {'spec_version': 2, 'fields': [
+    return {'spec_version': 2,
+            'tables': [{'ref': 'main', 'role': 'record_source', 'index': 0}],
+            'records': {'strategy': 'row', 'source_ref': 'main'},
+            'fields': [
         {'target': target, 'pipeline': [
             {'op': 'cell', 'source': 'main',
              'column': {'name': column}, 'row': 'current'}]}]}
@@ -39,6 +43,23 @@ class RuleAuthorReactTest(unittest.TestCase):
         self.assertTrue(result.meta['react_done'])
         self.assertEqual(result.meta['react_rounds'], 0)
         self.assertEqual(len(calls), 1)
+        self.assertEqual(result.diagnostics['compare']['field_accuracy'], 1.0)
+
+    def test_sample_extract_result_reads_content_db_and_skips_react(self):
+        from c1_structure.store import content_db
+        records = {'records': [
+            {'index': i, 'values': {'金额': value}, 'original': {},
+             'review': {'state': 'confirmed'}}
+            for i, value in enumerate(('10', '20'))]}
+        with mock.patch.object(content_db, 'get_records',
+                               return_value=records) as get_records:
+            result = rule_author.generate_rule_react(
+                _doc(), [{'target': '金额'}], sample_extract_result_id=9,
+                llm_fn=lambda p, s: _spec('金额', '金额'))
+        get_records.assert_called_once_with(9)
+        self.assertEqual(result.meta['sample_extract_result_id'], 9)
+        self.assertNotIn('sample_file_id', result.meta)
+        self.assertFalse(result.meta['react_triggered'])
         self.assertEqual(result.diagnostics['compare']['field_accuracy'], 1.0)
 
     def test_react_revises_to_target(self):

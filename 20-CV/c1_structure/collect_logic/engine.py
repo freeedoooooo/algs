@@ -165,11 +165,36 @@ def _restricted_cands(doc, spec):
     return None
 
 
+def _record_cands(doc, spec, by_ref):
+    """解析记录驱动表；显式 source_ref/record_source 不允许静默回退到全表。"""
+    cfg = spec.get('records') or {}
+    ref = cfg.get('source_ref')
+    if ref:
+        picked = by_ref.get(ref)
+        if not picked:
+            raise ValueError('records.source_ref 未命中表: {}'.format(ref))
+        return list(picked) if isinstance(picked, list) else [picked]
+    role_refs = [s.get('ref') or 'main' for s in spec.get('tables') or []
+                 if isinstance(s, dict) and s.get('role') == 'record_source']
+    if len(role_refs) > 1:
+        raise ValueError('多条 record_source 必须通过 records.source_ref 指定')
+    if role_refs:
+        picked = by_ref.get(role_refs[0])
+        if not picked:
+            raise ValueError('record_source 未命中表: {}'.format(role_refs[0]))
+        return list(picked) if isinstance(picked, list) else [picked]
+    return None
+
+
 def _records_row(doc, spec, fields, by_ref):
     """默认策略：无 fields 时直接复用老 passthrough，逐字段完全相等。"""
     if not fields:
+        if _record_cands(doc, spec, by_ref) is not None:
+            raise ValueError('无 fields 的 row 规则不能指定记录来源')
         return collect.passthrough(doc)
-    picked = _restricted_cands(doc, spec)
+    picked = _record_cands(doc, spec, by_ref)
+    if picked is None:
+        picked = _restricted_cands(doc, spec)
     return _finalize([_record_from_ctx(ctx, fields)
                       for ctx in _iter_table_ctxs(doc, by_ref, picked)])
 
@@ -180,7 +205,10 @@ def _records_key_value(doc, spec, fields, by_ref):
     key_sel = cfg.get('key_column') or {'index': 0}
     value_sel = cfg.get('value_column') or {'index': 1}
     records = []
-    for t, scope, ti, page_default in collect._candidate_tables(doc):
+    cands = _record_cands(doc, spec, by_ref)
+    if cands is None:
+        cands = collect._candidate_tables(doc)
+    for t, scope, ti, page_default in cands:
         keys = collect._keys(t.get('headers'))
         kc, vc = pick_column(keys, key_sel), pick_column(keys, value_sel)
         if kc is None or vc is None:
@@ -234,11 +262,16 @@ def _records_one_per_page(doc, spec, fields, by_ref):
     """每页一条记录；无 fields 时填 page_text，非表格 kv 规则走这里。"""
     pages = doc.get('pages') or []
     cands = collect._candidate_tables(doc)
+    driver = _record_cands(doc, spec, by_ref) if fields else None
     records = []
     for pg in pages:
+        page_cands = [c for c in (driver or cands)
+                      if c[3] in (None, pg.get('index'))]
+        picked = page_cands[0] if page_cands else None
         ctx = {'doc': doc, 'page': pg, 'page_index': pg.get('index'),
-               'table': cands[0][0] if cands else None,
-               'table_scope': None, 'table_index': None,
+               'table': picked[0] if picked else None,
+               'table_scope': picked[1] if picked else None,
+               'table_index': picked[2] if picked else None,
                'page_default': pg.get('index'), 'row': None, 'row_index': 0,
                'page_only': True, 'tables_by_ref': by_ref,
                'values': {}, 'lineage': {}}
@@ -256,7 +289,7 @@ def _records_one_per_page(doc, spec, fields, by_ref):
 def build_logic(doc, tpl=None):
     """spec_version=2 入口：c1-structure 信封 → records（信封形态不变）。"""
     doc = doc or {}
-    spec = ((tpl or {}).get('mapping_json') or {})
+    spec = ((tpl or {}).get('extraction_spec_json') or {})
     fields = [f for f in (spec.get('fields') or [])
               if isinstance(f, dict) and f.get('target')]
     by_ref = _tables_by_ref(doc, spec)

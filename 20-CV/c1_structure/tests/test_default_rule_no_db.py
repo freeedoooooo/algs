@@ -14,7 +14,7 @@ from c1_structure import collect, service
 
 
 class _EmptyCatalog:
-    def get_rule_version(self, version_id=None):
+    def get_rule(self, rule_id):
         return None
 
 
@@ -23,8 +23,10 @@ class TestDefaultRuleNoDb(unittest.TestCase):
         with patch.object(service, '_load', return_value=_EmptyCatalog()):
             tpl = service.resolve_rule()
         self.assertEqual(tpl['name'], '原始透传')
-        self.assertIsNone(tpl['version_id'])
-        self.assertEqual(tpl['mapping_json'], {})
+        self.assertIsNone(tpl['rule_id'])
+        self.assertNotIn('version', tpl)
+        self.assertNotIn('version_id', tpl)
+        self.assertEqual(tpl['extraction_spec_json'], {})
 
     def test_default_ignores_db_rules(self):
         def boom(*a, **k):

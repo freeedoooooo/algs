@@ -3,12 +3,11 @@ import hashlib
 import json
 import logging
 
-from . import catalog, content, loader, semantic_load
+from . import catalog, content_db, loader, semantic_load
 
 logger = logging.getLogger(__name__)
 
 INTENT_JSON = 'auto-intent.json'
-LOAD_PLAN_JSON = 'auto-load-plan.json'
 
 
 def normalize_intent(intent):
@@ -18,7 +17,7 @@ def normalize_intent(intent):
     if not out.get('description') and not out.get('prompt'):
         out['description'] = out.get('natural_language') or ''
     for key in ('table', 'datasource_id', 'field_map', 'write_mode',
-                'business_key'):
+                'business_key', 'business_keys'):
         if out.get(key) in (None, '') and load.get(key) not in (None, ''):
             out[key] = load[key]
     if out.get('table') and not out.get('target_table'):
@@ -30,7 +29,7 @@ def _target_name(value):
     return str(value or '').strip().split('.')[-1]
 
 
-def build_plan(record_set, intent, table_schemas, *, warnings=None):
+def _build_plan(record_set, intent, table_schemas, *, warnings=None):
     """纯函数规划；table_schemas 由调用方从现有数据源读取。"""
     intent = normalize_intent(intent)
     warnings = list(warnings or [])
@@ -111,16 +110,37 @@ def build_plan(record_set, intent, table_schemas, *, warnings=None):
                   if explicit_targets.count(column) > 1}
     invalid_explicit.update({name: column for name, column in explicit.items()
                              if column in duplicated})
+    write_mode = str(intent.get('write_mode') or mapping.get('write_mode') or 'insert')
+    business_keys = intent.get('business_keys')
+    if business_keys is None:
+        business_keys = intent.get('business_key')
+    if business_keys is None:
+        business_keys = mapping.get('business_key') or []
+    if isinstance(business_keys, str):
+        business_keys = [business_keys]
+    mapping['write_mode'] = write_mode
+    mapping['business_key'] = list(business_keys or [])
+    config_error = ''
+    if write_mode not in ('insert', 'upsert', 'update'):
+        config_error = '非法写入方式：{}'.format(write_mode)
+    elif write_mode in ('upsert', 'update') and not mapping['business_key']:
+        config_error = '{} 方式须选择业务键'.format(write_mode)
+    elif set(mapping['business_key']) - set(mapping['field_map'].values()):
+        config_error = '业务键必须出现在字段映射的目标列中'
     if invalid_explicit:
         mapping['complete'] = False
         mapping['invalid_explicit'] = invalid_explicit
+    elif config_error:
+        mapping['complete'] = False
+        mapping['config_error'] = config_error
     else:
         mapping['complete'] = bool(mapping['field_map'])
     target = {'datasource_id': schema.get('datasource_id'),
               'table': schema.get('name')}
     if not mapping['complete']:
         message = ('存在无效或重复的字段映射，请检查数据库列' if invalid_explicit
-                   else '请至少为一个中文字段选择数据库列；留空字段不入库')
+                   else config_error or
+                   '请至少为一个中文字段选择数据库列；留空字段不入库')
         return {'status': 'mapping_incomplete',
                 'message': message,
                 'target': target, 'mapping': mapping,
@@ -131,16 +151,39 @@ def build_plan(record_set, intent, table_schemas, *, warnings=None):
             'recommendations': [], 'warnings': warnings}
 
 
-def plan_for_file(file_id, intent):
-    """读取 records 与现有业务库表结构，生成并保存入库规划。"""
-    logger.info('开始表推荐与字段映射：file_id=%s', file_id)
-    record_set = content.get_records(file_id)
-    intent = normalize_intent(intent)
-    datasources = catalog.list_datasources()
+def build_plan(record_set, intent, table_schemas, *, warnings=None):
+    """结果维度规划入口：可传 records 信封或 extract_result_id。"""
+    if not isinstance(record_set, dict):
+        record_set = content_db.get_records(record_set)
+        if record_set is None:
+            from .errors import NotFound
+            raise NotFound('抽取结果不存在')
+    plan = _build_plan(record_set, intent, table_schemas, warnings=warnings)
+    plan['extract_result_id'] = (record_set or {}).get('extract_result_id')
+    plan['doc_id'] = (record_set or {}).get('doc_id')
+    return plan
+
+
+def plan_for_extract_result(extract_result_id, datasource_id=None,
+                            table_intent=None):
+    """读取单结果记录与现有业务库结构，生成并保存该结果的入库规划。"""
+    logger.info('开始表推荐与字段映射：extract_result_id=%s', extract_result_id)
+    record_set = content_db.get_records(extract_result_id)
+    if record_set is None:
+        from .errors import NotFound
+        raise NotFound('抽取结果不存在')
+    if isinstance(table_intent, dict):
+        intent = normalize_intent(table_intent)
+    else:
+        intent = normalize_intent({
+            'description': str(table_intent or ''),
+            'target_table': str(table_intent or '') or None,
+        })
+    if datasource_id is not None:
+        intent['datasource_id'] = datasource_id
     warnings, schemas = [], []
-    requested_ds = (intent or {}).get('datasource_id') \
-        if isinstance(intent, dict) else None
-    for ds in datasources:
+    requested_ds = intent.get('datasource_id')
+    for ds in catalog.list_datasources():
         if requested_ds not in (None, '') and str(ds['id']) != str(requested_ds):
             continue
         try:
@@ -148,15 +191,14 @@ def plan_for_file(file_id, intent):
         except Exception as exc:
             if requested_ds not in (None, ''):
                 raise
-            warnings.append('数据源 {} 暂不可用，已跳过'.format(ds.get('name')
-                                                       or ds.get('id')))
+            warnings.append('数据源 {} 暂不可用，已跳过'.format(
+                ds.get('name') or ds.get('id')))
             logger.warning('业务表结构读取失败：datasource_id=%s error=%s',
                            ds.get('id'), type(exc).__name__)
-    plan = build_plan(record_set, intent or {}, schemas, warnings=warnings)
-    save_plan(file_id, plan)
-    logger.info('入库规划完成：file_id=%s status=%s business_tables=%s recommendations=%s',
-                file_id, plan.get('status'), len(schemas),
-                len(plan.get('recommendations') or []))
+    plan = build_plan(extract_result_id, intent, schemas, warnings=warnings)
+    save_plan(extract_result_id, plan)
+    logger.info('入库规划完成：extract_result_id=%s status=%s',
+                extract_result_id, plan.get('status'))
     return plan
 
 
@@ -170,14 +212,24 @@ def get_intent(file_id):
     return artifact.get_json(file_id, INTENT_JSON) or {}
 
 
-def save_plan(file_id, plan):
-    from . import artifact
-    return artifact.save_json(file_id, LOAD_PLAN_JSON, plan)
+def _plan_artifact_name(extract_result_id):
+    record_set = content_db.get_records(extract_result_id)
+    if record_set is None:
+        from .errors import NotFound
+        raise NotFound('抽取结果不存在')
+    return record_set['doc_id'], 'load-plans/{}.json'.format(extract_result_id)
 
 
-def get_plan(file_id):
+def save_plan(extract_result_id, plan):
     from . import artifact
-    return artifact.get_json(file_id, LOAD_PLAN_JSON)
+    doc_id, name = _plan_artifact_name(extract_result_id)
+    return artifact.save_json(doc_id, name, plan)
+
+
+def get_plan(extract_result_id):
+    from . import artifact
+    _doc_id, name = _plan_artifact_name(extract_result_id)
+    return artifact.get_json(_doc_id, name)
 
 
 def snapshot_from_mapping(mapping):

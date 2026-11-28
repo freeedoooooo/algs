@@ -238,6 +238,11 @@ def sources_page():
     return HTMLResponse(asset('sources.html'))
 
 
+@app.get('/process', response_class=HTMLResponse)
+def process_page():
+    return HTMLResponse(asset('process.html'))
+
+
 @app.get('/preview', response_class=HTMLResponse)
 def preview_page():
     return HTMLResponse(asset('preview.html'))
@@ -487,59 +492,49 @@ def api_sources_del(file_id: int):
 
 @app.get('/api/sources/{file_id}/pipeline')
 def api_sources_pipeline(file_id: int):
-    """资料流程追踪：单链路（一资料=一次运行）四节点状态与产物入口。"""
+    """资料流程追踪：解析产物、全部抽取结果及独立入库绑定。"""
     catalog = _load('store.catalog')
     f = catalog.get_file(file_id)
     if f is None:
         raise store_errors.NotFound('资料文件不存在')
     content_db = _load('store.content_db')
     arts = [a['name'] for a in _load('store.artifact').list(file_id)]
-    gate = content_db.gate_counts(file_id)
-    logs = catalog.list_load_logs(file_id)
-    actions = {}
-    for l in logs:
-        actions[l['action']] = actions.get(l['action'], 0) + 1
-    rule = None
-    if f.get('rule_version_id'):
-        tv = catalog.get_rule_version(version_id=f['rule_version_id'])
-        if tv:
-            rule = {'name': tv['name'], 'version': tv['version'],
-                    'rule_id': tv['rule_id'], 'version_id': tv['id']}
-    load = None
-    if f.get('load_table_id'):
-        lt = catalog.get_load_table(f['load_table_id'])
-        ds = catalog.get_datasource(f['load_datasource_id']) \
-            if f.get('load_datasource_id') else None
-        if lt:
-            load = {'target_table': lt['target_table'],
-                    'write_mode': lt['write_mode'],
-                    'load_table_id': f['load_table_id'],
-                    'datasource_id': f['load_datasource_id'],
-                    'datasource_name': ds['name'] if ds else None,
-                    'db_name': ds['db_name'] if ds else None}
+    results = []
+    for result in catalog.list_extract_results(file_id):
+        gate = content_db.gate_counts(result['id'])
+        binding = catalog.get_binding(extract_result_id=result['id'])
+        results.append({
+            'extract_result_id': result['id'], 'rule_id': result['rule_id'],
+            'rule_name': result['rule_name'], 'status': result['status'],
+            'record_count': result['record_count'], 'error': result['error'],
+            'review_counts': {k: gate[k] for k in
+                              ('confirmed', 'edited', 'rejected', 'pending')},
+            'load_binding': binding,
+        })
     return {'ok': True, 'file': f,
-            'pipeline': {
-                'file_id': file_id,
-                'state': f['state'],
-                'rule': rule,
-                'parse_artifacts': arts,
-                'review_counts': {k: gate[k] for k in
-                                  ('confirmed', 'edited', 'rejected', 'pending')},
-                'load': load,
-                'load_actions': actions,
-            }}
+            'pipeline': {'file_id': file_id, 'state': f['state'],
+                         'parse_artifacts': arts, 'results': results}}
 
 
 @app.get('/api/sources/{file_id}/stage-results')
 def api_sources_stage_results(file_id: int):
-    """聊天阶段卡片：解析/抽取轻量摘要，不返回完整文件。"""
+    """聊天阶段卡片：解析摘要与全部抽取结果摘要。"""
     _file_or_404(file_id)
     summary = _load('stage_summary')
     content = _load('store.content')
+    catalog = _load('store.catalog')
     artifacts = [a['name'] for a in _load('store.artifact').list(file_id)]
+    extracts = []
+    for result in catalog.list_extract_results(file_id):
+        item = summary.extract_summary(content_db.get_records(result['id']))
+        item.update(extract_result_id=result['id'], rule_id=result['rule_id'],
+                    rule_name=result['rule_name'], status=result['status'],
+                    plan=_load('store.load_planner').get_plan(result['id']),
+                    binding=catalog.get_binding(extract_result_id=result['id']))
+        extracts.append(item)
     return {'ok': True,
             'parse': summary.parse_summary(content.get_extract(file_id), artifacts),
-            'extract': summary.extract_summary(content.get_records(file_id))}
+            'extract': extracts}
 
 
 @app.get('/api/extract-rules')
@@ -550,15 +545,21 @@ def api_rules():
 @app.post('/api/extract-rules')
 async def api_rules_add(request: Request):
     body = await _json_body(request)
-    vid = _load('store.catalog').create_rule(
+    rule_id = _load('store.catalog').create_rule(
         body.get('name'), body.get('description'),
-        body.get('schema'), body.get('mapping'), body.get('transform'))
-    return {'ok': True, 'version_id': vid}
+        body.get('output_schema_json'),
+        body.get('extraction_spec_json'),
+        reference_doc_ids_json=body.get('reference_doc_ids_json'),
+        validation_report_json=body.get('validation_report_json'))
+    return {'ok': True, 'rule_id': rule_id}
 
 
 @app.get('/api/extract-rules/{rule_id}')
 def api_rule_get(rule_id: int):
-    return _load('store.catalog').get_rule(rule_id)
+    rule = _load('store.catalog').get_rule(rule_id)
+    if rule is None:
+        raise store_errors.NotFound('抽取规则不存在')
+    return rule
 
 
 @app.patch('/api/extract-rules/{rule_id}')
@@ -567,7 +568,10 @@ async def api_rule_patch(rule_id: int, request: Request):
     _load('store.catalog').update_rule(
         rule_id, name=body.get('name'),
         description=body.get('description'),
-        current_version=body.get('current_version'))
+        output_schema_json=body.get('output_schema_json'),
+        extraction_spec_json=body.get('extraction_spec_json'),
+        reference_doc_ids_json=body.get('reference_doc_ids_json'),
+        validation_report_json=body.get('validation_report_json'))
     return {'ok': True}
 
 
@@ -577,45 +581,29 @@ def api_rule_del(rule_id: int):
     return {'ok': True}
 
 
-@app.get('/api/extract-rules/{rule_id}/versions')
-def api_rule_versions(rule_id: int):
-    return {'items': _load('store.catalog').list_versions(rule_id)}
-
-
-@app.get('/api/extract-rules/{rule_id}/versions/{version_id}')
-def api_rule_version_get(rule_id: int, version_id: int):
-    tv = _load('store.catalog').get_rule_version(version_id=version_id)
-    if not tv or tv['rule_id'] != rule_id:
-        raise _load('store.errors').NotFound('抽取规则版本不存在')
-    return tv
-
-
-@app.post('/api/extract-rules/{rule_id}/versions')
-async def api_rule_version_add(rule_id: int, request: Request):
-    body = await _json_body(request)
-    vid = _load('store.catalog').create_version(
-        rule_id, body.get('schema'), body.get('mapping'),
-        body.get('transform'))
-    return {'ok': True, 'version_id': vid}
-
-
 # ---- Agent 规则生成（P0）----
 # 独立前缀 /api/agent/...：避开 /api/extract-rules/{rule_id} 的 int 路由歧义。
-# 只产草稿、不写库、不建版本；保存由前端走既有 create_version，人工确认后生效。
+# 只产草稿、不写库；保存由前端提交单行规则，由用户确认后用于抽取。
 
 
 @app.post('/api/agent/generate-rule')
 async def api_agent_generate_rule(request: Request):
-    """AI 生成 v2 规则草稿：参考文件 + (目标列名 或 需求提示词) → spec + 诊断。
-
-    精确模式传 fields；自然语言模式传 prompt（AI 推断字段与模式）。
-    传 datasource_id+table 时，物理列名作为输出字段候选词表。
-    C1_SMART_STUB=stub（默认）不烧 token；设 live 走 Qoder Agent SDK。
-    """
+    """参考一份或多份已解析附件，生成一条或多条中文逻辑字段规则草稿。"""
     body = await _json_body(request)
     file_id = body.get('file_id')
-    if not isinstance(file_id, int):
-        raise store_errors.BadRequest('file_id 须为整数（参考文件）')
+    if not isinstance(file_id, int) or isinstance(file_id, bool) or file_id <= 0:
+        raise store_errors.BadRequest('file_id 须为正整数（主参考文件）')
+    raw_refs = body.get('reference_doc_ids')
+    if raw_refs is None:
+        raw_refs = []
+    if not isinstance(raw_refs, list) or len(raw_refs) > 10:
+        raise store_errors.BadRequest('reference_doc_ids 须为最多 10 个附件 ID')
+    doc_ids = []
+    for value in [file_id] + raw_refs:
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            raise store_errors.BadRequest('参考附件 ID 须为正整数')
+        if value not in doc_ids:
+            doc_ids.append(value)
     fields = body.get('fields')
     user_prompt = body.get('prompt')
     has_fields = isinstance(fields, list) and bool(fields)
@@ -625,45 +613,57 @@ async def api_agent_generate_rule(request: Request):
             'fields（精确模式）与 prompt（自然语言模式）须且只须提供一个')
     content = _load('store.content')
     catalog = _load('store.catalog')
-    f = catalog.get_file(file_id)
-    if f is None:
-        raise store_errors.NotFound('参考文件不存在')
-    doc = content.get_extract(file_id)
-    if doc is None:
-        raise store_errors.Conflict('参考文件尚无解析产物，请先解析')
-
-    # 参考业务表 → 物理列名作 target 候选（自然语言模式必须从中选）
-    column_candidates = []
-    ds_id, table = body.get('datasource_id'), body.get('table')
-    if has_prompt and ds_id is not None and table:
-        ds = catalog.get_datasource(int(ds_id))
-        if ds is None:
-            raise store_errors.NotFound('参考业务表的数据源不存在')
-        column_candidates = [c['name'] for c in
-                             _load('store.loader').list_columns(ds, str(table))]
+    references = []
+    primary = None
+    for doc_id in doc_ids:
+        f = catalog.get_file(doc_id)
+        if f is None:
+            raise store_errors.NotFound('参考文件不存在')
+        doc = content.get_extract(doc_id)
+        if doc is None:
+            raise store_errors.Conflict('参考文件尚无解析产物，请先解析')
+        item = {'file_id': doc_id, 'name': f['name'],
+                'doc_type': f.get('doc_type'), 'doc': doc}
+        if doc_id == file_id:
+            primary = item
+        else:
+            references.append(item)
+    sample_result_id = body.get('sample_extract_result_id')
+    if sample_result_id is not None:
+        if not isinstance(sample_result_id, int) or isinstance(sample_result_id, bool) \
+                or sample_result_id <= 0:
+            raise store_errors.BadRequest('sample_extract_result_id 须为正整数')
+        if catalog.get_extract_result(sample_result_id) is None:
+            raise store_errors.NotFound('标准答案抽取结果不存在')
 
     from fastapi.concurrency import run_in_threadpool
     agent = _load('agent.rule_author')
-    refs = {'file_id': file_id, 'datasource_id': ds_id, 'table': table}
+    refs = {'file_id': file_id, 'reference_doc_ids': doc_ids}
     result = await run_in_threadpool(
-        agent.generate_rule, doc, fields if has_fields else None, refs,
-        doc_type=f.get('doc_type'), generation=body.get('generation'),
-        targets=body.get('targets'), content=content,
-        sample_file_id=body.get('sample_file_id') or file_id,
+        agent.generate_rule, primary['doc'], fields if has_fields else None, refs,
+        doc_type=primary.get('doc_type'), generation=body.get('generation'),
+        targets=body.get('targets'),
+        sample_extract_result_id=sample_result_id,
         user_prompt=user_prompt if has_prompt else None,
-        column_candidates=column_candidates)
+        reference_docs=references,
+        multiple_rules=body.get('multiple_rules') is True)
 
     tasklog_mod = _load('tasklog')
     log_path = os.path.join(config.LOG_DIR, 'agent_{}.log'.format(file_id))
     log = tasklog_mod.TaskLog('agent_{}'.format(file_id), log_path=log_path)
     out_fields = (result.schema or {}).get('fields') or []
-    log.emit('info', 'agent', '生成规则草稿（{}模式）：目标字段 {}'.format(
-        (result.meta or {}).get('mode', 'precise'), len(out_fields)))
-    log.emit('ok', 'agent', '静态校验通过；干跑 {} 条；置信度 {}'.format(
-        result.diagnostics.get('records_n', 0), result.confidence))
-    if result.diagnostics.get('warning'):
-        log.emit('warn', 'agent', result.diagnostics['warning'])
-    return result.as_dict()
+    log.emit('info', 'agent', '生成规则草稿（{}模式，{}条）：目标字段 {}'.format(
+        (result.meta or {}).get('mode', 'precise'),
+        (result.meta or {}).get('rules_n', 1), len(out_fields)))
+    if result.rules is None:
+        log.emit('ok', 'agent', '静态校验通过；干跑 {} 条；置信度 {}'.format(
+            result.diagnostics.get('records_n', 0), result.confidence))
+        if result.diagnostics.get('warning'):
+            log.emit('warn', 'agent', result.diagnostics['warning'])
+    out = result.as_dict()
+    out['reference_doc_ids_json'] = doc_ids
+    out['validation_report_json'] = result.diagnostics
+    return out
 
 
 # ---- P2b 入库：数据源 / 映射绑定 / introspection ----
@@ -700,7 +700,8 @@ def api_compute_source_documents():
     catalog_load = _load('store.catalog.load')
     tables, errors, seen_tables = [], [], set()
     docs_by_table = {}
-    for doc in catalog_load.list_loaded_documents():
+    for loaded in catalog_load.list_loaded_results():
+        doc = dict(loaded, file_id=loaded['doc_id'])
         key = (doc['datasource_id'], doc['target_table'])
         docs_by_table.setdefault(key, []).append(doc)
     comments = {}
@@ -1033,16 +1034,12 @@ async def api_load_table_add(request: Request):
         ds_id = int(body.get('datasource_id'))
     except (TypeError, ValueError):
         raise store_errors.BadRequest('须选择业务库')
-    rid, vid = body.get('rule_id'), body.get('rule_version_id')
-    try:
-        rule_id = int(rid) if rid not in (None, '') else None
-        rule_version_id = int(vid) if vid not in (None, '') else None
-    except (TypeError, ValueError):
-        raise store_errors.BadRequest('参考抽取规则 id 非法')
+    fields = body.get('fields')
+    if isinstance(fields, list):
+        fields = [dict(field, field_name=field.get('field_name') or field.get('name'))
+                  for field in fields]
     lt_id = _load('store.catalog').create_load_table(
-        ds_id, rule_id, body.get('target_table'),
-        body.get('write_mode') or 'upsert', body.get('fields'),
-        rule_version_id=rule_version_id, snapshot=body.get('snapshot'))
+        ds_id, body.get('target_table'), fields)
     return {'ok': True, 'id': lt_id}
 
 
@@ -1050,27 +1047,78 @@ async def api_load_table_add(request: Request):
 def api_load_table_get(lt_id: int):
     lt = _load('store.catalog').get_load_table(lt_id)
     if lt is None:
-        raise store_errors.NotFound('入库映射不存在')
+        raise store_errors.NotFound('入库表配置不存在')
     return lt
 
 
 @app.patch('/api/load/tables/{lt_id}')
 async def api_load_table_patch(lt_id: int, request: Request):
     body = await _json_body(request)
-    vid = body.get('rule_version_id')
-    try:
-        rule_version_id = int(vid) if vid not in (None, '') else None
-    except (TypeError, ValueError):
-        raise store_errors.BadRequest('参考抽取规则版本 id 非法')
+    fields = body.get('fields')
+    if isinstance(fields, list):
+        fields = [dict(field, field_name=field.get('field_name') or field.get('name'))
+                  for field in fields]
     _load('store.catalog').update_load_table(
-        lt_id, write_mode=body.get('write_mode'), fields=body.get('fields'),
-        rule_version_id=rule_version_id, snapshot=body.get('snapshot'))
+        lt_id, target_table=body.get('target_table'), fields=fields)
     return {'ok': True}
 
 
 @app.delete('/api/load/tables/{lt_id}')
 def api_load_table_del(lt_id: int):
     _load('store.catalog').delete_load_table(lt_id)
+    return {'ok': True}
+
+
+@app.get('/api/load/bindings')
+def api_load_bindings(doc_id: int = None, extract_result_id: int = None):
+    return {'items': _load('store.catalog').list_bindings(
+        doc_id=doc_id, extract_result_id=extract_result_id)}
+
+
+@app.get('/api/load/bindings/{binding_id}')
+def api_load_binding_get(binding_id: int):
+    binding = _load('store.catalog').get_binding(binding_id=binding_id)
+    if binding is None:
+        raise store_errors.NotFound('入库绑定不存在')
+    return binding
+
+
+@app.post('/api/load/bindings')
+async def api_load_binding_add(request: Request):
+    body = await _json_body(request)
+    try:
+        result_id = int(body.get('extract_result_id'))
+        table_id = int(body.get('load_table_id'))
+    except (TypeError, ValueError):
+        raise store_errors.BadRequest('须选择抽取结果与入库表配置')
+    if result_id <= 0 or table_id <= 0:
+        raise store_errors.BadRequest('须选择抽取结果与入库表配置')
+    business_keys = body.get('business_keys')
+    if business_keys is None:
+        business_keys = body.get('business_key')
+    if isinstance(business_keys, str) and business_keys.strip():
+        business_keys = [business_keys.strip()]
+    binding_id = _load('store.catalog').create_binding(
+        result_id, table_id, body.get('field_map') or {},
+        body.get('write_mode') or 'insert', business_keys)
+    return {'ok': True, 'load_binding_id': binding_id}
+
+
+@app.patch('/api/load/bindings/{binding_id}')
+async def api_load_binding_patch(binding_id: int, request: Request):
+    body = await _json_body(request)
+    if body.get('confirmed') is True:
+        _load('store.catalog').confirm_binding(binding_id)
+    else:
+        business_keys = body.get('business_keys')
+        if business_keys is None:
+            business_keys = body.get('business_key')
+        if isinstance(business_keys, str) and business_keys.strip():
+            business_keys = [business_keys.strip()]
+        _load('store.catalog').update_binding(
+            binding_id, load_table_id=body.get('load_table_id'),
+            field_map=body.get('field_map'), write_mode=body.get('write_mode'),
+            business_keys=business_keys)
     return {'ok': True}
 
 
@@ -1098,54 +1146,33 @@ def api_sources_ledger():
 
 @app.get('/api/sources/{file_id}')
 def api_source_detail(file_id: int):
-    """资料详情（替代原 task 投影）：状态/规则/入库绑定/记录数。"""
+    """资料详情：汇总状态、全部抽取结果与独立入库绑定。"""
     f = _file_or_404(file_id)
-    rule = None
-    if f.get('rule_version_id'):
-        tv = _load('store.catalog').get_rule_version(
-            version_id=f['rule_version_id'])
-        if tv:
-            rule = {'name': tv['name'], 'version': tv['version'],
-                    'version_id': tv['id'], 'rule_id': tv['rule_id']}
-    gate = _load('store.content_db').gate_counts(file_id)
-    load = None
-    if f.get('load_table_id'):
-        lt = _load('store.catalog').get_load_table(f['load_table_id'])
-        if lt:
-            load = {'datasource_id': f['load_datasource_id'],
-                    'load_table_id': f['load_table_id'],
-                    'target_table': lt['target_table'],
-                    'write_mode': lt['write_mode']}
-    return {'file': {'file_id': file_id, 'state': f['state'],
-                     'error': f['error'], 'rule': rule, 'load': load,
+    catalog = _load('store.catalog')
+    results = catalog.list_extract_results(file_id)
+    bindings = {b['extract_result_id']: b for b in catalog.list_bindings(doc_id=file_id)}
+    return {'file': {'file_id': file_id, 'doc_id': file_id,
+                     'state': f['state'], 'error': f['error'],
                      'params': f.get('params_json') or {},
-                     'created_at': str(f['created_at']),
-                     'name': f['name'],
-                     'records_n': gate['records_n'],
+                     'created_at': str(f['created_at']), 'name': f['name'],
+                     'records_n': sum(r['record_count'] for r in results),
+                     'results': [dict(r, load_binding=bindings.get(r['id']))
+                                 for r in results],
                      'files': [{'file_id': file_id, 'name': f['name'],
                                 'state': f['state'],
-                                'records_n': gate['records_n']}]}}
+                                'records_n': sum(r['record_count'] for r in results)}]}}
 
 
 @app.get('/api/sources/{file_id}/config')
 def api_file_config_get(file_id: int):
-    """资料配置（四节点）：当前生效参数/抽取规则/入库映射 + 可选项 + 参数 schema。"""
+    """资料解析配置与可选规则/入库表；规则和入库绑定按结果单独管理。"""
     catalog = _load('store.catalog')
     f = _file_or_404(file_id)
-    rule_versions = []
-    for r in catalog.list_rules():
-        for v in catalog.list_versions(r['id']):
-            rule_versions.append({'version_id': v['id'], 'rule_id': r['id'],
-                                  'name': r['name'], 'version': v['version'],
-                                  'current': r['current_version'] == v['version']})
     return {
-        'ok': True, 'file_id': file_id,
+        'ok': True, 'file_id': file_id, 'doc_id': file_id,
         'params': f.get('params_json') or {},
-        'rule_version_id': f.get('rule_version_id'),
-        'load': {'datasource_id': f.get('load_datasource_id'),
-                 'load_table_id': f.get('load_table_id')},
         'schema': params_mod.public_schema(),
-        'rules': rule_versions,
+        'rules': catalog.list_rules(),
         'datasources': catalog.list_datasources(),
         'load_tables': catalog.list_load_tables(),
     }
@@ -1153,130 +1180,158 @@ def api_file_config_get(file_id: int):
 
 @app.post('/api/sources/{file_id}/config')
 async def api_file_config_set(file_id: int, request: Request):
-    """写资料配置（部分更新）：params / rule_version_id / load。
-    params 经 normalize 校验；规则版本/入库映射校验归属；运行中/已入库禁改。"""
+    """只更新解析参数；抽取规则与入库目标在对应结果上配置。"""
     catalog = _load('store.catalog')
     f = _file_or_404(file_id)
-    if f['state'] in ('parsing', 'loading', 'loaded'):
-        raise store_errors.Conflict('资料处理中/已入库，配置只读')
+    if f['state'] in ('parsing', 'loading'):
+        raise store_errors.Conflict('资料处理中，配置只读')
     body = await _json_body(request)
     changed = []
     if 'params' in body:
-        params, warns = params_mod.normalize(body.get('params'))
+        params, _warns = params_mod.normalize(body.get('params'))
         catalog.set_params(file_id, params)
         changed.append('params')
-    if 'rule_version_id' in body:
-        rv = body.get('rule_version_id')
-        if rv is not None:
-            if not isinstance(rv, int):
-                raise store_errors.BadRequest('rule_version_id 须为整数')
-            tv = catalog.get_rule_version(version_id=rv)
-            if tv is None:
-                raise store_errors.NotFound('抽取规则版本不存在')
-            catalog.set_rule(file_id, rv)
-        else:
-            catalog.set_rule(file_id, None)
-        changed.append('rule_version_id')
-    if 'load' in body and isinstance(body.get('load'), dict):
-        load = body['load']
-        ds_id, lt_id = load.get('datasource_id'), load.get('load_table_id')
-        if ds_id is None or lt_id is None:
-            catalog.set_load(file_id, None, None)
-        else:
-            lt = catalog.get_load_table(int(lt_id))
-            if lt is None:
-                raise store_errors.NotFound('入库映射不存在')
-            if lt['datasource_id'] != int(ds_id):
-                raise store_errors.BadRequest('入库映射不属于所选业务库')
-            catalog.set_load(file_id, int(ds_id), int(lt_id))
-        changed.append('load')
     return {'ok': True, 'file_id': file_id, 'changed': changed}
 
 
-@app.post('/api/sources/{file_id}/approve-all')
-def api_file_approve_all(file_id: int):
-    """执行校验（全部通过）：批量确认该资料全部待审记录，推进到 to_load。"""
-    return service.approve_all(file_id)
+def _result_or_404(extract_result_id):
+    result = _load('store.catalog').get_extract_result(extract_result_id)
+    if result is None:
+        raise store_errors.NotFound('抽取结果不存在')
+    return result
 
 
-@app.get('/api/sources/{file_id}/gate')
-def api_file_gate(file_id: int):
-    """门禁四态计数（轻量）：入库前检查，不拉记录内容。"""
+def _binding_or_empty(binding_id):
+    binding = _load('store.catalog').get_binding(binding_id=binding_id)
+    return binding or {}
+
+
+@app.get('/api/sources/{file_id}/extract-results')
+def api_file_extract_results(file_id: int):
     _file_or_404(file_id)
-    return dict(_load('store.content_db').gate_counts(file_id), ok=True)
+    catalog = _load('store.catalog')
+    bindings = {b['extract_result_id']: b for b in
+                catalog.list_bindings(doc_id=file_id)}
+    return {'ok': True, 'items': [dict(r, load_binding=bindings.get(r['id']))
+                                  for r in catalog.list_extract_results(file_id)]}
+
+
+@app.get('/api/extract-results/{extract_result_id}')
+def api_extract_result_detail(extract_result_id: int):
+    result = _result_or_404(extract_result_id)
+    binding = _load('store.catalog').get_binding(
+        extract_result_id=extract_result_id)
+    return {'ok': True, 'result': result, 'load_binding': binding}
+
+
+@app.delete('/api/extract-results/{extract_result_id}')
+def api_extract_result_delete(extract_result_id: int):
+    result = _result_or_404(extract_result_id)
+    binding = _load('store.catalog').get_binding(
+        extract_result_id=extract_result_id)
+    if binding and binding['status'] in ('confirmed', 'running', 'ready'):
+        raise store_errors.Conflict('已确认或已入库的抽取结果不可删除')
+    _load('store.catalog').purge_extract_result(extract_result_id)
+    remaining = _load('store.catalog').list_extract_results(result['doc_id'])
+    if remaining:
+        service.derive_review_state(remaining[0]['id'])
+    else:
+        _load('store.catalog').set_state(result['doc_id'], 'to_extract', None)
+    return {'ok': True, 'doc_id': result['doc_id']}
+
+
+@app.post('/api/extract-results/{extract_result_id}/rerun')
+async def api_extract_result_rerun(extract_result_id: int, request: Request):
+    raw = await request.body()
+    body = await _json_body(request) if raw else {}
+    return await run_in_threadpool(
+        service.run_extract, _result_or_404(extract_result_id)['doc_id'],
+        force=body.get('force') is True,
+        extract_result_id=extract_result_id)
+
+
+@app.post('/api/sources/{file_id}/extract')
+async def api_file_run_extract(file_id: int, request: Request):
+    """按单条规则抽取；同资料同规则覆盖该结果，其他规则结果不变。"""
+    _file_or_404(file_id)
+    raw = await request.body()
+    body = await _json_body(request) if raw else {}
+    rule_id = body.get('rule_id')
+    if not isinstance(rule_id, int) or isinstance(rule_id, bool) or rule_id <= 0:
+        raise store_errors.BadRequest('请选择抽取规则')
+    return await run_in_threadpool(
+        service.run_extract, file_id, force=body.get('force') is True,
+        rule_id=rule_id)
+
+
+@app.get('/api/extract-results/{extract_result_id}/gate')
+def api_extract_result_gate(extract_result_id: int):
+    _result_or_404(extract_result_id)
+    return dict(_load('store.content_db').gate_counts(extract_result_id), ok=True)
+
+
+@app.post('/api/extract-results/{extract_result_id}/approve-all')
+def api_extract_result_approve_all(extract_result_id: int):
+    _result_or_404(extract_result_id)
+    return service.approve_all(extract_result_id)
+
+
+@app.get('/api/extract-results/{extract_result_id}/load-log')
+def api_extract_result_load_log(extract_result_id: int):
+    _result_or_404(extract_result_id)
+    binding = _load('store.catalog').get_binding(
+        extract_result_id=extract_result_id)
+    items = (_load('store.catalog').list_receipts(
+        load_binding_id=binding['id']) if binding else [])
+    return {'ok': True, 'items': items}
 
 
 @app.get('/api/sources/{file_id}/load-log')
 def api_file_load_log(file_id: int):
     _file_or_404(file_id)
-    return {'ok': True, 'items': _load('store.catalog').list_load_logs(file_id)}
+    return {'ok': True, 'items': _load('store.catalog').list_receipts(doc_id=file_id)}
 
 
-@app.get('/api/sources/{file_id}/load-plan')
-def api_file_load_plan_get(file_id: int):
-    _file_or_404(file_id)
-    plan = _load('store.load_planner').get_plan(file_id)
+@app.get('/api/extract-results/{extract_result_id}/load-plan')
+def api_extract_result_load_plan_get(extract_result_id: int):
+    _result_or_404(extract_result_id)
+    plan = _load('store.load_planner').get_plan(extract_result_id)
     if plan is None:
         return JSONResponse({'ok': False, 'error': '尚无入库规划'}, status_code=404)
     return dict(plan, ok=True)
 
 
-@app.post('/api/sources/{file_id}/load-plan')
-async def api_file_load_plan(file_id: int, request: Request):
-    """按自然语言目标重新推荐表/映射；只读业务库并保存规划，不入库。"""
-    _file_or_404(file_id)
-    body = await _json_body(request)
+@app.post('/api/extract-results/{extract_result_id}/load-plan')
+async def api_extract_result_load_plan(extract_result_id: int, request: Request):
+    """推荐业务表与字段映射；只读业务库，不写业务数据。"""
+    _result_or_404(extract_result_id)
+    raw = await request.body()
+    body = await _json_body(request) if raw else {}
     intent = body.get('intent') or body
     if not isinstance(intent, dict):
         raise store_errors.BadRequest('入库规划须为 JSON 对象')
     plan = await run_in_threadpool(
-        _load('store.load_planner').plan_for_file, file_id, intent)
+        _load('store.load_planner').plan_for_extract_result,
+        extract_result_id, intent.get('datasource_id'), intent)
     return dict(plan, ok=True)
 
 
-@app.post('/api/sources/{file_id}/load-plan/apply')
-async def api_file_load_plan_apply(file_id: int, request: Request):
-    """用户确认推荐表或补齐字段映射后，创建入库映射并执行入库。"""
-    _file_or_404(file_id)
+@app.post('/api/extract-results/{extract_result_id}/load-plan/apply')
+async def api_extract_result_load_plan_apply(extract_result_id: int,
+                                             request: Request):
+    _result_or_404(extract_result_id)
     body = await _json_body(request)
     intent = body.get('intent') or body
     if not isinstance(intent, dict):
         raise store_errors.BadRequest('入库规划须为 JSON 对象')
     return await run_in_threadpool(
-        _load('auto_service').apply_plan, file_id, intent)
+        _load('auto_service').apply_plan, extract_result_id, intent)
 
 
-@app.post('/api/sources/{file_id}/load')
-async def api_file_load(file_id: int, request: Request):
-    """手动入库闸门：未绑定带 {load_datasource_id, load_table_id}；
-    已绑定空体沿用原绑定。门禁/预检在 service.launch_load。"""
-    raw = await request.body()
-    body = await _json_body(request) if raw else {}
-    target = None
-    if 'load_datasource_id' in body or 'load_table_id' in body:
-        try:
-            target = {'datasource_id': int(body.get('load_datasource_id')),
-                      'load_table_id': int(body.get('load_table_id'))}
-        except (TypeError, ValueError):
-            raise store_errors.BadRequest('入库目标须为业务库/入库映射 id')
-    return service.launch_load(file_id, target)
-
-
-@app.post('/api/sources/{file_id}/extract')
-async def api_file_run_extract(file_id: int, request: Request):
-    """执行抽取：{force?, rule_version_id?}；空体/显式 null=默认原始透传；
-    正整数=指定版本（资料处理页会显式带当前配置的规则），抽取成功后回写绑定。
-    parse.json 纯投影、同步毫秒级；重抽覆盖校验结论须 force=true。"""
-    raw = await request.body()
-    body = await _json_body(request) if raw else {}
-    rv = body.get('rule_version_id')
-    if rv is not None and not isinstance(rv, int):
-        raise store_errors.BadRequest('rule_version_id 须为整数')
-    if 'rule_version_id' in body and rv is None:
-        rv = 0  # 显式空选择 → 服务层强制内存默认透传，不回退已绑规则
-    return await run_in_threadpool(service.run_extract, file_id,
-                                   force=bool(body.get('force')),
-                                   rule_version_id=rv)
+@app.post('/api/extract-results/{extract_result_id}/load')
+async def api_extract_result_load(extract_result_id: int):
+    _result_or_404(extract_result_id)
+    return await run_in_threadpool(service.launch_load, extract_result_id)
 
 
 @app.post('/api/sources/{file_id}/reparse')
@@ -1289,23 +1344,44 @@ async def api_file_reparse(file_id: int, request: Request):
                                    test_mode=body.get('test_mode') is True)
 
 
-@app.post('/api/sources/{file_id}/load-preview')
-async def api_file_load_preview(file_id: int, request: Request):
-    """入库向导 dry-run（只读）：{load_table_id} 或 {draft:{...}}。"""
+@app.post('/api/extract-results/{extract_result_id}/load-preview')
+async def api_extract_result_load_preview(extract_result_id: int,
+                                          request: Request):
+    """入库 dry-run；只读目标业务表，不创建绑定、不写记录。"""
+    _result_or_404(extract_result_id)
     body = await _json_body(request)
     draft = body.get('draft')
-    table_id = body.get('load_table_id')
-    return service.preview_load(file_id,
-                                table_id=None if draft else table_id,
-                                draft=draft if isinstance(draft, dict) else None)
+    if not isinstance(draft, dict):
+        table_id = body.get('load_table_id')
+        keys = ('datasource_id', 'target_table', 'field_map',
+                'write_mode', 'business_keys', 'business_key')
+        if table_id is None and not any(key in body for key in keys):
+            draft = None
+        elif table_id is None:
+            draft = {key: body[key] for key in keys if key in body}
+        else:
+            lt = _load('store.catalog').get_load_table(int(table_id))
+            if lt is None:
+                raise store_errors.NotFound('入库表配置不存在')
+            draft = {'datasource_id': lt['datasource_id'],
+                     'target_table': lt['target_table']}
+    return service.preview_load(extract_result_id, draft=draft)
+
+
+@app.get('/api/extract-results/{extract_result_id}/quarantine')
+def api_extract_result_quarantine(extract_result_id: int):
+    _result_or_404(extract_result_id)
+    return {'ok': True,
+            'items': _load('store.catalog').list_quarantine(
+                extract_result_id=extract_result_id)}
 
 
 @app.get('/api/sources/{file_id}/quarantine')
 def api_file_quarantine(file_id: int):
-    """隔离区只读展示：该资料的隔离条目。"""
+    """隔离区只读展示：该资料全部抽取结果的隔离条目。"""
     _file_or_404(file_id)
     return {'ok': True,
-            'items': _load('store.catalog').list_quarantine(file_id=file_id)}
+            'items': _load('store.catalog').list_quarantine(doc_id=file_id)}
 
 
 @app.get('/api/sources/{file_id}/parse')
@@ -1317,9 +1393,9 @@ def api_file_extract(file_id: int):
     return doc
 
 
-@app.get('/api/sources/{file_id}/staging')
-def api_file_staging(file_id: int):
-    doc = _load('store.content').get_records(file_id)
+@app.get('/api/extract-results/{extract_result_id}/staging')
+def api_extract_result_staging(extract_result_id: int):
+    doc = _load('store.content_db').get_records(extract_result_id)
     if doc is None:
         return JSONResponse({'ok': False, 'error': '暂存记录不存在'},
                             status_code=404)
@@ -1328,19 +1404,35 @@ def api_file_staging(file_id: int):
 
 @app.get('/api/staging/query')
 def api_staging_query(field: str = None, q: str = None,
-                      task: str = None, state: str = None):
-    """跨资料暂存查询：DB 直查 field 投影；DB down → 503。task 参数按资料 ID 过滤。"""
-    rows = _load('store.content_db').query_fields(field, q, task, state)
+                      task: str = None, state: str = None,
+                      extract_result_id: int = None, doc_id: int = None):
+    """跨结果暂存查询；task 保留为 doc_id 别名。"""
+    rows = _load('store.content_db').query_fields(
+        field, q, task, state, extract_result_id=extract_result_id,
+        doc_id=doc_id)
     return {'ok': True, 'items': rows}
+
+
+@app.get('/api/extract-results/{extract_result_id}/record-ids')
+def api_extract_result_record_ids(extract_result_id: int):
+    _result_or_404(extract_result_id)
+    mapping = _load('store.content_db').record_id_map(extract_result_id)
+    return {'ok': True, 'items': [
+        {'index': key[1], 'record_id': rid}
+        for key, rid in sorted(mapping.items(), key=lambda item: item[0][1])]}
 
 
 @app.get('/api/sources/{file_id}/record-ids')
 def api_source_record_ids(file_id: int):
-    """(file_id, record_index) → staging record_id 映射，供看板反向定位。"""
-    m = _load('store.content_db').record_id_map(file_id)
-    return {'ok': True, 'items': [
-        {'index': idx, 'record_id': rid}
-        for (_fid, idx), rid in sorted(m.items(), key=lambda kv: kv[0][1])]}
+    _file_or_404(file_id)
+    items = []
+    for result in _load('store.catalog').list_extract_results(file_id):
+        mapping = _load('store.content_db').record_id_map(result['id'])
+        items.extend({'extract_result_id': key[0], 'index': key[1],
+                      'record_id': rid}
+                     for key, rid in sorted(mapping.items(),
+                                            key=lambda item: item[0][1]))
+    return {'ok': True, 'items': items}
 
 
 @app.post('/api/staging/trace-batch')
@@ -1364,50 +1456,52 @@ def api_staging_locate(record_id: int, key: str = None):
     if hit is None:
         return JSONResponse({'ok': False, 'error': '暂存记录不存在'},
                             status_code=404)
-    field_map = {}
-    f = catalog.get_file(hit['file_id'])
-    if f and f.get('load_table_id'):
-        lt = catalog.get_load_table(f['load_table_id'])
-        for fr in (lt or {}).get('fields', []):
-            field_map[fr['target_column']] = fr['rule_field']
+    binding = catalog.get_binding(extract_result_id=hit['extract_result_id'])
+    field_map = (binding or {}).get('field_map_json') or {}
     out = {'ok': True, **hit, 'field_map': field_map}
     if key is not None:
-        out['field'] = field_map.get(key, key)
+        reverse_map = {column: name for name, column in field_map.items()}
+        out['field'] = reverse_map.get(key, key)
     return out
 
 
-def _review_guard(file_id):
-    """校验写操作公共守卫：入库中/已入库记录只读。"""
-    f = _file_or_404(file_id)
-    if f['state'] in ('loading', 'loaded'):
-        raise store_errors.Conflict(
-            {'loading': '入库进行中，记录只读',
-             'loaded': '资料已入库，记录只读'}[f['state']])
+def _review_guard(extract_result_id):
+    """已执行入库的结果只读；其他结果仍可独立复核。"""
+    result = _result_or_404(extract_result_id)
+    if result['status'] != 'ready':
+        raise store_errors.Conflict('抽取结果尚未完成，记录只读')
+    binding = _load('store.catalog').get_binding(
+        extract_result_id=extract_result_id)
+    if binding and binding['status'] in ('confirmed', 'running', 'ready'):
+        raise store_errors.Conflict('已确认或已入库的记录只读')
 
 
-@app.patch('/api/sources/{file_id}/staging/{index}')
-async def api_staging_patch(file_id: int, index: int, request: Request):
-    """校验改值：values 差量合并→edited，original 永不覆盖。"""
-    _review_guard(file_id)
+@app.patch('/api/extract-results/{extract_result_id}/staging/{index}')
+async def api_staging_patch(extract_result_id: int, index: int,
+                            request: Request):
+    """校验改值：values 差量合并，original 与血缘不变。"""
+    _review_guard(extract_result_id)
     body = await _json_body(request)
     values = body.get('values')
     if not isinstance(values, dict) or not values:
         return JSONResponse({'ok': False, 'error': 'values 须为非空对象'},
                             status_code=400)
-    rec = _load('store.content').patch_record(file_id, index, values)
+    rec = _load('store.content_db').patch_record(
+        extract_result_id, index, values)
     return {'ok': True, 'record': rec,
-            'file_state': service.derive_review_state(file_id)}
+            'doc_state': service.derive_review_state(extract_result_id)}
 
 
-@app.post('/api/sources/{file_id}/staging/review')
-async def api_staging_review(file_id: int, request: Request):
-    """批量确认/拒绝：indexes（记录内下标）＋ state。"""
-    _review_guard(file_id)
+@app.post('/api/extract-results/{extract_result_id}/staging/review')
+async def api_staging_review(extract_result_id: int, request: Request):
+    """批量确认/拒绝单个抽取结果的记录。"""
+    _review_guard(extract_result_id)
     body = await _json_body(request)
     indexes = body.get('indexes')
     state = body.get('state')
     if not isinstance(indexes, list) or not indexes \
-            or not all(isinstance(i, int) for i in indexes):
+            or not all(isinstance(i, int) and not isinstance(i, bool)
+                       for i in indexes):
         return JSONResponse(
             {'ok': False, 'error': 'indexes 须为非空整数数组'},
             status_code=400)
@@ -1415,9 +1509,10 @@ async def api_staging_review(file_id: int, request: Request):
         return JSONResponse(
             {'ok': False, 'error': 'state 仅支持 confirmed/rejected'},
             status_code=400)
-    n = _load('store.content').set_review(file_id, indexes, state)
+    n = _load('store.content_db').set_review(
+        extract_result_id, indexes, state)
     return {'ok': True, 'updated': n,
-            'file_state': service.derive_review_state(file_id)}
+            'doc_state': service.derive_review_state(extract_result_id)}
 
 
 @app.post('/api/sources/{file_id}/parse')

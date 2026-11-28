@@ -1,6 +1,7 @@
 """M2 校验算子与 review.reason：只标记不改值，未知算子拒绝。"""
 import unittest
 
+from c1_structure.agent.validate import validate_spec
 from c1_structure.collect_logic.ops.validate import VALIDATORS, run_validates
 from c1_structure.collect_logic.engine import build_logic
 
@@ -47,8 +48,10 @@ class ValidateOpsTest(unittest.TestCase):
 
     def test_reason_only_when_issue_no_value_change(self):
         doc = _doc(['金额'], [['10'], ['abc']])
-        tpl = {'mapping_json': {'spec_version': 2,
-                                'records': {'strategy': 'row'},
+        tpl = {'extraction_spec_json': {'spec_version': 2,
+                                'tables': [{'ref': 'main', 'index': 0,
+                                            'role': 'record_source'}],
+                                'records': {'strategy': 'row', 'source_ref': 'main'},
                                 'fields': [{'target': '金额',
                                             'pipeline': [
                                                 {'op': 'cell', 'source': 'main',
@@ -61,10 +64,28 @@ class ValidateOpsTest(unittest.TestCase):
         self.assertNotIn('reason', recs[0]['review'])
         self.assertEqual(recs[1]['review']['reason'], {'金额': ['range']})
 
+    def test_record_source_contract(self):
+        spec = {'spec_version': 2,
+                'tables': [{'ref': 'main', 'index': 0,
+                            'role': 'record_source'}],
+                'records': {'strategy': 'row', 'source_ref': 'main'},
+                'fields': [{'target': '金额', 'pipeline': [
+                    {'op': 'cell', 'source': 'main',
+                     'column': {'name': '金额'}}]}]}
+        self.assertEqual(validate_spec(spec), [])
+        spec['records']['source_ref'] = 'missing'
+        self.assertTrue(any('source_ref' in issue
+                            for issue in validate_spec(spec)))
+        spec['records'].pop('source_ref')
+        self.assertTrue(any('record_source' in issue
+                            for issue in validate_spec(spec)))
+
     def test_legacy_rule_records_unchanged(self):
         doc = _doc(['金额'], [['10']])
-        tpl = {'mapping_json': {'spec_version': 2,
-                                'records': {'strategy': 'row'},
+        tpl = {'extraction_spec_json': {'spec_version': 2,
+                                'tables': [{'ref': 'main', 'index': 0,
+                                            'role': 'record_source'}],
+                                'records': {'strategy': 'row', 'source_ref': 'main'},
                                 'fields': [{'target': '金额',
                                             'pipeline': [
                                                 {'op': 'cell', 'source': 'main',

@@ -230,7 +230,7 @@ def _region_candidates(doc, region):
 def build_row_fallback(doc, tpl, records, *, llm=None, max_rows=50):
     """对 v2 失败行做受限 v3 补抽；保留原记录，只补空字段且有证据的值。"""
     diagnostics = {'attempted': 0, 'filled': 0, 'failed': [], 'skipped': None}
-    spec = (tpl or {}).get('mapping_json') or {}
+    spec = (tpl or {}).get('extraction_spec_json') or {}
     fields = [f for f in (spec.get('fields') or [])
               if isinstance(f, dict) and f.get('target')]
     if not records or not fields:
@@ -306,7 +306,7 @@ def build_smart(doc, tpl=None, llm=None):
             'review': {'state': 'pending', 'at': None},
         }]
 
-    spec = ((tpl or {}).get('mapping_json') or {})
+    spec = ((tpl or {}).get('extraction_spec_json') or {})
     smart = spec.get('smart') or spec
     fields = [f for f in (spec.get('fields') or [])
               if isinstance(f, dict) and f.get('target')]

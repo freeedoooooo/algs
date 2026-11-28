@@ -56,7 +56,7 @@ class TransformDownTest(unittest.TestCase):
 
     def test_extract_values_match_old_load_transform(self):
         doc = _doc()
-        records = collect.build(doc, {'mapping_json': _spec()})
+        records = collect.build(doc, {'extraction_spec_json': _spec()})
         self.assertEqual(len(records), 1)
         rec = records[0]
         old, errs = loader.apply_transform(
@@ -70,15 +70,15 @@ class TransformDownTest(unittest.TestCase):
 
     def test_restrict_limits_records_to_selected_table(self):
         doc = _doc()
-        self.assertEqual(len(collect.build(doc, {'mapping_json': _spec(True)})), 1)
-        self.assertEqual(len(collect.build(doc, {'mapping_json': _spec(False)})), 3)
+        self.assertEqual(len(collect.build(doc, {'extraction_spec_json': _spec(True)})), 1)
+        self.assertEqual(len(collect.build(doc, {'extraction_spec_json': _spec(False)})), 3)
 
     def test_header_contains_selector_also_restricts(self):
         doc = _doc()
         spec = _spec(True)
         spec['tables'] = [{'ref': 'main', 'header_contains': '金额',
                            'restrict': True}]
-        records = collect.build(doc, {'mapping_json': spec})
+        records = collect.build(doc, {'extraction_spec_json': spec})
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]['values']['名称'], '甲')
 

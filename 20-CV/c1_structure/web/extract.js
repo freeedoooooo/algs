@@ -1,7 +1,6 @@
-/* web/extract.js — 抽取规则管理：列表＋编辑抽屉（结构化字段行
-   表单＋公共参考文件／参考业务表辅助选表选列与命名字段）＋版本历史。 */
+/* web/extract.js — 单行抽取规则管理：列表＋编辑抽屉。 */
 var items=[], cur=null, origName='', origDesc='', cands=null, pendingTable=null,
-    page=1, size=getListPer();
+    filledFromFile=false, validationReport=null, page=1, size=getListPer();
 var rows=document.getElementById('rows');
 var pg=bindPager(document.getElementById('pager'),
   function(d){ page+=d; render(); },
@@ -9,10 +8,6 @@ var pg=bindPager(document.getElementById('pager'),
 var edit=document.getElementById('edit');
 var ename=document.getElementById('ename'), edesc=document.getElementById('edesc');
 var refsel=document.getElementById('refsel');
-var bizds=document.getElementById('bizds'), biztable=document.getElementById('biztable');
-var bizopts=document.getElementById('bizfieldopts');
-var bizFieldOpts=null;   // 参考业务表的列名候选；null=未提供
-var filledBy=null;   // 最近一次自动填充来源：null / 'file' / 'biz'
 var tblsel=document.getElementById('tblsel'), tmanual=document.getElementById('tmanual');
 var tindex=document.getElementById('tindex'), tkw=document.getElementById('tkw');
 var frows=document.getElementById('frows'), emsg=document.getElementById('emsg');
@@ -39,9 +34,7 @@ modeSimple.onclick=function(){setMode('simple');};
 modeJson.onclick=function(){setMode('json');};
 modeSmart.onclick=function(){setMode('smart');};
 smartScope.onchange=function(){smartPage.hidden=(smartScope.value!=='page');};
-/* 版本历史默认展开，不再提供收起开关 */
-
-/* ---- 复杂抽取：场景模板 → 生成 mapping_json（可继续手动微调） ---- */
+/* ---- 复杂抽取：场景模板 → 生成抽取定义（可继续手动微调） ---- */
 var tplKind=document.getElementById('tplKind'), tplForm=document.getElementById('tplForm');
 var genJson=document.getElementById('genJson');
 function tv(id){var e=document.getElementById(id);return e?e.value.trim():'';}
@@ -50,8 +43,7 @@ function colSel(mode,raw){
   if(mode==='exact') return {name:raw};
   return {header_contains:raw};
 }
-/* 简单规则译为 v2：转换下沉到抽取阶段；restrict 限定仅所选表产出记录。
-   旧规则不迁移，仍按原 mapping_json + transform_json 运行。 */
+/* 简单规则译为 v2：转换下沉到抽取阶段；restrict 限定仅所选表产出记录。 */
 function transformOps(apply){
   var pipe=[];
   (apply||[]).forEach(function(name){
@@ -72,8 +64,8 @@ function simpleToV2Spec(table,fields,transforms){
   return {
     spec_version:2,
     origin:'simple',
-    tables:[sel],
-    records:{strategy:'row'},
+    tables:[Object.assign({role:'record_source'},sel)],
+    records:{strategy:'row',source_ref:'main'},
     fields:(fields||[]).map(function(f){
       var pipe=[{op:'cell',source:'main',column:f.column||{}}];
       return {target:f.target,pipeline:pipe.concat(transformOps(fx[f.target]))};
@@ -99,7 +91,7 @@ function v2ToSimpleForm(mp){
 function tableRow(){
   return '<div class="tplrow">'+
     '<input class="tin tk_col" placeholder="原始列名 / 列序号">'+
-    '<input class="tin tk_name" placeholder="目标列名">'+
+    '<input class="tin tk_name" placeholder="中文逻辑字段">'+
     '<select class="tin tk_type" title="字段类型">'+
       '<option value="text">文本</option><option value="amount">金额</option>'+
     '</select>'+
@@ -126,7 +118,7 @@ function smartRow(name,desc){
   return '<div class="tplrow">'+
     '<input class="tin sm_desc" placeholder="字段说明（给模型看的提示）" value="'+
       escHtml(desc||'')+'">'+
-    '<input class="tin sm_name" placeholder="目标列名" value="'+
+    '<input class="tin sm_name" placeholder="中文逻辑字段" value="'+
       escHtml(name||'')+'">'+
     '<button type="button" class="linkbtn danger sm_del" title="删除该行">×</button>'+
   '</div>';
@@ -153,7 +145,7 @@ var TPL={
         '<label>列匹配方式<select class="tin" id="tk_mode">'+
         '<option value="contains">表头包含</option><option value="exact">表头原名</option>'+
         '<option value="index">列序号</option></select></label>'+
-        '<div class="full tplhead"><span>原始列名</span><span>目标列名</span>'+
+        '<div class="full tplhead"><span>原始列名</span><span>中文逻辑字段</span>'+
         '<span>类型<span class="hint" tabindex="0" data-tip="金额：自动追加 regex 与 number，去逗号并转数值。&#10;文本：只取原格文本。">?</span></span><span></span></div>'+
         '<div class="full" id="tk_rows">'+tableRow()+tableRow()+'</div>'+
         '<button type="button" class="btn mini ghost" id="tk_add">＋添加字段</button>';
@@ -173,14 +165,16 @@ var TPL={
         fields.push({target:n,pipeline:pipe});
       }
       if(!fields.length) return null;
-      var spec={spec_version:2,records:{strategy:'row'},fields:fields};
-      var kw=tv('tk_table'); if(kw) spec.tables=[{ref:'main',header_contains:kw}];
+      var spec={spec_version:2,records:{strategy:'row',source_ref:'main'},fields:fields};
+      var kw=tv('tk_table');
+      spec.tables=[{ref:'main',role:'record_source'}];
+      if(kw) spec.tables[0].header_contains=kw;
       return spec;
     }
   },
   kv:{
     render:function(){
-      return '<label class="full">目标列名<input class="tin" id="kv_target" value="信用代码"></label>'+
+      return '<label class="full">中文逻辑字段<input class="tin" id="kv_target" value="信用代码"></label>'+
         '<label class="full">标签文本<input class="tin" id="kv_label" value="统一社会信用代码"></label>'+
         '<label>匹配方式<select class="tin" id="kv_match">'+
         '<option value="contains">包含</option><option value="exact">完全相同</option>'+
@@ -204,7 +198,7 @@ var TPL={
   },
   page:{
     render:function(){
-      return '<label class="full"><span class="lblrow">目标列名'+
+      return '<label class="full"><span class="lblrow">中文逻辑字段'+
         '<span class="hint" tabindex="0" data-tip="该页正文写入 records 的这个键。&#10;固定行为：取该页 plain_text 全文，每页产出一条记录；不支持选列或正则。">?</span></span>'+
         '<input class="tin" id="pg_target" value="正文"></label>';
     },
@@ -270,8 +264,7 @@ function render(){
       '<td class="left">'+escHtml(r.name)+'</td>'+
       '<td class="left"><span class="desc" title="'+escHtml(r.description||'')+'">'+
         escHtml(r.description||'—')+'</span></td>'+
-      '<td class="num">v'+r.current_version+'</td>'+
-      '<td class="num">'+(r.version_count==null?'—':r.version_count)+'</td>'+
+      '<td class="num">'+(((r.output_schema_json||{}).fields||[]).length)+'</td>'+
       '<td class="num">'+fmtTime(r.updated_at)+'</td>'+
       '<td style="white-space:nowrap">'+
         '<button type="button" class="linkbtn" data-edit="'+r.id+'">编辑</button>'+
@@ -369,76 +362,19 @@ function addRow(target,col,fx){
   div.className='frow';
   div.innerHTML='<select class="tin fcol"></select>'+
     '<input type="number" class="tin fidx" min="0" placeholder="列序号" hidden>'+
-    '<input type="text" class="tin fname" placeholder="目标列名" value="'+
+    '<input type="text" class="tin fname" placeholder="中文逻辑字段" value="'+
     escHtml(target||'')+'">'+
-    '<select class="tin fxform" title="入库时应用的转换（暂存值保持不变）">'+
+    '<select class="tin fxform" title="抽取时应用的转换">'+
       '<option value="">无转换</option>'+
       '<option value="trim">trim</option>'+
       '<option value="trim,number">trim+number</option>'+
     '</select>'+
-    '<span class="fdest">-</span>'+
     '<button type="button" class="btn mini danger fdel">删</button>';
   frows.appendChild(div);
   fillCol(div,col);
   div.querySelector('.fxform').value=fx||'';
   div.querySelector('.fcol').onchange=function(){syncIdx(div);};
-  var fnameEl=div.querySelector('.fname');
-  if(bizFieldOpts) fnameEl.setAttribute('list','bizfieldopts');
-  fnameEl.addEventListener('input',updateDestHints);
   div.querySelector('.fdel').onclick=function(){div.remove();};
-  updateDestHints();
-}
-/* ---- 「这些字段去了哪」：编辑抽屉字段行尾部
-   显示该字段在入库映射里的目标列。本规则没有任何入库映射时**不显示**
-   （避免逐行刷「未配置」噪音）；有规则时按字段显示 去向/未配去向。 ---- */
-var destMap=null;   // null=本规则未查/新建；{field:[{表.列}…]}=已加载
-var destHasRules=false;
-function loadDestHints(id){
-  destMap=null; destHasRules=false;
-  api('GET','/api/load/tables').then(function(j){
-    var rules=(j.items||[]).filter(function(m){return m.rule_id===id;});
-    if(!rules.length){ destMap={}; updateDestHints(); return; }
-    destHasRules=true;
-    Promise.all(rules.map(function(m){
-      return api('GET','/api/load/tables/'+m.id).catch(function(){return null;});
-    })).then(function(details){
-      var map={};
-      details.forEach(function(d){
-        if(!d) return;
-        (d.fields||[]).forEach(function(f){
-          (map[f.rule_field]=map[f.rule_field]||[]).push(
-            d.target_table+'.'+f.target_column);
-        });
-      });
-      destMap=map; updateDestHints();
-    });
-  }).catch(function(){});
-}
-function updateDestHints(){
-  if(!destMap) return;
-  Array.prototype.forEach.call(frows.children,function(div){
-    var h=div.querySelector('.fdest');
-    if(!h) return;
-    var f=(div.querySelector('.fname').value||'').trim();
-    if(!f){
-      h.textContent='-'; h.title='填写目标列名后显示入库去向';
-      h.className='fdest'; return;
-    }
-    if(!destHasRules){
-      h.textContent='-';
-      h.title='本规则尚未配置入库映射；在「入库」页配置后，这里会显示每个字段写入哪张表哪一列';
-      h.className='fdest'; return;
-    }
-    var d=destMap[f]||[];
-    if(!d.length){
-      h.textContent='-'; h.title='该目标列名还没有出现在任何入库映射的目标列中';
-      h.className='fdest'; return;
-    }
-    var uniq=[], seen={};
-    d.forEach(function(x){ if(!seen[x]){seen[x]=1;uniq.push(x);} });
-    h.textContent=uniq.join(' / '); h.title='入库映射中的目标列';
-    h.className='fdest has';
-  });
 }
 function refreshCols(){
   Array.prototype.forEach.call(frows.children,function(div){
@@ -452,53 +388,29 @@ function rowsHaveContent(){
       div.querySelector('.fxform').value!=='';
   });
 }
-/* 参考文件选表：按源列整表填充（源列＝目标列名）。
-   已有配置且从未由参考来源填充时不覆盖；若此前由参考业务表填充，
-   本次覆盖生效——即「后选的来源覆盖先选的来源」。 */
+/* 参考文件选表：按文档源列整表填充中文逻辑字段。
+   已有配置且从未由参考文件填充时不覆盖；切换参考表时覆盖。 */
 function autofillRows(){
   var keys=currentKeys();
   if(!keys.length) return;
-  if(!filledBy&&rowsHaveContent()) return;
+  if(!filledFromFile&&rowsHaveContent()) return;
   frows.innerHTML='';
   keys.forEach(function(k){ addRow(k,{name:k}); });
-  filledBy='file';
+  filledFromFile=true;
 }
 document.getElementById('addfield').onclick=function(){addRow('',null);};
 
-/* ---- 公共参考：参考文件（看候选表列）＋参考业务表（看物理列名） ---- */
-function collectRefs(){
-  return {file_id:refsel.value?Number(refsel.value):null,
-          datasource_id:bizds.value?Number(bizds.value):null,
-          table:biztable.value||null};
-}
-function hasOpt(sel,v){
-  return Array.prototype.some.call(sel.options,function(o){
-    return o.value===String(v);
-  });
-}
-function applyBizFieldOpts(){
-  var opts=bizFieldOpts||[];
-  bizopts.innerHTML=opts.map(function(n){
-    return '<option value="'+escHtml(n)+'"></option>';
-  }).join('');
-  Array.prototype.forEach.call(frows.querySelectorAll('.fname'),function(inp){
-    if(opts.length) inp.setAttribute('list','bizfieldopts');
-    else inp.removeAttribute('list');
-  });
-  Array.prototype.forEach.call(document.querySelectorAll('#aiFieldRows .ai-field-name'),function(inp){
-    if(opts.length) inp.setAttribute('list','bizfieldopts');
-    else inp.removeAttribute('list');
-  });
+/* ---- 公共参考：可多选已解析资料，首份用于查看候选表列 ---- */
+function selectedRefs(){
+  return Array.prototype.map.call(refsel.selectedOptions||[],function(o){
+    return Number(o.value);
+  }).filter(function(id){return id>0;});
 }
 function loadRefs(){
-  refsel.innerHTML='<option value="">不使用参考（手动填写源表）</option>';
-  bizds.innerHTML='<option value="">不使用（手动填写目标列名）</option>';
-  biztable.innerHTML='<option value="">—</option>';
-  biztable.hidden=true; biztable.disabled=true;
-  bizFieldOpts=null; applyBizFieldOpts();
-  var pFiles=api('GET','/api/sources/state').then(function(j){
+  refsel.innerHTML='';
+  return api('GET','/api/sources/state').then(function(j){
     (j.items||[]).forEach(function(f){
-      if(['to_review','to_load','loading','loaded'].indexOf(f.state)<0) return;
+      if(['ready','to_review','to_load','loading','loaded'].indexOf(f.state)<0) return;
       var o=document.createElement('option');
       o.value=String(f.id);
       o.textContent='#'+f.id+' · '+f.name;
@@ -507,82 +419,23 @@ function loadRefs(){
   }).catch(function(){
     emsg.textContent='参考文件列表暂不可用，可手动填写源表。';
   });
-  var pDs=api('GET','/api/load/datasources').then(function(j){
-    (j.items||[]).forEach(function(d){
-      var o=document.createElement('option');
-      o.value=String(d.id);
-      o.textContent=(d.name||'业务库')+' · '+(d.db_name||'');
-      bizds.appendChild(o);
-    });
-  }).catch(function(){
-    emsg.textContent='业务库列表暂不可用，可手动填写目标列名。';
+}
+function hasOpt(sel,v){
+  return Array.prototype.some.call(sel.options,function(o){
+    return o.value===String(v);
   });
-  return Promise.all([pFiles,pDs]);
 }
-function loadBizTables(){
-  biztable.innerHTML='<option value="">—</option>';
-  bizFieldOpts=null; applyBizFieldOpts();
-  if(!bizds.value){biztable.hidden=true;biztable.disabled=true;return Promise.resolve();}
-  return api('GET','/api/load/datasources/'+encodeURIComponent(bizds.value)+'/tables')
-    .then(function(j){
-      var ts=j.items||[];
-      biztable.innerHTML='<option value="">—</option>'+ts.map(function(t){
-        return '<option value="'+escHtml(t)+'">'+escHtml(t)+'</option>';
-      }).join('');
-      biztable.hidden=false; biztable.disabled=!ts.length;
-    }).catch(function(e){
-      biztable.hidden=true; biztable.disabled=true;
-      emsg.textContent='业务库表加载失败：'+e.message;
-    });
-}
-/* 参考业务表选表：只填目标列名（物理列名），不改写源列。
-   源列来自文档解析结果，业务表无法推断；若先选了参考文件，
-   其已选源列会被保留，仅目标列名被覆盖。 */
-function fillFromBiz(cols){
-  if(mode!=='simple'||!cols.length) return false;
-  if(!filledBy&&rowsHaveContent()) return false;
-  var names=cols.map(function(c){return c.name;});
-  while(frows.children.length<names.length) addRow('',null);
-  while(frows.children.length>names.length) frows.lastElementChild.remove();
-  Array.prototype.forEach.call(frows.children,function(div,i){
-    div.querySelector('.fname').value=names[i]||'';
+function applyRefs(docIds){
+  var ids=Array.isArray(docIds)?docIds:(docIds&&docIds.file_id?[docIds.file_id]:[]);
+  Array.prototype.forEach.call(refsel.options,function(o){o.selected=false;});
+  ids.slice(0,10).forEach(function(id){
+    if(hasOpt(refsel,id)){
+      Array.prototype.filter.call(refsel.options,function(o){
+        return o.value===String(id);
+      })[0].selected=true;
+    }
   });
-  updateDestHints();
-  filledBy='biz';
-  return true;
-}
-function loadBizColumns(fill){
-  bizFieldOpts=null; applyBizFieldOpts();
-  if(!biztable.value) return Promise.resolve();
-  return api('GET','/api/load/datasources/'+encodeURIComponent(bizds.value)+
-      '/columns?table='+encodeURIComponent(biztable.value))
-    .then(function(j){
-      var cs=j.items||[];
-      if(fill!==false) fillFromBiz(cs);
-      bizFieldOpts=cs.map(function(c){return c.name;});
-      applyBizFieldOpts();
-    }).catch(function(e){emsg.textContent='列加载失败：'+e.message;});
-}
-bizds.onchange=loadBizTables;
-biztable.onchange=loadBizColumns;
-/* 回显已保存的参考选择：只恢复选择项与候选列，不用业务表覆盖已存字段 */
-function applyRefs(refs){
-  refs=refs||{};
-  var jobs=[];
-  if(refs.file_id&&hasOpt(refsel,refs.file_id)){
-    refsel.value=String(refs.file_id);
-    jobs.push(refsel.onchange());   // pendingTable 已在 openEditor 里设好，自动定位原表
-  }
-  if(refs.datasource_id&&hasOpt(bizds,refs.datasource_id)){
-    bizds.value=String(refs.datasource_id);
-    jobs.push(loadBizTables().then(function(){
-      if(refs.table&&hasOpt(biztable,refs.table)){
-        biztable.value=String(refs.table);
-        return loadBizColumns(false);   // 只恢复 datalist，不改字段
-      }
-    }));
-  }
-  return Promise.all(jobs);
+  return refsel.onchange();
 }
 function manualMode(hint){
   cands=null; tblsel.disabled=true;
@@ -592,12 +445,11 @@ function manualMode(hint){
   refreshCols();
 }
 refsel.onchange=function(){
-  var v=refsel.value;
-  if(!v){manualMode();return Promise.resolve();}
-  var p=v.split(':');
-  return api('GET','/api/sources/'+p[0]+'/parse').then(function(doc){
+  var id=selectedRefs()[0];
+  if(!id){manualMode();return Promise.resolve();}
+  return api('GET','/api/sources/'+id+'/parse').then(function(doc){
     cands=candidates(doc);
-    if(!cands.length){manualMode('该文件未解析出表格，请手动填写源表。');return;}
+    if(!cands.length){manualMode('首份参考文件未解析出表格，请手动填写源表。');return;}
     tblsel.innerHTML=cands.map(function(c,i){
       var head=(c.t.headers||[]).slice(0,4).join(' / ');
       return '<option value="'+i+'">#'+i+' · '+c.scope+' · '+
@@ -612,6 +464,7 @@ refsel.onchange=function(){
   });
 };
 tblsel.onchange=function(){autofillRows();refreshCols();};
+function collectRefs(){return selectedRefs();}
 
 /* ---- 编辑抽屉 ---- */
 function closeEditor(){edit.hidden=true;cur=null;}
@@ -621,38 +474,8 @@ document.addEventListener('keydown',function(e){
   if(e.key==='Escape'&&!edit.hidden) closeEditor();
 });
 
-function loadVersions(id){
-  api('GET','/api/extract-rules/'+id+'/versions').then(function(j){
-    var list=j.items||j.versions||j;
-    if(!Array.isArray(list)) list=[];
-    document.getElementById('verlist').innerHTML=list.map(function(v){
-      return '<div class="vrow"><span class="mono">v'+v.version+'</span>'+
-        '<span class="msg">'+fmtTime(v.created_at)+'</span>'+
-        '<span class="spacer"></span>'+
-        (v.is_current?'<span class="badge green">当前</span>':
-          '<button type="button" class="btn mini ghost" data-setcur="'+
-          v.version+'">设为当前</button>')+
-        '</div>';
-    }).join('')||'<div class="sthint">无版本</div>';
-  }).catch(function(e){
-    document.getElementById('verlist').innerHTML=
-      '<div class="sthint">版本历史加载失败：'+escHtml(e.message)+'</div>';
-  });
-}
-document.getElementById('verlist').addEventListener('click',function(e){
-  var b=e.target.closest?e.target.closest('[data-setcur]'):null;
-  if(!b||cur==null) return;
-  var v=Number(b.getAttribute('data-setcur'));
-  api('PATCH','/api/extract-rules/'+cur,{current_version:v}).then(function(){
-    document.getElementById('everbadge').innerHTML=
-      '<span class="badge green">v'+v+'</span>';
-    loadVersions(cur); load();
-    showOk('已将 v'+v+' 设为当前版本（旧任务仍引用各自快照，不受影响）。');
-  }).catch(function(e2){emsg.textContent=e2.message;});
-});
-
 function openEditor(id){
-  cur=id; cands=null; pendingTable=null; filledBy=null;
+  cur=id; cands=null; pendingTable=null; filledFromFile=false; validationReport=null;
   emsg.textContent=''; frows.innerHTML='';
   aiReset();
   setMode('simple'); jsonspec.value='';
@@ -668,7 +491,6 @@ function openEditor(id){
     document.getElementById('everbadge').innerHTML='';
     ename.value=''; edesc.value=''; origName=''; origDesc='';
     delbtn.hidden=true;
-    loadDestHints(null);
     document.getElementById('versec').hidden=true;
     addRow('',null);
     edit.hidden=false; loadRefs();
@@ -676,11 +498,11 @@ function openEditor(id){
   }
   api('GET','/api/extract-rules/'+id).then(function(j){
     document.getElementById('etitle').textContent='编辑规则 #'+id;
-    document.getElementById('everbadge').innerHTML=
-      '<span class="badge green">v'+j.current_version+'</span>';
+    document.getElementById('everbadge').innerHTML='<span class="badge green">单行规则</span>';
     ename.value=j.name||''; edesc.value=j.description||'';
     origName=j.name||''; origDesc=j.description||'';
-    var mp=j.mapping_json||{};
+    var mp=j.extraction_spec_json||{};
+    validationReport=j.validation_report_json||null;
     if(mp.spec_version===3){
       setMode('smart');
       var sfs=mp.fields||[];
@@ -706,25 +528,14 @@ function openEditor(id){
         setMode('json'); jsonspec.value=JSON.stringify(mp,null,2);
       }
     }else{
-      pendingTable=mp.table||null;
-      if(pendingTable){
-        if(typeof pendingTable.index==='number') tindex.value=pendingTable.index;
-        if(pendingTable.header_contains) tkw.value=pendingTable.header_contains;
-      }
-      var fs=mp.fields||[];
-      var fxMap={};
-      ((j.transform_json||{}).fields||[]).forEach(function(f){
-        fxMap[f.target]=(f.apply||[]).join(',');
-      });
-      if(fs.length) fs.forEach(function(f){addRow(f.target,f.column,fxMap[f.target]);});
-      else addRow('',null);
+      setMode('json'); jsonspec.value=JSON.stringify(mp,null,2);
     }
     delbtn.hidden=false;
     document.getElementById('versec').hidden=false;
-    loadVersions(id);
-    loadDestHints(id);
     edit.hidden=false;
-    return loadRefs().then(function(){ return applyRefs(mp.refs); });
+    return loadRefs().then(function(){
+      return applyRefs(j.reference_doc_ids_json);
+    });
   }).catch(function(e){showErr(e.message);});
 }
 
@@ -733,19 +544,19 @@ savebtn.onclick=function(){
   emsg.textContent='';
   var name=ename.value.trim();
   if(!name){emsg.textContent='规则名不能为空';return;}
-  var schema, mapping, transform;
+  var schema, spec, transform;
   if(mode==='smart'){
     var sfields=[], sseen={}, serr=null;
     var srows=smartRows.querySelectorAll('.tplrow');
     for(var si=0;si<srows.length;si++){
       var sn=srows[si].querySelector('.sm_name').value.trim();
       var sd=srows[si].querySelector('.sm_desc').value.trim();
-      if(!sn){serr='目标列名不能为空';break;}
-      if(sseen[sn]){serr='目标列名重复：'+sn;break;}
+      if(!sn){serr='中文逻辑字段不能为空';break;}
+      if(sseen[sn]){serr='中文逻辑字段重复：'+sn;break;}
       sseen[sn]=1; sfields.push({target:sn,description:sd});
     }
     if(serr){emsg.textContent=serr;return;}
-    if(!sfields.length){emsg.textContent='至少需要一个目标字段';return;}
+    if(!sfields.length){emsg.textContent='至少需要一个中文逻辑字段';return;}
     var srec={strategy:'all',scope:smartScope.value};
     if(smartScope.value==='page'){
       if(!smartPage.value){emsg.textContent='请填写页码';return;}
@@ -754,7 +565,7 @@ savebtn.onclick=function(){
     var sconf={};
     if(smartPrompt.value.trim()) sconf.prompt_template=smartPrompt.value.trim();
     if(smartModel.value.trim()) sconf.model=smartModel.value.trim();
-    mapping={spec_version:3,records:srec,fields:sfields,smart:sconf};
+    spec={spec_version:3,records:srec,fields:sfields,smart:sconf};
     schema={fields:sfields.map(function(f){return {name:f.target,type:'text'};})};
     transform=null;
   }else if(mode==='json'){
@@ -762,22 +573,22 @@ savebtn.onclick=function(){
     try{ parsed=JSON.parse(jsonspec.value); }
     catch(e){ emsg.textContent='JSON 语法错误：'+e.message; return; }
     if(!parsed || typeof parsed!=='object' || Array.isArray(parsed)){
-      emsg.textContent='mapping_json 须为 JSON 对象'; return;
+      emsg.textContent='抽取定义须为 JSON 对象'; return;
     }
-    if(parsed.spec_version!==2){
-      emsg.textContent='高级 JSON 模式要求 spec_version 为 2'; return;
+    if(parsed.spec_version!==2&&parsed.spec_version!==3){
+      emsg.textContent='高级 JSON 模式要求 spec_version 为 2 或 3'; return;
     }
     schema={fields:(parsed.fields||[]).filter(function(f){
       return f && f.target;
     }).map(function(f){return {name:f.target,type:'text'};})};
-    mapping=parsed; transform=null;
+    spec=parsed; transform=null;
   }else{
     var fields=[], seen={}, err=null, xf=[];
     Array.prototype.forEach.call(frows.children,function(div){
       if(err) return;
       var t=div.querySelector('.fname').value.trim();
-      if(!t){err='目标列名不能为空';return;}
-      if(seen[t]){err='目标列名重复：'+t;return;}
+      if(!t){err='中文逻辑字段不能为空';return;}
+      if(seen[t]){err='中文逻辑字段重复：'+t;return;}
       seen[t]=1;
       var col=readCol(div);
       if(!col){err='字段「'+t+'」未选源列';return;}
@@ -795,29 +606,27 @@ savebtn.onclick=function(){
     else if(tkw.value.trim()) table={header_contains:tkw.value.trim()};
     else{emsg.textContent='请选择源表（选择参考文件，或手动填写序号 / 表头关键词）';return;}
     schema={fields:fields.map(function(f){return {name:f.target,type:'text'};})};
-    mapping=simpleToV2Spec(table,fields,xf);
+    spec=simpleToV2Spec(table,fields,xf);
     transform=null;
   }
-  mapping.refs=collectRefs();   // 参考文件 / 参考业务表随规则版本一起保存
+  var referenceIds=collectRefs();
+  spec.refs=referenceIds.length?{file_id:referenceIds[0],reference_doc_ids:referenceIds.slice(1)}:{};
   var desc=edesc.value.trim();
+  var payload={
+    name:name,description:desc||null,
+    output_schema_json:schema,extraction_spec_json:spec,
+    reference_doc_ids_json:referenceIds,
+    validation_report_json:validationReport||{}
+  };
   savebtn.disabled=true;
   var p;
   if(cur==null){
-    p=api('POST','/api/extract-rules',
-          {name:name,description:desc||null,schema:schema,mapping:mapping,
-           transform:transform});
+    p=api('POST','/api/extract-rules',payload);
   }else{
-    var patch={};
-    if(name!==origName) patch.name=name;
-    if(desc!==origDesc) patch.description=desc;
-    p=(Object.keys(patch).length?api('PATCH','/api/extract-rules/'+cur,patch):
-        Promise.resolve()).then(function(){
-      return api('POST','/api/extract-rules/'+cur+'/versions',
-                 {schema:schema,mapping:mapping,transform:transform});
-    });
+    p=api('PATCH','/api/extract-rules/'+cur,payload);
   }
   p.then(function(){
-    showOk('已保存「'+name+'」新版本快照（当前版本前移，旧任务不受影响）。');
+    showOk('已保存「'+name+'」。已有抽取结果继续使用各自快照，重抽后使用最新定义。');
     return load();
   }).then(function(){
     if(cur==null){
@@ -825,18 +634,13 @@ savebtn.onclick=function(){
       if(it) openEditor(it.id);
     }else{
       origName=name; origDesc=desc;
-      loadVersions(cur);
-      api('GET','/api/extract-rules/'+cur).then(function(j){
-        document.getElementById('everbadge').innerHTML=
-          '<span class="badge green">v'+j.current_version+'</span>';
-      }).catch(function(){});
     }
   }).catch(function(e){emsg.textContent=e.message;})
    .then(function(){savebtn.disabled=false;});
 };
 
 function delRule(id,name){
-  if(!window.confirm('删除规则「'+name+'」及其全部版本？')) return;
+  if(!window.confirm('删除规则「'+name+'」？已有抽取结果会保留自己的快照，但不能再用该规则重抽。')) return;
   api('DELETE','/api/extract-rules/'+id).then(function(){
     if(cur===id) closeEditor();
     showOk('已删除规则「'+name+'」。');
@@ -875,9 +679,8 @@ function aiAddField(value,description){
   div.className='ai-field-row';
   var input=document.createElement('input');
   input.type='text'; input.className='tin ai-field-name';
-  input.placeholder='目标列名'; input.setAttribute('aria-label','目标字段');
+  input.placeholder='中文逻辑字段'; input.setAttribute('aria-label','中文逻辑字段');
   input.value=value||''; input.dataset.description=description||'';
-  if(bizFieldOpts) input.setAttribute('list','bizfieldopts');
   var del=document.createElement('button');
   del.type='button'; del.className='ai-field-del'; del.textContent='删除';
   del.onclick=function(){
@@ -902,7 +705,6 @@ function aiSeedPrecise(){
       if(n&&values.indexOf(n)<0) values.push(n);
     });
   }
-  if(!values.length&&bizFieldOpts) values=bizFieldOpts.slice();
   if(!values.length) values=[''];
   values.forEach(function(n){aiAddField(n,descriptions[n]);});
 }
@@ -928,13 +730,14 @@ function aiMetric(label,val){
 }
 aiGenBtn.onclick=function(){
   emsg.textContent='';
-  var fid=refsel.value?Number(refsel.value):0;
+  var referenceIds=selectedRefs();
+  var fid=referenceIds[0];
   if(!fid){showErr('请先选择参考文件（已解析的资料）');return;}
   var isNatural=aiMode==='natural';
   var promptText=aiPrompt.value.trim();
   var fields=isNatural?[]:aiTargets();
   if(isNatural&&!promptText){showErr('请填写要提取的内容（需求提示词）');return;}
-  if(!isNatural&&!fields.length){showErr('请至少填写一个目标字段');return;}
+  if(!isNatural&&!fields.length){showErr('请至少填写一个中文逻辑字段');return;}
   aigen.hidden=false;
   aiFields.innerHTML=isNatural
     ? '<span class="aigen-chip">'+escHtml(promptText)+'</span>'
@@ -942,9 +745,7 @@ aiGenBtn.onclick=function(){
   aiLog.textContent='正在生成规则草稿…';
   aiMetrics.innerHTML='';aiDiff.textContent='';
   aiGenBtn.disabled=true;
-  var payload={file_id:fid,
-    datasource_id:bizds.value?Number(bizds.value):null,
-    table:biztable.value||null};
+  var payload={file_id:fid,reference_doc_ids:referenceIds.slice(1)};
   if(isNatural) payload.prompt=promptText; else payload.fields=fields;
   api('POST','/api/agent/generate-rule',payload).then(function(j){
     var d=j.diagnostics||{}, cmp=d.compare||{};
@@ -966,7 +767,8 @@ aiGenBtn.onclick=function(){
     aiDiff.textContent=msgs.join('；');
     setMode('json');
     jsonspec.value=JSON.stringify(j.spec,null,2);
-    showOk('已生成规则草稿，请在「复杂抽取」编辑器中审阅后保存为新版本。');
+    validationReport=j.validation_report_json||{};
+    showOk('已生成规则草稿，请在「复杂抽取」编辑器中审阅后保存规则。');
   }).catch(function(e){
     aiLog.textContent='生成失败：'+e.message;
     emsg.textContent=e.message;

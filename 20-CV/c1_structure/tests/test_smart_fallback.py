@@ -21,7 +21,7 @@ def _doc():
 
 
 def _tpl():
-    return {'mapping_json': {'spec_version': 2, 'fields': [
+    return {'extraction_spec_json': {'spec_version': 2, 'fields': [
         {'target': '设备编号', 'pipeline': []},
         {'target': '设备名称', 'pipeline': []},
     ]}}

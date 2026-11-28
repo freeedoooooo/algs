@@ -31,11 +31,8 @@ class _Catalog:
     def set_state(self, *args):
         self.calls.append(('state',) + args)
 
-    def clear_quarantine(self, file_id):
-        self.calls.append(('quarantine', file_id))
-
-    def set_rule(self, *args):
-        self.calls.append(('rule',) + args)
+    def clear_document_results(self, doc_id):
+        self.calls.append(('results', doc_id))
 
 
 class _Artifact:
@@ -43,22 +40,6 @@ class _Artifact:
         self.calls = []
 
     def delete_all(self, file_id):
-        self.calls.append(file_id)
-
-
-class _Content:
-    def __init__(self):
-        self.calls = []
-
-    def purge_records(self, file_id):
-        self.calls.append(file_id)
-
-
-class _Load:
-    def __init__(self):
-        self.calls = []
-
-    def clear_load_logs(self, file_id):
         self.calls.append(file_id)
 
 
@@ -82,11 +63,10 @@ class ReparseIsolationTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.catalog = _Catalog('loaded')
-        self.artifact, self.content, self.load = _Artifact(), _Content(), _Load()
+        self.artifact = _Artifact()
         self.mods = {'store.catalog': self.catalog,
-                     'store.content_db': self.content,
+                     'store.content_db': SimpleNamespace(),
                      'store.artifact': self.artifact,
-                     'store.catalog.load': self.load,
                      'store.errors': errors,
                      'tasklog': SimpleNamespace(TaskLog=_TaskLog)}
         self.old_running = service.STATE['running']
@@ -107,15 +87,13 @@ class ReparseIsolationTest(unittest.TestCase):
         with self.assertRaises(errors.Conflict):
             self.launch(False)
         self.assertEqual(self.artifact.calls, [])
-        self.assertEqual(self.content.calls, [])
+        self.assertEqual(self.catalog.calls, [])
 
     def test_loaded_test_mode_preserves_formal_data(self):
         result = self.launch(True)
         self.assertTrue(result['test_mode'])
         self.assertEqual(result['report_url'], '/files/1/test/对照报告.html')
         self.assertEqual(self.artifact.calls, [])
-        self.assertEqual(self.content.calls, [])
-        self.assertEqual(self.load.calls, [])
         self.assertEqual(self.catalog.calls, [])
         self.assertTrue(service.STATE['test_mode'])
 
@@ -124,10 +102,9 @@ class ReparseIsolationTest(unittest.TestCase):
         result = self.launch(False)
         self.assertFalse(result['test_mode'])
         self.assertEqual(self.artifact.calls, [1])
-        self.assertEqual(self.content.calls, [1])
-        self.assertEqual(self.load.calls, [1])
+        self.assertEqual(self.catalog.calls[0], ('results', 1))
         self.assertIn(('state', 1, 'pending', ''), self.catalog.calls)
-        self.assertIn(('rule', 1, None), self.catalog.calls)
+        self.assertFalse(any(c[0] == 'rule' for c in self.catalog.calls))
 
 
 if __name__ == '__main__':

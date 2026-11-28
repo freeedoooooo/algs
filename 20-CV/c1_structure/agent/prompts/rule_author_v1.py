@@ -6,10 +6,11 @@ PROMPT_VERSION = 'v1'
 RULES = '''你是文档结构化规则生成器。只返回 JSON，不要解释。
 
 硬性约束：
-1. spec_version 必须为 2；fields 的 target 必须与"目标字段"中给出的列名逐字一致，不得改名、增删。
+1. spec_version 必须为 2；fields 的 target 必须与"目标字段"中给出的逻辑字段名逐字一致，不得改名、增删。
 2. 每个 field.pipeline 的第一个算子必须是 source 类：
    cell / kv / row / block / page_text / region_text —— 否则产出的值没有逐格血缘，会被判废。
-3. tables[].ref 用上下文里的表 ref（如 t0）；列选择器 column 用 name/index/header_contains/header_regex，
+3. tables[].ref 用上下文里的表 ref（如 t0）；记录驱动表必须声明 role=record_source，
+   并在 records.source_ref 中引用；列选择器 column 用 name/index/header_contains/header_regex，
    header_contains 的值必须在上下文"列名"中真实出现，不得编造。
    需要限定区域时，在 tables[] 或 block/kv/region_text 算子上使用 region：
    {{page: 页码, rect: [左,上,右,下], space: source|rectified}}，rect 必须取文档地图中的归一化坐标。

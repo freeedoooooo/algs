@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>入库映射 · 结构化工具</title>
+<title>业务库与入库绑定 · 结构化工具</title>
 <link rel="stylesheet" href="/static/shell.css">
 <link rel="stylesheet" href="/static/extract.css">
 <link rel="stylesheet" href="/static/rules.css">
@@ -22,12 +22,12 @@
   <a href="/governance">治理</a>
   <a href="/compute">计算</a>
   <span class="spacer"></span>
-  <span class="navnote">配置业务库与入库映射</span>
+  <span class="navnote">业务库、可复用目标表与逐结果绑定</span>
 </nav>
 <div class="pagebody">
   <div class="pagehead">
-    <h1>入库映射</h1>
-    <span class="hint" tabindex="0" data-tip="左侧选择业务库（一个业务库对应一个数据库），右侧配置入库映射。&#10;记录须先完成解析与校验，全部确认后手动入库。">?</span>
+    <h1>业务库与入库绑定</h1>
+    <span class="hint" tabindex="0" data-tip="目标表配置可复用；每个抽取结果独立绑定一张表与字段映射。&#10;本页只保存待确认绑定，业务数据库写入必须在结果向导中显式确认。">?</span>
   </div>
   <div class="banner err" id="err" hidden></div>
   <div class="banner info" id="ok" hidden></div>
@@ -45,24 +45,38 @@
       <div class="dshead">
         <b id="maptitle">业务表</b>
         <span class="spacer"></span>
-        <button type="button" class="btn mini" id="newmap" disabled>＋ 新建映射</button>
+        <button type="button" class="btn mini" id="newmap" disabled>＋ 登记目标表</button>
       </div>
       <table class="list" id="maptable" hidden>
         <thead><tr>
-          <th class="seq">序号</th><th>规则ID</th><th>目标表</th><th>抽取规则</th><th>写入方式</th>
-          <th>字段数</th><th>去重依据</th><th>操作</th>
+          <th class="seq">序号</th><th>配置ID</th><th>目标表</th>
+          <th>列数</th><th>绑定引用</th><th>操作</th>
         </tr></thead>
         <tbody id="maprows"></tbody>
       </table>
       <div class="empty" id="mapempty" hidden>
-        <b>该业务库还没有入库映射</b>
-        选择抽取规则与目标表，将规则字段逐一对应到目标列。系统仅写入已有表，不会自动建表。
+        <b>该业务库还没有目标表配置</b>
+        选择已有物理表并读取列元数据。这里不会创建或删除物理表，也不保存抽取规则或字段映射。
       </div>
       <div class="empty" id="mapnone">
         <b>请先在左侧选择一个业务库</b>
-        点击业务库，查看其下已配置的入库映射。
+        点击业务库，查看其下可复用的目标表配置与独立结果绑定。
       </div>
       <div class="pager" id="mappager" hidden>
+        <span class="pginfo"></span>
+        <button type="button" class="pgprev">上一页</button>
+        <button type="button" class="pgnext">下一页</button>
+      </div>
+      <div class="dshead" style="margin-top:18px">
+        <b>抽取结果独立绑定</b><span class="spacer"></span>
+        <button type="button" class="btn mini" id="newbinding" disabled>＋ 新建绑定</button>
+      </div>
+      <table class="list" id="bindingtable" hidden>
+        <thead><tr><th>绑定ID</th><th>抽取结果</th><th>目标表</th><th>写入方式</th><th>去重依据</th><th>状态</th><th>操作</th></tr></thead>
+        <tbody id="bindingrows"></tbody>
+      </table>
+      <div class="empty" id="bindingempty" hidden><b>暂无结果绑定</b>选择已完成抽取结果与目标表，建立独立映射；保存后仍需显式确认才能写入。</div>
+      <div class="pager" id="bindingpager" hidden>
         <span class="pginfo"></span>
         <button type="button" class="pgprev">上一页</button>
         <button type="button" class="pgnext">下一页</button>
@@ -130,35 +144,56 @@
         <input type="text" class="tin" id="mpds" disabled>
       </div>
       <div class="fsec">
-        <label class="flab" for="mptpl">参考抽取规则（可选，用于预填字段；保存后映射独立生效）</label>
-        <select class="tin" id="mptpl"></select>
-      </div>
-      <div class="fsec">
         <label class="flab" for="mptable">目标表（仅支持已有表）</label>
         <select class="tin" id="mptable" disabled><option value="">加载中…</option></select>
         <div class="sthint" id="mpthint"></div>
       </div>
       <div class="fsec">
-        <label class="flab" for="mpmode">写入方式</label>
-        <select class="tin" id="mpmode">
-          <option value="upsert" title="已存在的行覆盖更新，不存在的新增">覆盖或新增</option>
-          <option value="insert" title="全部作为新行插入，重复记录不做合并（可在回执中核对）">仅新增</option>
-          <option value="update" title="仅更新已存在的行，匹配不到的记录不写入">仅更新</option>
-        </select>
+        <label class="flab">物理列元数据</label>
+        <div id="mpmeta"></div>
+        <div class="sthint">只保存数据源、物理表名与目标列元数据；字段映射、写入方式和业务键属于下方结果绑定。</div>
       </div>
-      <div class="fsec">
-        <label class="flab">字段对齐（规则字段 → 目标列）</label>
-        <div class="sthint" id="mpmatch"></div>
-        <div id="mprows"></div>
-        <button type="button" class="btn mini ghost" id="mpaddfield" style="margin-top:4px">＋ 添加字段</button>
-        <div class="sthint">勾选「去重依据」的列用于判断记录是否已存在（如发票号）。系统按字段名自动对齐，无法匹配的需要手动选择。</div>
-      </div>
-      <div class="sthint" id="mplock" hidden>该映射已被资料引用，为保证历史回执一致，不再允许修改；如需调整请新建映射。</div>
+      <div class="sthint" id="mplock" hidden>该目标表已被结果绑定，不能修改或删除；其他结果仍可复用它并建立独立绑定。</div>
     </div>
     <div class="dfoot">
       <span class="msg" id="mpmsg"></span>
       <span class="spacer"></span>
-      <button type="button" class="btn" id="mpsave">保存规则</button>
+      <button type="button" class="btn" id="mpsave">保存目标表配置</button>
+    </div>
+  </div>
+</div>
+<div class="drawer wide" id="bdrawer" hidden>
+  <div class="dpanel">
+    <div class="dhead">
+      <h2 id="bdtitle">新建结果绑定</h2><span class="spacer"></span>
+      <button type="button" class="dclose" id="bdclose">关闭 (Esc)</button>
+    </div>
+    <div class="dbody">
+      <div class="fsec">
+        <label class="flab" for="bdresult">抽取结果</label>
+        <select class="tin" id="bdresult"></select>
+        <div class="sthint">只列出已完成的抽取结果；每个结果最多绑定一张目标表。</div>
+      </div>
+      <div class="fsec">
+        <label class="flab" for="bdtable">目标表配置</label>
+        <select class="tin" id="bdtable"></select>
+      </div>
+      <div class="fsec">
+        <label class="flab" for="bdmode">写入方式</label>
+        <select class="tin" id="bdmode">
+          <option value="upsert">覆盖或新增</option><option value="insert">仅新增</option><option value="update">仅更新</option>
+        </select>
+      </div>
+      <div class="fsec">
+        <label class="flab">结果字段 → 目标列</label>
+        <div id="bdrows"></div>
+        <div class="sthint">至少映射一个字段；update / upsert 须选择去重依据列。保存不会执行业务写入。</div>
+      </div>
+      <div class="sthint" id="bdlock" hidden>已确认、入库中或已入库的绑定只读；如需调整，请先在结果流程中按后端允许的状态处理。</div>
+    </div>
+    <div class="dfoot">
+      <span class="msg" id="bdmsg"></span><span class="spacer"></span>
+      <button type="button" class="btn" id="bdsave">保存待确认绑定</button>
     </div>
   </div>
 </div>
