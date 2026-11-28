@@ -4,7 +4,7 @@ var pfId=null, pfName='', pfNode='parse', pfData=null, pfCfg=null, pfRecords=[];
 var pfResultId=null, pfResults=[], pfRules=null, pfRulesLoading=false, pfRulesError='';
 var pfPending={}, pfCfgOpen=false, pfPreResult=null, pfPreError='', pfRuleDetail=null, pfRows=null;
 var pfFileNames={};
-var pfLineageOpen=true, pfLinRidByIndex={}, pfLinFieldMap={};
+var pfLineageOpen=true, pfLinRidByIndex={}, pfLinColumnFields={};
 var pfWizardLoading=null;
 var PF_NODES=[['parse','解析'],['extract','抽取'],['review','校验'],['load','入库']];
 var PF_TITLE={parse:'解析参数',extract:'抽取规则',review:'校验规则',load:'入库映射'};
@@ -99,7 +99,7 @@ function pfInit(){
 }
 function pfLoad(){
   pfPreResult=null; pfPreError=''; pfCfgOpen=false; pfRows=null; pfRecords=[];
-  pfLinRidByIndex={}; pfLinFieldMap={};
+  pfLinRidByIndex={}; pfLinColumnFields={};
   document.getElementById('procBody').innerHTML='<div class="empty">加载中…</div>';
   Promise.all([
     pfApi('GET','/api/sources/'+pfId+'/pipeline'),
@@ -429,6 +429,13 @@ function pfPreviewUrl(){
   return u;
 }
 /* ---- 产物区内联血缘追溯 ---- */
+function pfLinColumnMap(fieldMap){
+  var out={};
+  Object.keys(fieldMap||{}).forEach(function(field){
+    out[fieldMap[field]]=field;
+  });
+  return out;
+}
 function pfLinBaseSrc(){
   var u='/preview?embed=1&file='+pfId;
   if(pfResultId!=null) u+='&result='+encodeURIComponent(pfResultId);
@@ -460,7 +467,7 @@ function pfLinHighlight(key,index,rid,col){
     }
     if(tr) Array.prototype.forEach.call(tr.querySelectorAll('td.cell[data-col]'),function(y){
       var c=y.getAttribute('data-col');
-      if((col&&c===col)||(!col&&(pfLinFieldMap[c]||c)===key)) td=y;
+      if((col&&c===col)||(!col&&(pfLinColumnFields[c]||c)===key)) td=y;
     });
   }
   if(tr) tr.classList.add('pf-sel');
@@ -502,7 +509,7 @@ function pfBindLinCells(){
         '?key='+encodeURIComponent(col)).then(function(o){
         if(!(o.s===200&&o.j&&o.j.ok)) return;
         if(String(o.j.extract_result_id)!==String(pfResultId)) return;
-        pfLinFieldMap=o.j.field_map||{};
+        pfLinColumnFields=pfLinColumnMap(o.j.field_map||{});
         pfLinSelect(o.j.field||col,o.j.record_index,rid,col);
       });
     };
@@ -603,6 +610,7 @@ function pfRenderResult(){
   }else{
     var l=pfCurrentBinding();
     if(l){
+      pfLinColumnFields=pfLinColumnMap(l.field_map_json||{});
       openLink='<a class="proc-open" target="_blank" rel="noopener" href="/dashboard?ds='+
         encodeURIComponent(l.datasource_id||'')+'&table='+encodeURIComponent(l.target_table)+
         '&lt='+encodeURIComponent(l.load_table_id||'')+'&file='+pfId+
