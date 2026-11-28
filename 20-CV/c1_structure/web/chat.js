@@ -255,12 +255,13 @@
       var fmap=mapping.field_map||{},conf=mapping.confidence||{},amb=mapping.ambiguous_fields||{};
       var names=Object.keys(fmap);(mapping.unmapped_fields||[]).forEach(function(n){if(names.indexOf(n)<0)names.push(n);});
       html+='<div class="plan-section"><h3>字段映射</h3>'+
-        '<p class="muted">已预填高置信度建议；数据库列可选择，留空表示该字段不入库。至少映射一个字段。</p>'+
-        '<table class="mapping-table"><thead><tr><th>中文字段</th><th>数据库列（可选）</th><th>置信度</th></tr></thead><tbody>'+
+        '<p class="muted">已预填高置信度建议；勾选需要入库的字段，至少选择一个。</p>'+
+        '<table class="mapping-table"><thead><tr><th>入库</th><th>中文字段</th><th>数据库列</th><th>置信度</th></tr></thead><tbody>'+
         names.map(function(name){
-          var note=!fmap[name]?'不入库':(amb[name]?'建议候选，请确认':'');
-          return '<tr><td>'+escHtml(name)+'</td><td><select data-field="'+escHtml(name)+'"></select></td>'+
-            '<td class="'+(note?'warn-text':'muted')+'">'+escHtml(note||Math.round(Number(conf[name]||0)*100)+'%')+'</td></tr>';
+          var selected=!!fmap[name];
+          return '<tr><td><input type="checkbox" data-load-field="'+escHtml(name)+'"'+(selected?' checked':'')+' aria-label="入库字段 '+escHtml(name)+'"></td>'+
+            '<td>'+escHtml(name)+'</td><td><select data-field="'+escHtml(name)+'"'+(selected?'':' disabled')+'></select></td>'+
+            '<td data-confidence="'+escHtml(name)+'" class="muted">'+(selected?escHtml(amb[name]?'建议候选，请确认':Math.round(Number(conf[name]||0)*100)+'%'):'')+'</td></tr>';
         }).join('')+'</tbody></table>';
       html+='<div class="plan-actions"><button type="button" class="btn ghost mini" data-save-map>保存并重新检查</button>'+
         '<span class="muted">仅所选字段会在确认后写入</span></div></div>';
@@ -280,12 +281,31 @@
         columns.forEach(function(column){
           if(ordered.indexOf(column.name)<0)ordered.push(column.name);
         });
-        addSelectOption(select,'','不入库（不写该字段）');
         ordered.forEach(function(columnName){
           var column=columns.filter(function(item){return item.name===columnName;})[0]||{};
           addSelectOption(select,columnName,columnName+(column.comment?' · '+column.comment:''));
         });
         if(fmap[name])select.value=fmap[name];
+        else{
+          var preferred=ordered.filter(function(columnName){
+            var column=columns.filter(function(item){return item.name===columnName;})[0];
+            return column&&!column.primary&&column.default==null;
+          });
+          if(preferred.length)select.value=preferred[0];
+          else if(ordered.length)select.value=ordered[0];
+        }
+      });
+      planNode.querySelectorAll('[data-load-field]').forEach(function(checkbox){
+        checkbox.onchange=function(){
+          var name=checkbox.getAttribute('data-load-field');
+          var select=planNode.querySelector('[data-field="'+CSS.escape(name)+'"]');
+          var confidence=planNode.querySelector('[data-confidence="'+CSS.escape(name)+'"]');
+          select.disabled=!checkbox.checked;
+          if(!checkbox.checked){confidence.textContent='';return;}
+          var suggestion=(amb[name]||[])[0];
+          confidence.textContent=amb[name]?'建议候选，请确认':
+            Math.round(Number((suggestion&&suggestion.confidence)||conf[name]||0)*100)+'%';
+        };
       });
     }
     planNode.querySelectorAll('[data-choose]').forEach(function(btn){
@@ -304,8 +324,10 @@
     var save=planNode.querySelector('[data-save-map]');
     if(save)save.onclick=function(){
       var patch={field_map:{}};
-      planNode.querySelectorAll('[data-field]').forEach(function(input){
-        var value=input.value.trim();if(value)patch.field_map[input.getAttribute('data-field')]=value;
+      planNode.querySelectorAll('[data-load-field]').forEach(function(checkbox){
+        if(!checkbox.checked)return;
+        var input=planNode.querySelector('[data-field="'+CSS.escape(checkbox.getAttribute('data-load-field'))+'"]');
+        var value=input.value.trim();if(value)patch.field_map[checkbox.getAttribute('data-load-field')]=value;
       });replan(patch,save);
     };
     var confirm=planNode.querySelector('[data-confirm]');
