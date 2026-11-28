@@ -42,7 +42,7 @@ _CACHE_TTL = {'tables': 15.0, 'columns': 30.0, 'table_comment': 30.0,
 
 
 def _cache_key(ds):
-    return (ds.get('id'), ds.get('host'), ds.get('port'),
+    return (ds.get('id'), ds.get('code'), ds.get('host'), ds.get('port'),
             ds.get('user'), ds.get('db_name'))
 
 
@@ -204,6 +204,8 @@ def list_table_schemas(ds, tables=None):
     finally:
         conn.close()
     out = [{'name': name, 'datasource_id': ds.get('id'),
+            'datasource_code': ds.get('code'),
+            'table_code': '{}.{}'.format(ds.get('code') or ds.get('db_name'), name),
             'comment': comments.get(name, ''),
             'columns': columns.get(name) or [],
             'indexes': [item for (table, _name), item in indexes.items()

@@ -144,11 +144,14 @@ class ExtractResultApiTest(unittest.TestCase):
     def test_plan_apply_and_load_are_scoped_to_one_result(self):
         self.assertEqual(31, self.client.get(
             '/api/extract-results/31/load-plan').json()['extract_result_id'])
-        intent = {'datasource_id': 2, 'target_table': 'inspection', 'confirmed': True}
+        intent = {'datasource_id': 2, 'datasource_code': 'biz',
+                  'table_code': 'biz.inspection',
+                  'target_table': 'inspection', 'confirmed': True}
         response = self.client.post('/api/extract-results/31/load-plan',
                                     json={'intent': intent})
         self.assertEqual(200, response.status_code)
-        self.planner.plan_for_extract_result.assert_called_once_with(31, 2, intent)
+        self.planner.plan_for_extract_result.assert_called_once_with(
+            31, datasource_code='biz', table_intent=intent)
         response = self.client.post('/api/extract-results/31/load-plan/apply',
                                     json={'intent': intent})
         self.assertEqual({'ok': True}, response.json())

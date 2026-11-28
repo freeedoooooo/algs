@@ -26,7 +26,7 @@ function renderDs(){
   document.getElementById('dslist').innerHTML=dss.map(function(d,i){
     return '<div class="dsitem'+(d.id===curDs?' active':'')+'" data-ds="'+d.id+'">'+
       '<div class="dsmain"><b>'+(i+1)+'. '+escHtml(d.name)+'</b><span class="badge">'+d.table_count+' 目标表</span></div>'+
-      '<div class="dsmeta mono">'+escHtml('ID '+d.id+' · '+d.host+':'+d.port+'/'+d.db_name)+'</div>'+
+      '<div class="dsmeta mono">'+escHtml('ID '+d.id+' · '+d.code+' · '+d.host+':'+d.port+'/'+d.db_name)+'</div>'+
       '<div class="dsops"><button type="button" class="linkbtn" data-test="'+d.id+'">测试</button>'+
       '<button type="button" class="linkbtn" data-editds="'+d.id+'">编辑</button>'+
       '<button type="button" class="linkbtn danger" data-delds="'+d.id+'" data-name="'+escHtml(d.name)+'">删除</button></div></div>';
@@ -35,25 +35,25 @@ function renderDs(){
 function renderMaps(){
   var d=dsById(curDs);document.getElementById('maptitle').textContent='目标表配置';
   document.getElementById('newmap').disabled=!d;document.getElementById('newbinding').disabled=!d;
-  var list=maps.filter(function(m){return m.datasource_id===curDs;}),info=pageSlice(list,mapPage,mapSize);mapPage=info.page;
+  var d=dsById(curDs),list=d?maps.filter(function(m){return m.datasource_code===d.code;}):[],info=pageSlice(list,mapPage,mapSize);mapPage=info.page;
   document.getElementById('mapnone').hidden=!!d;document.getElementById('maptable').hidden=!d||!list.length;
   document.getElementById('mapempty').hidden=!d||list.length>0;
   document.getElementById('maprows').innerHTML=info.rows.map(function(m,i){
     return '<tr><td class="seq">'+seqNo(info,i)+'</td><td class="mono">'+m.id+'</td>'+
-      '<td class="left"><a class="linkbtn" href="/dashboard?ds='+encodeURIComponent(m.datasource_id)+'&table='+encodeURIComponent(m.target_table)+'">'+escHtml(m.target_table)+'</a></td>'+
+      '<td class="left"><a class="linkbtn" href="/dashboard?ds='+encodeURIComponent(m.datasource_id)+'&table='+encodeURIComponent(m.target_table)+'">'+escHtml(m.target_table)+'</a><div class="sthint mono">'+escHtml(m.code)+'</div></td>'+
       '<td class="num">'+(m.fields||[]).length+'</td><td class="num">'+(m.binding_refs||[]).length+'</td>'+
       '<td style="white-space:nowrap"><button type="button" class="linkbtn" data-editmap="'+m.id+'">编辑元数据</button>'+
       '<button type="button" class="linkbtn danger" data-delmap="'+m.id+'" data-name="'+escHtml(m.target_table)+'">删除</button></td></tr>';
   }).join('');pgMap.render(info);
 }
 function renderBindings(){
-  var list=bindings.filter(function(b){return Number(b.datasource_id)===Number(curDs);}),info=pageSlice(list,bindingPage,bindingSize);bindingPage=info.page;
+  var d=dsById(curDs),list=d?bindings.filter(function(b){return b.datasource_code===d.code;}):[],info=pageSlice(list,bindingPage,bindingSize);bindingPage=info.page;
   document.getElementById('bindingtable').hidden=!curDs||!list.length;
   document.getElementById('bindingempty').hidden=!curDs||list.length>0;
   document.getElementById('bindingrows').innerHTML=info.rows.map(function(b){
     var locked=['confirmed','running','ready'].indexOf(b.status)>=0;
     return '<tr><td class="mono">'+b.id+'</td><td>#'+escHtml(b.extract_result_id)+' · '+escHtml(b.rule_name||'规则 #'+b.rule_id)+'</td>'+
-      '<td>'+escHtml(b.target_table)+'</td><td>'+escHtml(modeLabel(b.write_mode))+'</td>'+
+      '<td>'+escHtml(b.target_table)+'<div class="sthint mono">'+escHtml(b.load_table_code||'')+'</div></td><td>'+escHtml(modeLabel(b.write_mode))+'</td>'+
       '<td class="left mono">'+escHtml(businessKeysOf(b).join(', ')||'—')+'</td><td>'+escHtml(b.status)+'</td>'+
       '<td><button type="button" class="linkbtn" data-editbinding="'+b.id+'"'+(locked?' disabled title="已确认或已入库，不可修改"':'')+'>编辑</button> '+
       '<a class="linkbtn" href="/preview?file='+encodeURIComponent(b.doc_id)+'&amp;result='+encodeURIComponent(b.extract_result_id)+'">结果</a></td></tr>';
@@ -86,13 +86,14 @@ document.getElementById('dslist').addEventListener('click',function(e){
   if(del){var did=del.getAttribute('data-delds'),name=del.getAttribute('data-name');if(!confirm('删除业务库「'+name+'」？已被目标表引用时后端会拒绝。'))return;api('DELETE','/api/load/datasources/'+did).then(function(){showOk('已删除业务库。');loadAll(true);}).catch(function(err){showErr(err.message);});return;}
   var item=t.closest?t.closest('[data-ds]'):null;if(item){curDs=Number(item.getAttribute('data-ds'));mapPage=1;bindingPage=1;renderDs();renderMaps();renderBindings();}
 });
-var DS_FIELDS=['dsname','dshost','dsport','dsuser','dspass','dsdb'];
+var DS_FIELDS=['dsname','dscode','dshost','dsport','dsuser','dspass','dsdb'];
 function openDs(d){
   editDs=d||null;document.getElementById('dstitle').textContent=d?'编辑业务库':'新建业务库';
-  document.getElementById('dsname').value=d?d.name:'';document.getElementById('dshost').value=d?d.host:'';
+  document.getElementById('dsname').value=d?d.name:'';document.getElementById('dscode').value=d?d.code:'';
+  document.getElementById('dshost').value=d?d.host:'';
   document.getElementById('dsport').value=d?d.port:'3306';document.getElementById('dsuser').value=d?d.user:'';
   document.getElementById('dspass').value=d?d.password:'';document.getElementById('dsdb').value=d?d.db_name:'';
-  var locked=!!(d&&d.table_count>0);['dshost','dsport','dsdb'].forEach(function(id){document.getElementById(id).disabled=locked;});
+  var locked=!!(d&&d.table_count>0);['dscode','dshost','dsport','dsdb'].forEach(function(id){document.getElementById(id).disabled=locked;});
   document.getElementById('dslock').hidden=!locked;dsmsg.textContent='';dds.hidden=false;
 }
 function closeDs(){dds.hidden=true;}
@@ -101,7 +102,7 @@ dds.addEventListener('click',function(e){if(e.target===dds)closeDs();});
 document.getElementById('dssave').onclick=function(){
   dsmsg.textContent='';var v={};DS_FIELDS.forEach(function(id){v[id]=document.getElementById(id).value.trim();});
   if(!v.dsname){dsmsg.textContent='名称不能为空';return;}if(!editDs&&(!v.dshost||!v.dsdb)){dsmsg.textContent='主机与库名不能为空';return;}
-  var body={name:v.dsname,user:v.dsuser,password:v.dspass};if(!editDs||!editDs.table_count){body.host=v.dshost;body.port=v.dsport;body.db_name=v.dsdb;}
+  var body={name:v.dsname,user:v.dsuser,password:v.dspass};if(!editDs||!editDs.table_count){body.host=v.dshost;body.port=v.dsport;body.db_name=v.dsdb;if(v.dscode)body.code=v.dscode;}
   (editDs?api('PATCH','/api/load/datasources/'+editDs.id,body):api('POST','/api/load/datasources',body)).then(function(){closeDs();showOk('已保存业务库。');return loadAll(true);}).catch(function(e){dsmsg.textContent=e.message;});
 };
 
@@ -116,7 +117,7 @@ function loadTableMeta(table,after){
 function openMap(lt){
   editLt=lt||null;ltLocked=!!(lt&&(lt.binding_refs||[]).length);var d=dsById(curDs);
   document.getElementById('mptitle').textContent=lt?'编辑目标表配置':'登记目标表配置';
-  document.getElementById('mpds').value=d?(d.name+' · '+d.host+':'+d.port+'/'+d.db_name):'';
+  document.getElementById('mpds').value=d?(d.name+' · '+d.code+' · '+d.host+':'+d.port+'/'+d.db_name):'';
   document.getElementById('mplock').hidden=!ltLocked;document.getElementById('mpsave').disabled=ltLocked;
   mpmsg.textContent='';cols=[];document.getElementById('mpmeta').innerHTML='';document.getElementById('mpthint').textContent='';
   if(lt){mptable.innerHTML='<option value="'+escHtml(lt.target_table)+'">'+escHtml(lt.target_table)+'</option>';mptable.disabled=true;loadTableMeta(lt.target_table,function(){renderTableMeta();});}
@@ -133,7 +134,7 @@ mptable.onchange=function(){if(mptable.value){cols=[];document.getElementById('m
 document.getElementById('mpsave').onclick=function(){
   if(ltLocked){mpmsg.textContent='该目标表已被结果绑定，不能修改';return;}if(!mptable.value){mpmsg.textContent='请选择目标表';return;}if(!cols.length){mpmsg.textContent='目标列尚未加载';return;}
   var fields=cols.map(function(c,i){return {field_name:c.name,data_type:c.type||c.data_type||'text',is_primary:!!(c.primary||c.is_primary),has_default:c.default!=null,sort_order:c.sort_order==null?i:c.sort_order};});
-  (editLt?api('PATCH','/api/load/tables/'+editLt.id,{target_table:mptable.value,fields:fields}):api('POST','/api/load/tables',{datasource_id:curDs,target_table:mptable.value,fields:fields}))
+  (editLt?api('PATCH','/api/load/tables/'+editLt.id,{target_table:mptable.value,fields:fields}):api('POST','/api/load/tables',{datasource_code:dsById(curDs).code,target_table:mptable.value,fields:fields}))
     .then(function(){closeDmap();showOk('已保存目标表元数据；结果字段映射请在独立绑定中维护。');return loadAll(true);}).catch(function(e){mpmsg.textContent=e.message;});
 };
 document.getElementById('maprows').addEventListener('click',function(e){
@@ -166,8 +167,8 @@ function openBinding(binding){
     return '<option value="'+r.id+'"'+(existing&&Number(existing.extract_result_id)===Number(r.id)?' selected':'')+'>资料 #'+r.doc_id+' · 结果 #'+r.id+' · '+escHtml(r.rule_name||'规则 #'+r.rule_id)+'</option>';
   }).join('');
   resultSel.disabled=bindingLocked||!!existing;
-  var tables=maps.filter(function(t){return t.datasource_id===curDs;});
-  document.getElementById('bdtable').innerHTML='<option value="">选择目标表配置</option>'+tables.map(function(t){return '<option value="'+t.id+'"'+(existing&&Number(existing.load_table_id)===Number(t.id)?' selected':'')+'>'+escHtml(t.target_table)+'</option>';}).join('');
+  var tables=maps.filter(function(t){return t.datasource_code===dsById(curDs).code;});
+  document.getElementById('bdtable').innerHTML='<option value="">选择目标表配置</option>'+tables.map(function(t){return '<option value="'+t.id+'"'+(existing&&Number(existing.load_table_id)===Number(t.id)?' selected':'')+'>'+escHtml(t.code||t.target_table)+'</option>';}).join('');
   document.getElementById('bdtable').disabled=bindingLocked;
   document.getElementById('bdmode').value=existing?existing.write_mode:'upsert';document.getElementById('bdmode').disabled=bindingLocked;
   document.getElementById('bdlock').hidden=!bindingLocked;document.getElementById('bdsave').disabled=bindingLocked;

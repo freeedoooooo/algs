@@ -914,7 +914,7 @@ async def api_load_datasource_add(request: Request):
     did = _load('store.catalog').create_datasource(
         body.get('name'), body.get('host'), body.get('port'),
         body.get('user'), body.get('password'), body.get('db_name'),
-        body.get('db_type') or 'mysql')
+        body.get('db_type') or 'mysql', code=body.get('code'))
     return {'ok': True, 'id': did}
 
 
@@ -924,7 +924,8 @@ async def api_load_datasource_patch(ds_id: int, request: Request):
     _load('store.catalog').update_datasource(
         ds_id, name=body.get('name'), host=body.get('host'),
         port=body.get('port'), user=body.get('user'),
-        password=body.get('password'), db_name=body.get('db_name'))
+        password=body.get('password'), db_name=body.get('db_name'),
+        code=body.get('code'))
     return {'ok': True}
 
 
@@ -999,8 +1000,8 @@ def api_load_datasource_rows(ds_id: int, table: str = None,
 
 
 @app.get('/api/load/tables')
-def api_load_tables(datasource_id: int = None):
-    return {'items': _load('store.catalog').list_load_tables(datasource_id)}
+def api_load_tables(datasource_code: str = None):
+    return {'items': _load('store.catalog').list_load_tables(datasource_code)}
 
 
 @app.get('/api/load/business-table-options')
@@ -1010,16 +1011,22 @@ def api_load_business_table_options():
     loader = _load('store.loader')
     datasources, tables, warnings = [], [], []
     for ds in catalog.list_datasources():
-        datasources.append({'id': ds['id'], 'name': ds.get('name')})
+        datasources.append({'id': ds['id'], 'code': ds.get('code'),
+                            'db_name': ds.get('db_name'), 'name': ds.get('name')})
         try:
             names = loader.list_business_tables(ds)
         except Exception as exc:
             warnings.append('数据源 {} 暂不可用，已跳过'.format(
-                ds.get('name') or ds['id']))
-            logger.warning('可选业务表读取失败：datasource_id=%s error=%s',
-                           ds['id'], type(exc).__name__)
+                ds.get('name') or ds.get('code') or ds['id']))
+            logger.warning('可选业务表读取失败：datasource_code=%s error=%s',
+                           ds.get('code') or ds['id'], type(exc).__name__)
             continue
-        tables.extend({'datasource_id': ds['id'], 'table': name}
+        tables.extend({'datasource_id': ds['id'],
+                       'datasource_code': ds.get('code'),
+                       'datasource_name': ds.get('name'),
+                       'db_name': ds.get('db_name'),
+                       'table': name,
+                       'table_code': '{}.{}'.format(ds.get('code') or ds.get('db_name'), name)}
                       for name in names)
     logger.info('可选业务表读取完成：datasources=%s tables=%s skipped=%s',
                 len(datasources), len(tables), len(warnings))
@@ -1030,16 +1037,15 @@ def api_load_business_table_options():
 @app.post('/api/load/tables')
 async def api_load_table_add(request: Request):
     body = await _json_body(request)
-    try:
-        ds_id = int(body.get('datasource_id'))
-    except (TypeError, ValueError):
-        raise store_errors.BadRequest('须选择业务库')
+    ds_code = str(body.get('datasource_code') or '').strip()
+    if not ds_code:
+        raise store_errors.BadRequest('须选择业务库编码')
     fields = body.get('fields')
     if isinstance(fields, list):
         fields = [dict(field, field_name=field.get('field_name') or field.get('name'))
                   for field in fields]
     lt_id = _load('store.catalog').create_load_table(
-        ds_id, body.get('target_table'), fields)
+        ds_code, body.get('target_table'), fields)
     return {'ok': True, 'id': lt_id}
 
 
@@ -1312,7 +1318,8 @@ async def api_extract_result_load_plan(extract_result_id: int, request: Request)
         raise store_errors.BadRequest('入库规划须为 JSON 对象')
     plan = await run_in_threadpool(
         _load('store.load_planner').plan_for_extract_result,
-        extract_result_id, intent.get('datasource_id'), intent)
+        extract_result_id, datasource_code=intent.get('datasource_code'),
+        table_intent=intent)
     return dict(plan, ok=True)
 
 
@@ -1353,8 +1360,9 @@ async def api_extract_result_load_preview(extract_result_id: int,
     draft = body.get('draft')
     if not isinstance(draft, dict):
         table_id = body.get('load_table_id')
-        keys = ('datasource_id', 'target_table', 'field_map',
-                'write_mode', 'business_keys', 'business_key')
+        keys = ('datasource_id', 'datasource_code', 'table_code',
+                'target_table', 'field_map', 'write_mode', 'business_keys',
+                'business_key')
         if table_id is None and not any(key in body for key in keys):
             draft = None
         elif table_id is None:
@@ -1364,6 +1372,8 @@ async def api_extract_result_load_preview(extract_result_id: int,
             if lt is None:
                 raise store_errors.NotFound('入库表配置不存在')
             draft = {'datasource_id': lt['datasource_id'],
+                     'datasource_code': lt['datasource_code'],
+                     'table_code': lt['code'],
                      'target_table': lt['target_table']}
     return service.preview_load(extract_result_id, draft=draft)
 

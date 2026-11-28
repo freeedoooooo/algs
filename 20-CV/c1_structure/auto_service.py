@@ -200,7 +200,8 @@ def _run(paths, params, log, task_ctx, intent, rule_generator):
             log.stage('extract', '开始按规则 {} 抽取中文字段'.format(tpl['name']))
             result_id, recs = _extract_one(doc_id, doc, tpl, log)
             plan = load_planner.plan_for_extract_result(
-                result_id, datasource_id=_intent_for_rule(intent, index - 1).get('datasource_id'),
+                result_id,
+                datasource_code=_intent_for_rule(intent, index - 1).get('datasource_code'),
                 table_intent=_intent_for_rule(intent, index - 1))
             summaries.append({'extract_result_id': result_id,
                               'rule_id': tpl['rule_id'], 'rule_name': tpl['name'],
@@ -228,10 +229,10 @@ def _run(paths, params, log, task_ctx, intent, rule_generator):
         _finish('error', str(exc), str(exc))
 
 
-def _target_table(datasource_id, target_table, fields):
+def _target_table(datasource_code, target_table, fields):
     metadata = [dict(field, field_name=field.get('field_name') or field.get('name'))
                 for field in fields or []]
-    existing = next((t for t in catalog.list_load_tables(datasource_id)
+    existing = next((t for t in catalog.list_load_tables(datasource_code)
                      if t['target_table'] == target_table), None)
     if existing:
         if not existing.get('fields') and metadata:
@@ -239,7 +240,7 @@ def _target_table(datasource_id, target_table, fields):
             existing = catalog.get_load_table(existing['id'])
         return existing
     return catalog.get_load_table(catalog.create_load_table(
-        datasource_id, target_table, metadata))
+        datasource_code, target_table, metadata))
 
 
 def apply_plan(extract_result_id, intent):
@@ -247,7 +248,7 @@ def apply_plan(extract_result_id, intent):
     if not isinstance(intent, dict) or intent.get('confirmed') is not True:
         raise Conflict('请明确确认入库规划和字段映射')
     plan = load_planner.plan_for_extract_result(
-        extract_result_id, datasource_id=intent.get('datasource_id'),
+        extract_result_id, datasource_code=intent.get('datasource_code'),
         table_intent=intent)
     if plan['status'] != 'ready':
         raise Conflict(plan['message'])
@@ -259,7 +260,7 @@ def apply_plan(extract_result_id, intent):
     result = catalog.get_extract_result(extract_result_id)
     if result is None:
         raise Conflict('抽取结果不存在')
-    lt = _target_table(target['datasource_id'], target['table'],
+    lt = _target_table(target['datasource_code'], target['table'],
                        mapping.get('available_columns') or [])
     write_mode = mapping.get('write_mode') or 'insert'
     business_keys = mapping.get('business_key') or []

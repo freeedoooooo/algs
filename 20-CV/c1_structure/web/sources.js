@@ -181,7 +181,8 @@ function pipeDetail(key,item,p){
   }else if(item.kind==='table'){
     var load=item.load,r=item.result,id=r.extract_result_id||r.id;
     h='<h4>'+escHtml(item.label)+'</h4>'+
-      '<div class="kv"><b>业务库</b>'+escHtml(load.datasource_name||load.db_name||'—')+'</div>'+
+      '<div class="kv"><b>业务库</b>'+escHtml(load.datasource_code||load.datasource_name||load.db_name||'—')+'</div>'+
+      '<div class="kv"><b>目标表</b>'+escHtml(load.load_table_code||load.target_table||'—')+'</div>'+
       '<div class="kv"><b>写入方式</b>'+escHtml(load.write_mode||'—')+'</div>'+
       '<div class="kv"><b>绑定状态</b>'+escHtml(load.status||'—')+'</div>'+
       '<a class="linkbtn" href="/dashboard?ds='+encodeURIComponent(load.datasource_id||'')+

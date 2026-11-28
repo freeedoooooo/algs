@@ -218,7 +218,8 @@ load(record_set, load_plan, target_port) -> LoadResult
   },
   "load": {
     "table": "equipment_inspection",
-    "datasource_id": null,
+    "datasource_code": "product",
+    "table_code": "product.equipment_inspection",
     "write_mode": null,
     "business_key": null
   }
@@ -232,7 +233,8 @@ load(record_set, load_plan, target_port) -> LoadResult
 ```json
 {
   "candidates": [{
-    "datasource_id": 1,
+    "datasource_code": "product",
+    "table_code": "product.equipment_inspection",
     "table": "equipment_inspection",
     "score": 0.92,
     "matched_fields": ["设备编号", "巡检日期", "异常描述"],
@@ -257,7 +259,8 @@ load(record_set, load_plan, target_port) -> LoadResult
 
 ```json
 {
-  "datasource_id": 1,
+  "datasource_code": "product",
+  "table_code": "product.equipment_inspection",
   "target_table": "equipment_inspection",
   "field_map": {
     "设备编号": "equipment_code",

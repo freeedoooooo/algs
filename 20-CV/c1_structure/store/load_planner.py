@@ -16,10 +16,15 @@ def normalize_intent(intent):
     load = out.get('load') if isinstance(out.get('load'), dict) else {}
     if not out.get('description') and not out.get('prompt'):
         out['description'] = out.get('natural_language') or ''
-    for key in ('table', 'datasource_id', 'field_map', 'write_mode',
-                'business_key', 'business_keys'):
+    for key in ('table', 'datasource_id', 'datasource_code', 'table_code',
+                'field_map', 'write_mode', 'business_key', 'business_keys'):
         if out.get(key) in (None, '') and load.get(key) not in (None, ''):
             out[key] = load[key]
+    if out.get('table_code') and not out.get('target_table'):
+        ds_code, sep, table_name = str(out['table_code']).rpartition('.')
+        if sep:
+            out.setdefault('datasource_code', ds_code)
+            out['target_table'] = table_name
     if out.get('table') and not out.get('target_table'):
         out['target_table'] = out['table']
     return out
@@ -42,18 +47,24 @@ def _build_plan(record_set, intent, table_schemas, *, warnings=None):
     schemas = [s for s in (table_schemas or [])
                if loader.is_business_table((s or {}).get('name'))]
     target_table = _target_name(intent.get('target_table') or intent.get('table'))
+    datasource_code = str(intent.get('datasource_code') or '').strip() or None
     datasource_id = intent.get('datasource_id')
     try:
         datasource_id = int(datasource_id) if datasource_id not in (None, '') else None
     except (TypeError, ValueError):
         datasource_id = None
         warnings.append('datasource_id 不是整数，已按未指定数据源处理')
+    requested_table_code = str(intent.get('table_code') or '').strip() or None
 
     matches = [s for s in schemas
-               if target_table and str(s.get('name') or '').casefold()
-               == target_table.casefold()
-               and (datasource_id is None
-                    or s.get('datasource_id') == datasource_id)]
+               if (requested_table_code and s.get('table_code') == requested_table_code)
+               or (target_table and str(s.get('name') or '').casefold()
+                   == target_table.casefold()
+                   and (datasource_code is None
+                        or str(s.get('datasource_code') or '').casefold()
+                        == datasource_code.casefold())
+                   and (datasource_code is not None or datasource_id is None
+                        or s.get('datasource_id') == datasource_id))]
     explicit_value = intent.get('field_map')
     if not isinstance(explicit_value, dict):
         explicit_value = intent.get('field_aliases')
@@ -78,19 +89,25 @@ def _build_plan(record_set, intent, table_schemas, *, warnings=None):
         return {'status': 'target_missing',
                 'message': '指定目标表不存在，未自动入库',
                 'target': {'datasource_id': datasource_id,
-                           'table': target_table},
+                           'datasource_code': datasource_code,
+                           'table': target_table,
+                           'table_code': requested_table_code},
                 'mapping': None, 'recommendations': recommendations,
                 'warnings': warnings}
 
     if len(matches) > 1:
         return {'status': 'target_ambiguous',
-                'message': '多个数据源存在同名目标表，请指定 datasource_id',
+                'message': '多个数据源存在同名目标表，请指定 datasource_code 或 table_code',
                 'target': {'datasource_id': datasource_id,
-                           'table': target_table},
+                           'datasource_code': datasource_code,
+                           'table': target_table,
+                           'table_code': requested_table_code},
                 'mapping': None,
                 'recommendations': [
                     {'table': s.get('name'),
                      'datasource_id': s.get('datasource_id'),
+                     'datasource_code': s.get('datasource_code'),
+                     'table_code': s.get('table_code'),
                      'score': 1.0, 'matched_fields': [],
                      'missing_fields': [], 'ambiguous_fields': {},
                      'suggested_mapping': {}, 'reasons': ['同名目标表']}
@@ -136,7 +153,9 @@ def _build_plan(record_set, intent, table_schemas, *, warnings=None):
     else:
         mapping['complete'] = bool(mapping['field_map'])
     target = {'datasource_id': schema.get('datasource_id'),
-              'table': schema.get('name')}
+              'datasource_code': schema.get('datasource_code'),
+              'table': schema.get('name'),
+              'table_code': schema.get('table_code')}
     if not mapping['complete']:
         message = ('存在无效或重复的字段映射，请检查数据库列' if invalid_explicit
                    else config_error or
@@ -165,7 +184,7 @@ def build_plan(record_set, intent, table_schemas, *, warnings=None):
 
 
 def plan_for_extract_result(extract_result_id, datasource_id=None,
-                            table_intent=None):
+                            table_intent=None, datasource_code=None):
     """读取单结果记录与现有业务库结构，生成并保存该结果的入库规划。"""
     logger.info('开始表推荐与字段映射：extract_result_id=%s', extract_result_id)
     record_set = content_db.get_records(extract_result_id)
@@ -181,20 +200,27 @@ def plan_for_extract_result(extract_result_id, datasource_id=None,
         })
     if datasource_id is not None:
         intent['datasource_id'] = datasource_id
+    if datasource_code not in (None, ''):
+        intent['datasource_code'] = datasource_code
     warnings, schemas = [], []
-    requested_ds = intent.get('datasource_id')
+    requested_ds_code = str(intent.get('datasource_code') or '').strip() or None
+    requested_ds_id = intent.get('datasource_id')
     for ds in catalog.list_datasources():
-        if requested_ds not in (None, '') and str(ds['id']) != str(requested_ds):
+        if requested_ds_code is not None and str(ds.get('code') or '').casefold() \
+                != requested_ds_code.casefold():
+            continue
+        if requested_ds_code is None and requested_ds_id not in (None, '') \
+                and str(ds['id']) != str(requested_ds_id):
             continue
         try:
             schemas.extend(loader.list_table_schemas(ds))
         except Exception as exc:
-            if requested_ds not in (None, ''):
+            if requested_ds_code is not None or requested_ds_id not in (None, ''):
                 raise
             warnings.append('数据源 {} 暂不可用，已跳过'.format(
-                ds.get('name') or ds.get('id')))
-            logger.warning('业务表结构读取失败：datasource_id=%s error=%s',
-                           ds.get('id'), type(exc).__name__)
+                ds.get('name') or ds.get('code') or ds.get('id')))
+            logger.warning('业务表结构读取失败：datasource_code=%s error=%s',
+                           ds.get('code') or ds.get('id'), type(exc).__name__)
     plan = build_plan(extract_result_id, intent, schemas, warnings=warnings)
     save_plan(extract_result_id, plan)
     logger.info('入库规划完成：extract_result_id=%s status=%s',

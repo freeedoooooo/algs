@@ -251,12 +251,12 @@
     var dsSelect=panel.querySelector('[data-other-datasource]'),tableSelect=panel.querySelector('[data-other-table]');
     var status=panel.querySelector('[data-other-status]'),button=panel.querySelector('[data-choose-other]');
     var previous=dsSelect.value;dsSelect.innerHTML='';tableSelect.innerHTML='';button.disabled=true;
-    (tableOptions.datasources||[]).forEach(function(ds){addSelectOption(dsSelect,ds.id,ds.name+' (#'+ds.id+')');});
-    if(previous&&tableOptions.datasources.some(function(ds){return String(ds.id)===previous;}))dsSelect.value=previous;
+    (tableOptions.datasources||[]).forEach(function(ds){addSelectOption(dsSelect,ds.code,ds.name+' · '+ds.code);});
+    if(previous&&tableOptions.datasources.some(function(ds){return String(ds.code)===previous;}))dsSelect.value=previous;
     function fillTables(){
       tableSelect.innerHTML='';button.disabled=true;
-      var items=(tableOptions.tables||[]).filter(function(item){return String(item.datasource_id)===dsSelect.value;});
-      items.forEach(function(item){addSelectOption(tableSelect,item.table,item.table);});
+      var items=(tableOptions.tables||[]).filter(function(item){return String(item.datasource_code)===dsSelect.value;});
+      items.forEach(function(item){addSelectOption(tableSelect,item.table,item.table_code||item.table);});
       if(items.length){button.disabled=false;status.textContent='共 '+items.length+' 张业务表';}
       else{addSelectOption(tableSelect,'','该业务库没有可选业务表');status.textContent='该业务库没有可选业务表';}
     }
@@ -281,7 +281,7 @@
       '<p>'+escHtml(plan.message||'')+'</p>';
     var target=plan.target||{},mapping=plan.mapping||{};
     if(target.table)html+='<dl class="kv-grid"><dt>目标表</dt><dd>'+escHtml(target.table)+
-      ' <span class="muted">数据源 #'+escHtml(target.datasource_id)+'</span></dd>'+
+      ' <span class="muted">'+escHtml(target.table_code||target.datasource_code||('数据源 #'+target.datasource_id))+'</span></dd>'+
       '<dt>写入方式</dt><dd>'+escHtml(mapping.write_mode||'—')+'</dd></dl>';
     var fields=(mapping.fields||[]);
     if(fields.length){
@@ -296,8 +296,8 @@
     var recs=plan.recommendations||[];
     if(recs.length){
       html+='<div class="plan-section"><h3>推荐目标表</h3><div class="rec-list">'+recs.map(function(r,i){
-        return '<div class="rec-item"><div class="rec-info"><b>'+escHtml(r.table)+'</b><span>数据源 #'+
-          escHtml(r.datasource_id)+' · 匹配度 '+Math.round(Number(r.score||0)*100)+'%'+
+        return '<div class="rec-item"><div class="rec-info"><b>'+escHtml(r.table)+'</b><span>'+
+          escHtml(r.table_code||r.datasource_code||('数据源 #'+r.datasource_id))+' · 匹配度 '+Math.round(Number(r.score||0)*100)+'%'+
           (r.comment?' · '+escHtml(r.comment):'')+'</span></div><button type="button" class="btn ghost mini" data-choose="'+i+'">选择此表</button></div>';
       }).join('')+'</div></div>';
     }
@@ -368,7 +368,9 @@
     }
     planNode.querySelectorAll('[data-choose]').forEach(function(btn){
       btn.onclick=function(){var r=recs[Number(btn.getAttribute('data-choose'))];
-        replan({target_table:r.table,datasource_id:r.datasource_id,field_map:null,field_aliases:null},btn);};
+        replan({target_table:r.table,datasource_id:r.datasource_id,
+          datasource_code:r.datasource_code,table_code:r.table_code,
+          field_map:null,field_aliases:null},btn);};
     });
     var other=planNode.querySelector('[data-other-tables]'),otherPanel=planNode.querySelector('[data-other-panel]');
     if(other)other.onclick=function(){openOtherTables(otherPanel,other);};
@@ -377,7 +379,8 @@
       var ds=otherPanel.querySelector('[data-other-datasource]').value;
       var table=otherPanel.querySelector('[data-other-table]').value;
       if(!ds||!table)return;
-      replan({target_table:table,datasource_id:Number(ds),field_map:null,field_aliases:null},chooseOther);
+      replan({target_table:table,datasource_id:null,datasource_code:ds,
+        table_code:ds+'.'+table,field_map:null,field_aliases:null},chooseOther);
     };
     var save=planNode.querySelector('[data-save-map]');
     if(save)save.onclick=function(){
@@ -396,7 +399,7 @@
     if(busy||!selectedResultId)return;
     var resultId=selectedResultId,button=planNode&&planNode.querySelector('[data-confirm]');
     var plan=currentPlan||{},target=plan.target||{};
-    if(!window.confirm('仅将抽取结果 #'+resultId+' 写入 '+target.table+'（数据源 #'+target.datasource_id+'）？\n此操作会修改业务数据库，其他结果不受影响。'))return;
+    if(!window.confirm('仅将抽取结果 #'+resultId+' 写入 '+target.table+'（'+target.table_code+'）？\n此操作会修改业务数据库，其他结果不受影响。'))return;
     setBusy(true);if(button)button.disabled=true;addProgress('正在确认映射并写入所选结果');
     api('/api/extract-results/'+resultId+'/load-plan/apply',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({intent:Object.assign({},currentIntent,{confirmed:true})})}).then(function(){

@@ -38,12 +38,14 @@ def _attach_results(cur, doc_id):
         ' t.name AS rule_name, b.id AS load_binding_id, b.status AS binding_status,'
         ' b.field_map_json, b.write_mode, b.business_keys_json,'
         ' b.confirmed_at, lt.id AS load_table_id, lt.target_table,'
-        ' ds.id AS datasource_id, ds.name AS datasource_name'
+        ' lt.code AS load_table_code, lt.datasource_code,'
+        ' ds.id AS datasource_id, ds.code AS datasource_code_ref,'
+        ' ds.name AS datasource_name'
         ' FROM c1_extract_result r'
         ' JOIN c1_extract_rule t ON t.id=r.rule_id'
         ' LEFT JOIN c1_load_binding b ON b.extract_result_id=r.id'
         ' LEFT JOIN c1_load_table lt ON lt.id=b.load_table_id'
-        ' LEFT JOIN c1_load_datasource ds ON ds.id=lt.datasource_id'
+        ' LEFT JOIN c1_load_datasource ds ON ds.code=lt.datasource_code'
         ' WHERE r.doc_id=%s ORDER BY r.id', (doc_id,))
     results, bindings = [], []
     for row in _rows(cur):
@@ -56,14 +58,20 @@ def _attach_results(cur, doc_id):
         confirmed_at = row.pop('confirmed_at')
         lt_id = row.pop('load_table_id')
         target_table = row.pop('target_table')
+        load_table_code = row.pop('load_table_code')
+        load_table_datasource_code = row.pop('datasource_code')
         ds_id = row.pop('datasource_id')
+        ds_code = row.pop('datasource_code_ref')
         ds_name = row.pop('datasource_name')
         binding = None
         if binding_id is not None:
             binding = {
                 'id': binding_id, 'doc_id': row['doc_id'],
                 'extract_result_id': row['id'], 'load_table_id': lt_id,
-                'target_table': target_table, 'datasource_id': ds_id,
+                'target_table': target_table,
+                'load_table_code': load_table_code,
+                'load_table_datasource_code': load_table_datasource_code,
+                'datasource_id': ds_id, 'datasource_code': ds_code,
                 'datasource_name': ds_name, 'status': binding_status,
                 'field_map_json': field_map or {},
                 'business_keys_json': business_keys or [],

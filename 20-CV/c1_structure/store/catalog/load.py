@@ -1,6 +1,6 @@
 """目录库 · 入库配置、绑定与回执。
 
-c1_load_table/c1_load_mapping_field 只描述目标业务表；来源字段、写模式和
+c1_load_table/c1_load_table_field 只描述目标业务表；来源字段、写模式和
 业务键属于 c1_load_binding。回执按 load_binding_id 隔离，平台表不可作为
 业务目标，也不自动创建/修改业务表。
 """
@@ -11,7 +11,7 @@ from .. import db, loader
 from ..errors import BadRequest, Conflict, NotFound
 from ._common import _j, _rows, snapshot_field_names
 
-_DS_COLS = 'id, name, db_type, host, port, user, password, db_name, created_at'
+_DS_COLS = 'id, code, name, db_type, host, port, user, password, db_name, created_at'
 _BINDING_STATUSES = ('pending', 'confirmed', 'running', 'ready', 'failed')
 
 
@@ -25,10 +25,10 @@ def list_datasources():
     try:
         with conn.cursor() as cur:
             cur.execute(
-                'SELECT d.id, d.name, d.db_type, d.host, d.port, d.user,'
+                'SELECT d.id, d.code, d.name, d.db_type, d.host, d.port, d.user,'
                 ' d.password, d.db_name, d.created_at,'
                 ' (SELECT COUNT(*) FROM c1_load_table lt'
-                '   WHERE lt.datasource_id=d.id) AS table_count'
+                '   WHERE lt.datasource_code=d.code) AS table_count'
                 ' FROM c1_load_datasource d ORDER BY d.id')
             return [_ds_doc(row) for row in _rows(cur)]
     finally:
@@ -47,12 +47,27 @@ def get_datasource(ds_id):
         conn.close()
 
 
+def get_datasource_by_code(code):
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('SELECT ' + _DS_COLS +
+                        ' FROM c1_load_datasource WHERE code=%s', (code,))
+            rows = _rows(cur)
+        return _ds_doc(rows[0]) if rows else None
+    finally:
+        conn.close()
+
+
 def create_datasource(name, host, port, user, password, db_name,
-                      db_type='mysql'):
+                      db_type='mysql', code=None):
     name, host, db_name = (str(name or '').strip(), str(host or '').strip(),
                            str(db_name or '').strip())
+    code = str(code or '').strip() or db_name
     if not name:
         raise BadRequest('业务库名称不能为空')
+    if not code:
+        raise BadRequest('数据源编码不能为空')
     if not host or not db_name:
         raise BadRequest('主机与库名不能为空')
     if db_type != 'mysql':
@@ -68,11 +83,15 @@ def create_datasource(name, host, port, user, password, db_name,
                         (name,))
             if cur.fetchone():
                 raise Conflict('业务库名称已存在')
+            cur.execute('SELECT id FROM c1_load_datasource WHERE code=%s',
+                        (code,))
+            if cur.fetchone():
+                raise Conflict('数据源编码已存在')
             cur.execute(
-                'INSERT INTO c1_load_datasource (name, db_type, host, port,'
-                ' user, password, db_name) VALUES (%s,%s,%s,%s,%s,%s,%s)',
-                (name, db_type, host, port, str(user or ''), str(password or ''),
-                 db_name))
+                'INSERT INTO c1_load_datasource (code, name, db_type, host, port,'
+                ' user, password, db_name) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)',
+                (code, name, db_type, host, port, str(user or ''),
+                 str(password or ''), db_name))
             ds_id = cur.lastrowid
             conn.commit()
             return ds_id
@@ -81,35 +100,34 @@ def create_datasource(name, host, port, user, password, db_name,
 
 
 def update_datasource(ds_id, name=None, host=None, port=None, user=None,
-                      password=None, db_name=None):
+                      password=None, db_name=None, code=None):
     """目标坐标被表配置引用后锁定；凭据轮换不影响历史回执。"""
     if host is not None and not str(host).strip():
         raise BadRequest('主机不能为空')
     if db_name is not None and not str(db_name).strip():
         raise BadRequest('库名不能为空')
+    if code is not None and not str(code).strip():
+        raise BadRequest('数据源编码不能为空')
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT id FROM c1_load_datasource WHERE id=%s', (ds_id,))
-            if not cur.fetchone():
+            cur.execute('SELECT id, code, db_name FROM c1_load_datasource'
+                        ' WHERE id=%s', (ds_id,))
+            current = cur.fetchone()
+            if not current:
                 raise NotFound('业务库不存在')
-            if name is not None:
-                name = str(name).strip()
-                if not name:
-                    raise BadRequest('业务库名称不能为空')
+            old_code, old_db_name = current[1], current[2]
+            next_code = str(code).strip() if code is not None else old_code
+            if code is None and db_name is not None and old_code == old_db_name:
+                next_code = str(db_name).strip()
+            if next_code != old_code:
                 cur.execute('SELECT id FROM c1_load_datasource'
-                            ' WHERE name=%s AND id<>%s', (name, ds_id))
+                            ' WHERE code=%s AND id<>%s', (next_code, ds_id))
                 if cur.fetchone():
-                    raise Conflict('业务库名称已存在')
-                cur.execute('UPDATE c1_load_datasource SET name=%s WHERE id=%s',
-                            (name, ds_id))
-            if user is not None:
-                cur.execute('UPDATE c1_load_datasource SET user=%s WHERE id=%s',
-                            (str(user), ds_id))
-            if password is not None:
-                cur.execute('UPDATE c1_load_datasource SET password=%s'
-                            ' WHERE id=%s', (str(password), ds_id))
+                    raise Conflict('数据源编码已存在')
             target = {}
+            if next_code != old_code:
+                target['code'] = next_code
             if host is not None:
                 target['host'] = str(host).strip()
             if port is not None:
@@ -121,9 +139,23 @@ def update_datasource(ds_id, name=None, host=None, port=None, user=None,
                 target['db_name'] = str(db_name).strip()
             if target:
                 cur.execute('SELECT COUNT(*) FROM c1_load_table'
-                            ' WHERE datasource_id=%s', (ds_id,))
+                            ' WHERE datasource_code=%s', (old_code,))
                 if cur.fetchone()[0]:
-                    raise Conflict('该业务库已被入库表配置引用，主机、端口、库名不可修改')
+                    raise Conflict('该业务库已被入库表配置引用，编码、主机、端口、库名不可修改')
+            if name is not None:
+                name = str(name).strip()
+                if not name:
+                    raise BadRequest('业务库名称不能为空')
+                cur.execute('SELECT id FROM c1_load_datasource'
+                            ' WHERE name=%s AND id<>%s', (name, ds_id))
+                if cur.fetchone():
+                    raise Conflict('业务库名称已存在')
+                target['name'] = name
+            if user is not None:
+                target['user'] = str(user)
+            if password is not None:
+                target['password'] = str(password)
+            if target:
                 cur.execute('UPDATE c1_load_datasource SET ' +
                             ', '.join(k + '=%s' for k in target) +
                             ' WHERE id=%s', list(target.values()) + [ds_id])
@@ -137,11 +169,12 @@ def delete_datasource(ds_id):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT id FROM c1_load_datasource WHERE id=%s', (ds_id,))
-            if not cur.fetchone():
+            cur.execute('SELECT code FROM c1_load_datasource WHERE id=%s', (ds_id,))
+            row = cur.fetchone()
+            if not row:
                 raise NotFound('业务库不存在')
             cur.execute('SELECT COUNT(*) FROM c1_load_table'
-                        ' WHERE datasource_id=%s', (ds_id,))
+                        ' WHERE datasource_code=%s', (row[0],))
             if cur.fetchone()[0]:
                 raise Conflict('该业务库已被入库表配置引用，禁止删除')
             cur.execute('DELETE FROM c1_load_datasource WHERE id=%s', (ds_id,))
@@ -163,10 +196,11 @@ def ensure_default_datasource():
                 if row:
                     return row[0]
                 cur.execute(
-                    "INSERT INTO c1_load_datasource (name, db_type, host, port,"
-                    " user, password, db_name) VALUES ('产品库','mysql',%s,%s,%s,%s,%s)",
-                    (parts['host'], parts['port'], parts['user'],
-                     parts['password'], parts['database']))
+                    "INSERT INTO c1_load_datasource (code, name, db_type, host, port,"
+                    " user, password, db_name)"
+                    " VALUES (%s,'产品库','mysql',%s,%s,%s,%s,%s)",
+                    (parts['database'], parts['host'], parts['port'],
+                     parts['user'], parts['password'], parts['database']))
                 conn.commit()
                 return cur.lastrowid
         finally:
@@ -175,39 +209,41 @@ def ensure_default_datasource():
         return None
 
 
-# ---- 目标表配置：只有 datasource_id/target_table 与字段元数据 ----
+# ---- 目标表配置：datasource_code/target_table 与字段元数据 ----
 
 def _table_row(cur, lt_id):
     cur.execute(
-        'SELECT lt.id, lt.datasource_id, lt.target_table, lt.created_at,'
-        ' lt.updated_at, d.name AS datasource_name, d.db_name'
+        'SELECT lt.id, lt.code, lt.datasource_code, lt.target_table,'
+        ' lt.created_at, lt.updated_at, d.name AS datasource_name,'
+        ' d.db_name, d.id AS datasource_id'
         ' FROM c1_load_table lt JOIN c1_load_datasource d'
-        ' ON d.id=lt.datasource_id WHERE lt.id=%s', (lt_id,))
+        ' ON d.code=lt.datasource_code WHERE lt.id=%s', (lt_id,))
     return cur.fetchone()
 
 
 def _attach_fields(cur, row):
     cur.execute(
-        'SELECT id, load_table_id, field_name, data_type, is_primary,'
-        ' has_default, sort_order FROM c1_load_mapping_field'
-        ' WHERE load_table_id=%s ORDER BY sort_order, id', (row['id'],))
+        'SELECT id, table_code, field_name, data_type, is_primary,'
+        ' has_default, sort_order FROM c1_load_table_field'
+        ' WHERE table_code=%s ORDER BY sort_order, id', (row['code'],))
     row['fields'] = _rows(cur)
     row['field_count'] = len(row['fields'])
     return row
 
 
-def list_load_tables(datasource_id=None):
+def list_load_tables(datasource_code=None):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            sql = ('SELECT lt.id, lt.datasource_id, lt.target_table, lt.created_at,'
-                   ' lt.updated_at, d.name AS datasource_name, d.db_name'
+            sql = ('SELECT lt.id, lt.code, lt.datasource_code, lt.target_table,'
+                   ' lt.created_at, lt.updated_at, d.name AS datasource_name,'
+                   ' d.db_name, d.id AS datasource_id'
                    ' FROM c1_load_table lt JOIN c1_load_datasource d'
-                   ' ON d.id=lt.datasource_id')
+                   ' ON d.code=lt.datasource_code')
             args = []
-            if datasource_id is not None:
-                sql += ' WHERE lt.datasource_id=%s'
-                args.append(datasource_id)
+            if datasource_code is not None:
+                sql += ' WHERE lt.datasource_code=%s'
+                args.append(datasource_code)
             sql += ' ORDER BY lt.id'
             cur.execute(sql, args)
             rows = [_attach_fields(cur, row) for row in _rows(cur)]
@@ -223,12 +259,7 @@ def get_load_table(lt_id):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute(
-                'SELECT lt.id, lt.datasource_id, lt.target_table, lt.created_at,'
-                ' lt.updated_at, d.name AS datasource_name, d.db_name'
-                ' FROM c1_load_table lt JOIN c1_load_datasource d'
-                ' ON d.id=lt.datasource_id WHERE lt.id=%s', (lt_id,))
-            rows = _rows(cur)
+            rows = _rows_for_table(cur, lt_id)
             if not rows:
                 return None
             row = _attach_fields(cur, rows[0])
@@ -240,6 +271,16 @@ def get_load_table(lt_id):
         return row
     finally:
         conn.close()
+
+
+def _rows_for_table(cur, lt_id):
+    cur.execute(
+        'SELECT lt.id, lt.code, lt.datasource_code, lt.target_table,'
+        ' lt.created_at, lt.updated_at, d.name AS datasource_name,'
+        ' d.db_name, d.id AS datasource_id'
+        ' FROM c1_load_table lt JOIN c1_load_datasource d'
+        ' ON d.code=lt.datasource_code WHERE lt.id=%s', (lt_id,))
+    return _rows(cur)
 
 
 def _metadata(fields):
@@ -267,38 +308,43 @@ def _metadata(fields):
     return out
 
 
-def _replace_fields(cur, lt_id, fields):
-    cur.execute('DELETE FROM c1_load_mapping_field WHERE load_table_id=%s', (lt_id,))
+def _replace_fields(cur, table_code, fields):
+    cur.execute('DELETE FROM c1_load_table_field WHERE table_code=%s', (table_code,))
     for field in fields:
         cur.execute(
-            'INSERT INTO c1_load_mapping_field (load_table_id, field_name,'
+            'INSERT INTO c1_load_table_field (table_code, field_name,'
             ' data_type, is_primary, has_default, sort_order)'
             ' VALUES (%s,%s,%s,%s,%s,%s)',
-            (lt_id, field['field_name'], field['data_type'], field['is_primary'],
-             field['has_default'], field['sort_order']))
+            (table_code, field['field_name'], field['data_type'],
+             field['is_primary'], field['has_default'], field['sort_order']))
 
 
-def create_load_table(datasource_id, target_table, fields=None):
+def create_load_table(datasource_code, target_table, fields=None):
     """创建可跨抽取结果复用的目标表配置，返回 load_table_id。"""
+    datasource_code = str(datasource_code or '').strip()
     target_table = str(target_table or '').strip()
+    if not datasource_code:
+        raise BadRequest('数据源编码不能为空')
     if not loader.is_business_table(target_table):
         raise BadRequest('只能选择现有业务表，不能写入平台 c1_ 表')
+    table_code = datasource_code + '.' + target_table
     metadata = _metadata(fields)
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT id FROM c1_load_datasource WHERE id=%s',
-                        (datasource_id,))
+            cur.execute('SELECT id FROM c1_load_datasource WHERE code=%s',
+                        (datasource_code,))
             if not cur.fetchone():
                 raise NotFound('业务库不存在')
-            cur.execute('SELECT id FROM c1_load_table WHERE datasource_id=%s'
-                        ' AND target_table=%s', (datasource_id, target_table))
+            cur.execute('SELECT id FROM c1_load_table WHERE code=%s',
+                        (table_code,))
             if cur.fetchone():
                 raise Conflict('该业务表配置已存在')
-            cur.execute('INSERT INTO c1_load_table (datasource_id, target_table)'
-                        ' VALUES (%s,%s)', (datasource_id, target_table))
+            cur.execute('INSERT INTO c1_load_table'
+                        ' (code, datasource_code, target_table) VALUES (%s,%s,%s)',
+                        (table_code, datasource_code, target_table))
             lt_id = cur.lastrowid
-            _replace_fields(cur, lt_id, metadata)
+            _replace_fields(cur, table_code, metadata)
             conn.commit()
             return lt_id
     finally:
@@ -314,6 +360,8 @@ def update_load_table(lt_id, target_table=None, fields=None):
             row = _table_row(cur, lt_id)
             if not row:
                 raise NotFound('入库表配置不存在')
+            old_code, datasource_code = row[1], row[2]
+            table_code = old_code
             if target_table is not None:
                 target_table = str(target_table).strip()
                 if not loader.is_business_table(target_table):
@@ -322,8 +370,20 @@ def update_load_table(lt_id, target_table=None, fields=None):
                             ' WHERE load_table_id=%s', (lt_id,))
                 if cur.fetchone()[0]:
                     raise Conflict('该表配置已有绑定，不可更换目标表')
-                cur.execute('UPDATE c1_load_table SET target_table=%s,'
-                            ' updated_at=NOW() WHERE id=%s', (target_table, lt_id))
+                table_code = datasource_code + '.' + target_table
+                cur.execute('SELECT id FROM c1_load_table WHERE code=%s AND id<>%s',
+                            (table_code, lt_id))
+                if cur.fetchone():
+                    raise Conflict('该业务表配置已存在')
+                cur.execute('UPDATE c1_load_table SET target_table=%s, code=%s,'
+                            ' updated_at=NOW() WHERE id=%s',
+                            (target_table, table_code, lt_id))
+                if fields is None:
+                    cur.execute('UPDATE c1_load_table_field SET table_code=%s'
+                                ' WHERE table_code=%s', (table_code, old_code))
+                else:
+                    cur.execute('DELETE FROM c1_load_table_field'
+                                ' WHERE table_code=%s', (old_code,))
             if fields is not None:
                 allowed = {field['field_name'] for field in metadata}
                 cur.execute('SELECT field_map_json FROM c1_load_binding'
@@ -333,7 +393,7 @@ def update_load_table(lt_id, target_table=None, fields=None):
                     if missing:
                         raise Conflict('字段元数据不能删除已绑定目标列：{}'.format(
                             '、'.join(sorted(missing))))
-                _replace_fields(cur, lt_id, metadata)
+                _replace_fields(cur, table_code, metadata)
                 cur.execute('UPDATE c1_load_table SET updated_at=NOW()'
                             ' WHERE id=%s', (lt_id,))
             conn.commit()
@@ -346,13 +406,14 @@ def delete_load_table(lt_id):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            if not _table_row(cur, lt_id):
+            row = _table_row(cur, lt_id)
+            if not row:
                 raise NotFound('入库表配置不存在')
             cur.execute('SELECT COUNT(*) FROM c1_load_binding'
                         ' WHERE load_table_id=%s', (lt_id,))
             if cur.fetchone()[0]:
                 raise Conflict('该入库表配置已被绑定引用，禁止删除')
-            _replace_fields(cur, lt_id, [])
+            _replace_fields(cur, row[1], [])
             cur.execute('DELETE FROM c1_load_table WHERE id=%s', (lt_id,))
             conn.commit()
     finally:
@@ -367,13 +428,14 @@ def _binding_row(cur, binding_id):
         ' b.field_map_json, b.write_mode, b.business_keys_json, b.status,'
         ' b.confirmed_at, b.error, b.created_at, b.updated_at,'
         ' r.rule_id, t.name AS rule_name, d.name AS doc_name,'
-        ' lt.target_table, ds.id AS datasource_id, ds.name AS datasource_name,'
-        ' ds.db_name FROM c1_load_binding b'
+        ' lt.target_table, lt.code AS load_table_code, lt.datasource_code,'
+        ' ds.id AS datasource_id, ds.code AS datasource_code,'
+        ' ds.name AS datasource_name, ds.db_name FROM c1_load_binding b'
         ' JOIN c1_extract_result r ON r.id=b.extract_result_id'
         ' JOIN c1_extract_rule t ON t.id=r.rule_id'
         ' JOIN c1_doc d ON d.id=b.doc_id'
         ' JOIN c1_load_table lt ON lt.id=b.load_table_id'
-        ' JOIN c1_load_datasource ds ON ds.id=lt.datasource_id'
+        ' JOIN c1_load_datasource ds ON ds.code=lt.datasource_code'
         ' WHERE b.id=%s', (binding_id,))
     row = cur.fetchone()
     if not row:
@@ -417,10 +479,11 @@ def _validate_binding(cur, extract_result_id, load_table_id, field_map,
     row = cur.fetchone()
     if not row:
         raise NotFound('抽取结果不存在')
-    if not _table_row(cur, load_table_id):
+    table = _table_row(cur, load_table_id)
+    if not table:
         raise NotFound('入库表配置不存在')
-    cur.execute('SELECT field_name FROM c1_load_mapping_field'
-                ' WHERE load_table_id=%s', (load_table_id,))
+    cur.execute('SELECT field_name FROM c1_load_table_field'
+                ' WHERE table_code=%s', (table[1],))
     columns = [r[0] for r in cur.fetchall()]
     if not columns:
         raise BadRequest('入库表配置缺少目标字段元数据，请先刷新字段')
@@ -529,14 +592,15 @@ def list_bindings(doc_id=None, extract_result_id=None, load_table_id=None):
                 ' b.field_map_json, b.write_mode, b.business_keys_json, b.status,'
                 ' b.confirmed_at, b.error, b.created_at, b.updated_at,'
                 ' r.rule_id, t.name AS rule_name, d.name AS doc_name,'
-                ' lt.target_table, ds.id AS datasource_id,'
+                ' lt.target_table, lt.code AS load_table_code, lt.datasource_code,'
+                ' ds.id AS datasource_id, ds.code AS datasource_code,'
                 ' ds.name AS datasource_name, ds.db_name'
                 ' FROM c1_load_binding b'
                 ' JOIN c1_extract_result r ON r.id=b.extract_result_id'
                 ' JOIN c1_extract_rule t ON t.id=r.rule_id'
                 ' JOIN c1_doc d ON d.id=b.doc_id'
                 ' JOIN c1_load_table lt ON lt.id=b.load_table_id'
-                ' JOIN c1_load_datasource ds ON ds.id=lt.datasource_id' + w +
+                ' JOIN c1_load_datasource ds ON ds.code=lt.datasource_code' + w +
                 ' ORDER BY b.doc_id, b.id', args)
             return [_decode_binding(row) for row in _rows(cur)]
     finally:
@@ -621,9 +685,11 @@ def add_receipt(load_binding_id, record_index, target_pk, action):
             cur.execute(
                 'INSERT INTO c1_load_receipt (load_binding_id, doc_id,'
                 ' record_index, datasource_id, target_table, target_pk, action)'
-                ' SELECT b.id, b.doc_id, %s, lt.datasource_id, lt.target_table,'
+                ' SELECT b.id, b.doc_id, %s, ds.id, lt.target_table,'
                 ' %s, %s FROM c1_load_binding b'
-                ' JOIN c1_load_table lt ON lt.id=b.load_table_id WHERE b.id=%s',
+                ' JOIN c1_load_table lt ON lt.id=b.load_table_id'
+                ' JOIN c1_load_datasource ds ON ds.code=lt.datasource_code'
+                ' WHERE b.id=%s',
                 (record_index, str(target_pk)[:255], action, load_binding_id))
             conn.commit()
             return True

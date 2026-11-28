@@ -72,7 +72,7 @@ class AutoServiceTests(unittest.TestCase):
         auto_service.catalog.create_binding.assert_not_called()
         auto_service.content_db.save_records.assert_called_once_with(31, self.recs)
         auto_service.load_planner.plan_for_extract_result.assert_called_once_with(
-            31, datasource_id=None, table_intent=self.intent)
+            31, datasource_code=None, table_intent=self.intent)
         auto_service.catalog.set_state.assert_called_with(1, 'to_review', None)
         self.assertEqual([31], [r['extract_result_id']
                                 for r in auto_service.service.STATE['extract_results']])
@@ -230,7 +230,9 @@ class AutoServiceTests(unittest.TestCase):
 
     def test_apply_plan_preserves_partial_mapping_and_confirms_only_result(self):
         ready = {'status': 'ready', 'message': 'ready',
-                 'target': {'datasource_id': 2, 'table': 'inspection'},
+                 'target': {'datasource_id': 2, 'datasource_code': 'biz',
+                            'table': 'inspection',
+                            'table_code': 'biz.inspection'},
                  'mapping': {'complete': True, 'write_mode': 'upsert',
                              'business_key': ['equipment_code'],
                              'field_map': {'设备编号': 'equipment_code',
@@ -242,7 +244,8 @@ class AutoServiceTests(unittest.TestCase):
         records = [{'index': i, 'values': {}, 'review': {'state': state}}
                    for i, state in enumerate(('pending', 'edited', 'confirmed'))]
         intent = {'confirmed': True, 'target_table': 'inspection',
-                  'datasource_id': 2, 'field_map': ready['mapping']['field_map'],
+                  'datasource_id': 2, 'datasource_code': 'biz',
+                  'field_map': ready['mapping']['field_map'],
                   'write_mode': 'upsert', 'business_keys': ['equipment_code']}
         with patch.object(auto_service.load_planner, 'plan_for_extract_result',
                           return_value=ready) as planner, \
@@ -252,6 +255,7 @@ class AutoServiceTests(unittest.TestCase):
                              return_value=None), \
                 patch.object(auto_service.catalog, 'list_load_tables',
                              return_value=[{'id': 55, 'datasource_id': 2,
+                                            'datasource_code': 'biz',
                                             'target_table': 'inspection',
                                             'fields': ready['mapping']['available_columns']}]), \
                 patch.object(auto_service.catalog, 'create_binding',
@@ -263,7 +267,7 @@ class AutoServiceTests(unittest.TestCase):
                 patch.object(auto_service.service, 'launch_load',
                              return_value={'ok': True}) as launch:
             self.assertEqual({'ok': True}, auto_service.apply_plan(31, intent))
-        planner.assert_called_once_with(31, datasource_id=2, table_intent=intent)
+        planner.assert_called_once_with(31, datasource_code='biz', table_intent=intent)
         create.assert_called_once_with(
             31, 55, {'设备编号': 'equipment_code', '设备名称': 'equipment_name'},
             'upsert', ['equipment_code'])
@@ -275,7 +279,8 @@ class AutoServiceTests(unittest.TestCase):
         for plan in (
             {'status': 'mapping_incomplete', 'message': 'bad'},
             {'status': 'ready', 'message': 'ready',
-             'target': {'datasource_id': 2, 'table': 'inspection'},
+             'target': {'datasource_id': 2, 'datasource_code': 'biz',
+                        'table': 'inspection'},
              'mapping': {'field_map': {}}},
         ):
             with self.subTest(plan=plan), \
@@ -290,7 +295,8 @@ class AutoServiceTests(unittest.TestCase):
 
     def test_apply_plan_cannot_retarget_confirmed_binding(self):
         plan = {'status': 'ready', 'message': 'ready',
-                'target': {'datasource_id': 2, 'table': 'other'},
+                'target': {'datasource_id': 2, 'datasource_code': 'biz',
+                           'table': 'other'},
                 'mapping': {'field_map': {'设备名称': 'device_name'}}}
         binding = {'id': 55, 'status': 'confirmed'}
         with patch.object(auto_service.load_planner, 'plan_for_extract_result',

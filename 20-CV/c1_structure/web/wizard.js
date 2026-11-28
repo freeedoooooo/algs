@@ -53,7 +53,8 @@ function openLoadWizard(opts){
   var binding=opts.result&&(opts.result.load_binding||opts.result.binding);
   wz={fileId:opts.fileId,resultId:Number(opts.extractResultId),result:opts.result||{},
     onDone:opts.onDone,gate:opts.gate||null,step:1,dsList:null,tables:null,
-    dsId:binding?String(binding.datasource_id||''):'',tableId:binding?String(binding.load_table_id||''):'',
+    dsId:binding?String(binding.datasource_id||''):'',dsCode:binding?String(binding.datasource_code||''):'',
+    tableId:binding?String(binding.load_table_id||''):'',
     newTable:'',fieldMap:wzBindingMap(binding),
     writeMode:binding&&binding.write_mode||'upsert',businessKeys:wzBindingKeys(binding),
     binding:binding||null,fields:[],cols:[],preview:null,previewErr:'',approvePending:false,busy:false};
@@ -77,7 +78,7 @@ function wzRender(first){
   else b.innerHTML='<div class="empty">正在确认绑定并写入所选结果…</div>';
 }
 function wzGo(step){if(!wz)return;wz.step=step;wz.preview=null;wz.previewErr='';wzRender();}
-function wzDsOpt(d){return '<option value="'+d.id+'">'+escHtml(d.name+' · '+d.host+'/'+d.db_name)+'</option>';}
+function wzDsOpt(d){return '<option value="'+d.id+'">'+escHtml(d.name+' · '+d.code+' · '+d.host+'/'+d.db_name)+'</option>';}
 function wzStep1(b){
   if(!wz.dsList){
     b.innerHTML='<div class="empty">加载业务库与目标表配置…</div>';
@@ -93,29 +94,34 @@ function wzStep1(b){
     '<div class="wzrow"><label>或物理表名</label><input class="tin" id="wznewtable" placeholder="已有业务表名；保存绑定时登记列元数据"></div>'+
     '<div class="hint">新业务库请在 <a href="/rules" target="_blank">业务库与目标表</a> 页维护。这里不会创建或删除物理表。</div>';
   var ds=b.querySelector('#wzds'),tb=b.querySelector('#wztable'),nt=b.querySelector('#wznewtable');
+  function selectedDs(){return (wz.dsList||[]).filter(function(d){return String(d.id)===ds.value;})[0]||null;}
   function fillTables(){
-    var list=wz.tables.filter(function(t){return String(t.datasource_id)===ds.value;});
+    var d=selectedDs(),code=d?d.code:'';
+    var list=wz.tables.filter(function(t){return String(t.datasource_code)===String(code);});
     tb.innerHTML='<option value="">选择已配置目标表</option>'+list.map(function(t){
-      return '<option value="'+t.id+'">'+escHtml(t.target_table)+(t.binding_refs?' · 已被 '+t.binding_refs.length+' 个结果使用':'')+'</option>';
+      return '<option value="'+t.id+'">'+escHtml(t.code||t.target_table)+(t.binding_refs?' · 已被 '+t.binding_refs.length+' 个结果使用':'')+'</option>';
     }).join('');
     if(wz.tableId&&list.some(function(t){return String(t.id)===wz.tableId;}))tb.value=wz.tableId;
   }
   ds.value=wz.dsId;nt.value=wz.newTable;fillTables();
-  ds.onchange=function(){wz.dsId=ds.value;wz.tableId='';wz.newTable='';nt.value='';fillTables();};
+  ds.onchange=function(){wz.dsId=ds.value;var d=selectedDs();wz.dsCode=d?d.code:'';wz.tableId='';wz.newTable='';nt.value='';fillTables();};
   tb.onchange=function(){wz.tableId=tb.value;wz.newTable='';nt.value='';};
   nt.oninput=function(){wz.newTable=nt.value.trim();if(wz.newTable)tb.value='';};
   if(wz.dsId)fillTables();
 }
 function wzSelectedTable(){
+  var ds=(wz.dsList||[]).filter(function(d){return String(d.id)===String(wz.dsId);})[0]||null;
+  var datasourceCode=wz.dsCode||(ds&&ds.code)||'';
   var t=(wz.tables||[]).filter(function(x){return String(x.id)===wz.tableId;})[0]||null;
-  return t?{id:t.id,datasource_id:t.datasource_id,target_table:t.target_table}:
-    {id:null,datasource_id:Number(wz.dsId),target_table:wz.newTable};
+  return t?{id:t.id,datasource_id:t.datasource_id,datasource_code:t.datasource_code,target_table:t.target_table,table_code:t.code}:
+    {id:null,datasource_id:Number(wz.dsId),datasource_code:datasourceCode,target_table:wz.newTable,
+      table_code:datasourceCode?datasourceCode+'.'+wz.newTable:''};
 }
 function wzSaveBinding(){
   var chain=Promise.resolve();
   if(!wz.target.id){
     chain=chain.then(function(){
-      return wzApi('POST','/api/load/tables',{datasource_id:wz.target.datasource_id,target_table:wz.target.target_table,
+      return wzApi('POST','/api/load/tables',{datasource_code:wz.target.datasource_code,target_table:wz.target.target_table,
         fields:wz.cols.map(function(c,i){return {field_name:c.name,data_type:c.type||c.data_type||'text',is_primary:!!(c.primary||c.is_primary),has_default:c.default!=null,sort_order:c.sort_order==null?i:c.sort_order};})});
     }).then(function(j){if(!j.id)throw new Error('目标表配置保存失败');wz.target.id=j.id;});
   }
@@ -133,7 +139,7 @@ function wzAdvance(){
   if(!wz||wz.busy)return;
   if(wz.step===1){
     var target=wzSelectedTable();
-    if(!target.datasource_id||!target.target_table){wzMsg('请选择业务库与目标表',true);return;}
+    if(!target.datasource_code||!target.target_table){wzMsg('请选择业务库与目标表',true);return;}
     wz.target=target;
     wz.fields=[];wz.cols=[];wzGo(2);return;
   }
@@ -149,7 +155,8 @@ function wzAdvance(){
 function wzStep2(b){
   if(!wz.fields.length){
     b.innerHTML='<div class="empty">加载结果字段与目标列…</div>';
-    var intent={datasource_id:wz.target.datasource_id,target_table:wz.target.target_table,
+    var intent={datasource_id:wz.target.datasource_id,datasource_code:wz.target.datasource_code,
+      table_code:wz.target.table_code,target_table:wz.target.target_table,
       field_map:wz.fieldMap,write_mode:wz.writeMode,business_keys:wz.businessKeys};
     wzApi('POST','/api/extract-results/'+wz.resultId+'/load-plan',{intent:intent}).then(function(plan){
       if(!wz||wz.step!==2)return;
@@ -203,8 +210,8 @@ function wzCollect(){
   wz.fieldMap=map;wz.businessKeys=keys;return true;
 }
 function wzSummary(){
-  var rows=[['抽取结果','#'+wz.resultId],['业务库',wzDsName(wz.target.datasource_id)],
-    ['目标表',wz.target.target_table],['写入方式',modeLabel(wz.writeMode)],['去重依据',wz.businessKeys.join('、')||'—']];
+  var rows=[['抽取结果','#'+wz.resultId],['业务库',wzDsName(wz.target.datasource_id)+' · '+wz.target.datasource_code],
+    ['目标表',wz.target.target_table+' · '+wz.target.table_code],['写入方式',modeLabel(wz.writeMode)],['去重依据',wz.businessKeys.join('、')||'—']];
   return '<div class="wzsum">'+rows.map(function(r){return '<div class="wzsr"><span>'+escHtml(r[0])+'</span><b>'+escHtml(r[1])+'</b></div>';}).join('')+'</div>';
 }
 function wzDsName(id){var hit='';(wz.dsList||[]).forEach(function(d){if(String(d.id)===String(id))hit=d.name;});return hit||('业务库 #'+id);}

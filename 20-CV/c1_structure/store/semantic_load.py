@@ -246,6 +246,9 @@ def map_fields(record_set, table_schema, *, explicit=None, auto_map=True):
     business_key = key_candidates[0] if key_candidates else []
     return {
         'target_table': table_schema.get('name'),
+        'datasource_id': table_schema.get('datasource_id'),
+        'datasource_code': table_schema.get('datasource_code'),
+        'table_code': table_schema.get('table_code'),
         'field_map': field_map,
         'confidence': confidence,
         'unmapped_fields': unmapped,
@@ -293,6 +296,8 @@ def recommend_tables(record_set, table_schemas, *, intent='', limit=5,
         results.append({
             'table': table.get('name'),
             'datasource_id': table.get('datasource_id'),
+            'datasource_code': table.get('datasource_code'),
+            'table_code': table.get('table_code'),
             'score': score,
             'matched_fields': mapped,
             'missing_fields': mapping['unmapped_fields'],

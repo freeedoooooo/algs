@@ -92,12 +92,12 @@ flowchart TD
 | `c1_staging_record` | `c1_extract_record` | 明确是抽取记录，不再强调暂存 |
 | `c1_staging_field` | `c1_extract_record_field` | 明确是抽取记录的字段投影 |
 | `c1_staging_lineage` | `c1_extract_record_lineage` | 明确是抽取记录的血缘 |
-| `c1_load_table_field` | `c1_load_mapping_field` | 明确是目标字段元数据，不是来源字段映射 |
+| `c1_load_mapping_field` | `c1_load_table_field` | 明确是目标字段元数据，不是来源字段映射 |
 | `c1_load_run` | `c1_load_binding` | 记录单个抽取结果的字段映射、写入方式和业务键 |
 | `c1_load_log` | `c1_load_receipt` | 明确是入库回执，不是普通日志 |
 | `c1_load_quarantine` | `c1_quarantine_record` | 抽取和入库阶段都可能产生问题 |
 
-`c1_load_table` 保留表名，但语义调整为平台侧的“目标表配置”，不是业务库中的实际表；关联外键仍统一使用 `load_table_id`。
+`c1_load_table` 保留表名，但语义调整为平台侧的“目标表配置”，不是业务库中的实际表。元数据之间统一使用编码关联：数据源编码 → 入库表编码 → 目标字段；只有运行时实体（如 `c1_load_binding.load_table_id`）仍使用数字 ID。
 
 字段命名也同步统一：
 
@@ -156,7 +156,7 @@ flowchart TD
 | 抽取规则 Rule | `c1_extract_rule` | 一条规则，只有一个当前定义 |
 | 抽取结果 ExtractionResult | `c1_extract_result` | 文档使用某条规则得到的当前结果 |
 | 记录集 RecordSet | `c1_extract_result` + `c1_extract_record` | 结果头信息 + 实际记录 |
-| 入库表配置 LoadTable | `c1_load_table` + `c1_load_mapping_field` | 目标库、目标表、目标列定义 |
+| 入库表配置 LoadTable | `c1_load_table` + `c1_load_table_field` | 目标库、目标表、目标列定义 |
 | 入库绑定 LoadBinding | `c1_load_binding` | 某条抽取结果写入某张表 |
 | 入库回执 LoadLog | `c1_load_receipt` | 每条记录写入目标库的结果 |
 
@@ -174,7 +174,7 @@ erDiagram
     c1_extract_record ||--o{ c1_extract_record_lineage : "记录血缘"
 
     c1_load_datasource ||--o{ c1_load_table : "配置目标库"
-    c1_load_table ||--o{ c1_load_mapping_field : "配置目标列"
+    c1_load_table ||--o{ c1_load_table_field : "配置目标列"
 
     c1_extract_result o|--o| c1_load_binding : "最多一个目标"
     c1_load_table ||--o{ c1_load_binding : "提供目标定义"
@@ -239,9 +239,9 @@ flowchart LR
 | `c1_extract_record` | 修改 | 增加 `extract_result_id`，调整唯一键 |
 | `c1_extract_record_field` | 保留 | 仍通过 `record_id` 关联 |
 | `c1_extract_record_lineage` | 保留 | 仍通过 `record_id` 关联 |
-| `c1_load_datasource` | 保留 | 数据源配置不变 |
-| `c1_load_table` | 修改 | 只保存目标库、目标表和目标列，不保存规则与来源字段 |
-| `c1_load_mapping_field` | 修改 | 只保存目标列元数据，来源字段映射移入 `c1_load_binding` |
+| `c1_load_datasource` | 修改 | 新增唯一编码 `code`，默认等于 `db_name` |
+| `c1_load_table` | 修改 | 使用 `datasource_code` 关联数据源，新增 `code = datasource_code.target_table` |
+| `c1_load_table_field` | 修改 | 只保存目标列元数据，使用 `table_code` 关联入库表 |
 | `c1_load_binding` | 新增 | 每条抽取结果最多一个入库绑定 |
 | `c1_load_receipt` | 修改 | 增加 `load_binding_id`，调整唯一键 |
 | `c1_quarantine_record` | 修改 | 增加抽取结果、入库绑定引用 |
@@ -372,7 +372,21 @@ flowchart LR
 
 `c1_extract_record_field` 和 `c1_extract_record_lineage` 保持通过 `record_id` 关联，不需要增加结果字段。
 
-### 16. 修改表：`c1_load_table`
+### 16. 数据源、入库表与目标字段的编码关联
+
+三张元数据表组成一条稳定链路：
+
+```mermaid
+flowchart LR
+    DS["c1_load_datasource<br/>code = c1_structure_dev"] -->|"datasource_code"| LT["c1_load_table<br/>code = c1_structure_dev.biz_demo_2"]
+    LT -->|"table_code"| F["c1_load_table_field<br/>field_name = account_1"]
+```
+
+- `c1_load_datasource.code` 唯一，默认等于数据库名 `db_name`；创建数据源时可显式指定。
+- `c1_load_table.datasource_code` 引用数据源编码，不再保存 `datasource_id`。
+- `c1_load_table.code` 唯一，固定为 `<datasource_code>.<target_table>`，例如 `c1_structure_dev.biz_demo_2`。
+- `c1_load_table_field.table_code` 引用入库表编码，不再保存 `load_table_id`。
+- 运行时连接仍通过数据源编码找到数据源记录，再使用其 `id/host/port/db_name`；`c1_load_binding.load_table_id` 保留，用于关联已配置的入库表。
 
 `c1_load_table` 只描述“目标表是什么”，不描述“抽取结果怎么写入”。
 
@@ -380,8 +394,9 @@ flowchart LR
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| `id` | bigint | 入库表配置 ID |
-| `datasource_id` | bigint | 目标数据源 |
+| `id` | bigint | 入库表配置 ID，供运行时绑定使用 |
+| `code` | varchar(255) | 入库表编码，唯一，格式为 `datasource_code.target_table` |
+| `datasource_code` | varchar(100) | 目标数据源编码 |
 | `target_table` | varchar(128) | 目标业务表 |
 | `created_at` | datetime | 创建时间 |
 | `updated_at` | datetime | 最后更新时间 |
@@ -393,27 +408,29 @@ flowchart LR
 | `source_snapshot_json` | 删除 | 入库表配置不描述抽取来源 |
 | `load_transform_json` | 不增加 | 探索阶段不设计入库转换 |
 | `write_mode` | 移动到 `c1_load_binding` | 写入方式由具体绑定决定 |
-| `datasource_id` | 保留 | 目标数据源 |
+| `datasource_id` | 替换为 `datasource_code` | 元数据关联统一使用编码 |
+| `code` | 新增 | 入库表编码 |
 | `target_table` | 保留 | 目标业务表 |
 | `created_at` | 保留 | 创建时间 |
 | `updated_at` | 新增 | 最后更新时间 |
 
 职责边界：
 
-- `c1_load_table` 只记录数据库、数据表和目标列。
+- `c1_load_table` 只记录数据源编码、入库表编码、目标表和目标列。
 - 中文字段映射到目标列、写入方式、业务键都由 `c1_load_binding` 记录。
 - 同一目标表可以被多个抽取结果绑定。
-- 修改目标表结构时，只需要刷新 `c1_load_mapping_field`。
-- `UNIQUE KEY uk_load_table_target (datasource_id, target_table)`，避免同一目标表重复建档。
+- 修改目标表结构时，只需要刷新 `c1_load_table_field`。
+- `UNIQUE KEY uk_load_table_target (datasource_code, target_table)`，避免同一目标表重复建档。
+- `UNIQUE KEY uk_load_table_code (code)`，保证入库表编码唯一。
 
-### 17. 修改表：`c1_load_mapping_field`
+### 17. 修改表：`c1_load_table_field`
 
 该表只描述目标表的字段，不再保存来源字段。
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `id` | bigint | 主键 |
-| `load_table_id` | bigint | 所属入库表配置 |
+| `table_code` | varchar(255) | 所属入库表编码 |
 | `field_name` | varchar(128) | 目标数据库列名 |
 | `data_type` | varchar(64) | 目标列类型 |
 | `is_primary` | tinyint | 是否主键 |
@@ -422,7 +439,7 @@ flowchart LR
 
 唯一键：
 
-- `(load_table_id, field_name)`
+- `(table_code, field_name)`
 
 该表不包含：
 
@@ -463,7 +480,7 @@ UNIQUE KEY uk_extract_result_binding (extract_result_id)
 绑定校验规则：
 
 - `field_map_json` 的键必须存在于抽取结果；
-- `field_map_json` 的值必须存在于 `c1_load_mapping_field`；
+- `field_map_json` 的值必须存在于 `c1_load_table_field`；
 - 抽取结果中的额外字段不写入；
 - 业务键必须出现在 `field_map_json` 的目标列中；
 - 校验由上游绑定逻辑完成，`c1_load_table` 不关心抽取结果。
@@ -705,8 +722,8 @@ flowchart LR
 | 规则当前版本 | 合并到 `c1_extract_rule` |
 | 文档绑定的规则版本 | 创建一条 `c1_extract_result`，并复制版本快照 |
 | 当前暂存记录（旧表） | 补 `extract_result_id` |
-| `c1_load_table` | 按 `(datasource_id, target_table)` 去重，保留目标库和目标表；规则引用不再使用 |
-| `c1_load_table_field.target_column` | 去重后写入 `c1_load_mapping_field.field_name`，作为目标字段元数据 |
+| `c1_load_table` | 先按 `(datasource_id, target_table)` 去重，再由 009 迁移器转换为数据源编码和入库表编码 |
+| `c1_load_table_field.target_column` | 去重后写入 `c1_load_table_field.field_name`，作为目标字段元数据 |
 | `c1_load_table_field.rule_field` | 与 `target_column` 组成来源到目标映射，写入对应 `c1_load_binding.field_map_json` |
 | `c1_load_table_field.is_business_key` | 汇总为目标字段列表，写入对应 `c1_load_binding.business_keys_json` |
 | `c1_load_table.write_mode` | 迁移到对应 `c1_load_binding.write_mode` |
@@ -716,6 +733,8 @@ flowchart LR
 | `c1_doc` 的旧标量字段 | 回填完成后删除 |
 
 迁移期间旧字段只读，不再写入。确认单规则旧流程和多规则新流程都通过后，再删除 `c1_extract_rule_version`。
+
+元数据编码关联由 `store/migrations/009_load_metadata_codes.py` 单独升级：默认只读预演，`--confirm` 先备份全库，再回填 `c1_load_datasource.code`、`c1_load_table.code/datasource_code`，将 `c1_load_mapping_field` 改名为 `c1_load_table_field` 并回填 `table_code`。迁移保留全部数据，可断点重跑。
 
 ---
 

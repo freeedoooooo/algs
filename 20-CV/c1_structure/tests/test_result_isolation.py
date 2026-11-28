@@ -144,12 +144,12 @@ class _Catalog:
         self.results = {31: {'id': 31, 'doc_id': 1}, 32: {'id': 32, 'doc_id': 1}}
         self.bindings = {
             31: {'id': 501, 'doc_id': 1, 'extract_result_id': 31,
-                 'datasource_id': 2, 'load_table_id': 55,
+                 'datasource_id': 2, 'datasource_code': 'biz', 'load_table_id': 55,
                  'field_map_json': {'设备名称': 'device_name'},
                  'write_mode': 'insert', 'business_keys_json': [],
                  'status': 'confirmed'},
             32: {'id': 502, 'doc_id': 1, 'extract_result_id': 32,
-                 'datasource_id': 2, 'load_table_id': 55,
+                 'datasource_id': 2, 'datasource_code': 'biz', 'load_table_id': 55,
                  'field_map_json': {'设备名称': 'device_name'},
                  'write_mode': 'insert', 'business_keys_json': [],
                  'status': 'confirmed'},
@@ -177,6 +177,9 @@ class _Catalog:
 
     def get_datasource(self, datasource_id):
         return {'id': datasource_id, 'db_name': 'fake'}
+
+    def get_datasource_by_code(self, code):
+        return {'id': 2, 'code': code, 'db_name': 'fake'}
 
     def list_receipts(self, load_binding_id=None, doc_id=None):
         self.receipt_queries.append(load_binding_id)
@@ -331,7 +334,7 @@ class BindingReceiptIsolationTest(unittest.TestCase):
             response = service.launch_load(31)
         self.assertEqual({'ok': True, 'doc_id': 1, 'extract_result_id': 31,
                           'load_binding_id': 501}, response)
-        self.assertEqual([({'id': 2, 'db_name': 'fake'}, 'inspection',
+        self.assertEqual([({'id': 2, 'code': 'biz', 'db_name': 'fake'}, 'inspection',
                            {'设备名称': 'device_name'}, 'insert',
                            ['设备名称'], [])], self.loader.preflights)
         self.assertEqual([31], self.content_db.queries)

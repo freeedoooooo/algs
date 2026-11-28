@@ -517,7 +517,7 @@ def launch_load(extract_result_id, *, background=True):
     if binding['status'] != 'confirmed':
         raise errors.Conflict('入库绑定尚未显式确认')
     lt = catalog.get_load_table(binding['load_table_id'])
-    ds = catalog.get_datasource(binding['datasource_id'])
+    ds = catalog.get_datasource_by_code(binding['datasource_code'])
     if lt is None or ds is None:
         raise errors.NotFound('入库目标不存在')
     loader = _load('store.loader')
@@ -573,18 +573,22 @@ def preview_load(extract_result_id, draft=None):
     if binding:
         if draft is not None:
             raise errors.Conflict('已有入库绑定，预览不再接受草稿')
-        ds = catalog.get_datasource(binding['datasource_id'])
+        ds = catalog.get_datasource_by_code(binding['datasource_code'])
         lt = catalog.get_load_table(binding['load_table_id'])
         cm, bk = binding['field_map_json'], binding['business_keys_json']
         table, wm = lt['target_table'], binding['write_mode']
     else:
         if not isinstance(draft, dict):
             raise errors.BadRequest('请选择业务库与目标表')
-        try:
-            ds_id = int(draft.get('datasource_id'))
-        except (TypeError, ValueError):
-            raise errors.BadRequest('请选择业务库')
-        ds = catalog.get_datasource(ds_id)
+        ds_code = str(draft.get('datasource_code') or '').strip()
+        if ds_code:
+            ds = catalog.get_datasource_by_code(ds_code)
+        else:
+            try:
+                ds_id = int(draft.get('datasource_id'))
+            except (TypeError, ValueError):
+                raise errors.BadRequest('请选择业务库')
+            ds = catalog.get_datasource(ds_id)
         table = str(draft.get('target_table') or '').strip()
         wm = str(draft.get('write_mode') or 'upsert')
         cm = draft.get('field_map') if isinstance(draft.get('field_map'), dict) else {}

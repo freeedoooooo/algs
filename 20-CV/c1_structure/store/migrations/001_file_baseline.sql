@@ -121,6 +121,7 @@ CREATE TABLE IF NOT EXISTS `c1_extract_record_lineage` (
 -- ⑥ 目标库/目标表配置：不持有抽取规则、来源映射或写入方式。
 CREATE TABLE IF NOT EXISTS `c1_load_datasource` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '数据源 ID',
+  `code` varchar(100) NOT NULL COMMENT '数据源编码（默认等于库名）',
   `name` varchar(100) NOT NULL COMMENT '显示名（唯一）',
   `db_type` varchar(20) NOT NULL DEFAULT 'mysql' COMMENT '目标库类型',
   `host` varchar(255) NOT NULL COMMENT '目标库主机',
@@ -130,29 +131,33 @@ CREATE TABLE IF NOT EXISTS `c1_load_datasource` (
   `db_name` varchar(100) NOT NULL COMMENT '目标库名',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间（UTC）',
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_ds_code` (`code`),
   UNIQUE KEY `uk_ds_name` (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='入库数据源：一行一个目标库';
 
 CREATE TABLE IF NOT EXISTS `c1_load_table` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '入库表配置 ID',
-  `datasource_id` bigint NOT NULL COMMENT '目标数据源 ID',
+  `code` varchar(255) NOT NULL COMMENT '入库表编码：数据源编码.表名',
+  `datasource_code` varchar(100) NOT NULL COMMENT '目标数据源编码',
   `target_table` varchar(128) NOT NULL COMMENT '目标业务表名',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间（UTC）',
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间（UTC）',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_load_table_target` (`datasource_id`,`target_table`)
+  UNIQUE KEY `uk_load_table_code` (`code`),
+  UNIQUE KEY `uk_load_table_target` (`datasource_code`,`target_table`),
+  KEY `idx_load_table_datasource` (`datasource_code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='入库表配置：仅描述目标库和目标表';
 
-CREATE TABLE IF NOT EXISTS `c1_load_mapping_field` (
+CREATE TABLE IF NOT EXISTS `c1_load_table_field` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '目标字段元数据 ID',
-  `load_table_id` bigint NOT NULL COMMENT '所属入库表配置 ID',
+  `table_code` varchar(255) NOT NULL COMMENT '所属入库表编码',
   `field_name` varchar(128) NOT NULL COMMENT '目标数据库列名',
   `data_type` varchar(64) NOT NULL COMMENT '目标列类型',
   `is_primary` tinyint NOT NULL DEFAULT '0' COMMENT '是否目标表物理主键',
   `has_default` tinyint NOT NULL DEFAULT '0' COMMENT '目标列是否有默认值',
   `sort_order` int NOT NULL DEFAULT '0' COMMENT '展示顺序',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_mapping_field` (`load_table_id`,`field_name`)
+  UNIQUE KEY `uk_table_field` (`table_code`,`field_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='目标字段元数据：不保存来源字段映射或业务键';
 
 -- ⑦ 入库绑定：一个抽取结果最多一个目标；映射、写入方式和业务键按绑定隔离。

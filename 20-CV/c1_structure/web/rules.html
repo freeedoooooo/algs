@@ -97,6 +97,11 @@
         <input type="text" class="tin" id="dsname" placeholder="如：审计业务库">
       </div>
       <div class="fsec">
+        <label class="flab" for="dscode">编码</label>
+        <input type="text" class="tin" id="dscode" placeholder="默认使用库名">
+        <div class="sthint">入库表通过该编码关联数据源；已被目标表引用后不可修改。</div>
+      </div>
+      <div class="fsec">
         <label class="flab" for="dshost">主机</label>
         <input type="text" class="tin" id="dshost" placeholder="如：10.0.6.161">
       </div>
@@ -122,7 +127,7 @@
         <input type="text" class="tin" value="mysql" disabled>
         <div class="sthint">当前版本仅支持 MySQL。</div>
       </div>
-      <div class="sthint" id="dslock" hidden>该业务库已被入库映射引用，主机、端口、库名不可修改（修改将改变目标库，导致历史回执无法追溯）；账号与密码可以修改。如需更换目标库，请新建业务库。</div>
+      <div class="sthint" id="dslock" hidden>该业务库已被入库表配置引用，编码、主机、端口、库名不可修改（修改将改变目标坐标，导致历史回执无法追溯）；账号与密码可以修改。如需更换目标库，请新建业务库。</div>
     </div>
     <div class="dfoot">
       <span class="msg" id="dsmsg"></span>

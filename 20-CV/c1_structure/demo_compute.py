@@ -129,13 +129,14 @@ def ensure_trace_sample(datasource, table):
         {'rule_field': balance_key, 'target_column': 'account_2',
          'is_business_key': False},
     ]
-    snapshot = {'schema_version': 1, 'fields': [
-        {'name': f['rule_field'], 'type': 'text'} for f in fields]}
     load_table_id = file.get('load_table_id')
     if not load_table_id:
         load_table_id = catalog.create_load_table(
-            datasource['id'], None, table, 'insert', fields,
-            snapshot=snapshot)
+            datasource['code'], table, [
+                {'field_name': f['target_column'],
+                 'data_type': 'text', 'is_primary': False,
+                 'has_default': False, 'sort_order': i}
+                for i, f in enumerate(fields)])
     if (file.get('load_datasource_id') != datasource['id'] or
             file.get('load_table_id') != load_table_id):
         catalog.set_load(2, datasource['id'], load_table_id)
@@ -378,7 +379,7 @@ def ensure_rich_tables(datasource):
 
 
 def ensure_rich_mapping(datasource, table):
-    for mapping in catalog.list_load_tables(datasource['id']):
+    for mapping in catalog.list_load_tables(datasource['code']):
         if mapping['target_table'] == table:
             return mapping['id'], False
     fields = [
@@ -387,10 +388,11 @@ def ensure_rich_mapping(datasource, table):
         {'rule_field': '余额', 'target_column': 'account_2',
          'is_business_key': False},
     ]
-    snapshot = {'schema_version': 1, 'fields': [
-        {'name': field['rule_field'], 'type': 'text'} for field in fields]}
     return catalog.create_load_table(
-        datasource['id'], None, table, 'insert', fields, snapshot=snapshot), True
+        datasource['code'], table, [
+            {'field_name': field['target_column'], 'data_type': 'text',
+             'is_primary': False, 'has_default': False, 'sort_order': i}
+            for i, field in enumerate(fields)]), True
 
 
 def _save_rich_preview(file_id, spec, preview, size, cells, record_ids):

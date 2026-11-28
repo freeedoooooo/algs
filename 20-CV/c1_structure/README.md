@@ -11,8 +11,12 @@
 **存储模型（2026-11-24 重构）**：一条资料记录 = 一次运行（单文件），以 `c1_doc_file.id`
 （`file_id`）为唯一运行主键；已删除 `c1_task` / `c1_task_file` 两表，运行态并入资料行。
 任务不在导航中——**资料清单（`/sources`）是唯一功能入口**，数据预览 / 解析保留为二级页。
-无外键（表 `c1_*` 前缀）；当前存储模型与自动化处理方案见
-[docs/design-agentic-extraction.md](./docs/design-agentic-extraction.md)。
+无外键（表 `c1_*` 前缀）；当前以文档、抽取结果和入库绑定为中心，完整表关系见
+[docs/design-decoupled-extraction-loading.md](./docs/design-decoupled-extraction-loading.md)。
+元数据统一使用编码关联：`c1_load_datasource.code`（默认库名）→
+`c1_load_table.datasource_code` / `c1_load_table.code`（`库名.表名`）→
+`c1_load_table_field.table_code`。存量库升级执行
+`python -m c1_structure.store.migrations.009_load_metadata_codes --confirm`（从 `20-CV` 目录，默认只读预演，确认前自动全库备份）。
 
 ## 启动
 
@@ -224,23 +228,20 @@ c1_structure/
 
 ### 入库链路（数据源 × 入库规则）
 
-- **数据源**（`c1_load_datasource`）：一个数据源＝一个 MySQL 库，
+- **数据源**（`c1_load_datasource`）：一个数据源＝一个 MySQL 库，新增唯一 `code`，默认等于 `db_name`；
   host/port/账号/密码/库名**明文存库、页面可见可编辑**（2026-11-21 裁决，暂不加密）；
-  首启幂等种「产品库」默认行（解析 `C1_STRUCTURE_DB`）。日志与测试连接回显永不打印凭据
-  （仅 host:port/库名）。平台库自身凭据仍走 conn_ref。
-- **映射**（`c1_load_table` ＋ `c1_load_table_field`）：一行＝数据源×目标表×抽取规则
-  ＋write_mode（upsert/insert/update），字段行＝抽取规则字段→目标列＋业务键勾选。
-  只写已有表（不自动建表）；同物理表可被不同抽取规则各建一行（UNIQUE 三元组）。
-- **审计守卫**：数据源被映射引用后 host/port/库名锁定（409，账号密码可改，换目标＝新建）；
-  映射被资料引用后只读（PATCH/DELETE 409，回执语义）。
-- **流程（入库时绑定目标）**：上传只选文件（不携带入库目标，旧契约键 400；也不选规则，
-  在「执行抽取」时选）→ 校验（门禁：全部 confirmed 才可入库，否则 409 带计数）
-  → 资料清单/数据预览「入库」打开四步向导（wizard.js，选目标→字段对齐→dry-run 过目→执行；
-  按 数据源×资料抽取规则 双过滤）→ **校验/门禁/预检全过才绑定目标并写入**
-  （失败不留绑定，可另选；已绑定资料重试沿用原目标，带新目标 409）→ 逐条回执
-  （`c1_load_log`，唯一键 `(file_id, record_index, datasource_id, target_table)` 幂等）
-  ＋数据级隔离（`c1_load_quarantine` stage=load，重试无回执记录）。
-  transform（trim/number）只在入库时消费，暂存原值永不改。loaded 资料记录只读。
+  日志与测试连接回显永不打印凭据（仅 host:port/库名）。
+- **入库表配置**（`c1_load_table` + `c1_load_table_field`）：通过 `datasource_code` 关联数据源，
+  `code` 固定为 `<datasource_code>.<target_table>`；字段通过 `table_code` 关联入库表。
+  配置只保存目标表及目标字段元数据，不含抽取规则，也不含来源字段映射；同物理表可被不同规则复用。
+- **入库绑定**（`c1_load_binding`）：每条抽取结果最多一个绑定，保存自己的 `field_map_json`、
+  `write_mode`、`business_keys_json` 和确认状态；运行时通过 `load_table_id` 找到目标表配置。
+- **审计守卫**：数据源被入库表引用后 code/host/port/库名锁定（409，账号密码可改，换目标＝新建）；
+  入库表被绑定引用后只读（PATCH/DELETE 409，回执语义）。
+- **流程**：上传文档 → 解析 → 按规则抽取（一份文档可有多个结果）→ 校验 →
+  为某个抽取结果选择目标表并配置中文字段到物理列的映射 → dry-run 预检 →
+  用户确认后入库 → 按绑定记录回执（`c1_load_receipt`，唯一键 `(load_binding_id, record_index)`）
+  与隔离记录（`c1_quarantine_record`）。只写已有业务表，不自动建表。
 - 业务表**溯源列由两列组成**：`file_id` + `record_id`（平台禁止自动 DDL，须业务系统预建；
   旧版三列 `task_id/task_file_id/record_id` 中的前两列新代码不再写）。
 - **/rules 入库规则页**：左数据源列表（试连/编辑/删除）右入库规则列表（字段行抽屉编辑）；
