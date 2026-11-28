@@ -47,20 +47,38 @@
         <div class="welcome-steps"><span>1 上传文件</span><span>2 描述需求</span><span>3 确认方案</span></div>
       </div>
     </div>
-    <div class="composer-wrap">
+    <div class="composer-backdrop" id="composerBackdrop" hidden></div>
+    <div class="composer-wrap" id="composerWrap">
+      <div class="composer-modal-head">
+        <div class="composer-modal-title">
+          <span class="composer-modal-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>
+          </span>
+          <div><h2 id="composerTitle">描述处理需求</h2><p>补充信息位置、中文字段和目标表，方案会更准确</p></div>
+        </div>
+        <div class="composer-modal-tools">
+          <span class="composer-esc"><kbd>Esc</kbd> 退出</span>
+          <button type="button" class="composer-icon-btn" id="collapseComposer" aria-label="还原聊天输入框" title="还原">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v5H3"/><path d="M3 3l6 6"/><path d="M16 21v-5h5"/><path d="M21 21l-6-6"/></svg>
+          </button>
+        </div>
+      </div>
       <div class="file-chip" id="fileChip" hidden>
         <span id="fileName"></span><span id="fileSize" class="muted"></span>
         <button type="button" class="linkbtn" id="removeFile">移除</button>
       </div>
       <div class="composer" id="dropZone">
-        <textarea id="prompt" rows="2" placeholder="例如：提取第二页巡检表中的设备名称、日期、异常描述，目标表 inspection_record"></textarea>
+        <button type="button" class="composer-icon-btn composer-expand" id="expandComposer" aria-label="放大聊天输入框" aria-expanded="false" aria-controls="composerWrap" title="放大输入框">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5"/><path d="M3 3l6 6"/><path d="M16 21h5v-5"/><path d="M21 21l-6-6"/></svg>
+        </button>
+        <textarea id="prompt" rows="4" aria-label="描述文档处理需求" placeholder="例如：提取第二页巡检表中的设备名称、日期、异常描述，目标表 inspection_record"></textarea>
         <div class="composer-actions">
           <div class="composer-left">
             <button type="button" class="btn ghost mini" id="pickFile">添加附件</button>
             <input type="file" id="fileInput" hidden accept=".png,.jpg,.jpeg,.bmp,.webp,.tif,.tiff,.pdf,.csv,.txt,.md">
             <span class="muted" id="composerHint">PDF / 图片 / CSV / 文本，最大 20MB</span>
           </div>
-          <button type="button" class="btn" id="send" disabled>发送需求</button>
+          <button type="button" class="btn" id="send" disabled>发送</button>
         </div>
       </div>
       <p class="composer-note">助手生成的规则和字段映射可在传统「抽取」「入库」页面继续检查与调整。</p>

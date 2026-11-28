@@ -1,4 +1,5 @@
 .chat-page{height:100vh;display:flex;flex-direction:column;overflow:hidden}
+.chat-page [hidden]{display:none!important}
 .chat-layout{display:grid;grid-template-columns:250px minmax(0,1fr);flex:1;min-height:0}
 .chat-side{display:flex;flex-direction:column;padding:18px 16px;background:var(--c1-surface);border-right:1px solid var(--c1-border);min-height:0}
 .chat-side-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
@@ -60,16 +61,45 @@
 .progress-log div{padding:2px 0}
 .result-box{padding:10px;border-radius:7px;background:var(--c1-success-soft);color:var(--c1-success);font-size:12px;line-height:1.8}
 .result-box.err{background:var(--c1-danger-soft);color:var(--c1-danger)}
-.composer-wrap{flex:none;padding:10px max(24px,calc((100% - 880px)/2)) 12px;background:linear-gradient(transparent,var(--c1-bg) 18%)}
-.composer{border:1px solid var(--c1-border-strong);border-radius:12px;background:var(--c1-surface);padding:11px 12px 9px;box-shadow:0 4px 20px rgba(20,30,60,.06)}
+.composer-backdrop{position:fixed;inset:0;z-index:98;background:rgba(15,23,42,.48);backdrop-filter:blur(6px);animation:fadeIn .18s ease-out}
+.composer-wrap{position:relative;flex:none;padding:10px max(24px,calc((100% - 880px)/2)) 12px;background:linear-gradient(transparent,var(--c1-bg) 18%)}
+.composer-modal-head{display:none}
+.composer-icon-btn{display:inline-flex;align-items:center;justify-content:center;flex:none;width:30px;height:30px;padding:0;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--c1-text-muted);cursor:pointer;transition:background .16s,color .16s,border-color .16s}
+.composer-icon-btn svg{width:16px;height:16px}
+.composer-icon-btn:hover{background:var(--c1-surface-subtle);color:var(--c1-primary)}
+.composer-icon-btn:focus-visible{outline:2px solid var(--c1-primary);outline-offset:2px}
+.composer-wrap.expanded{position:fixed;z-index:99;left:50%;top:50%;transform:translate(-50%,-50%);width:min(1040px,calc(100vw - 64px));height:min(760px,calc(100vh - 64px));padding:0;border:1px solid rgba(148,163,184,.28);border-radius:20px;background:var(--c1-surface);box-shadow:0 30px 90px rgba(15,23,42,.28),0 2px 8px rgba(15,23,42,.08);display:flex;flex-direction:column;overflow:hidden;animation:composerIn .22s cubic-bezier(.2,.8,.2,1)}
+.expanded .composer-modal-head{display:flex;align-items:center;justify-content:space-between;gap:20px;flex:none;padding:18px 22px;border-bottom:1px solid var(--c1-border-subtle)}
+.composer-modal-title{display:flex;align-items:center;gap:12px;min-width:0}
+.composer-modal-icon{display:grid;place-items:center;flex:none;width:38px;height:38px;border-radius:11px;background:var(--c1-primary-soft);color:var(--c1-primary)}
+.composer-modal-icon svg{width:19px;height:19px}
+.composer-modal-title h2{margin:0;font-size:15px;line-height:1.4;color:var(--c1-text-strong)}
+.composer-modal-title p{margin:2px 0 0;font-size:12px;line-height:1.5;color:var(--c1-text-muted)}
+.composer-modal-tools{display:flex;align-items:center;gap:12px;flex:none}
+.composer-modal-tools .composer-icon-btn{width:34px;height:34px;border-color:var(--c1-border);background:var(--c1-surface)}
+.composer-esc{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--c1-text-faint)}
+.composer-esc kbd{padding:2px 6px;border:1px solid var(--c1-border);border-bottom-width:2px;border-radius:5px;background:var(--c1-surface-subtle);font:inherit;color:var(--c1-text-muted)}
+.composer{position:relative;border:1px solid var(--c1-border-strong);border-radius:12px;background:var(--c1-surface);padding:11px 12px 9px;box-shadow:0 4px 20px rgba(20,30,60,.06)}
+.composer-expand{position:absolute;z-index:1;top:9px;right:9px;background:var(--c1-surface)}
+.expanded .composer{display:flex;flex-direction:column;flex:1;min-height:0;margin:16px 22px 0;padding:16px;border-radius:14px;background:var(--c1-surface-subtle);box-shadow:none}
 .composer.on{border-color:var(--c1-primary);box-shadow:0 0 0 2px var(--c1-primary-soft)}
-.composer textarea{display:block;width:100%;min-height:48px;max-height:150px;resize:vertical;border:0;outline:none;font:inherit;font-size:13px;line-height:1.7;color:var(--c1-text);background:transparent}
+.composer textarea{display:block;width:100%;min-height:96px;max-height:240px;padding-right:38px;resize:vertical;border:0;outline:none;font:inherit;font-size:13px;line-height:1.7;color:var(--c1-text);background:transparent}
+.expanded .composer textarea{flex:1;min-height:0;max-height:none;padding-right:2px;resize:none;font-size:14px;line-height:1.85;overscroll-behavior:contain}
 .composer textarea::placeholder{color:var(--c1-text-faint)}
 .composer-actions{display:flex;align-items:center;gap:10px;margin-top:5px}
+.expanded .composer-actions{flex:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--c1-border)}
+.expanded #expandComposer{display:none}
 .composer-left{display:flex;align-items:center;gap:9px;min-width:0;flex:1}
 .composer-note{text-align:center;font-size:11px;color:var(--c1-text-faint);margin:7px 0 0}
+.expanded .composer-note{flex:none;margin:10px 0 14px}
 .file-chip{display:flex;align-items:center;gap:8px;width:fit-content;max-width:100%;margin:0 0 7px;padding:5px 8px 5px 11px;border:1px solid var(--c1-border);border-radius:8px;background:var(--c1-surface);font-size:12px}
+.expanded .file-chip{margin:14px 22px 0}
 .file-chip>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:360px}
 .muted{color:var(--c1-text-faint);font-size:11px}
-@media(max-width:900px){.chat-layout{grid-template-columns:1fr}.chat-side{display:none}.chat-head{padding:13px 16px}.chat-scroll{padding:18px 12px}.composer-wrap{padding:8px 12px 10px}.bubble{max-width:94%}.plan-card{max-width:100%}}
-@media(max-width:560px){.chat-head p{display:none}.composer-left .muted{display:none}.composer-actions{align-items:flex-end}.kv-grid{grid-template-columns:72px minmax(0,1fr)}.rec-item{flex-wrap:wrap}.mapping-table input{min-width:90px}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes composerIn{from{opacity:0;transform:translate(-50%,-48%) scale(.985)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+@keyframes composerInMobile{from{opacity:0;transform:translateY(10px) scale(.99)}to{opacity:1;transform:none}}
+@media(max-width:1100px){.composer-left #composerHint{display:none}}
+@media(max-width:900px){.chat-layout{grid-template-columns:1fr}.chat-side{display:none}.chat-head{padding:13px 16px}.chat-scroll{padding:18px 12px}.composer-wrap{padding:8px 12px 10px}.bubble{max-width:94%}.plan-card{max-width:100%}.composer-wrap.expanded{width:calc(100vw - 32px);height:calc(100vh - 32px)}}
+@media(max-width:560px){.chat-head p{display:none}.composer-left .muted{display:none}.composer-actions{align-items:flex-end}.kv-grid{grid-template-columns:72px minmax(0,1fr)}.rec-item{flex-wrap:wrap}.mapping-table input{min-width:90px}.composer-wrap.expanded{left:8px;top:8px;right:8px;bottom:8px;width:auto;height:auto;transform:none;border-radius:16px;animation-name:composerInMobile}.expanded .composer-modal-head{padding:14px 14px 13px}.composer-modal-title{gap:9px}.composer-modal-icon{width:34px;height:34px;border-radius:10px}.composer-modal-title h2{font-size:14px}.composer-modal-title p,.composer-esc{display:none}.expanded .file-chip{margin:12px 12px 0}.expanded .composer{margin:12px 12px 0;padding:12px}.expanded .composer-note{margin:8px 12px 12px;font-size:10px}.composer-left{gap:6px;flex-wrap:wrap}}
+@media(prefers-reduced-motion:reduce){.composer-backdrop,.composer-wrap.expanded{animation:none}.composer-icon-btn{transition:none}}

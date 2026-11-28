@@ -1,7 +1,8 @@
 (function(){
   'use strict';
   var file=null,currentIntent=null,fileId=null,phase='idle',timer=null;
-  var planNode=null,progressNode=null,seenLogs=0,busy=false;
+  var planNode=null,progressNode=null,seenLogs=0,busy=false,expanded=false;
+  var allowedFile=/\.(png|jpe?g|bmp|webp|tiff?|pdf|csv|txt|md)$/i,maxFileSize=20*1024*1024;
   var $=function(id){return document.getElementById(id);};
   var statusNames={ready:'等待确认',waiting_target:'等待选择目标表',target_missing:'目标表不存在',
     target_ambiguous:'目标表有歧义',mapping_incomplete:'需要完善字段映射',no_records:'没有抽取记录',
@@ -33,9 +34,29 @@
     else{$('fileInput').value='';}
     updateSend();
   }
+  function chooseFile(f){
+    if(!f)return;
+    if(!allowedFile.test(f.name)){addMessage('assistant','<div class="result-box err">仅支持 PDF、图片、CSV 或文本文件。</div>');$('fileInput').value='';return;}
+    if(!f.size||f.size>maxFileSize){addMessage('assistant','<div class="result-box err">附件不能为空，且大小不能超过 20MB。</div>');$('fileInput').value='';return;}
+    setFile(f);
+  }
   function updateSend(){
     $('send').disabled=busy||!file||!$('prompt').value.trim();
-    $('send').textContent=phase==='loading'?'入库中…':(phase==='processing'?'处理中…':'发送需求');
+    $('send').textContent=phase==='loading'?'入库中…':(phase==='processing'?'处理中…':'发送');
+  }
+  function setComposerExpanded(value){
+    expanded=!!value;var wrap=$('composerWrap'),button=$('expandComposer');
+    wrap.classList.toggle('expanded',expanded);$('composerBackdrop').hidden=!expanded;
+    button.setAttribute('aria-expanded',expanded?'true':'false');
+    button.setAttribute('aria-label',expanded?'还原聊天输入框':'放大聊天输入框');
+    button.title=expanded?'还原输入框':'放大输入框';
+    if(expanded){
+      wrap.setAttribute('role','dialog');wrap.setAttribute('aria-modal','true');
+      wrap.setAttribute('aria-labelledby','composerTitle');$('prompt').focus();
+    }else{
+      wrap.removeAttribute('role');wrap.removeAttribute('aria-modal');wrap.removeAttribute('aria-labelledby');
+      button.focus();
+    }
   }
   function setBusy(v){
     busy=v;$('pickFile').disabled=v;$('newChat').disabled=v;updateSend();
@@ -92,6 +113,7 @@
   function send(){
     if(busy||!file||!$('prompt').value.trim())return;
     var description=$('prompt').value.trim();
+    if(expanded)setComposerExpanded(false);
     addMessage('user','<span class="file-ref">附件：'+escHtml(file.name)+'</span>'+escHtml(description));
     var upload=file;setFile(null);$('prompt').value='';updateSend();
     currentIntent={description:description,auto_load:false};fileId=null;planNode=null;
@@ -110,13 +132,14 @@
   }
   function replan(patch,button){
     if(!fileId||busy)return;
-    if(button)button.disabled=true;
+    setBusy(true);if(button)button.disabled=true;
     currentIntent=Object.assign({},currentIntent,patch,{auto_load:false});
     api('/api/sources/'+fileId+'/load-plan',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({intent:currentIntent})}).then(function(plan){
       currentIntent=plan;renderPlan(plan);stateBadge(statusNames[plan.status]||plan.status,plan.status==='ready'?'green':'yellow');
+      setBusy(false);
     }).catch(function(err){
-      if(button)button.disabled=false;
+      setBusy(false);if(button)button.disabled=false;
       addMessage('assistant','<div class="result-box err">'+escHtml(err.message)+'</div>');
     });
   }
@@ -209,22 +232,34 @@
   }
   function newChat(){
     if(busy)return;
+    if(expanded)setComposerExpanded(false);
     clearTimeout(timer);fileId=null;currentIntent=null;phase='idle';planNode=null;progressNode=null;setFile(null);
     $('prompt').value='';$('messages').querySelectorAll('.msg').forEach(function(n){n.remove();});
     $('welcome').hidden=false;stateBadge('准备就绪','blue');updateSend();
   }
   $('pickFile').onclick=function(){$('fileInput').click();};
-  $('fileInput').onchange=function(){if(this.files[0])setFile(this.files[0]);};
+  $('fileInput').onchange=function(){chooseFile(this.files[0]);};
   $('removeFile').onclick=function(){setFile(null);};
+  $('expandComposer').onclick=function(){setComposerExpanded(!expanded);};
+  $('collapseComposer').onclick=function(){setComposerExpanded(false);};
+  $('composerBackdrop').onclick=function(){setComposerExpanded(false);};
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape'&&expanded){e.preventDefault();setComposerExpanded(false);return;}
+    if(e.key!=='Tab'||!expanded)return;
+    var nodes=Array.prototype.filter.call($('composerWrap').querySelectorAll('button:not([disabled]),textarea:not([disabled]),input:not([disabled])'),function(node){return node.getClientRects().length>0;});
+    if(!nodes.length)return;var first=nodes[0],last=nodes[nodes.length-1];
+    if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
+    else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
+  });
   $('send').onclick=send;
   $('newChat').onclick=newChat;
   $('prompt').oninput=updateSend;
   $('prompt').onkeydown=function(e){if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();send();}};
   document.querySelectorAll('[data-example]').forEach(function(btn){
-    btn.onclick=function(){$('prompt').value=btn.getAttribute('data-example');updateSend();$('prompt').focus();};
+    btn.onclick=function(){if(busy)return;$('prompt').value=btn.getAttribute('data-example');updateSend();$('prompt').focus();};
   });
   ['dragenter','dragover'].forEach(function(ev){$('dropZone').addEventListener(ev,function(e){e.preventDefault();if(!busy)$('dropZone').classList.add('on');});});
   ['dragleave','drop'].forEach(function(ev){$('dropZone').addEventListener(ev,function(e){e.preventDefault();$('dropZone').classList.remove('on');});});
-  $('dropZone').addEventListener('drop',function(e){var f=e.dataTransfer.files[0];if(f&&!busy)setFile(f);});
+  $('dropZone').addEventListener('drop',function(e){var f=e.dataTransfer.files[0];if(f&&!busy)chooseFile(f);});
   stateBadge('准备就绪','blue');updateSend();
 })();
