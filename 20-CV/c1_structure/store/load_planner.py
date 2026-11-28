@@ -55,9 +55,14 @@ def build_plan(record_set, intent, table_schemas, *, warnings=None):
                == target_table.casefold()
                and (datasource_id is None
                     or s.get('datasource_id') == datasource_id)]
-    explicit = intent.get('field_map') or intent.get('field_aliases') or {}
-    explicit = {str(k): str(v) for k, v in explicit.items()} \
-        if isinstance(explicit, dict) else {}
+    explicit_value = intent.get('field_map')
+    if not isinstance(explicit_value, dict):
+        explicit_value = intent.get('field_aliases')
+    explicit_provided = isinstance(explicit_value, dict)
+    explicit = {str(k).strip(): str(v).strip()
+                for k, v in (explicit_value or {}).items()
+                if str(k).strip() and str(v or '').strip()} \
+        if explicit_provided else {}
     description = str(intent.get('description') or intent.get('prompt') or '')
 
     if not target_table:
@@ -94,8 +99,9 @@ def build_plan(record_set, intent, table_schemas, *, warnings=None):
                 'warnings': warnings}
 
     schema = matches[0]
-    mapping = semantic_load.map_fields(record_set, schema, explicit=explicit)
-    valid_columns = {str(c.get('name')) for c in schema.get('columns') or []}
+    mapping = semantic_load.map_fields(
+        record_set, schema, explicit=explicit, auto_map=not explicit_provided)
+    valid_columns = {str(c.get('name')) for c in mapping['available_columns']}
     field_names = {f['name'] for f in profile['fields']}
     invalid_explicit = {
         name: column for name, column in explicit.items()
@@ -108,14 +114,19 @@ def build_plan(record_set, intent, table_schemas, *, warnings=None):
     if invalid_explicit:
         mapping['complete'] = False
         mapping['invalid_explicit'] = invalid_explicit
+    else:
+        mapping['complete'] = bool(mapping['field_map'])
     target = {'datasource_id': schema.get('datasource_id'),
               'table': schema.get('name')}
     if not mapping['complete']:
+        message = ('存在无效或重复的字段映射，请检查数据库列' if invalid_explicit
+                   else '请至少为一个中文字段选择数据库列；留空字段不入库')
         return {'status': 'mapping_incomplete',
-                'message': '中文字段未能完整映射到目标列，未自动入库',
+                'message': message,
                 'target': target, 'mapping': mapping,
                 'recommendations': [], 'warnings': warnings}
-    return {'status': 'ready', 'message': '目标表与字段映射已就绪',
+    return {'status': 'ready',
+            'message': '目标表与字段映射已就绪；留空字段不会入库',
             'target': target, 'mapping': mapping,
             'recommendations': [], 'warnings': warnings}
 
@@ -170,8 +181,10 @@ def get_plan(file_id):
 
 
 def snapshot_from_mapping(mapping):
+    field_map = (mapping or {}).get('field_map') or {}
     fields = [{'name': f['name'], 'type': f.get('type') or 'text'}
-              for f in (mapping or {}).get('fields') or []]
+              for f in (mapping or {}).get('fields') or []
+              if f['name'] in field_map]
     digest = hashlib.sha256(json.dumps(
         fields, sort_keys=True, ensure_ascii=False).encode('utf-8')).hexdigest()[:16]
     return {'schema_version': 1, 'fields': fields, 'hash': digest}

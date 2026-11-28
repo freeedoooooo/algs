@@ -108,7 +108,9 @@ Qoder PAT 用于规则生成，不会自动成为 `smart_extract` / v3 的 OpenA
 在 `waiting_target` 停止且未写业务库；154 个单元测试通过。
 同日完成聊天增强验收：解析/抽取摘要与阶段事件正常，其他表选择只返回 3 张业务表，
 `c1_doc_file` 被拒绝；在聊天页实际切换业务表后进入 `mapping_incomplete`，未写业务库，
-163 个单元测试通过。验收流程见
+163 个单元测试通过。字段映射验收：数据库列改为下拉选择并预填高置信度建议，
+留空字段不入库，至少保留一个有效映射即可就绪；保存后的映射不再自动补全，
+切换目标表会重新预填，溯源列不作为映射候选。验收流程见
 [方案文档第五阶段](docs/design-agentic-extraction.md#第五阶段聊天式处理入口已实现)。
 
 容器化时把 `official_models` 缓存打进镜像，`CMD python app.py`、`HEALTHCHECK curl -f http://127.0.0.1:8765/healthz`，并保持 `--workers 1`。

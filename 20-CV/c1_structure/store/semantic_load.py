@@ -182,11 +182,15 @@ def _column_score(field, column):
     return round(0.88 * name_score + 0.12 * type_score, 4)
 
 
-def map_fields(record_set, table_schema, *, explicit=None):
-    """返回字段映射草稿；complete=False 表示存在未映射或歧义字段。"""
+_RESERVED_COLUMNS = {'file_id', 'record_id'}
+
+
+def map_fields(record_set, table_schema, *, explicit=None, auto_map=True):
+    """返回字段映射草稿；auto_map=False 时只使用显式映射。"""
     explicit = explicit or {}
     profile = record_profile(record_set)
-    columns = list(table_schema.get('columns') or [])
+    columns = [column for column in table_schema.get('columns') or []
+               if str(column.get('name') or '').casefold() not in _RESERVED_COLUMNS]
     pairs = []
     for field in profile['fields']:
         for column in columns:
@@ -196,7 +200,7 @@ def map_fields(record_set, table_schema, *, explicit=None):
     used_columns = set()
     chosen = {}
     for score, field, column in pairs:
-        if field in chosen or field in explicit or column in used_columns:
+        if not auto_map or field in chosen or field in explicit or column in used_columns:
             continue
         if score < 0.72:
             continue
@@ -246,6 +250,7 @@ def map_fields(record_set, table_schema, *, explicit=None):
         'confidence': confidence,
         'unmapped_fields': unmapped,
         'ambiguous_fields': ambiguous,
+        'available_columns': [dict(column) for column in columns],
         'business_key': business_key,
         'write_mode': 'upsert' if business_key else 'insert',
         'complete': not unmapped and not ambiguous,

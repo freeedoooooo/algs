@@ -53,6 +53,33 @@ class SemanticLoadTest(unittest.TestCase):
         self.assertEqual(result['field_map']['设备编号'], 'equipment_code')
         self.assertEqual(result['confidence']['设备编号'], 1.0)
 
+    def test_explicit_mapping_can_disable_automatic_prefill(self):
+        result = semantic_load.map_fields(
+            self.records, _table(), explicit={'设备编号': 'equipment_code'},
+            auto_map=False)
+        self.assertEqual({'设备编号': 'equipment_code'}, result['field_map'])
+        self.assertEqual(
+            {'单据编号', '设备名称', '巡检日期', '异常描述'},
+            set(result['unmapped_fields']))
+
+    def test_mapping_exposes_selectable_database_columns(self):
+        result = semantic_load.map_fields(self.records, _table())
+        self.assertIn('equipment_name',
+                      [column['name'] for column in result['available_columns']])
+
+    def test_trace_columns_are_not_mapping_candidates(self):
+        table = _table()
+        table['columns'].extend([
+            {'name': 'file_id', 'type': 'bigint', 'comment': '资料ID'},
+            {'name': 'record_id', 'type': 'bigint', 'comment': '记录ID'},
+        ])
+        result = semantic_load.map_fields(self.records, table)
+        selectable = [column['name'] for column in result['available_columns']]
+        self.assertNotIn('file_id', selectable)
+        self.assertNotIn('record_id', selectable)
+        self.assertNotIn('file_id', result['field_map'].values())
+        self.assertNotIn('record_id', result['field_map'].values())
+
     def test_unmapped_field_blocks_complete_mapping(self):
         records = _records([{'设备编号': 'EQ-001', '不存在的字段': 'x'}])
         result = semantic_load.map_fields(records, _table())

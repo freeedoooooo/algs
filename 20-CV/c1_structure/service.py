@@ -640,7 +640,9 @@ def preview_load(file_id, table_id=None, draft=None):
             if rec['index'] in receipts:
                 counts['skip'] += 1
                 continue
-            vals, errs = loader.apply_transform(rec['values'], transform)
+            selected = {name: value for name, value in rec['values'].items()
+                        if name in cm}
+            vals, errs = loader.apply_transform(selected, transform)
             if errs:
                 counts['quarantine'] += 1
                 continue
@@ -697,7 +699,9 @@ def run_load(file_id, ds, lt, tpl, log):
                     if rec['index'] in receipts:
                         skipped += 1
                         continue
-                    vals, errs = loader.apply_transform(rec['values'], transform)
+                    selected = {name: value for name, value in rec['values'].items()
+                                if name in cm}
+                    vals, errs = loader.apply_transform(selected, transform)
                     if errs:
                         catalog.add_quarantine(
                             file_id, rec['index'], 'load',

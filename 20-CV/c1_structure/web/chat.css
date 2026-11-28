@@ -60,7 +60,7 @@
 .mapping-table{width:100%;border-collapse:collapse;font-size:12px}
 .mapping-table th,.mapping-table td{padding:6px 5px;border-bottom:1px solid var(--c1-border-subtle);text-align:left;vertical-align:middle}
 .mapping-table th{font-weight:500;color:var(--c1-text-faint)}
-.mapping-table input{width:100%;min-width:120px;font:inherit;padding:4px 6px;border:1px solid var(--c1-border-strong);border-radius:5px;background:#fff;color:var(--c1-text)}
+.mapping-table input,.mapping-table select{width:100%;min-width:150px;font:inherit;padding:4px 6px;border:1px solid var(--c1-border-strong);border-radius:5px;background:#fff;color:var(--c1-text)}
 .mapping-table .warn-text{color:var(--c1-warning);font-size:11px}
 .plan-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:15px;padding-top:13px;border-top:1px solid var(--c1-border-subtle)}
 .plan-actions .muted{font-size:11px}

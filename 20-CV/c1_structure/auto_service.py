@@ -180,8 +180,8 @@ def create_and_load(file_id, plan, *, background=True):
         raise Conflict('请先确认入库规划')
     mapping = plan.get('mapping') or {}
     target = plan.get('target') or {}
-    if not mapping.get('complete') or not target.get('table'):
-        raise Conflict('字段映射不完整，不能自动入库')
+    if not mapping.get('complete') or not mapping.get('field_map') or not target.get('table'):
+        raise Conflict('请至少为一个中文字段选择数据库列后再入库')
     f = catalog.get_file(file_id)
     if f is None:
         raise Conflict('资料不存在')

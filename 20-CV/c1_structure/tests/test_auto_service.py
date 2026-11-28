@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from c1_structure import auto_service
+from c1_structure.store import loader
 
 
 class AutoServiceTests(unittest.TestCase):
@@ -272,6 +273,73 @@ class AutoServiceTests(unittest.TestCase):
         launch.assert_called_once_with(
             1, {'datasource_id': 2, 'load_table_id': 55},
             auto=True, background=False)
+    def test_create_and_load_uses_only_selected_mapping_fields(self):
+        plan = {
+            'status': 'ready',
+            'target': {'datasource_id': 2, 'table': 'inspection'},
+            'mapping': {
+                'complete': True, 'write_mode': 'insert', 'business_key': [],
+                'field_map': {'设备名称': 'device_name'},
+                'fields': [{'name': '设备名称', 'type': 'text'},
+                           {'name': '不需要入库', 'type': 'text'}],
+            },
+        }
+        with patch.object(auto_service.load_planner, 'get_intent',
+                          return_value={}), \
+                patch.object(auto_service.catalog, 'get_file', return_value={
+                'state': 'to_review', 'rule_version_id': 99}), \
+                patch.object(auto_service.service, 'resolve_rule',
+                             return_value=self.tpl), \
+                patch.object(auto_service.catalog, 'create_load_table',
+                             return_value=55) as create, \
+                patch.object(auto_service.service, 'launch_load',
+                             return_value={'ok': True}) as launch:
+            auto_service.create_and_load(1, plan, background=False)
+        self.assertEqual([{'rule_field': '设备名称',
+                           'target_column': 'device_name',
+                           'is_business_key': False}], create.call_args.args[4])
+        self.assertEqual(['设备名称'],
+                         [f['name'] for f in create.call_args.kwargs['snapshot']['fields']])
+        launch.assert_called_once_with(
+            1, {'datasource_id': 2, 'load_table_id': 55},
+            auto=True, background=False)
+
+    def test_create_and_load_rejects_plan_without_selected_fields(self):
+        plan = {'status': 'ready', 'target': {'datasource_id': 2,
+                'table': 'inspection'},
+                'mapping': {'complete': True, 'field_map': {}}}
+        with patch.object(auto_service.load_planner, 'get_intent',
+                          return_value={}), \
+                patch.object(auto_service.catalog, 'get_file') as get_file, \
+                patch.object(auto_service.service, 'launch_load') as launch:
+            with self.assertRaises(auto_service.Conflict):
+                auto_service.create_and_load(1, plan, background=False)
+            get_file.assert_not_called()
+            launch.assert_not_called()
+
+
+class PartialWriteTests(unittest.TestCase):
+    def test_write_record_excludes_unmapped_fields(self):
+        class Cursor:
+            lastrowid = 7
+
+            def __init__(self):
+                self.sql = None
+                self.params = None
+
+            def execute(self, sql, params):
+                self.sql, self.params = sql, params
+
+        cur = Cursor()
+        action, pk = loader.write_record(
+            cur, 'inspection', {'设备名称': 'device_name'},
+            {'设备名称': '泵机', '忽略字段': '不写入'}, 'insert', [],
+            extra_values={'file_id': 1, 'record_id': 2})
+        self.assertEqual('insert', action)
+        self.assertEqual('7', pk)
+        self.assertIn('`device_name`,`file_id`,`record_id`', cur.sql)
+        self.assertNotIn('忽略字段', cur.sql)
+        self.assertEqual(['泵机', 1, 2], cur.params)
 
 
 if __name__ == '__main__':

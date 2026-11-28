@@ -70,14 +70,37 @@ class LoadPlannerTests(unittest.TestCase):
         self.assertTrue(plan['mapping']['complete'])
         self.assertEqual('device_name', plan['mapping']['field_map']['设备名称'])
 
-    def test_incomplete_mapping_blocks_load(self):
+    def test_partial_mapping_is_ready_and_skips_unmapped_fields(self):
         partial = schema('other')
         partial['columns'] = partial['columns'][:2]
         plan = build_plan(self.record_set,
                           {'target_table': 'other', 'datasource_id': 1},
                           [partial])
+        self.assertEqual('ready', plan['status'])
+        self.assertTrue(plan['mapping']['complete'])
+        self.assertEqual({'编号', '设备名称'},
+                         set(plan['mapping']['field_map']))
+        self.assertEqual({'巡检日期', '异常描述'},
+                         set(plan['mapping']['unmapped_fields']))
+
+    def test_saved_mapping_is_authoritative_and_does_not_autofill(self):
+        plan = build_plan(
+            self.record_set,
+            {'target_table': 'inspection_record', 'datasource_id': 1,
+             'field_map': {'设备名称': 'device_name'}},
+            [schema()])
+        self.assertEqual('ready', plan['status'])
+        self.assertEqual({'设备名称': 'device_name'},
+                         plan['mapping']['field_map'])
+
+    def test_empty_mapping_still_blocks_load(self):
+        plan = build_plan(
+            self.record_set,
+            {'target_table': 'inspection_record', 'datasource_id': 1,
+             'field_map': {}},
+            [schema()])
         self.assertEqual('mapping_incomplete', plan['status'])
-        self.assertFalse(plan['mapping']['complete'])
+        self.assertEqual({}, plan['mapping']['field_map'])
 
     def test_duplicate_table_requires_datasource(self):
         plan = build_plan(self.record_set,
@@ -94,6 +117,19 @@ class LoadPlannerTests(unittest.TestCase):
         self.assertEqual('mapping_incomplete', plan['status'])
         self.assertIn('设备名称', plan['mapping']['invalid_explicit'])
 
+    def test_explicit_mapping_to_trace_column_is_rejected(self):
+        target = schema()
+        target['columns'].append(
+            {'name': 'file_id', 'type': 'bigint', 'comment': '资料ID'})
+        plan = build_plan(
+            self.record_set,
+            {'target_table': 'inspection_record', 'datasource_id': 1,
+             'field_map': {'设备名称': 'file_id'}},
+            [target])
+        self.assertEqual('mapping_incomplete', plan['status'])
+        self.assertEqual({'设备名称': 'file_id'},
+                         plan['mapping']['invalid_explicit'])
+
     def test_snapshot_contains_semantic_fields(self):
         plan = build_plan(self.record_set,
                           {'target_table': 'inspection_record', 'datasource_id': 1},
@@ -102,6 +138,15 @@ class LoadPlannerTests(unittest.TestCase):
         self.assertEqual(['编号', '设备名称', '巡检日期', '异常描述'],
                          [f['name'] for f in snap['fields']])
         self.assertEqual(16, len(snap['hash']))
+
+    def test_partial_snapshot_contains_only_selected_fields(self):
+        plan = build_plan(
+            self.record_set,
+            {'target_table': 'inspection_record', 'datasource_id': 1,
+             'field_map': {'设备名称': 'device_name'}},
+            [schema()])
+        snap = snapshot_from_mapping(plan['mapping'])
+        self.assertEqual(['设备名称'], [f['name'] for f in snap['fields']])
 
 
 if __name__ == '__main__':

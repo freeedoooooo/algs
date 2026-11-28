@@ -6,7 +6,7 @@
   var allowedFile=/\.(png|jpe?g|bmp|webp|tiff?|pdf|csv|txt|md)$/i,maxFileSize=20*1024*1024;
   var $=function(id){return document.getElementById(id);};
   var statusNames={ready:'等待确认',waiting_target:'等待选择目标表',target_missing:'目标表不存在',
-    target_ambiguous:'目标表有歧义',mapping_incomplete:'需要完善字段映射',no_records:'没有抽取记录',
+    target_ambiguous:'目标表有歧义',mapping_incomplete:'请选择入库字段',no_records:'没有抽取记录',
     rule_empty:'规则生成失败',loaded:'入库完成',loading:'入库中',error:'处理失败'};
 
   function api(url,options){
@@ -173,7 +173,9 @@
   function replan(patch,button){
     if(!fileId||busy)return;
     setBusy(true);if(button)button.disabled=true;
-    currentIntent=Object.assign({},currentIntent,patch,{auto_load:false});
+    var next=Object.assign({},currentIntent);
+    Object.keys(patch).forEach(function(key){if(patch[key]===null)delete next[key];else next[key]=patch[key];});
+    currentIntent=Object.assign(next,{auto_load:false});
     delete currentIntent.mapping;delete currentIntent.confirmed;
     api('/api/sources/'+fileId+'/load-plan',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({intent:currentIntent})}).then(function(plan){
@@ -252,24 +254,43 @@
     if(mapping.field_map){
       var fmap=mapping.field_map||{},conf=mapping.confidence||{},amb=mapping.ambiguous_fields||{};
       var names=Object.keys(fmap);(mapping.unmapped_fields||[]).forEach(function(n){if(names.indexOf(n)<0)names.push(n);});
-      html+='<div class="plan-section"><h3>字段映射</h3><table class="mapping-table"><thead><tr><th>中文字段</th><th>数据库列</th><th>置信度</th></tr></thead><tbody>'+
+      html+='<div class="plan-section"><h3>字段映射</h3>'+
+        '<p class="muted">已预填高置信度建议；数据库列可选择，留空表示该字段不入库。至少映射一个字段。</p>'+
+        '<table class="mapping-table"><thead><tr><th>中文字段</th><th>数据库列（可选）</th><th>置信度</th></tr></thead><tbody>'+
         names.map(function(name){
-          var note=amb[name]?'有歧义，请选择':(!fmap[name]?'待映射':'');
-          return '<tr><td>'+escHtml(name)+'</td><td><input data-field="'+escHtml(name)+'" value="'+escHtml(fmap[name]||'')+'" placeholder="填写数据库列名"></td>'+
+          var note=!fmap[name]?'不入库':(amb[name]?'建议候选，请确认':'');
+          return '<tr><td>'+escHtml(name)+'</td><td><select data-field="'+escHtml(name)+'"></select></td>'+
             '<td class="'+(note?'warn-text':'muted')+'">'+escHtml(note||Math.round(Number(conf[name]||0)*100)+'%')+'</td></tr>';
         }).join('')+'</tbody></table>';
-      if(mapping.unmapped_fields&&mapping.unmapped_fields.length)html+='<p style="margin:7px 0 0;color:var(--c1-warning)">未映射：'+escHtml(mapping.unmapped_fields.join('、'))+'</p>';
       html+='<div class="plan-actions"><button type="button" class="btn ghost mini" data-save-map>保存并重新检查</button>'+
-        '<span class="muted">映射仅在确认方案后写入</span></div></div>';
+        '<span class="muted">仅所选字段会在确认后写入</span></div></div>';
     }
     if(plan.warnings&&plan.warnings.length)html+='<div class="plan-section"><h3>提示</h3>'+
       plan.warnings.map(function(w){return '<p>· '+escHtml(w)+'</p>';}).join('')+'</div>';
     if(plan.status==='ready')html+='<div class="plan-actions"><button type="button" class="btn" data-confirm>确认并写入数据库</button>'+
       '<span class="muted">将向 '+escHtml(target.table)+' 执行 '+escHtml(mapping.write_mode||'insert')+'</span></div>';
     html+='</div>';planNode.innerHTML=html;
+    if(mapping.field_map){
+      var fmap=mapping.field_map||{},amb=mapping.ambiguous_fields||{};
+      var columns=mapping.available_columns||[];
+      planNode.querySelectorAll('[data-field]').forEach(function(select){
+        var name=select.getAttribute('data-field');
+        var suggested=(amb[name]||[]).map(function(item){return item.target_column;});
+        var ordered=suggested.slice();
+        columns.forEach(function(column){
+          if(ordered.indexOf(column.name)<0)ordered.push(column.name);
+        });
+        addSelectOption(select,'','不入库（不写该字段）');
+        ordered.forEach(function(columnName){
+          var column=columns.filter(function(item){return item.name===columnName;})[0]||{};
+          addSelectOption(select,columnName,columnName+(column.comment?' · '+column.comment:''));
+        });
+        if(fmap[name])select.value=fmap[name];
+      });
+    }
     planNode.querySelectorAll('[data-choose]').forEach(function(btn){
       btn.onclick=function(){var r=recs[Number(btn.getAttribute('data-choose'))];
-        replan({target_table:r.table,datasource_id:r.datasource_id,field_map:{},field_aliases:{}},btn);};
+        replan({target_table:r.table,datasource_id:r.datasource_id,field_map:null,field_aliases:null},btn);};
     });
     var other=planNode.querySelector('[data-other-tables]'),otherPanel=planNode.querySelector('[data-other-panel]');
     if(other)other.onclick=function(){openOtherTables(otherPanel,other);};
@@ -278,7 +299,7 @@
       var ds=otherPanel.querySelector('[data-other-datasource]').value;
       var table=otherPanel.querySelector('[data-other-table]').value;
       if(!ds||!table)return;
-      replan({target_table:table,datasource_id:Number(ds),field_map:{},field_aliases:{}},chooseOther);
+      replan({target_table:table,datasource_id:Number(ds),field_map:null,field_aliases:null},chooseOther);
     };
     var save=planNode.querySelector('[data-save-map]');
     if(save)save.onclick=function(){
