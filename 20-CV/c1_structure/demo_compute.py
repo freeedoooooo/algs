@@ -71,9 +71,9 @@ def rename_legacy_defs():
     try:
         with conn.cursor() as cur:
             for table, names in (
-                    ('c1_index_info', zip(LEGACY_INDEX_NAMES, INDEX_NAMES)),
-                    ('c1_rule_info', zip(LEGACY_RULE_NAMES, RULE_NAMES)),
-                    ('c1_frame_info', zip(LEGACY_FRAME_NAMES, FRAME_NAMES))):
+                    ('c1_calc_index_info', zip(LEGACY_INDEX_NAMES, INDEX_NAMES)),
+                    ('c1_calc_rule_info', zip(LEGACY_RULE_NAMES, RULE_NAMES)),
+                    ('c1_calc_frame_info', zip(LEGACY_FRAME_NAMES, FRAME_NAMES))):
                 for old, new in names:
                     cur.execute('UPDATE {} SET name=%s WHERE name=%s'
                                 .format(table), (new, old))

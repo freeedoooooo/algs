@@ -6,11 +6,11 @@ from .errors import BadRequest, NotFound
 from .value_common import rows
 
 _TABLES = {
-    'document': 'c1_doc_file',
-    'source': 'c1_index_info',
-    'index': 'c1_index_info',
-    'rule': 'c1_rule_info',
-    'frame': 'c1_frame_info',
+    'document': 'c1_doc',
+    'source': 'c1_calc_index_info',
+    'index': 'c1_calc_index_info',
+    'rule': 'c1_calc_rule_info',
+    'frame': 'c1_calc_frame_info',
 }
 _MISSING_TABLE = 1146
 
@@ -75,7 +75,7 @@ def list_layout():
         with conn.cursor() as cur:
             try:
                 cur.execute('SELECT scope,def_id,pos_x,pos_y'
-                            ' FROM c1_compute_graph_layout')
+                            ' FROM c1_calc_graph_layout')
                 items = rows(cur)
             except Exception as exc:
                 if not _missing_table(exc):
@@ -110,7 +110,7 @@ def save_layout(items):
                     if missing:
                         raise NotFound('节点不存在：' + str(missing))
                 cur.executemany(
-                    'INSERT INTO c1_compute_graph_layout'
+                    'INSERT INTO c1_calc_graph_layout'
                     ' (scope,def_id,pos_x,pos_y) VALUES (%s,%s,%s,%s)'
                     ' ON DUPLICATE KEY UPDATE pos_x=VALUES(pos_x),'
                     ' pos_y=VALUES(pos_y),updated_at=CURRENT_TIMESTAMP',
@@ -119,7 +119,7 @@ def save_layout(items):
                 if _missing_table(exc):
                     raise BadRequest(
                         '节点布局表尚未安装，请由数据库管理员执行 '
-                        'store/migrations/005_compute_graph_layout.sql')
+                        'store/migrations/008_rename_calc_tables.py --confirm')
                 raise
             conn.commit()
         return {'available': True, 'saved': len(items)}
@@ -130,7 +130,7 @@ def save_layout(items):
 def delete_for_def(cur, scope, def_id):
     """删除定义时同事务清理；旧库尚未安装布局表不阻断原删除流程。"""
     try:
-        cur.execute('DELETE FROM c1_compute_graph_layout'
+        cur.execute('DELETE FROM c1_calc_graph_layout'
                     ' WHERE scope=%s AND def_id=%s', (scope, def_id))
     except Exception as exc:
         if not _missing_table(exc):

@@ -18,6 +18,7 @@ var reviewView=new URLSearchParams(location.search).get('view')==='review';
 var fileDoc=null, records=[], keys=[], selIdx=-1, selKey=null, stateFilter='';
 var srcMap={};
 var pageMap={}, allAnchors=[], pagesPresent=[], curPage=null, curView=null, allOn=false;
+var mb=document.getElementById('modebanner');
 
 function showErr(t){
   var e=document.getElementById('err');

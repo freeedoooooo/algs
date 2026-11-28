@@ -110,8 +110,8 @@ try:
     sqls = [sql for sql, args in value_conn.cur.calls]
     check('指标结果返回新 ID', vid == 9)
     check('指标结果先删后写',
-          len(sqls) == 3 and sqls[1].startswith('DELETE FROM c1_index_value')
-          and sqls[2].startswith('INSERT INTO c1_index_value'), sqls)
+          len(sqls) == 3 and sqls[1].startswith('DELETE FROM c1_calc_index_value')
+          and sqls[2].startswith('INSERT INTO c1_calc_index_value'), sqls)
     check('指标结果删除参数正确',
           value_conn.cur.calls[1][1] == (1,))
     check('指标结果事务提交并关闭连接',
@@ -187,11 +187,11 @@ def check_latest_list(module, table, foreign_key, value_field, json_cols):
     check(label + ' 查询后关闭连接', conn.closed)
 
 
-check_latest_list(ir, 'c1_index_info', 'index_id', 'index_value',
+check_latest_list(ir, 'c1_calc_index_info', 'index_id', 'index_value',
                   ('filter_json',))
-check_latest_list(rr, 'c1_rule_info', 'rule_id', 'rule_value',
+check_latest_list(rr, 'c1_calc_rule_info', 'rule_id', 'rule_value',
                   ('index_refs_json', 'conditions_json'))
-check_latest_list(fr, 'c1_frame_info', 'frame_id', 'frame_value',
+check_latest_list(fr, 'c1_calc_frame_info', 'frame_id', 'frame_value',
                   ('rule_refs_json',))
 
 
@@ -210,9 +210,11 @@ bad = []
 for p in py_files:
     with open(p, encoding='utf-8') as fh:
         text = fh.read()
-    for token in ('c1_metric_', 'c1_framework_', '/api/biz-rules', '/api/metrics'):
+    for token in ('c1_metric_', 'c1_framework_', '/api/biz-rules', '/api/metrics',
+                  'c1_index_', 'c1_rule_', 'c1_frame_',
+                  'c1_compute_graph_layout'):
         if token in text:
             bad.append((os.path.basename(p), token))
-check('产品代码无 metric/framework/biz-rules 旧命名', not bad, bad)
+check('产品代码无旧命名', not bad, bad)
 
 print('P0 repo logic: {} checks passed'.format(ok))

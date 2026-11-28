@@ -164,9 +164,9 @@ c1_structure/
 │   │                          / transform（trim·number）/ write_record（应用层 upsert）
 │   ├── semantic_load.py       中文字段推荐与物理列映射（纯函数）
 │   ├── load_planner.py        入库规划：目标表解析、推荐、映射与规划持久化
-│   ├── index_repo.py          指标定义/结果 repo（c1_index_info / c1_index_value）
-│   ├── rule_repo.py           业务规则定义/结果 repo（c1_rule_info / c1_rule_value）
-│   ├── frame_repo.py          框架定义/结果 repo（c1_frame_info / c1_frame_value）
+│   ├── index_repo.py          指标定义/结果 repo（c1_calc_index_info / c1_calc_index_value）
+│   ├── rule_repo.py           业务规则定义/结果 repo（c1_calc_rule_info / c1_calc_rule_value）
+│   ├── frame_repo.py          框架定义/结果 repo（c1_calc_frame_info / c1_calc_frame_value）
 │   ├── value_common.py        计算层共享：JSON 序列化 / 行投影（哈希工具已退役）
 │   ├── artifact.py            附件门面（kind/mime 推断）
 │   └── artifact_db.py         c1_parse_artifact BLOB（键＝file_id，应用层级联删）
@@ -248,13 +248,13 @@ c1_structure/
 
 **计算层（/compute，导航「计算」）**：在入库业务表之上做三层轻量计算。
 
-- **三层含义**：指标（选业务库表/列做聚合）→ 规则（用指标做比较）→ 框架（关联规则出结论）。页面只显示中文；`index/rule/frame` 仅用于代码与 API 前缀，定义表 `c1_*_info`、结果表 `c1_*_value`。与「抽取规则」「入库映射」是完全不同的概念，API 前缀彼此隔离。
-- **极简设计**：定义表存配置（同名唯一、保存即覆盖；关联关系用数组存：规则 `index_refs_json` 关联多个指标，框架 `rule_refs_json` 关联多个规则）。结果表只存 `id + 定义ID + 结果值 + 时间`——结果字段分别为 `index_value/rule_value/frame_value`；不存行锚点、依赖 ID、输入明细、版本与哈希。每次运行新增一行。
+- **三层含义**：指标（选业务库表/列做聚合）→ 规则（用指标做比较）→ 框架（关联规则出结论）。页面只显示中文；`index/rule/frame` 仅用于代码与 API 前缀，定义表 `c1_calc_*_info`、结果表 `c1_calc_*_value`。与「抽取规则」「入库映射」是完全不同的概念，API 前缀彼此隔离。
+- **极简设计**：定义表存配置（同名唯一、保存即覆盖；关联关系用数组存：规则 `index_refs_json` 关联多个指标，框架 `rule_refs_json` 关联多个规则）。结果表只存 `id + 定义ID + 结果值 + 时间`——结果字段分别为 `index_value/rule_value/frame_value`；不存行锚点、依赖 ID、输入明细、版本与哈希。每次运行：指标结果覆盖旧值，规则和框架结果追加一行。
 - **运行**：`POST /api/{scope}/{id}/run` 无参数，后端从定义推导依赖（取各下级最新结果值），须先运行下级再运行上级。
 - **依据链**：`GET /api/{scope}/value/{id}/lineage` 返回参与计算的定义元数据链（框架→规则→指标，逐层展开配置），用于回答"这个结论用了哪些配置"。
 - **结果复核**：`GET /api/{scope}/value/{id}/replay` 用当前定义重算并比对结果值；可发现配置或数据变化，不提供历史口径复现与防篡改证据。
 - **接口**：`/api/index|rule|frame` 的定义 CRUD、`/{id}/run`、`/{id}/values`、`/value/{id}/lineage|replay`；引擎在 `compute/`，repo 在 `store/{index,rule,frame}_repo.py`。
-- **建表**：执行 `store/migrations/004_result_value_only.sql`（重建 3 张结果表；定义表与 001 基线表不动）。
+- **建表与迁移**：空库依次执行 `store/migrations/001_file_baseline.sql`、`002_index_rule_frame.sql`、`003_simplify_value.sql`、`004_result_value_only.sql`、`005_compute_graph_layout.sql`、`006_index_value_single.sql`，最后执行 `D:/miniforge3/envs/paddle/python.exe -m c1_structure.store.migrations.008_rename_calc_tables --confirm`（从 `20-CV` 目录运行）。存量库直接执行最后的 008 迁移器；默认只读预演，确认模式先全库备份，再用 `RENAME TABLE` 保留全部定义、结果与布局数据。迁移后重启服务。
 - 演示脚本见 [docs/demo-script-index-rule-frame.md](./docs/demo-script-index-rule-frame.md)；设计稿见 [docs/design-index-rule-frame.md](./docs/design-index-rule-frame.md)。
 
 **按需导出**（file:// 直开 / 审计 / 迁移出口）：

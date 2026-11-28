@@ -1,4 +1,4 @@
-"""store/index_repo.py — 指标域（c1_index_info / c1_index_value）。
+"""store/index_repo.py — 指标域（c1_calc_index_info / c1_calc_index_value）。
 
 简化设计（2026-11-26）：定义同名唯一、无版本、无哈希；结果只存血缘锚点。
 """
@@ -44,11 +44,11 @@ def list_defs():
             cols += ['v.id AS value_id', 'v.index_value', 'v.computed_at']
             cur.execute(
                 'SELECT ' + ','.join(cols) +
-                ' FROM c1_index_info i'
+                ' FROM c1_calc_index_info i'
                 ' LEFT JOIN (SELECT index_id,MAX(id) AS value_id'
-                '            FROM c1_index_value GROUP BY index_id) latest'
+                '            FROM c1_calc_index_value GROUP BY index_id) latest'
                 '   ON latest.index_id=i.id'
-                ' LEFT JOIN c1_index_value v ON v.id=latest.value_id'
+                ' LEFT JOIN c1_calc_index_value v ON v.id=latest.value_id'
                 ' ORDER BY i.id')
             out = rows(cur)
         for r in out:
@@ -71,10 +71,10 @@ def get_def(index_id=None, name=None):
         with conn.cursor() as cur:
             if index_id is not None:
                 cur.execute('SELECT ' + ','.join(_INFO_COLS) +
-                            ' FROM c1_index_info WHERE id=%s', (index_id,))
+                            ' FROM c1_calc_index_info WHERE id=%s', (index_id,))
             elif name:
                 cur.execute('SELECT ' + ','.join(_INFO_COLS) +
-                            ' FROM c1_index_info WHERE name=%s', (name,))
+                            ' FROM c1_calc_index_info WHERE name=%s', (name,))
             else:
                 return None
             got = rows(cur)
@@ -99,27 +99,27 @@ def save_def(name, datasource_id, source_table, source_column, aggregate,
     try:
         with conn.cursor() as cur:
             if index_id:
-                cur.execute('SELECT id FROM c1_index_info WHERE id=%s',
+                cur.execute('SELECT id FROM c1_calc_index_info WHERE id=%s',
                             (index_id,))
                 if not cur.fetchone():
                     raise NotFound('指标定义不存在')
-                cur.execute('UPDATE c1_index_info SET datasource_id=%s,'
+                cur.execute('UPDATE c1_calc_index_info SET datasource_id=%s,'
                             ' source_table=%s,source_column=%s,aggregate=%s,'
                             ' filter_json=%s WHERE id=%s', vals + (index_id,))
                 did = index_id
             else:
-                cur.execute('SELECT id FROM c1_index_info WHERE name=%s',
+                cur.execute('SELECT id FROM c1_calc_index_info WHERE name=%s',
                             (name,))
                 hit = cur.fetchone()
                 if hit:
                     did = hit[0]
-                    cur.execute('UPDATE c1_index_info SET datasource_id=%s,'
+                    cur.execute('UPDATE c1_calc_index_info SET datasource_id=%s,'
                                 ' source_table=%s,source_column=%s,'
                                 ' aggregate=%s,filter_json=%s WHERE id=%s',
                                 vals + (did,))
                 else:
                     cur.execute(
-                        'INSERT INTO c1_index_info'
+                        'INSERT INTO c1_calc_index_info'
                         ' (name,datasource_id,source_table,source_column,'
                         '  aggregate,filter_json) VALUES (%s,%s,%s,%s,%s,%s)',
                         (name,) + vals)
@@ -137,12 +137,12 @@ def delete_def(index_id):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT id FROM c1_index_info WHERE id=%s', (index_id,))
+            cur.execute('SELECT id FROM c1_calc_index_info WHERE id=%s', (index_id,))
             if not cur.fetchone():
                 raise NotFound('指标定义不存在')
-            cur.execute('DELETE FROM c1_index_value WHERE index_id=%s',
+            cur.execute('DELETE FROM c1_calc_index_value WHERE index_id=%s',
                         (index_id,))
-            cur.execute('DELETE FROM c1_index_info WHERE id=%s', (index_id,))
+            cur.execute('DELETE FROM c1_calc_index_info WHERE id=%s', (index_id,))
             from .compute_layout_repo import delete_for_def
             delete_for_def(cur, 'index', index_id)
             delete_for_def(cur, 'source', index_id)
@@ -156,12 +156,12 @@ def add_value(index_id, index_value):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT id FROM c1_index_info WHERE id=%s', (index_id,))
+            cur.execute('SELECT id FROM c1_calc_index_info WHERE id=%s', (index_id,))
             if not cur.fetchone():
                 raise NotFound('指标定义不存在')
-            cur.execute('DELETE FROM c1_index_value WHERE index_id=%s',
+            cur.execute('DELETE FROM c1_calc_index_value WHERE index_id=%s',
                         (index_id,))
-            cur.execute('INSERT INTO c1_index_value (index_id,index_value)'
+            cur.execute('INSERT INTO c1_calc_index_value (index_id,index_value)'
                         ' VALUES (%s,%s)', (index_id, str(index_value)))
             vid = cur.lastrowid
             conn.commit()
@@ -175,7 +175,7 @@ def get_value(value_id):
     try:
         with conn.cursor() as cur:
             cur.execute('SELECT ' + ','.join(_VALUE_COLS) +
-                        ' FROM c1_index_value WHERE id=%s', (value_id,))
+                        ' FROM c1_calc_index_value WHERE id=%s', (value_id,))
             got = rows(cur)
         return got[0] if got else None
     finally:
@@ -183,7 +183,7 @@ def get_value(value_id):
 
 
 def list_values(index_id=None, limit=200):
-    sql = 'SELECT ' + ','.join(_VALUE_COLS) + ' FROM c1_index_value'
+    sql = 'SELECT ' + ','.join(_VALUE_COLS) + ' FROM c1_calc_index_value'
     args = []
     if index_id is not None:
         sql += ' WHERE index_id=%s'

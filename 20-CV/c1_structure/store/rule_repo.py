@@ -1,4 +1,4 @@
-"""store/rule_repo.py — 业务规则域（c1_rule_info / c1_rule_value）。
+"""store/rule_repo.py — 业务规则域（c1_calc_rule_info / c1_calc_rule_value）。
 
 简化设计（2026-11-26）：定义同名唯一、无版本、无哈希；结果只存依赖 ID 与实际值。
 """
@@ -52,11 +52,11 @@ def list_defs():
             cols += ['v.id AS value_id', 'v.rule_value', 'v.computed_at']
             cur.execute(
                 'SELECT ' + ','.join(cols) +
-                ' FROM c1_rule_info i'
+                ' FROM c1_calc_rule_info i'
                 ' LEFT JOIN (SELECT rule_id,MAX(id) AS value_id'
-                '            FROM c1_rule_value GROUP BY rule_id) latest'
+                '            FROM c1_calc_rule_value GROUP BY rule_id) latest'
                 '   ON latest.rule_id=i.id'
-                ' LEFT JOIN c1_rule_value v ON v.id=latest.value_id'
+                ' LEFT JOIN c1_calc_rule_value v ON v.id=latest.value_id'
                 ' ORDER BY i.id')
             out = rows(cur)
         for r in out:
@@ -80,10 +80,10 @@ def get_def(rule_id=None, name=None):
         with conn.cursor() as cur:
             if rule_id is not None:
                 cur.execute('SELECT ' + ','.join(_INFO_COLS) +
-                            ' FROM c1_rule_info WHERE id=%s', (rule_id,))
+                            ' FROM c1_calc_rule_info WHERE id=%s', (rule_id,))
             elif name:
                 cur.execute('SELECT ' + ','.join(_INFO_COLS) +
-                            ' FROM c1_rule_info WHERE name=%s', (name,))
+                            ' FROM c1_calc_rule_info WHERE name=%s', (name,))
             else:
                 return None
             got = rows(cur)
@@ -105,26 +105,26 @@ def save_def(name, index_refs, conditions, combine='all', rule_id=None):
     try:
         with conn.cursor() as cur:
             if rule_id:
-                cur.execute('SELECT id FROM c1_rule_info WHERE id=%s',
+                cur.execute('SELECT id FROM c1_calc_rule_info WHERE id=%s',
                             (rule_id,))
                 if not cur.fetchone():
                     raise NotFound('规则定义不存在')
-                cur.execute('UPDATE c1_rule_info SET index_refs_json=%s,'
+                cur.execute('UPDATE c1_calc_rule_info SET index_refs_json=%s,'
                             ' conditions_json=%s,combine=%s WHERE id=%s',
                             vals + (rule_id,))
                 did = rule_id
             else:
-                cur.execute('SELECT id FROM c1_rule_info WHERE name=%s',
+                cur.execute('SELECT id FROM c1_calc_rule_info WHERE name=%s',
                             (name,))
                 hit = cur.fetchone()
                 if hit:
                     did = hit[0]
-                    cur.execute('UPDATE c1_rule_info SET index_refs_json=%s,'
+                    cur.execute('UPDATE c1_calc_rule_info SET index_refs_json=%s,'
                                 ' conditions_json=%s,combine=%s WHERE id=%s',
                                 vals + (did,))
                 else:
                     cur.execute(
-                        'INSERT INTO c1_rule_info'
+                        'INSERT INTO c1_calc_rule_info'
                         ' (name,index_refs_json,conditions_json,combine)'
                         ' VALUES (%s,%s,%s,%s)', (name,) + vals)
                     did = cur.lastrowid
@@ -141,11 +141,11 @@ def delete_def(rule_id):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT id FROM c1_rule_info WHERE id=%s', (rule_id,))
+            cur.execute('SELECT id FROM c1_calc_rule_info WHERE id=%s', (rule_id,))
             if not cur.fetchone():
                 raise NotFound('规则定义不存在')
-            cur.execute('DELETE FROM c1_rule_value WHERE rule_id=%s', (rule_id,))
-            cur.execute('DELETE FROM c1_rule_info WHERE id=%s', (rule_id,))
+            cur.execute('DELETE FROM c1_calc_rule_value WHERE rule_id=%s', (rule_id,))
+            cur.execute('DELETE FROM c1_calc_rule_info WHERE id=%s', (rule_id,))
             from .compute_layout_repo import delete_for_def
             delete_for_def(cur, 'rule', rule_id)
             conn.commit()
@@ -158,10 +158,10 @@ def add_value(rule_id, rule_value):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT id FROM c1_rule_info WHERE id=%s', (rule_id,))
+            cur.execute('SELECT id FROM c1_calc_rule_info WHERE id=%s', (rule_id,))
             if not cur.fetchone():
                 raise NotFound('规则定义不存在')
-            cur.execute('INSERT INTO c1_rule_value (rule_id,rule_value)'
+            cur.execute('INSERT INTO c1_calc_rule_value (rule_id,rule_value)'
                         ' VALUES (%s,%s)', (rule_id, str(rule_value)))
             vid = cur.lastrowid
             conn.commit()
@@ -175,7 +175,7 @@ def get_value(value_id):
     try:
         with conn.cursor() as cur:
             cur.execute('SELECT ' + ','.join(_VALUE_COLS) +
-                        ' FROM c1_rule_value WHERE id=%s', (value_id,))
+                        ' FROM c1_calc_rule_value WHERE id=%s', (value_id,))
             got = rows(cur)
         return got[0] if got else None
     finally:
@@ -183,7 +183,7 @@ def get_value(value_id):
 
 
 def list_values(rule_id=None, limit=200):
-    sql = 'SELECT ' + ','.join(_VALUE_COLS) + ' FROM c1_rule_value'
+    sql = 'SELECT ' + ','.join(_VALUE_COLS) + ' FROM c1_calc_rule_value'
     args = []
     if rule_id is not None:
         sql += ' WHERE rule_id=%s'

@@ -33,7 +33,7 @@ class Cursor:
 
     def execute(self, sql, args=None):
         self.calls.append((sql, args))
-        if self.missing and 'c1_compute_graph_layout' in sql:
+        if self.missing and 'c1_calc_graph_layout' in sql:
             raise Exception(1146, "Table doesn't exist")
         if sql.startswith('SELECT scope,def_id'):
             self.result = [('index', 1, 10.5, 20.0)]
@@ -87,6 +87,14 @@ for item in bad_items:
     except errors.BadRequest:
         check('非法布局拒绝 ' + repr(item)[:30], True)
 
+check('节点布局表使用计算域新命名', repo._TABLES == {
+    'document': 'c1_doc',
+    'source': 'c1_calc_index_info',
+    'index': 'c1_calc_index_info',
+    'rule': 'c1_calc_rule_info',
+    'frame': 'c1_calc_frame_info',
+}, repo._TABLES)
+
 conn = use(Cursor(missing=True))
 check('缺表时读取返回未安装', repo.list_layout() ==
       {'available': False, 'items': []})
@@ -116,7 +124,7 @@ try:
     repo.save_layout(items)
     check('缺表时保存提示迁移', False)
 except errors.BadRequest as exc:
-    check('缺表时保存提示迁移', '005_compute_graph_layout.sql' in exc.msg)
+    check('缺表时保存提示迁移', '008_rename_calc_tables.py' in exc.msg)
 
 repo.delete_for_def(Cursor(missing=True), 'index', 1)
 check('旧库无布局表仍允许删除定义', True)

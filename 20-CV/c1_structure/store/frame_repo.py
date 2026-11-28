@@ -1,4 +1,4 @@
-"""store/frame_repo.py — 框架域（c1_frame_info / c1_frame_value）。
+"""store/frame_repo.py — 框架域（c1_calc_frame_info / c1_calc_frame_value）。
 
 简化设计（2026-11-26）：定义同名唯一、无版本、无哈希；结果只存依赖 ID 与结论。
 """
@@ -51,11 +51,11 @@ def list_defs():
             cols += ['v.id AS value_id', 'v.frame_value', 'v.computed_at']
             cur.execute(
                 'SELECT ' + ','.join(cols) +
-                ' FROM c1_frame_info i'
+                ' FROM c1_calc_frame_info i'
                 ' LEFT JOIN (SELECT frame_id,MAX(id) AS value_id'
-                '            FROM c1_frame_value GROUP BY frame_id) latest'
+                '            FROM c1_calc_frame_value GROUP BY frame_id) latest'
                 '   ON latest.frame_id=i.id'
-                ' LEFT JOIN c1_frame_value v ON v.id=latest.value_id'
+                ' LEFT JOIN c1_calc_frame_value v ON v.id=latest.value_id'
                 ' ORDER BY i.id')
             out = rows(cur)
         for r in out:
@@ -80,10 +80,10 @@ def get_def(frame_id=None, name=None):
         with conn.cursor() as cur:
             if frame_id is not None:
                 cur.execute('SELECT ' + ','.join(_INFO_COLS) +
-                            ' FROM c1_frame_info WHERE id=%s', (frame_id,))
+                            ' FROM c1_calc_frame_info WHERE id=%s', (frame_id,))
             elif name:
                 cur.execute('SELECT ' + ','.join(_INFO_COLS) +
-                            ' FROM c1_frame_info WHERE name=%s', (name,))
+                            ' FROM c1_calc_frame_info WHERE name=%s', (name,))
             else:
                 return None
             got = rows(cur)
@@ -107,26 +107,26 @@ def save_def(name, rule_refs, combine='weighted', threshold=None,
     try:
         with conn.cursor() as cur:
             if frame_id:
-                cur.execute('SELECT id FROM c1_frame_info WHERE id=%s',
+                cur.execute('SELECT id FROM c1_calc_frame_info WHERE id=%s',
                             (frame_id,))
                 if not cur.fetchone():
                     raise NotFound('框架定义不存在')
-                cur.execute('UPDATE c1_frame_info SET rule_refs_json=%s,'
+                cur.execute('UPDATE c1_calc_frame_info SET rule_refs_json=%s,'
                             ' combine=%s,threshold=%s WHERE id=%s',
                             vals + (frame_id,))
                 did = frame_id
             else:
-                cur.execute('SELECT id FROM c1_frame_info WHERE name=%s',
+                cur.execute('SELECT id FROM c1_calc_frame_info WHERE name=%s',
                             (name,))
                 hit = cur.fetchone()
                 if hit:
                     did = hit[0]
-                    cur.execute('UPDATE c1_frame_info SET rule_refs_json=%s,'
+                    cur.execute('UPDATE c1_calc_frame_info SET rule_refs_json=%s,'
                                 ' combine=%s,threshold=%s WHERE id=%s',
                                 vals + (did,))
                 else:
                     cur.execute(
-                        'INSERT INTO c1_frame_info'
+                        'INSERT INTO c1_calc_frame_info'
                         ' (name,rule_refs_json,combine,threshold)'
                         ' VALUES (%s,%s,%s,%s)', (name,) + vals)
                     did = cur.lastrowid
@@ -143,12 +143,12 @@ def delete_def(frame_id):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT id FROM c1_frame_info WHERE id=%s', (frame_id,))
+            cur.execute('SELECT id FROM c1_calc_frame_info WHERE id=%s', (frame_id,))
             if not cur.fetchone():
                 raise NotFound('框架定义不存在')
-            cur.execute('DELETE FROM c1_frame_value WHERE frame_id=%s',
+            cur.execute('DELETE FROM c1_calc_frame_value WHERE frame_id=%s',
                         (frame_id,))
-            cur.execute('DELETE FROM c1_frame_info WHERE id=%s', (frame_id,))
+            cur.execute('DELETE FROM c1_calc_frame_info WHERE id=%s', (frame_id,))
             from .compute_layout_repo import delete_for_def
             delete_for_def(cur, 'frame', frame_id)
             conn.commit()
@@ -161,10 +161,10 @@ def add_value(frame_id, frame_value):
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT id FROM c1_frame_info WHERE id=%s', (frame_id,))
+            cur.execute('SELECT id FROM c1_calc_frame_info WHERE id=%s', (frame_id,))
             if not cur.fetchone():
                 raise NotFound('框架定义不存在')
-            cur.execute('INSERT INTO c1_frame_value (frame_id,frame_value)'
+            cur.execute('INSERT INTO c1_calc_frame_value (frame_id,frame_value)'
                         ' VALUES (%s,%s)', (frame_id, str(frame_value)))
             vid = cur.lastrowid
             conn.commit()
@@ -178,7 +178,7 @@ def get_value(value_id):
     try:
         with conn.cursor() as cur:
             cur.execute('SELECT ' + ','.join(_VALUE_COLS) +
-                        ' FROM c1_frame_value WHERE id=%s', (value_id,))
+                        ' FROM c1_calc_frame_value WHERE id=%s', (value_id,))
             got = rows(cur)
         return got[0] if got else None
     finally:
@@ -186,7 +186,7 @@ def get_value(value_id):
 
 
 def list_values(frame_id=None, limit=200):
-    sql = 'SELECT ' + ','.join(_VALUE_COLS) + ' FROM c1_frame_value'
+    sql = 'SELECT ' + ','.join(_VALUE_COLS) + ' FROM c1_calc_frame_value'
     args = []
     if frame_id is not None:
         sql += ' WHERE frame_id=%s'

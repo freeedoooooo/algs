@@ -442,7 +442,8 @@ def _link_records(cur, doc_table, record_table):
         raise RuntimeError('仍有暂存记录未关联抽取结果')
     _execute(cur, 'ALTER TABLE {} MODIFY COLUMN extract_result_id BIGINT NOT NULL'.format(
         _q(record_table)))
-    _rename_column(cur, record_table, key, 'doc_id', 'BIGINT NOT NULL')
+    if key != 'doc_id':
+        _rename_column(cur, record_table, key, 'doc_id', 'BIGINT NOT NULL')
     if _index_exists(cur, record_table, 'uk_file_idx'):
         _execute(cur, 'ALTER TABLE {} DROP INDEX uk_file_idx'.format(_q(record_table)))
     if not _index_exists(cur, record_table, 'uk_extract_result_record'):
@@ -580,7 +581,8 @@ def _link_receipts(cur, receipt_table):
         raise RuntimeError('仍有旧回执未关联入库绑定')
     _execute(cur, 'ALTER TABLE {} MODIFY COLUMN load_binding_id BIGINT NOT NULL'.format(
         _q(receipt_table)))
-    _rename_column(cur, receipt_table, key, 'doc_id', 'BIGINT NOT NULL')
+    if key != 'doc_id':
+        _rename_column(cur, receipt_table, key, 'doc_id', 'BIGINT NOT NULL')
     if _index_exists(cur, receipt_table, 'uk_load_receipt'):
         _execute(cur, 'ALTER TABLE {} DROP INDEX uk_load_receipt'.format(
             _q(receipt_table)))
@@ -602,13 +604,24 @@ def _dedupe_load_tables(cur, mapping_table):
         # 此阶段 mapping_field 仍保留 target_column/rule_field/is_business_key，
         # 绑定已在上一步从各旧配置行生成，这里只合并目标字段元数据。
         if _column_exists(cur, mapping_table, 'target_column'):
-            cur.executemany(
-                'INSERT IGNORE INTO {}'
-                ' (load_table_id,field_name,data_type,is_primary,has_default,sort_order)'
-                ' SELECT %s,target_column,%s,0,0,MIN(sort_order) FROM {}'
-                ' WHERE load_table_id=%s GROUP BY target_column'.format(
-                    _q(mapping_table), _q(mapping_table)),
-                [(keep, 'unknown', old) for old, keep in aliases])
+            for old, keep in aliases:
+                cur.execute(
+                    'SELECT target_column,MIN(sort_order) FROM {}'
+                    ' WHERE load_table_id=%s GROUP BY target_column'.format(
+                        _q(mapping_table)), (old,))
+                source_rows = cur.fetchall()
+                cur.execute(
+                    'SELECT target_column FROM {} WHERE load_table_id=%s'.format(
+                        _q(mapping_table)), (keep,))
+                existing = {row[0] for row in cur.fetchall()}
+                missing = [(keep, '', name, 0, order)
+                           for name, order in source_rows if name not in existing]
+                if missing:
+                    cur.executemany(
+                        'INSERT IGNORE INTO {}'
+                        ' (load_table_id,rule_field,target_column,is_business_key,'
+                        ' sort_order) VALUES (%s,%s,%s,%s,%s)'.format(
+                            _q(mapping_table)), missing)
         cur.executemany('UPDATE c1_load_binding SET load_table_id=%s'
                         ' WHERE load_table_id=%s', aliases)
         for old, _keep in aliases:
@@ -636,6 +649,10 @@ def _finalize_mapping_and_tables(cur, mapping_table):
             _q(mapping_table)))
     _drop_column(cur, mapping_table, 'rule_field')
     _drop_column(cur, mapping_table, 'is_business_key')
+    cur.execute(
+        'DELETE m1 FROM {0} m1 JOIN {0} m2'
+        ' ON m2.load_table_id=m1.load_table_id AND m2.field_name=m1.field_name'
+        ' AND m2.id<m1.id'.format(_q(mapping_table)))
     _execute(cur, 'ALTER TABLE {} MODIFY COLUMN data_type VARCHAR(64) NOT NULL'.format(
         _q(mapping_table)))
     _execute(cur, 'ALTER TABLE {} MODIFY COLUMN is_primary TINYINT NOT NULL'
@@ -720,6 +737,37 @@ def _finalize_docs_rules_artifacts(cur, doc_table, artifact_table):
     if artifact_table != 'c1_parse_artifact':
         _rename_table(cur, artifact_table, 'c1_parse_artifact')
     print('  文档旧标量/规则版本号/解析产物 sha256 已清理；文档 sha256 保留')
+
+
+def _repair_binding_targets(cur):
+    cur.execute(
+        'SELECT b.id FROM c1_load_binding b LEFT JOIN c1_load_table t'
+        ' ON t.id=b.load_table_id LEFT JOIN c1_load_receipt r'
+        ' ON r.load_binding_id=b.id'
+        ' WHERE t.id IS NULL OR t.datasource_id<>r.datasource_id'
+        ' OR t.target_table<>r.target_table GROUP BY b.id')
+    binding_ids = [row[0] for row in cur.fetchall()]
+    repaired = 0
+    for binding_id in binding_ids:
+        cur.execute(
+            'SELECT DISTINCT datasource_id,target_table FROM c1_load_receipt'
+            ' WHERE load_binding_id=%s', (binding_id,))
+        targets = cur.fetchall()
+        if len(targets) != 1:
+            continue
+        datasource_id, target_table = targets[0]
+        cur.execute(
+            'SELECT id FROM c1_load_table WHERE datasource_id=%s'
+            ' AND target_table=%s ORDER BY id LIMIT 1',
+            (datasource_id, target_table))
+        row = cur.fetchone()
+        if not row:
+            continue
+        cur.execute('UPDATE c1_load_binding SET load_table_id=%s WHERE id=%s',
+                    (row[0], binding_id))
+        repaired += 1
+    if repaired:
+        print('  依据回执修复 {} 个绑定目标'.format(repaired))
 
 
 def _validate(cur):
@@ -844,7 +892,10 @@ def run(confirm=False):
             print('目标库:', db.safe_detail(config.PLATFORM_DB))
             print('现有表 {} 张'.format(len(tables)))
             if not _is_legacy(cur, tables):
+                _repair_binding_targets(cur)
                 _validate(cur)
+                if confirm:
+                    conn.commit()
                 print('已是目标结构，无需迁移。')
                 return
             print('迁移顺序:')
@@ -927,6 +978,7 @@ def run(confirm=False):
                 _execute(cur, 'DROP TABLE c1_extract_rule_version')
 
             print('[6/6] 校验')
+            _repair_binding_targets(cur)
             _validate(cur)
             conn.commit()
             print('迁移完成。MySQL DDL 不可回滚，请保留备份: {}'.format(backup))
