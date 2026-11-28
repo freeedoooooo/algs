@@ -78,6 +78,15 @@ def list_tables(ds):
     return list(out)
 
 
+def is_business_table(name):
+    """c1_ 前缀为平台产品配置/元数据表，不作为业务入库目标。"""
+    return bool(str(name or '').strip()) and not str(name).strip().casefold().startswith('c1_')
+
+
+def list_business_tables(ds):
+    return [name for name in list_tables(ds) if is_business_table(name)]
+
+
 def table_comments(ds, tables):
     """批量读取表注释，同一数据源只建立一次业务库连接。"""
     names = list(dict.fromkeys(tables))
@@ -135,8 +144,8 @@ def list_columns(ds, table):
 
 def list_table_schemas(ds, tables=None):
     """批量读取现有表结构，供中文语义推荐/映射使用。"""
-    names = list(tables) if tables is not None else list_tables(ds)
-    names = [str(name) for name in names if str(name or '').strip()]
+    names = (list_business_tables(ds) if tables is None else
+             [str(name) for name in tables if is_business_table(name)])
     if not names:
         return []
     key = _cache_key(ds)

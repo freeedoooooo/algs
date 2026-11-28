@@ -108,6 +108,10 @@ class AutoServiceTests(unittest.TestCase):
             auto_service.catalog.set_rule.assert_called_once_with(1, 99)
             auto_service.service.extract_records.assert_called_once_with(
                 self.doc, self.tpl)
+            events = [call.kwargs.get('event') for call in self.log.stage.call_args_list
+                      + self.log.ok.call_args_list]
+            self.assertIn('parse_complete', events)
+            self.assertIn('extract_complete', events)
         finally:
             for p in reversed(patches):
                 p.stop()

@@ -4,6 +4,7 @@
 （后者 _purge 先删后插会抹掉中间层人工成果）。
 """
 import json
+from decimal import Decimal, InvalidOperation
 
 from .. import collect
 from ..collect_logic import build_logic
@@ -107,6 +108,19 @@ def dry_run(spec, doc):
             'empty_fields': [k for k, c in hits.items() if c == 0]}
 
 
+def _values_equal(actual, expect):
+    if str(actual or '') == str(expect or ''):
+        return True
+    if isinstance(actual, bool) or isinstance(expect, bool):
+        return False
+    if not isinstance(actual, (int, float)) and not isinstance(expect, (int, float)):
+        return False
+    try:
+        return Decimal(str(actual).strip()) == Decimal(str(expect).strip())
+    except (InvalidOperation, ValueError):
+        return False
+
+
 def compare_targets(recs, targets):
     """与中间层 confirmed/edited 记录逐字段对拍（纯函数）。"""
     if not targets:
@@ -120,7 +134,7 @@ def compare_targets(recs, targets):
         for k, expect in (target.get('values') or {}).items():
             total += 1
             actual = got.get(k)
-            if str(actual or '') == str(expect or ''):
+            if _values_equal(actual, expect):
                 same += 1
             else:
                 if len(diffs) < 20:

@@ -14,10 +14,14 @@ import hashlib
 import shutil
 import tempfile
 import importlib
+import logging
 import threading
 import traceback
 
 from . import config
+from .logging_config import log_level
+
+logger = logging.getLogger(__name__)
 
 
 def _load(name):
@@ -45,6 +49,7 @@ def step(msg, level='info', stage='batch'):
             't': round(time.time() - (STATE['started'] or time.time()), 2),
             'ms': 0, 'level': level, 'stage': stage, 'msg': msg,
         })
+    logger.log(log_level(level), '[%s] %s', stage, msg)
 
 
 def _on_log(row):
@@ -294,7 +299,8 @@ def task_batch(paths, params=None, log=None, task_ctx=None, finalize=True):
             with LOCK:
                 STATE.update(running=False, ready=False, error=str(e),
                              stage='error')
-        print(traceback.format_exc(limit=3))
+        if not log:
+            logger.exception('解析失败：file_id=%s', task_ctx.get('file_id'))
     finally:
         for f in task_ctx.get('files') or []:
             if f.get('scratch'):
@@ -343,17 +349,26 @@ def run_extract(file_id, force=False, rule_version_id=None):
     doc = content.get_extract(file_id)
     if doc is None:
         raise errors.Conflict('资料缺少解析产物，请重新解析')
-    recs = extract_records(doc, tpl)
-    catalog.clear_load_logs(file_id)
-    content.save_records(collect.build_records_doc(
-        doc, recs, task_id=file_id,
-        task_file_id=file_id, file_id=file_id,
-        rule={'name': tpl['name'], 'version': tpl['version']}))
-    # 显式指定版本时回写绑定：抽取用的规则即资料当前规则（Agent 自动选规则可追溯）。
-    # rule_version_id=None/0 的透传调用不回写，保持 API 兼容与"不抹配置"语义。
-    if vid is not None:
-        catalog.set_rule(file_id, vid)
-    catalog.set_state(file_id, 'to_review', None)
+    logger.info('开始手动抽取：file_id=%s rule_version_id=%s force=%s',
+                file_id, vid, force)
+    try:
+        recs = extract_records(doc, tpl)
+        catalog.clear_load_logs(file_id)
+        content.save_records(collect.build_records_doc(
+            doc, recs, task_id=file_id,
+            task_file_id=file_id, file_id=file_id,
+            rule={'name': tpl['name'], 'version': tpl['version']}))
+        # 显式指定版本时回写绑定：抽取用的规则即资料当前规则（Agent 自动选规则可追溯）。
+        # rule_version_id=None/0 的透传调用不回写，保持 API 兼容与"不抹配置"语义。
+        if vid is not None:
+            catalog.set_rule(file_id, vid)
+        catalog.set_state(file_id, 'to_review', None)
+    except Exception:
+        logger.exception('手动抽取失败：file_id=%s rule_version_id=%s',
+                         file_id, vid)
+        raise
+    logger.info('手动抽取完成：file_id=%s records=%s rule=%s v%s',
+                file_id, len(recs), tpl.get('name'), tpl.get('version'))
     return {'ok': True, 'file_id': file_id,
             'files': [{'file_id': file_id, 'name': f['name'],
                        'records_n': len(recs)}]}
@@ -396,6 +411,8 @@ def approve_all(file_id):
             if (r.get('review') or {}).get('state') in ('pending', 'edited')]
     n = content.set_review(file_id, idxs, 'confirmed') if idxs else 0
     new_state = derive_review_state(file_id)
+    logger.info('记录复核完成：file_id=%s updated=%s file_state=%s',
+                file_id, n, new_state)
     return {'ok': True, 'file_id': file_id, 'updated': n,
             'file_state': new_state}
 
@@ -528,8 +545,11 @@ def launch_load(file_id, target=None, *, auto=False, background=True):
     tpl = resolve_rule(f['rule_version_id']) if f.get('rule_version_id') else None
     fields = _snapshot_names(lt.get('source_snapshot'))
     loader = _load('store.loader')
+    logger.info('入库预检开始：file_id=%s datasource_id=%s table=%s mode=%s',
+                file_id, ds_id, lt['target_table'], lt['write_mode'])
     loader.preflight(ds, lt['target_table'], lt['fields'],
                      lt['write_mode'], fields)
+    logger.info('入库预检通过：file_id=%s fields=%s', file_id, len(fields))
     doc = _load('store.content').get_records(file_id)
     recs = [r for fs in (doc['files'] if doc else []) for r in fs['records']]
     if not recs:
@@ -760,4 +780,3 @@ def run_load(file_id, ds, lt, tpl, log):
         with LOCK:
             STATE.update(running=False, ready=False, error=str(e),
                          stage='error')
-        print(traceback.format_exc(limit=3))

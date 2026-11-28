@@ -8,10 +8,13 @@ llm 可注入（与 build_smart 同构）；Stub 模式不烧 token。
 """
 import hashlib
 import json
+import logging
 
 from . import context, llm, validate
 from .prompts import rule_author_v1
 from ..collect_logic import registry
+
+logger = logging.getLogger(__name__)
 
 
 class GenerationResult:
@@ -95,8 +98,13 @@ def generate_rule(doc, fields=None, refs=None, *, doc_type=None,
         stub_targets = fields
     spec_conf = {'prompt_version': pv,
                  'tool_version': str(len(registry.OPS))}
+    logger.info('规则生成开始：mode=%s sample_file_id=%s',
+                'natural' if natural else 'precise', sample_file_id)
     raw, meta = llm.call_json(prompt, None, llm=llm_fn, stub=stub_fn,
                               spec=spec_conf, stub_fields=stub_targets)
+    logger.info('规则校验与干跑开始：mode=%s provider=%s model=%s',
+                'natural' if natural else 'precise', meta.get('provider'),
+                meta.get('model'))
     issues = validate.validate_spec(raw)
     if issues:
         raise llm.LLMSchemaFail('生成规则未通过静态校验：' + '；'.join(issues))
@@ -138,6 +146,11 @@ def _finalize(spec, diag, targets, fields, meta, inp_sha,
                  'doc_type': doc_type,
                  'sample_file_id': sample_file_id,
                  'targets_n': cmp.get('targets_n', 0)})
+    logger.info('规则生成完成：fields=%s records=%s anchor_coverage=%s '
+                'field_accuracy=%s confidence=%s',
+                len(spec.get('fields') or []), diag.get('records_n'),
+                diag.get('anchor_coverage'), cmp.get('field_accuracy'),
+                _confidence(diag, cmp))
     spec['_agent_meta'] = meta
     if fields is None:
         # 自然语言模式：字段名由模型产出，schema 从生成结果推导

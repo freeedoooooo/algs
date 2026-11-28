@@ -135,12 +135,20 @@ class LLMTest(unittest.TestCase):
                 llm.raw_call('p')
         urlopen.assert_not_called()
 
+    def test_qodercn_sdk_module_selected_by_region(self):
+        sdk = object()
+        with mock.patch.object(llm.config, 'QODER_REGION', 'cn'), \
+                mock.patch('builtins.__import__', return_value=sdk) as importer:
+            self.assertIs(llm._load_qoder_sdk(), sdk)
+        importer.assert_called_once_with('qodercn_agent_sdk')
+
     def test_qoder_preferred_when_both_providers_configured(self):
         sdk, calls = _fake_sdk([[_ResultMessage('{"ok": true}')]])
         with mock.patch.object(llm, '_load_qoder_sdk', return_value=sdk), \
                 mock.patch.object(llm, '_openai_call') as openai_call, \
                 mock.patch.multiple(
                     llm.config, QODER_PERSONAL_ACCESS_TOKEN='pt-test',
+                    QODER_REGION='global',
                     QODER_MODEL='qoder-test-model', QODER_CLI_PATH='',
                     QODER_TIMEOUT=2, LLM_BASE_URL='https://llm.example/v1',
                     LLM_API_KEY='llm-test-key', LLM_MODEL='llm-test-model'):
@@ -232,6 +240,7 @@ class LLMTest(unittest.TestCase):
         with mock.patch.object(llm, '_load_qoder_sdk', return_value=sdk), \
                 mock.patch.multiple(
                     llm.config, QODER_PERSONAL_ACCESS_TOKEN='pt-test',
+                    QODER_REGION='global',
                     QODER_MODEL='qoder-test-model',
                     QODER_CLI_PATH='C:/qodercli.exe', QODER_TIMEOUT=2,
                     QODER_TMP_DIR='D:/qoder-tmp'):
@@ -260,6 +269,7 @@ class LLMTest(unittest.TestCase):
         with mock.patch.object(llm, '_load_qoder_sdk', return_value=sdk), \
                 mock.patch.multiple(
                     llm.config, QODER_PERSONAL_ACCESS_TOKEN='pt-test',
+                    QODER_REGION='global',
                     QODER_MODEL='', QODER_CLI_PATH='', QODER_TIMEOUT=2):
             with self.assertRaises(llm.LLLError):
                 llm.raw_call('prompt')
@@ -271,6 +281,7 @@ class LLMTest(unittest.TestCase):
         with mock.patch.object(llm, '_load_qoder_sdk', return_value=sdk), \
                 mock.patch.multiple(
                     llm.config, QODER_PERSONAL_ACCESS_TOKEN='pt-test',
+                    QODER_REGION='global',
                     QODER_MODEL='', QODER_CLI_PATH='', QODER_TIMEOUT=2):
             with self.assertRaises(llm.LLMUnconfigured):
                 llm.raw_call('prompt')
@@ -283,6 +294,7 @@ class LLMTest(unittest.TestCase):
         with mock.patch.object(llm, '_load_qoder_sdk', return_value=sdk), \
                 mock.patch.multiple(
                     llm.config, QODER_PERSONAL_ACCESS_TOKEN='pt-test',
+                    QODER_REGION='global',
                     QODER_MODEL='', QODER_CLI_PATH='', QODER_TIMEOUT=2,
                     QODER_TMP_DIR=''):
             with self.assertRaises(llm.LLMUnconfigured):
@@ -295,6 +307,7 @@ class LLMTest(unittest.TestCase):
         with mock.patch.object(llm, '_load_qoder_sdk', return_value=sdk), \
                 mock.patch.multiple(
                     llm.config, QODER_PERSONAL_ACCESS_TOKEN='pt-test',
+                    QODER_REGION='global',
                     QODER_MODEL='', QODER_CLI_PATH='', QODER_TIMEOUT=2):
             with self.assertRaises(llm.LLLError):
                 llm.raw_call('prompt')
@@ -306,6 +319,7 @@ class LLMTest(unittest.TestCase):
         with mock.patch.object(llm, '_load_qoder_sdk', return_value=sdk), \
                 mock.patch.multiple(
                     llm.config, QODER_PERSONAL_ACCESS_TOKEN='pt-test',
+                    QODER_REGION='global',
                     QODER_MODEL='', QODER_CLI_PATH='', QODER_TIMEOUT=2,
                     SMART_STUB=False):
             obj, meta = llm.call_json('base', {}, max_repair=1)
@@ -333,6 +347,7 @@ class LLMTest(unittest.TestCase):
         with mock.patch.object(llm, '_load_qoder_sdk', return_value=sdk), \
                 mock.patch.multiple(
                     llm.config, QODER_PERSONAL_ACCESS_TOKEN='pt-test',
+                    QODER_REGION='global',
                     QODER_MODEL='', QODER_CLI_PATH='', QODER_TIMEOUT=2):
             with self.assertRaises(llm.LLMUnconfigured):
                 llm.raw_call('prompt')
@@ -351,6 +366,7 @@ class LLMTest(unittest.TestCase):
         with mock.patch.object(llm, '_load_qoder_sdk', return_value=sdk), \
                 mock.patch.multiple(
                     llm.config, QODER_PERSONAL_ACCESS_TOKEN='pt-test',
+                    QODER_REGION='global',
                     QODER_MODEL='', QODER_CLI_PATH='', QODER_TIMEOUT=0.01):
             with self.assertRaises(llm.LLMTimeout):
                 llm.raw_call('prompt')
@@ -470,6 +486,14 @@ class ValidateTest(unittest.TestCase):
         self.assertTrue(cmp['count_match'])
         self.assertEqual(cmp['field_accuracy'], 0.5)
         self.assertEqual(len(cmp['diffs']), 1)
+
+    def test_compare_numeric_formatting_is_equivalent(self):
+        recs = [{'values': {'金额': 14871.5, '编码': '001'}}]
+        targets = [{'values': {'金额': '14871.50', '编码': '1'}}]
+        cmp = validate.compare_targets(recs, targets)
+        self.assertEqual(cmp['field_accuracy'], 0.5)
+        self.assertEqual(cmp['diffs'], [
+            {'index': 0, 'field': '编码', 'expected': '1', 'actual': '001'}])
 
     def test_dry_run_bad_spec_no_crash(self):
         d = validate.dry_run({'spec_version': 2, 'fields': [],

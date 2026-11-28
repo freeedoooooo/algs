@@ -11,9 +11,14 @@ c1_structure/tasklog.py — 结构化运行日志（唯一真相源）。
   · level: info / ok / warn / error / stage；stage 是短阶段名（ocr/table/…）。
   · t 是相对运行开始的秒数，ms 是本条相对上一条的耗时，页面直接显示。
 """
+import logging
 import os
 import time
 import threading
+
+from .logging_config import log_level
+
+logger = logging.getLogger(__name__)
 
 LEVEL_ORDER = {'info': 0, 'ok': 1, 'stage': 2, 'warn': 3, 'error': 4}
 _LEVEL_TAG = {'info': 'INFO', 'ok': ' OK ', 'stage': 'STAGE',
@@ -53,7 +58,7 @@ class TaskLog:
             line = '[{:>7}s +{:>5}ms] [{:<5}] [{:<9}] {}'.format(
                 row['t'], row['ms'], _LEVEL_TAG.get(row['level'], 'INFO'),
                 row['stage'], row['msg'])
-            print(line, flush=True)
+            logger.log(log_level(row['level']), '%s', line)
             if self.path:
                 try:
                     with open(self.path, 'a', encoding='utf-8') as f:

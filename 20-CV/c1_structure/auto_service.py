@@ -82,6 +82,10 @@ def _run(paths, params, log, task_ctx, intent, rule_generator):
         doc = content.get_extract(file_id)
         if doc is None:
             raise RuntimeError('解析产物缺失，自动处理停止')
+        with service.LOCK:
+            service.STATE['progress'] = 45
+        log.stage('parse', '解析完成，已生成页面、文本与表格产物',
+                  event='parse_complete')
 
         tpl = _find_reusable_rule(doc, intent, log)
         if tpl is None:
@@ -89,6 +93,7 @@ def _run(paths, params, log, task_ctx, intent, rule_generator):
                     'datasource_id': intent.get('datasource_id')}
             if rule_generator is None:
                 from .agent import rule_author
+                log.stage('rule', '开始根据自然语言生成抽取规则')
                 result = rule_author.generate_rule(
                     doc, user_prompt=intent.get('description') or intent.get('prompt'),
                     refs=refs, doc_type=f.get('doc_type'), content=content,
@@ -97,6 +102,11 @@ def _run(paths, params, log, task_ctx, intent, rule_generator):
                 result = rule_generator(doc, intent)
 
             spec = result.spec if hasattr(result, 'spec') else result
+            if rule_generator is None:
+                meta = getattr(result, 'meta', None) or {}
+                log.ok('rule', '规则生成完成：provider={} model={} 字段={}'.format(
+                    meta.get('provider') or '-', meta.get('model') or '-',
+                    len(spec.get('fields') or []) if isinstance(spec, dict) else 0))
             schema = result.schema if hasattr(result, 'schema') else {
                 'fields': [{'name': f.get('target'), 'type': f.get('type') or 'text'}
                            for f in (spec or {}).get('fields') or []
@@ -118,6 +128,7 @@ def _run(paths, params, log, task_ctx, intent, rule_generator):
                 rule_name, description=description[:200], schema=schema,
                 mapping=spec, transform={})
             tpl = service.resolve_rule(version_id)
+        log.stage('extract', '开始按规则抽取中文字段')
         recs = service.extract_records(doc, tpl)
         if (tpl.get('mapping_json') or {}).get('spec_version') == 2:
             from . import smart_extract
@@ -135,7 +146,13 @@ def _run(paths, params, log, task_ctx, intent, rule_generator):
             rule={'name': tpl['name'], 'version': tpl['version']}))
         catalog.set_rule(file_id, tpl['version_id'])
         catalog.set_state(file_id, 'to_review', None)
+        with service.LOCK:
+            service.STATE['progress'] = 80
+        log.ok('extract', '抽取完成：{} 条记录，规则 {} v{}'.format(
+            len(recs), tpl.get('name'), tpl.get('version')), event='extract_complete')
 
+        with service.LOCK:
+            service.STATE['progress'] = 90
         plan = load_planner.plan_for_file(file_id, intent)
         if plan['status'] == 'ready' and intent.get('auto_load', True):
             create_and_load(file_id, plan, background=False)

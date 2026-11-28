@@ -5,12 +5,15 @@
   · lineage 返回「参与计算的元数据链」（定义配置），不下钻行锚点。
   · replay 用当前定义重算一次结果，与存储值比对。
 """
+import logging
+
 from .. import store
 from ..store import index_repo, rule_repo, frame_repo
 from ..store.errors import BadRequest, NotFound
 from . import engine
 
 _LABEL = {'index': '指标', 'rule': '规则', 'frame': '框架'}
+logger = logging.getLogger(__name__)
 _VALUE_FIELD = {'index': 'index_value', 'rule': 'rule_value',
                 'frame': 'frame_value'}
 
@@ -40,14 +43,17 @@ def _latest(scope, def_id):
 
 
 def execute_index(index_id):
+    logger.info('指标计算开始：index_id=%s', index_id)
     defn = _def('index', index_id)
     value = engine.compute_index(defn)
     vid = index_repo.add_value(index_id, value)
+    logger.info('指标计算完成：index_id=%s value_id=%s', index_id, vid)
     return {'def_id': index_id, 'value_id': vid, 'value': value}
 
 
 def execute_rule(rule_id):
     """从规则定义引用指标，取各指标最新值，比较得结论。"""
+    logger.info('规则计算开始：rule_id=%s', rule_id)
     defn = _def('rule', rule_id)
     alias_values = {}
     for ref in defn['index_refs_json']:
@@ -58,11 +64,13 @@ def execute_rule(rule_id):
         alias_values[ref['alias']] = val
     value = engine.compute_rule(defn, alias_values)
     vid = rule_repo.add_value(rule_id, value)
+    logger.info('规则计算完成：rule_id=%s value_id=%s', rule_id, vid)
     return {'def_id': rule_id, 'value_id': vid, 'value': value}
 
 
 def execute_frame(frame_id):
     """从框架定义引用规则，取各规则最新结论，组合得结果。"""
+    logger.info('框架计算开始：frame_id=%s', frame_id)
     defn = _def('frame', frame_id)
     rule_values = []
     combine = defn['combine']
@@ -77,6 +85,7 @@ def execute_frame(frame_id):
                             'veto': bool(ref.get('veto'))})
     value = engine.compute_frame(defn, rule_values)
     vid = frame_repo.add_value(frame_id, value)
+    logger.info('框架计算完成：frame_id=%s value_id=%s', frame_id, vid)
     return {'def_id': frame_id, 'value_id': vid, 'value': value}
 
 

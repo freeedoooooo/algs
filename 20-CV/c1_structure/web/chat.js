@@ -1,7 +1,8 @@
 (function(){
   'use strict';
-  var file=null,currentIntent=null,fileId=null,phase='idle',timer=null;
+  var file=null,currentIntent=null,currentPlan=null,fileId=null,phase='idle',timer=null;
   var planNode=null,progressNode=null,seenLogs=0,busy=false,expanded=false;
+  var stageNodes={},stagePending={},tableOptions=null;
   var allowedFile=/\.(png|jpe?g|bmp|webp|tiff?|pdf|csv|txt|md)$/i,maxFileSize=20*1024*1024;
   var $=function(id){return document.getElementById(id);};
   var statusNames={ready:'等待确认',waiting_target:'等待选择目标表',target_missing:'目标表不存在',
@@ -74,6 +75,8 @@
     var logs=status.logs||[],fresh=logs.slice(seenLogs);seenLogs=logs.length;
     fresh.forEach(function(row){
       var line=document.createElement('div');line.textContent=row.msg||'';progressNode.log.appendChild(line);
+      if(row.event==='parse_complete')loadStageResult('parse');
+      if(row.event==='extract_complete')loadStageResult('extract');
     });
     progressNode.log.scrollTop=progressNode.log.scrollHeight;scrollBottom();
   }
@@ -82,6 +85,41 @@
     var spinner=progressNode.body.querySelector('.spinner');if(spinner)spinner.remove();
     if(error){progressNode.body.querySelector('b').textContent='处理未完成';}
     progressNode.bar.style.width='100%';
+  }
+  function renderStageResult(kind,data){
+    if(!data||!['ready','empty'].includes(data.status))return;
+    if(stageNodes[kind])stageNodes[kind].remove();
+    var body=addMessage('assistant','','stage-card');
+    stageNodes[kind]=body;
+    if(kind==='parse'){
+      var report=data.report_available?' · <a href="/files/'+fileId+'/'+encodeURIComponent('对照报告.html')+'" target="_blank">打开对照报告 →</a>':'';
+      body.innerHTML='<div class="stage-head"><span class="badge green">解析完成</span><b>'+escHtml(data.file_name||'附件')+'</b></div>'+
+        '<div class="stage-stats"><span><b>'+escHtml(data.page_count||0)+'</b> 页</span><span><b>'+escHtml(data.text_fragments||0)+'</b> 个文本片段</span><span><b>'+escHtml(data.table_count||0)+'</b> 张表</span></div>'+
+        '<p class="muted">文本块 '+escHtml(data.blocks||0)+' · 文本约 '+escHtml(data.text_chars||0)+' 字'+report+'</p>';
+      return;
+    }
+    var fields=data.fields||[],samples=data.samples||[];
+    var html='<div class="stage-head"><span class="badge green">抽取完成</span><b>'+escHtml(data.record_count||0)+' 条记录</b></div>'+
+      '<div class="field-chips">'+fields.map(function(name){return '<span>'+escHtml(name)+'</span>';}).join('')+'</div>';
+    if(fields.length&&samples.length){
+      html+='<div class="tblscroll stage-sample"><table class="list"><thead><tr>'+fields.map(function(name){return '<th>'+escHtml(name)+'</th>';}).join('')+
+        '</tr></thead><tbody>'+samples.map(function(row){return '<tr>'+fields.map(function(name){var value=row[name];return '<td>'+escHtml(value===undefined||value===null||value===''?'—':value)+'</td>';}).join('')+'</tr>';}).join('')+
+        '</tbody></table></div><p class="muted">仅展示前 '+samples.length+' 条样例 · 有血缘记录 '+escHtml(data.anchored_records||0)+' 条</p>';
+    }else{html+='<p class="muted">没有可展示的抽取记录。</p>';}
+    html+='<p class="muted"><a href="/preview?file='+fileId+'" target="_blank">打开完整结果、血缘与复核 →</a></p>';
+    body.innerHTML=html;
+  }
+  function loadStageResult(kind){
+    if(stageNodes[kind])return Promise.resolve();
+    if(kind==='extract'&&stagePending.parse)return stagePending.parse.then(function(){return loadStageResult('extract');});
+    if(!fileId)return Promise.resolve();
+    if(stagePending[kind])return stagePending[kind];
+    stagePending[kind]=api('/api/sources/'+fileId+'/stage-results').then(function(result){
+      renderStageResult(kind,result[kind]);
+    }).catch(function(err){
+      addMessage('assistant','<div class="result-box err">'+escHtml((kind==='parse'?'解析':'抽取')+'结果读取失败：'+err.message)+'</div>');
+    }).finally(function(){stagePending[kind]=null;});
+    return stagePending[kind];
   }
   function poll(){
     clearTimeout(timer);
@@ -101,8 +139,9 @@
   function finishPlan(status){
     phase='idle';
     return api('/api/sources/'+fileId+'/load-plan').then(function(plan){
-      currentIntent=plan;renderPlan(plan);
+      currentPlan=plan;renderPlan(plan);
       stateBadge(statusNames[plan.status]||plan.status,plan.status==='ready'?'green':'yellow');
+      loadStageResult('parse');loadStageResult('extract');
       if(status.error)addMessage('assistant','<div class="result-box err">'+escHtml(status.error)+'</div>');
       setBusy(false);
     }).catch(function(err){
@@ -116,7 +155,8 @@
     if(expanded)setComposerExpanded(false);
     addMessage('user','<span class="file-ref">附件：'+escHtml(file.name)+'</span>'+escHtml(description));
     var upload=file;setFile(null);$('prompt').value='';updateSend();
-    currentIntent={description:description,auto_load:false};fileId=null;planNode=null;
+    currentIntent={description:description,auto_load:false};currentPlan=null;fileId=null;planNode=null;
+    stageNodes={};stagePending={};tableOptions=null;
     setBusy(true);stateBadge('正在上传','blue');addProgress('正在提交附件与处理需求');
     b64(upload).then(function(data){
       return api('/api/auto/process',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -134,13 +174,42 @@
     if(!fileId||busy)return;
     setBusy(true);if(button)button.disabled=true;
     currentIntent=Object.assign({},currentIntent,patch,{auto_load:false});
+    delete currentIntent.mapping;delete currentIntent.confirmed;
     api('/api/sources/'+fileId+'/load-plan',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({intent:currentIntent})}).then(function(plan){
-      currentIntent=plan;renderPlan(plan);stateBadge(statusNames[plan.status]||plan.status,plan.status==='ready'?'green':'yellow');
+      currentPlan=plan;renderPlan(plan);stateBadge(statusNames[plan.status]||plan.status,plan.status==='ready'?'green':'yellow');
       setBusy(false);
     }).catch(function(err){
       setBusy(false);if(button)button.disabled=false;
       addMessage('assistant','<div class="result-box err">'+escHtml(err.message)+'</div>');
+    });
+  }
+  function addSelectOption(select,value,label){
+    var option=document.createElement('option');option.value=String(value);option.textContent=label;select.appendChild(option);
+  }
+  function fillOtherTables(panel){
+    var dsSelect=panel.querySelector('[data-other-datasource]'),tableSelect=panel.querySelector('[data-other-table]');
+    var status=panel.querySelector('[data-other-status]'),button=panel.querySelector('[data-choose-other]');
+    var previous=dsSelect.value;dsSelect.innerHTML='';tableSelect.innerHTML='';button.disabled=true;
+    (tableOptions.datasources||[]).forEach(function(ds){addSelectOption(dsSelect,ds.id,ds.name+' (#'+ds.id+')');});
+    if(previous&&tableOptions.datasources.some(function(ds){return String(ds.id)===previous;}))dsSelect.value=previous;
+    function fillTables(){
+      tableSelect.innerHTML='';button.disabled=true;
+      var items=(tableOptions.tables||[]).filter(function(item){return String(item.datasource_id)===dsSelect.value;});
+      items.forEach(function(item){addSelectOption(tableSelect,item.table,item.table);});
+      if(items.length){button.disabled=false;status.textContent='共 '+items.length+' 张业务表';}
+      else{addSelectOption(tableSelect,'','该业务库没有可选业务表');status.textContent='该业务库没有可选业务表';}
+    }
+    dsSelect.onchange=fillTables;fillTables();
+    if(tableOptions.warnings&&tableOptions.warnings.length)status.textContent+='；'+tableOptions.warnings.join('；');
+  }
+  function openOtherTables(panel,button){
+    panel.hidden=false;button.hidden=true;
+    if(tableOptions){fillOtherTables(panel);return;}
+    api('/api/load/business-table-options').then(function(result){
+      tableOptions=result;fillOtherTables(panel);
+    }).catch(function(err){
+      panel.querySelector('[data-other-status]').textContent='业务表读取失败：'+err.message;
     });
   }
   function renderPlan(plan){
@@ -172,6 +241,14 @@
           (r.comment?' · '+escHtml(r.comment):'')+'</span></div><button type="button" class="btn ghost mini" data-choose="'+i+'">选择此表</button></div>';
       }).join('')+'</div></div>';
     }
+    html+='<div class="plan-section other-tables"><h3>其他目标表</h3>'+
+      '<p>推荐列表没有需要的表？可从业务库已有表中选择；平台产品配置表不会列出。</p>'+
+      '<button type="button" class="btn ghost mini" data-other-tables>选择其他现有表</button>'+
+      '<div class="other-table-panel" data-other-panel hidden>'+
+      '<label>业务库<select data-other-datasource></select></label>'+
+      '<label>目标表<select data-other-table></select></label>'+
+      '<div class="plan-actions"><button type="button" class="btn mini" data-choose-other disabled>使用此表重新规划</button>'+
+      '<span class="muted" data-other-status>正在读取业务表…</span></div></div></div>';
     if(mapping.field_map){
       var fmap=mapping.field_map||{},conf=mapping.confidence||{},amb=mapping.ambiguous_fields||{};
       var names=Object.keys(fmap);(mapping.unmapped_fields||[]).forEach(function(n){if(names.indexOf(n)<0)names.push(n);});
@@ -192,8 +269,17 @@
     html+='</div>';planNode.innerHTML=html;
     planNode.querySelectorAll('[data-choose]').forEach(function(btn){
       btn.onclick=function(){var r=recs[Number(btn.getAttribute('data-choose'))];
-        replan({target_table:r.table,datasource_id:r.datasource_id,field_map:{}},btn);};
+        replan({target_table:r.table,datasource_id:r.datasource_id,field_map:{},field_aliases:{}},btn);};
     });
+    var other=planNode.querySelector('[data-other-tables]'),otherPanel=planNode.querySelector('[data-other-panel]');
+    if(other)other.onclick=function(){openOtherTables(otherPanel,other);};
+    var chooseOther=planNode.querySelector('[data-choose-other]');
+    if(chooseOther)chooseOther.onclick=function(){
+      var ds=otherPanel.querySelector('[data-other-datasource]').value;
+      var table=otherPanel.querySelector('[data-other-table]').value;
+      if(!ds||!table)return;
+      replan({target_table:table,datasource_id:Number(ds),field_map:{},field_aliases:{}},chooseOther);
+    };
     var save=planNode.querySelector('[data-save-map]');
     if(save)save.onclick=function(){
       var patch={field_map:{}};
@@ -208,7 +294,7 @@
   function confirmLoad(){
     if(busy||!fileId)return;
     var button=planNode&&planNode.querySelector('[data-confirm]');
-    var plan=currentIntent||{},target=plan.target||{};
+    var plan=currentPlan||{},target=plan.target||{};
     if(!window.confirm('确认将抽取结果写入 '+target.table+'（数据源 #'+target.datasource_id+'）？\n此操作会修改业务数据库。'))return;
     setBusy(true);if(button)button.disabled=true;addProgress('正在创建入库映射并写入数据库');
     api('/api/sources/'+fileId+'/load-plan/apply',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -233,7 +319,8 @@
   function newChat(){
     if(busy)return;
     if(expanded)setComposerExpanded(false);
-    clearTimeout(timer);fileId=null;currentIntent=null;phase='idle';planNode=null;progressNode=null;setFile(null);
+    clearTimeout(timer);fileId=null;currentIntent=null;currentPlan=null;phase='idle';planNode=null;progressNode=null;
+    stageNodes={};stagePending={};tableOptions=null;setFile(null);
     $('prompt').value='';$('messages').querySelectorAll('.msg').forEach(function(n){n.remove();});
     $('welcome').hidden=false;stateBadge('准备就绪','blue');updateSend();
   }

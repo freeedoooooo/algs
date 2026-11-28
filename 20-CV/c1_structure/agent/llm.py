@@ -12,11 +12,15 @@ live 时优先走 QoderCN / Qoder Agent SDK，未配置 PAT 时复用 C1_LLM_* O
 """
 import asyncio
 import json
+import logging
 import re
+import time
 import urllib.error
 import urllib.request
 
 from .. import config
+
+logger = logging.getLogger(__name__)
 
 
 class LLLError(Exception):
@@ -94,15 +98,27 @@ def _provider(spec=None):
 def raw_call(prompt, spec=None):
     """单次受限模型查询，返回解析后的 dict（不修复、不校验）。"""
     spec = spec or {}
-    provider, _ = _provider(spec)
-    if provider in ('qoder_agent_sdk', 'qodercn_agent_sdk'):
-        return _qoder_call(prompt, spec)
-    if provider == 'openai_compatible':
-        return _openai_call(prompt, spec)
-    raise LLMUnconfigured(
-        'Agent 模型未配置：需设置 QODERCN_PERSONAL_ACCESS_TOKEN '
-        '（或 QODER_PERSONAL_ACCESS_TOKEN），'
-        '或完整配置 C1_LLM_BASE_URL / C1_LLM_API_KEY / C1_LLM_MODEL')
+    provider, model = _provider(spec)
+    if provider not in ('qoder_agent_sdk', 'qodercn_agent_sdk',
+                        'openai_compatible'):
+        raise LLMUnconfigured(
+            'Agent 模型未配置：需设置 QODERCN_PERSONAL_ACCESS_TOKEN '
+            '（或 QODER_PERSONAL_ACCESS_TOKEN），'
+            '或完整配置 C1_LLM_BASE_URL / C1_LLM_API_KEY / C1_LLM_MODEL')
+    started = time.monotonic()
+    logger.info('模型调用开始：provider=%s model=%s', provider, model)
+    try:
+        if provider in ('qoder_agent_sdk', 'qodercn_agent_sdk'):
+            result = _qoder_call(prompt, spec)
+        else:
+            result = _openai_call(prompt, spec)
+    except LLLError as exc:
+        logger.error('模型调用失败：provider=%s model=%s error=%s',
+                     provider, model, type(exc).__name__)
+        raise
+    logger.info('模型调用完成：provider=%s model=%s elapsed=%.2fs',
+                provider, model, time.monotonic() - started)
+    return result
 
 
 def _qoder_call(prompt, spec):

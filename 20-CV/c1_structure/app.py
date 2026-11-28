@@ -28,6 +28,7 @@ DB 不可用显式 503/failed，不降级。
 """
 import base64
 import importlib
+import logging
 import os
 import sys
 import tempfile
@@ -56,6 +57,8 @@ def _load(name):
 
 
 config = _load('config')  # 必须在 paddle 相关导入之前：设置模型源环境变量
+_load('logging_config').configure_logging()
+logger = logging.getLogger(PKG + '.app')
 params_mod = _load('params')  # 调试参数 schema / 校验（纯 Python，不碰模型）
 service = _load('service')  # 运行引擎：STATE/LOCK、launch、task_batch
 from fastapi import FastAPI, Request
@@ -80,7 +83,7 @@ async def lifespan(_app):
         engines = _load('pipeline.engines')
         engines.ocr()
         engines.structure()
-        print('>> 模型预热完成（PaddleOCR + PPStructureV3）')
+        logger.info('模型预热完成（PaddleOCR + PPStructureV3）')
     yield
 
 
@@ -115,9 +118,10 @@ async def agent_llm_error_handler(_request, exc):
 async def fallback_error_handler(_request, exc):
     import pymysql
     if isinstance(exc, (pymysql.MySQLError, OSError, LookupError)):
-        print('>> 平台库不可用：{}: {}'.format(type(exc).__name__, exc))
+        logger.error('平台库不可用：error_type=%s', type(exc).__name__)
         return JSONResponse({'ok': False, 'error': '平台库不可用'},
                             status_code=503)
+    logger.exception('未处理请求异常：%s: %s', type(exc).__name__, exc)
     return JSONResponse({'ok': False, 'error': '服务器内部错误'},
                         status_code=500)
 
@@ -524,6 +528,18 @@ def api_sources_pipeline(file_id: int):
                 'load': load,
                 'load_actions': actions,
             }}
+
+
+@app.get('/api/sources/{file_id}/stage-results')
+def api_sources_stage_results(file_id: int):
+    """聊天阶段卡片：解析/抽取轻量摘要，不返回完整文件。"""
+    _file_or_404(file_id)
+    summary = _load('stage_summary')
+    content = _load('store.content')
+    artifacts = [a['name'] for a in _load('store.artifact').list(file_id)]
+    return {'ok': True,
+            'parse': summary.parse_summary(content.get_extract(file_id), artifacts),
+            'extract': summary.extract_summary(content.get_records(file_id))}
 
 
 @app.get('/api/extract-rules')
@@ -986,6 +1002,30 @@ def api_load_tables(datasource_id: int = None):
     return {'items': _load('store.catalog').list_load_tables(datasource_id)}
 
 
+@app.get('/api/load/business-table-options')
+def api_load_business_table_options():
+    """聊天选择其他目标表：只返回业务表，排除 c1_ 平台产品配置表。"""
+    catalog = _load('store.catalog')
+    loader = _load('store.loader')
+    datasources, tables, warnings = [], [], []
+    for ds in catalog.list_datasources():
+        datasources.append({'id': ds['id'], 'name': ds.get('name')})
+        try:
+            names = loader.list_business_tables(ds)
+        except Exception as exc:
+            warnings.append('数据源 {} 暂不可用，已跳过'.format(
+                ds.get('name') or ds['id']))
+            logger.warning('可选业务表读取失败：datasource_id=%s error=%s',
+                           ds['id'], type(exc).__name__)
+            continue
+        tables.extend({'datasource_id': ds['id'], 'table': name}
+                      for name in names)
+    logger.info('可选业务表读取完成：datasources=%s tables=%s skipped=%s',
+                len(datasources), len(tables), len(warnings))
+    return {'ok': True, 'datasources': datasources, 'tables': tables,
+            'warnings': warnings}
+
+
 @app.post('/api/load/tables')
 async def api_load_table_add(request: Request):
     body = await _json_body(request)
@@ -1417,7 +1457,7 @@ async def api_sources_parse(file_id: int, request: Request):
 if __name__ == '__main__':
     import uvicorn
 
-    print('>> 结构化工具 地址： http://{}:{}'.format(config.HOST, config.PORT))
-    print('>> 结构化工具 地址： http://127.0.0.1:{}'.format(config.PORT))
-    print('>> 结构化工具 存储： {}'.format(_load('store.db').safe_detail(config.PLATFORM_DB)))
-    uvicorn.run(app, host=config.HOST, port=config.PORT, log_level='warning')
+    logger.info('结构化工具地址：http://%s:%s', config.HOST, config.PORT)
+    logger.info('结构化工具存储：%s', _load('store.db').safe_detail(config.PLATFORM_DB))
+    uvicorn.run(app, host=config.HOST, port=config.PORT, log_level='info',
+                log_config=_load('logging_config').uvicorn_log_config())

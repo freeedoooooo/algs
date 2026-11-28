@@ -44,6 +44,19 @@ class LoadPlannerTests(unittest.TestCase):
         self.assertEqual('waiting_target', plan['status'])
         self.assertEqual('inspection_record', plan['recommendations'][0]['table'])
 
+    def test_recommendations_exclude_platform_configuration_tables(self):
+        plan = build_plan(self.record_set, {'description': '设备巡检记录'},
+                          [schema('c1_doc_file'), schema('biz_inspection')])
+        self.assertEqual('waiting_target', plan['status'])
+        self.assertEqual(['biz_inspection'],
+                         [r['table'] for r in plan['recommendations']])
+
+    def test_platform_table_cannot_be_selected_as_business_target(self):
+        plan = build_plan(self.record_set, {'target_table': 'c1_doc_file'},
+                          [schema('c1_doc_file')])
+        self.assertEqual('target_missing', plan['status'])
+        self.assertIsNone(plan['mapping'])
+
     def test_missing_target_does_not_plan_load(self):
         plan = build_plan(self.record_set, {'target_table': 'missing'}, [schema()])
         self.assertEqual('target_missing', plan['status'])

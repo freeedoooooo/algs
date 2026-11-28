@@ -1,8 +1,11 @@
 """入库规划：中文字段 → 现有表推荐 / 目标表字段映射（无写库副作用）。"""
 import hashlib
 import json
+import logging
 
 from . import catalog, content, loader, semantic_load
+
+logger = logging.getLogger(__name__)
 
 INTENT_JSON = 'auto-intent.json'
 LOAD_PLAN_JSON = 'auto-load-plan.json'
@@ -37,7 +40,8 @@ def build_plan(record_set, intent, table_schemas, *, warnings=None):
                 'target': None, 'mapping': None,
                 'recommendations': [], 'warnings': warnings}
 
-    schemas = list(table_schemas or [])
+    schemas = [s for s in (table_schemas or [])
+               if loader.is_business_table((s or {}).get('name'))]
     target_table = _target_name(intent.get('target_table') or intent.get('table'))
     datasource_id = intent.get('datasource_id')
     try:
@@ -118,6 +122,7 @@ def build_plan(record_set, intent, table_schemas, *, warnings=None):
 
 def plan_for_file(file_id, intent):
     """读取 records 与现有业务库表结构，生成并保存入库规划。"""
+    logger.info('开始表推荐与字段映射：file_id=%s', file_id)
     record_set = content.get_records(file_id)
     intent = normalize_intent(intent)
     datasources = catalog.list_datasources()
@@ -129,13 +134,18 @@ def plan_for_file(file_id, intent):
             continue
         try:
             schemas.extend(loader.list_table_schemas(ds))
-        except Exception:
+        except Exception as exc:
             if requested_ds not in (None, ''):
                 raise
             warnings.append('数据源 {} 暂不可用，已跳过'.format(ds.get('name')
                                                        or ds.get('id')))
+            logger.warning('业务表结构读取失败：datasource_id=%s error=%s',
+                           ds.get('id'), type(exc).__name__)
     plan = build_plan(record_set, intent or {}, schemas, warnings=warnings)
     save_plan(file_id, plan)
+    logger.info('入库规划完成：file_id=%s status=%s business_tables=%s recommendations=%s',
+                file_id, plan.get('status'), len(schemas),
+                len(plan.get('recommendations') or []))
     return plan
 
 

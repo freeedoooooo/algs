@@ -86,17 +86,30 @@ uvicorn c1_structure.app:app --host 0.0.0.0 --port 8765 --workers 1    # 生产�
 | `C1_STRUCTURE_WARMUP` | `0` | 设 `1` 则启动时预加载模型 |
 | `PADDLE_PDX_CACHE_HOME` | `~/.paddlex` | 模型缓存根目录，离线部署必设 |
 | `C1_SMART_STUB` | `stub` | `stub` 不调用模型；`live` 才走真实模型 |
-| `QODER_PERSONAL_ACCESS_TOKEN` | 空 | 规则生成首选的 Qoder PAT |
+| `QODERCN_PERSONAL_ACCESS_TOKEN` | 空 | QoderCN PAT，规则生成首选 |
+| `QODER_PERSONAL_ACCESS_TOKEN` | 空 | 国际版 Qoder PAT；配置 QoderCN PAT 时优先使用 QoderCN |
+| `C1_QODER_REGION` | 按 PAT 自动判断 | `cn` / `global`，显式指定 SDK 区域 |
 | `C1_QODER_MODEL` | 空 | Qoder 模型 ID；留空使用账户默认模型 |
+| `C1_QODER_CLI_PATH` | 空 | 可选：指定 SDK 自带的 `qoderclicn.exe` / `qodercli.exe` |
+| `C1_QODER_TIMEOUT` | `120` | Qoder SDK 调用超时秒数 |
+| `C1_QODER_TMP_DIR` | 空 | 可选：Windows 原生模块解压与认证临时目录 |
 | `C1_LLM_BASE_URL` | 空 | OpenAI 兼容端点根地址，如 `https://api.example.com/v1` |
 | `C1_LLM_API_KEY` | 空 | OpenAI 兼容端点密钥 |
 | `C1_LLM_MODEL` | 空 | 智能抽取模型；未配 Qoder PAT 时也用于规则生成回退 |
 | `C1_LLM_TIMEOUT` | `60` | OpenAI 兼容调用超时秒数 |
 | `C1_LLM_TEMPERATURE` | `0` | OpenAI 兼容调用温度 |
+| `C1_LOG_LEVEL` | `INFO` | 项目控制台日志级别；输出格式固定为 `时间 | 级别 | 模块 | 消息` |
 
-规则生成在 `live` 模式下优先使用 Qoder PAT；PAT 缺失时，只有 `C1_LLM_BASE_URL`、
+规则生成在 `live` 模式下优先使用 QoderCN / Qoder PAT；PAT 缺失时，只有 `C1_LLM_BASE_URL`、
 `C1_LLM_API_KEY`、`C1_LLM_MODEL` 三项都配置完整才会回退到 OpenAI 兼容端点，否则显式报错。
+Qoder PAT 用于规则生成，不会自动成为 `smart_extract` / v3 的 OpenAI 兼容端点；这两条路径需要分别配置。
 本地可把上述键写入已忽略的 `data/secrets.json`，不要提交密钥。
+2026-11-28 已用 QoderCN PAT 完成临时端口真实 API 验收：CSV 抽取 2 条记录、推荐 5 张现有表，
+在 `waiting_target` 停止且未写业务库；154 个单元测试通过。
+同日完成聊天增强验收：解析/抽取摘要与阶段事件正常，其他表选择只返回 3 张业务表，
+`c1_doc_file` 被拒绝；在聊天页实际切换业务表后进入 `mapping_incomplete`，未写业务库，
+163 个单元测试通过。验收流程见
+[方案文档第五阶段](docs/design-agentic-extraction.md#第五阶段聊天式处理入口已实现)。
 
 容器化时把 `official_models` 缓存打进镜像，`CMD python app.py`、`HEALTHCHECK curl -f http://127.0.0.1:8765/healthz`，并保持 `--workers 1`。
 
@@ -124,6 +137,8 @@ c1_structure/
 ├── config.py                  唯一配置源：模型 / DPI / 阈值 / 路径 / 环境变量
 ├── params.py                  调试参数 schema（顺序=优先级）+ 校验 + 快照
 ├── tasklog.py                 结构化运行日志（service.STATE + logs/file_<id>.log）
+├── logging_config.py          Python 标准控制台日志格式与 uvicorn 配置
+├── stage_summary.py           聊天解析/抽取轻量摘要
 ├── app.py                     FastAPI 路由 + 请求校验 + 包自举 + 异常处理器
 ├── service.py                 运行引擎：STATE/LOCK + launch + launch_load/run_load（入库）
 ├── auto_service.py            自然语言自动编排：解析→规则→抽取→推荐/映射→入库
@@ -169,8 +184,8 @@ c1_structure/
 │   ├── builder.py             组装对照报告（内联 web/ 资产，每资料一份）
 │   └── templates/             Jinja2 HTML 模板（autoescape，结构与逻辑分离）
 ├── web/                       全部前端资产（/static 挂载于此）
-│   ├── <page>.html/js/css     八页：home / sources(资料·唯一入口) / parse(解析) /
-│   │                          preview(预览) / review(校验) / extract / rules / dashboard
+│   ├── <page>.html/js/css     页面：home / sources(资料·唯一入口) / parse(解析) /
+│   │                          preview(预览) / review(校验) / extract / rules / dashboard / chat
 │   ├── shell.css/js           全局壳＋列表页共用小件＋回执抽屉
 │   ├── stage.css/js           舞台共用件（校验台＋报告）
 │   ├── wizard.css/js          四步入库向导
@@ -351,8 +366,12 @@ IDE 高亮、改结构 / 样式不必碰 Python 逻辑。迁移经「重构前�
   页面「下载日志」或 `GET /api/logs` 可取当前资料纯文本。
 
 实现在 `tasklog.py`：一个 `TaskLog` 实例对应一次运行，同时写 `service.STATE['logs']`
-（页面轮询 `/api/status` 拿结构化数组）、`logs/task_<id>.log` 和控制台（同格式实时打印）。**pipeline 只认一个
+（页面轮询 `/api/status` 拿结构化数组）、`logs/file_<id>.log` 和控制台。**pipeline 只认一个
 `emit(level, stage, msg)` 回调**，由 service 注入，解析层不 import Web 层，保持分层干净。
+
+控制台统一由 `logging_config.py` 配置为 Python 标准格式 `时间 | 级别 | 模块 | 消息`；
+规则生成、模型调用、手动抽取、复核、表推荐/映射、计算和入库预检也输出到控制台。
+任务文件与页面结构化日志仍保留相对时间、阶段和原级别，不输出密钥、DSN、提示词或完整业务记录。
 
 ## 调试参数面板（badcase 用，按优先级排）
 
