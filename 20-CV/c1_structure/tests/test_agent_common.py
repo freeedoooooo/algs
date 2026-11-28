@@ -1,7 +1,9 @@
 """P0-① agent 公共层：LLM 注入/Stub、上下文压缩、静态校验与干跑对拍。"""
 import asyncio
 import copy
+import json
 import unittest
+import urllib.error
 from types import SimpleNamespace
 from unittest import mock
 
@@ -52,6 +54,25 @@ class _Options:
         self.kwargs = kwargs
 
 
+class _HTTPResponse:
+    def __init__(self, content):
+        self.content = content
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def read(self):
+        return self.content
+
+
+def _model_response(text):
+    payload = {'choices': [{'message': {'content': text}}]}
+    return _HTTPResponse(json.dumps(payload).encode('utf-8'))
+
+
 def _fake_sdk(batches):
     calls = []
 
@@ -81,11 +102,15 @@ class LLMTest(unittest.TestCase):
             'p', {}, llm=lambda p, s: {'spec_version': 2})
         self.assertEqual(obj, {'spec_version': 2})
         self.assertFalse(meta['stub'])
+        self.assertEqual(meta['provider'], 'injected')
+        self.assertEqual(meta['model'], 'injected')
 
     def test_stub_no_network(self):
         obj, meta = llm.call_json('p', {}, stub=lambda p: {'stub': 1})
         self.assertEqual(obj, {'stub': 1})
         self.assertTrue(meta['stub'])
+        self.assertEqual(meta['provider'], 'stub')
+        self.assertEqual(meta['model'], 'stub')
 
     def test_repair_on_bad_json(self):
         calls = []
@@ -102,14 +127,104 @@ class LLMTest(unittest.TestCase):
         self.assertIn('上次返回的不是合法 JSON', calls[1])
 
     def test_unconfigured_raises(self):
-        import c1_structure.config as cfg
-        old = cfg.QODER_PERSONAL_ACCESS_TOKEN
-        try:
-            cfg.QODER_PERSONAL_ACCESS_TOKEN = ''
+        with mock.patch.multiple(
+                llm.config, QODER_PERSONAL_ACCESS_TOKEN='',
+                LLM_BASE_URL='', LLM_API_KEY='', LLM_MODEL=''), \
+                mock.patch.object(llm.urllib.request, 'urlopen') as urlopen:
             with self.assertRaises(llm.LLMUnconfigured):
                 llm.raw_call('p')
-        finally:
-            cfg.QODER_PERSONAL_ACCESS_TOKEN = old
+        urlopen.assert_not_called()
+
+    def test_qoder_preferred_when_both_providers_configured(self):
+        sdk, calls = _fake_sdk([[_ResultMessage('{"ok": true}')]])
+        with mock.patch.object(llm, '_load_qoder_sdk', return_value=sdk), \
+                mock.patch.object(llm, '_openai_call') as openai_call, \
+                mock.patch.multiple(
+                    llm.config, QODER_PERSONAL_ACCESS_TOKEN='pt-test',
+                    QODER_MODEL='qoder-test-model', QODER_CLI_PATH='',
+                    QODER_TIMEOUT=2, LLM_BASE_URL='https://llm.example/v1',
+                    LLM_API_KEY='llm-test-key', LLM_MODEL='llm-test-model'):
+            self.assertEqual(llm.raw_call('prompt'), {'ok': True})
+        openai_call.assert_not_called()
+        self.assertEqual(len(calls), 1)
+
+    def test_openai_fallback_success_and_metadata(self):
+        with mock.patch.multiple(
+                llm.config, QODER_PERSONAL_ACCESS_TOKEN='',
+                QODER_MODEL='qoder-model-must-not-leak',
+                LLM_BASE_URL='https://llm.example/v1/',
+                LLM_API_KEY='llm-test-key', LLM_MODEL='llm-test-model',
+                LLM_TIMEOUT=3, LLM_TEMPERATURE=0.2, SMART_STUB=False), \
+                mock.patch.object(llm.urllib.request, 'urlopen',
+                                  return_value=_model_response(
+                                      '```json\n{"ok": true}\n```')) as urlopen:
+            obj, meta = llm.call_json('prompt', {})
+        self.assertEqual(obj, {'ok': True})
+        self.assertEqual(meta['provider'], 'openai_compatible')
+        self.assertEqual(meta['model'], 'llm-test-model')
+        req = urlopen.call_args.args[0]
+        self.assertEqual(req.full_url, 'https://llm.example/v1/chat/completions')
+        self.assertEqual(req.get_method(), 'POST')
+        self.assertEqual(req.get_header('Authorization'),
+                         'Bearer llm-test-key')
+        body = json.loads(req.data.decode('utf-8'))
+        self.assertEqual(body['model'], 'llm-test-model')
+        self.assertEqual(body['temperature'], 0.2)
+        self.assertEqual(body['messages'][0]['role'], 'system')
+        self.assertEqual(body['messages'][1], {'role': 'user',
+                                               'content': 'prompt'})
+        self.assertNotIn('tools', body)
+
+    def test_openai_fallback_repairs_bad_json(self):
+        with mock.patch.multiple(
+                llm.config, QODER_PERSONAL_ACCESS_TOKEN='',
+                LLM_BASE_URL='https://llm.example/v1', LLM_API_KEY='test-key',
+                LLM_MODEL='test-model', LLM_TIMEOUT=2, SMART_STUB=False), \
+                mock.patch.object(
+                    llm.urllib.request, 'urlopen',
+                    side_effect=[_model_response('not-json'),
+                                 _model_response('{"ok": true}')]) as urlopen:
+            obj, meta = llm.call_json('base', {}, max_repair=1)
+        self.assertEqual(obj, {'ok': True})
+        self.assertEqual(meta['repairs'], 1)
+        self.assertEqual(meta['provider'], 'openai_compatible')
+        self.assertEqual(urlopen.call_count, 2)
+        repair_body = json.loads(urlopen.call_args.args[0].data.decode('utf-8'))
+        self.assertIn('上次返回的不是合法 JSON',
+                      repair_body['messages'][1]['content'])
+
+    def test_openai_fallback_requires_complete_config(self):
+        with mock.patch.multiple(
+                llm.config, QODER_PERSONAL_ACCESS_TOKEN='',
+                LLM_BASE_URL='https://llm.example/v1', LLM_API_KEY='test-key',
+                LLM_MODEL=''), \
+                mock.patch.object(llm.urllib.request, 'urlopen') as urlopen:
+            with self.assertRaises(llm.LLMUnconfigured):
+                llm.raw_call('prompt')
+        urlopen.assert_not_called()
+
+    def test_openai_auth_failure_maps_unconfigured(self):
+        error = urllib.error.HTTPError(
+            'https://llm.example/v1/chat/completions', 401, 'Unauthorized',
+            None, None)
+        with mock.patch.multiple(
+                llm.config, QODER_PERSONAL_ACCESS_TOKEN='',
+                LLM_BASE_URL='https://llm.example/v1', LLM_API_KEY='test-key',
+                LLM_MODEL='test-model', LLM_TIMEOUT=2), \
+                mock.patch.object(llm.urllib.request, 'urlopen',
+                                  side_effect=error):
+            with self.assertRaises(llm.LLMUnconfigured):
+                llm.raw_call('prompt')
+
+    def test_openai_timeout_maps_to_typed_error(self):
+        with mock.patch.multiple(
+                llm.config, QODER_PERSONAL_ACCESS_TOKEN='',
+                LLM_BASE_URL='https://llm.example/v1', LLM_API_KEY='test-key',
+                LLM_MODEL='test-model', LLM_TIMEOUT=2), \
+                mock.patch.object(llm.urllib.request, 'urlopen',
+                                  side_effect=TimeoutError()):
+            with self.assertRaises(llm.LLMTimeout):
+                llm.raw_call('prompt')
 
     def test_qoder_success_and_restricted_options(self):
         sdk, calls = _fake_sdk([

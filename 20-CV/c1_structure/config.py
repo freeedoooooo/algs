@@ -64,7 +64,7 @@ PDF_DPI = 110
 LOW_SCORE = 0.8
 MIN_TEXT_LAYER_CHARS = 50
 
-# ---- 智能抽取（OpenAI 兼容端点；凭据只从环境变量读取，不进代码/DB/日志）----
+# ---- 智能抽取与规则生成回退（OpenAI 兼容端点；凭据只从环境变量读取，不进代码/DB/日志）----
 # 例：C1_LLM_BASE_URL=https://api.example.com/v1 C1_LLM_API_KEY=... C1_LLM_MODEL=gpt-4o-mini
 LLM_BASE_URL = os.getenv('C1_LLM_BASE_URL', '').rstrip('/')
 LLM_API_KEY = os.getenv('C1_LLM_API_KEY', '')
@@ -72,10 +72,20 @@ LLM_MODEL = os.getenv('C1_LLM_MODEL', '')
 LLM_TIMEOUT = float(os.getenv('C1_LLM_TIMEOUT', '60'))
 LLM_TEMPERATURE = float(os.getenv('C1_LLM_TEMPERATURE', '0'))
 
-# ---- AI 规则生成（Qoder Agent SDK）----
+# ---- AI 规则生成（QoderCN SDK 优先，OpenAI 兼容端点回退）----
 # PAT 只从官方环境变量读取；data/secrets.json 存在时会先注入进程环境。
-QODER_PERSONAL_ACCESS_TOKEN = os.getenv('QODER_PERSONAL_ACCESS_TOKEN', '')
-# 留空使用 Qoder 账户默认模型；如需固定模型，填 Qoder 模型 ID，勿复用 QCode 模型名。
+# 未配置 PAT 时，规则生成复用完整的 C1_LLM_BASE_URL / C1_LLM_API_KEY / C1_LLM_MODEL。
+QODERCN_PERSONAL_ACCESS_TOKEN = os.getenv('QODERCN_PERSONAL_ACCESS_TOKEN', '')
+QODER_PERSONAL_ACCESS_TOKEN = (
+    QODERCN_PERSONAL_ACCESS_TOKEN
+    or os.getenv('QODER_PERSONAL_ACCESS_TOKEN', ''))
+QODER_REGION = os.getenv(
+    'C1_QODER_REGION', 'cn' if QODERCN_PERSONAL_ACCESS_TOKEN else 'global'
+).strip().lower()
+if QODER_REGION not in ('cn', 'global'):
+    raise ValueError('C1_QODER_REGION 非法值「{}」：只接受 cn / global'.format(
+        QODER_REGION))
+# 留空使用 Qoder 账户默认模型；如需固定模型，填对应区域的 Qoder 模型 ID。
 QODER_MODEL = os.getenv('C1_QODER_MODEL', '').strip()
 QODER_CLI_PATH = os.getenv('C1_QODER_CLI_PATH', '').strip()
 QODER_TIMEOUT = float(os.getenv('C1_QODER_TIMEOUT', '120'))
@@ -91,7 +101,7 @@ if QODER_TMP_DIR:
     _tempfile.tempdir = QODER_TMP_DIR
 # 智能抽取/规则生成模式开关（语义值）：
 #   stub = 联调占位，不访问模型、不烧 token（默认）
-#   live = 真实模型调用（Agent 规则生成走 Qoder SDK，smart_extract 走 C1_LLM_*）
+#   live = 真实模型调用（规则生成优先 QoderCN SDK、缺 PAT 时复用 C1_LLM_*；smart_extract 走 C1_LLM_*）
 # 兼容旧值：1/true/on → stub，0/false/off → live；其它值显式报错，不静默走错模式。
 _MODE_RAW = os.getenv('C1_SMART_STUB', 'stub').strip().lower()
 if _MODE_RAW in ('stub', '1', 'true', 'on'):

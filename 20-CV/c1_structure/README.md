@@ -85,6 +85,18 @@ uvicorn c1_structure.app:app --host 0.0.0.0 --port 8765 --workers 1    # 生产�
 | `C1_STRUCTURE_MAX_FILE_MB` | `20` | 单文件上限（改它时同步改 `parse.js` 的前端 20MB 校验） |
 | `C1_STRUCTURE_WARMUP` | `0` | 设 `1` 则启动时预加载模型 |
 | `PADDLE_PDX_CACHE_HOME` | `~/.paddlex` | 模型缓存根目录，离线部署必设 |
+| `C1_SMART_STUB` | `stub` | `stub` 不调用模型；`live` 才走真实模型 |
+| `QODER_PERSONAL_ACCESS_TOKEN` | 空 | 规则生成首选的 Qoder PAT |
+| `C1_QODER_MODEL` | 空 | Qoder 模型 ID；留空使用账户默认模型 |
+| `C1_LLM_BASE_URL` | 空 | OpenAI 兼容端点根地址，如 `https://api.example.com/v1` |
+| `C1_LLM_API_KEY` | 空 | OpenAI 兼容端点密钥 |
+| `C1_LLM_MODEL` | 空 | 智能抽取模型；未配 Qoder PAT 时也用于规则生成回退 |
+| `C1_LLM_TIMEOUT` | `60` | OpenAI 兼容调用超时秒数 |
+| `C1_LLM_TEMPERATURE` | `0` | OpenAI 兼容调用温度 |
+
+规则生成在 `live` 模式下优先使用 Qoder PAT；PAT 缺失时，只有 `C1_LLM_BASE_URL`、
+`C1_LLM_API_KEY`、`C1_LLM_MODEL` 三项都配置完整才会回退到 OpenAI 兼容端点，否则显式报错。
+本地可把上述键写入已忽略的 `data/secrets.json`，不要提交密钥。
 
 容器化时把 `official_models` 缓存打进镜像，`CMD python app.py`、`HEALTHCHECK curl -f http://127.0.0.1:8765/healthz`，并保持 `--workers 1`。
 
@@ -164,7 +176,7 @@ c1_structure/
 │   ├── wizard.css/js          四步入库向导
 │   ├── hint.css/js            「?」悬浮说明（解析页＋报告）
 │   └── report.css/js · lightbox.html   报告专用（生成时内联进 BLOB）
-├── data/                      backup/（迁移前整库备份；DSN 已入 config.py，无 secrets.json）
+├── data/                      backup/（迁移前整库备份）+ secrets.json（本地密钥，已忽略）
 ├── logs/                      运行日志（运行时生成，每条资料一个 file_<id>.log）
 └── docs/                      design-agentic-extraction.md（当前自动结构化方案）
 ```

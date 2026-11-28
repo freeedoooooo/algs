@@ -11,7 +11,6 @@ import json
 
 from . import context, llm, validate
 from .prompts import rule_author_v1
-from .. import config
 from ..collect_logic import registry
 
 
@@ -95,8 +94,7 @@ def generate_rule(doc, fields=None, refs=None, *, doc_type=None,
         pv = rule_author_v1.PROMPT_VERSION
         stub_targets = fields
     spec_conf = {'prompt_version': pv,
-                 'tool_version': str(len(registry.OPS)),
-                 'model': config.QODER_MODEL or None}
+                 'tool_version': str(len(registry.OPS))}
     raw, meta = llm.call_json(prompt, None, llm=llm_fn, stub=stub_fn,
                               spec=spec_conf, stub_fields=stub_targets)
     issues = validate.validate_spec(raw)
@@ -194,8 +192,7 @@ def generate_rule_react(doc, fields, refs=None, *, doc_type=None,
     ctx = context.doc_to_context(doc)
     prompt = rule_author_v1.render(ctx, fields, refs)
     spec_conf = {'prompt_version': rule_author_v1.PROMPT_VERSION,
-                 'tool_version': str(len(registry.OPS)),
-                 'model': config.QODER_MODEL or None}
+                 'tool_version': str(len(registry.OPS))}
 
     # 首轮：复用 P0 一次性生成（严格解析 + 静态校验 + 干跑）
     raw, meta = llm.call_json(prompt, None, llm=llm_fn, stub=stub_fn,

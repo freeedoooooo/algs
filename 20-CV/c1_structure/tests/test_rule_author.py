@@ -1,5 +1,6 @@
 """P0-② generate_rule：生成草稿、中间层对拍、警告与显式失败。"""
 import unittest
+from unittest import mock
 
 from c1_structure.agent import llm, rule_author
 from c1_structure.agent.rule_author import GenerationResult
@@ -81,6 +82,19 @@ class RuleAuthorTest(unittest.TestCase):
     def test_empty_fields_rejected(self):
         with self.assertRaises(ValueError):
             rule_author.generate_rule(_doc(), [], llm_fn=lambda p, s: SPEC)
+
+    def test_provider_model_selected_without_qoder_model_leak(self):
+        with mock.patch.multiple(
+                llm.config, QODER_PERSONAL_ACCESS_TOKEN='',
+                QODER_MODEL='qoder-only-model',
+                LLM_BASE_URL='https://llm.example/v1', LLM_API_KEY='test-key',
+                LLM_MODEL='openai-model', SMART_STUB=False), \
+                mock.patch.object(llm, 'raw_call', return_value=dict(SPEC)) as call:
+            result = rule_author.generate_rule(
+                _doc(), [{'target': '金额'}])
+        self.assertEqual(result.meta['provider'], 'openai_compatible')
+        self.assertEqual(result.meta['model'], 'openai-model')
+        self.assertNotIn('model', call.call_args.args[1])
 
     def test_stub_no_network(self):
         result = rule_author.generate_rule(
