@@ -15,8 +15,10 @@
 [docs/design-decoupled-extraction-loading.md](./docs/design-decoupled-extraction-loading.md)。
 元数据统一使用编码关联：`c1_load_datasource.code`（默认库名）→
 `c1_load_table.datasource_code` / `c1_load_table.code`（`库名.表名`）→
-`c1_load_table_field.table_code`。存量库升级执行
-`python -m c1_structure.store.migrations.009_load_metadata_codes --confirm`（从 `20-CV` 目录，默认只读预演，确认前自动全库备份）。
+`c1_load_table_field.table_code` → `c1_load_binding.table_code`。存量库依次执行
+`python -m c1_structure.store.migrations.009_load_metadata_codes --confirm` 和
+`python -m c1_structure.store.migrations.010_binding_table_code --confirm`
+（从 `20-CV` 目录，默认只读预演，确认前自动全库备份；迁移后重启服务）。
 
 ## 启动
 
@@ -235,7 +237,7 @@ c1_structure/
   `code` 固定为 `<datasource_code>.<target_table>`；字段通过 `table_code` 关联入库表。
   配置只保存目标表及目标字段元数据，不含抽取规则，也不含来源字段映射；同物理表可被不同规则复用。
 - **入库绑定**（`c1_load_binding`）：每条抽取结果最多一个绑定，保存自己的 `field_map_json`、
-  `write_mode`、`business_keys_json` 和确认状态；运行时通过 `load_table_id` 找到目标表配置。
+  `write_mode`、`business_keys_json` 和确认状态；通过 `table_code` 找到目标业务表配置。
 - **审计守卫**：数据源被入库表引用后 code/host/port/库名锁定（409，账号密码可改，换目标＝新建）；
   入库表被绑定引用后只读（PATCH/DELETE 409，回执语义）。
 - **流程**：上传文档 → 解析 → 按规则抽取（一份文档可有多个结果）→ 校验 →

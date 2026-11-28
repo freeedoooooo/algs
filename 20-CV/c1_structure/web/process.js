@@ -276,7 +276,7 @@ function pfRenderConfig(){
       fields+='<div class="cfg-row"><label>业务库</label>'+spacer+
         '<span class="cfg-static">'+escHtml(binding.datasource_code||binding.datasource_name||binding.db_name||('业务库 #'+binding.datasource_id))+'</span></div>'+
         '<div class="cfg-row"><label>目标表</label>'+spacer+
-        '<span class="cfg-static">'+escHtml(binding.load_table_code||binding.target_table)+'</span></div>'+
+        '<span class="cfg-static">'+escHtml(binding.table_code||binding.target_table)+'</span></div>'+
         '<div class="cfg-row"><label>写入方式</label>'+spacer+
         '<span class="cfg-static">'+escHtml(modeLabel(binding.write_mode))+'</span></div>'+
         '<div class="cfg-row"><label>字段映射</label>'+spacer+
@@ -613,12 +613,12 @@ function pfRenderResult(){
       pfLinColumnFields=pfLinColumnMap(l.field_map_json||{});
       openLink='<a class="proc-open" target="_blank" rel="noopener" href="/dashboard?ds='+
         encodeURIComponent(l.datasource_id||'')+'&table='+encodeURIComponent(l.target_table)+
-        '&lt='+encodeURIComponent(l.load_table_id||'')+'&file='+pfId+
+        '&lt='+encodeURIComponent(l.table_code||'')+'&file='+pfId+
         '&result='+encodeURIComponent(pfResultId)+'">打开数据看板 →</a>';
       tools='<button type="button" class="btn mini" id="pfPreflight">预检</button>'+
         '<button type="button" class="btn mini" id="pfReceipt">回执 / 隔离</button>';
       body='<div class="proc-kv"><span><b>抽取结果</b>#'+pfResultId+'</span>'+
-        '<span><b>目标表</b>'+escHtml(l.load_table_code||l.target_table)+'</span>'+
+        '<span><b>目标表</b>'+escHtml(l.table_code||l.target_table)+'</span>'+
         '<span><b>写入</b>'+escHtml(modeLabel(l.write_mode))+'</span>'+
         '<span><b>绑定</b>'+escHtml(l.status||'—')+'</span></div>'+
         '<div class="msg" id="pfPreMsg">'+

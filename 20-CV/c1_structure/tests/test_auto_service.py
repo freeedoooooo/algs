@@ -254,7 +254,8 @@ class AutoServiceTests(unittest.TestCase):
                 patch.object(auto_service.catalog, 'get_binding',
                              return_value=None), \
                 patch.object(auto_service.catalog, 'list_load_tables',
-                             return_value=[{'id': 55, 'datasource_id': 2,
+                             return_value=[{'id': 55, 'code': 'biz.inspection',
+                                            'datasource_id': 2,
                                             'datasource_code': 'biz',
                                             'target_table': 'inspection',
                                             'fields': ready['mapping']['available_columns']}]), \
@@ -269,7 +270,7 @@ class AutoServiceTests(unittest.TestCase):
             self.assertEqual({'ok': True}, auto_service.apply_plan(31, intent))
         planner.assert_called_once_with(31, datasource_code='biz', table_intent=intent)
         create.assert_called_once_with(
-            31, 55, {'设备编号': 'equipment_code', '设备名称': 'equipment_name'},
+            31, 'biz.inspection', {'设备编号': 'equipment_code', '设备名称': 'equipment_name'},
             'upsert', ['equipment_code'])
         review.assert_called_once_with(31, [0, 1], 'confirmed')
         confirm.assert_called_once_with(55)

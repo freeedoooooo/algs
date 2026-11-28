@@ -516,7 +516,7 @@ def launch_load(extract_result_id, *, background=True):
         raise errors.BadRequest('该抽取结果尚未配置入库目标')
     if binding['status'] != 'confirmed':
         raise errors.Conflict('入库绑定尚未显式确认')
-    lt = catalog.get_load_table(binding['load_table_id'])
+    lt = catalog.get_load_table_by_code(binding['table_code'])
     ds = catalog.get_datasource_by_code(binding['datasource_code'])
     if lt is None or ds is None:
         raise errors.NotFound('入库目标不存在')
@@ -574,7 +574,7 @@ def preview_load(extract_result_id, draft=None):
         if draft is not None:
             raise errors.Conflict('已有入库绑定，预览不再接受草稿')
         ds = catalog.get_datasource_by_code(binding['datasource_code'])
-        lt = catalog.get_load_table(binding['load_table_id'])
+        lt = catalog.get_load_table_by_code(binding['table_code'])
         cm, bk = binding['field_map_json'], binding['business_keys_json']
         table, wm = lt['target_table'], binding['write_mode']
     else:

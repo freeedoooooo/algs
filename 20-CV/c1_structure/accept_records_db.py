@@ -193,7 +193,7 @@ def main():
                                  'extraction_spec_json')),
         (catalog, 'get_extract_result', ('extract_result_id',)),
         (catalog, 'create_load_table', ('datasource_code', 'target_table', 'fields')),
-        (catalog, 'create_binding', ('extract_result_id', 'load_table_id',
+        (catalog, 'create_binding', ('extract_result_id', 'table_code',
                                     'field_map', 'write_mode', 'business_keys')),
         (content_db, 'get_records', ('extract_result_id',)),
         (content_db, 'save_records', ('extract_result_id', 'records')),

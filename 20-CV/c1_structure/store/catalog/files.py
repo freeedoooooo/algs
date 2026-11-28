@@ -37,14 +37,14 @@ def _attach_results(cur, doc_id):
         ' r.record_count, r.error, r.created_at, r.updated_at,'
         ' t.name AS rule_name, b.id AS load_binding_id, b.status AS binding_status,'
         ' b.field_map_json, b.write_mode, b.business_keys_json,'
-        ' b.confirmed_at, lt.id AS load_table_id, lt.target_table,'
-        ' lt.code AS load_table_code, lt.datasource_code,'
+        ' b.confirmed_at, b.table_code, lt.target_table,'
+        ' lt.datasource_code,'
         ' ds.id AS datasource_id, ds.code AS datasource_code_ref,'
         ' ds.name AS datasource_name'
         ' FROM c1_extract_result r'
         ' JOIN c1_extract_rule t ON t.id=r.rule_id'
         ' LEFT JOIN c1_load_binding b ON b.extract_result_id=r.id'
-        ' LEFT JOIN c1_load_table lt ON lt.id=b.load_table_id'
+        ' LEFT JOIN c1_load_table lt ON lt.code=b.table_code'
         ' LEFT JOIN c1_load_datasource ds ON ds.code=lt.datasource_code'
         ' WHERE r.doc_id=%s ORDER BY r.id', (doc_id,))
     results, bindings = [], []
@@ -56,9 +56,8 @@ def _attach_results(cur, doc_id):
         write_mode = row.pop('write_mode')
         business_keys = _j(row.pop('business_keys_json'))
         confirmed_at = row.pop('confirmed_at')
-        lt_id = row.pop('load_table_id')
+        table_code = row.pop('table_code')
         target_table = row.pop('target_table')
-        load_table_code = row.pop('load_table_code')
         load_table_datasource_code = row.pop('datasource_code')
         ds_id = row.pop('datasource_id')
         ds_code = row.pop('datasource_code_ref')
@@ -67,9 +66,8 @@ def _attach_results(cur, doc_id):
         if binding_id is not None:
             binding = {
                 'id': binding_id, 'doc_id': row['doc_id'],
-                'extract_result_id': row['id'], 'load_table_id': lt_id,
+                'extract_result_id': row['id'], 'table_code': table_code,
                 'target_table': target_table,
-                'load_table_code': load_table_code,
                 'load_table_datasource_code': load_table_datasource_code,
                 'datasource_id': ds_id, 'datasource_code': ds_code,
                 'datasource_name': ds_name, 'status': binding_status,

@@ -54,7 +54,7 @@ function openLoadWizard(opts){
   wz={fileId:opts.fileId,resultId:Number(opts.extractResultId),result:opts.result||{},
     onDone:opts.onDone,gate:opts.gate||null,step:1,dsList:null,tables:null,
     dsId:binding?String(binding.datasource_id||''):'',dsCode:binding?String(binding.datasource_code||''):'',
-    tableId:binding?String(binding.load_table_id||''):'',
+    tableCode:binding?String(binding.table_code||''):'',
     newTable:'',fieldMap:wzBindingMap(binding),
     writeMode:binding&&binding.write_mode||'upsert',businessKeys:wzBindingKeys(binding),
     binding:binding||null,fields:[],cols:[],preview:null,previewErr:'',approvePending:false,busy:false};
@@ -99,20 +99,20 @@ function wzStep1(b){
     var d=selectedDs(),code=d?d.code:'';
     var list=wz.tables.filter(function(t){return String(t.datasource_code)===String(code);});
     tb.innerHTML='<option value="">选择已配置目标表</option>'+list.map(function(t){
-      return '<option value="'+t.id+'">'+escHtml(t.code||t.target_table)+(t.binding_refs?' · 已被 '+t.binding_refs.length+' 个结果使用':'')+'</option>';
+      return '<option value="'+escHtml(t.code)+'">'+escHtml(t.code||t.target_table)+'</option>';
     }).join('');
-    if(wz.tableId&&list.some(function(t){return String(t.id)===wz.tableId;}))tb.value=wz.tableId;
+    if(wz.tableCode&&list.some(function(t){return t.code===wz.tableCode;}))tb.value=wz.tableCode;
   }
   ds.value=wz.dsId;nt.value=wz.newTable;fillTables();
-  ds.onchange=function(){wz.dsId=ds.value;var d=selectedDs();wz.dsCode=d?d.code:'';wz.tableId='';wz.newTable='';nt.value='';fillTables();};
-  tb.onchange=function(){wz.tableId=tb.value;wz.newTable='';nt.value='';};
+  ds.onchange=function(){wz.dsId=ds.value;var d=selectedDs();wz.dsCode=d?d.code:'';wz.tableCode='';wz.newTable='';nt.value='';fillTables();};
+  tb.onchange=function(){wz.tableCode=tb.value;wz.newTable='';nt.value='';};
   nt.oninput=function(){wz.newTable=nt.value.trim();if(wz.newTable)tb.value='';};
   if(wz.dsId)fillTables();
 }
 function wzSelectedTable(){
   var ds=(wz.dsList||[]).filter(function(d){return String(d.id)===String(wz.dsId);})[0]||null;
   var datasourceCode=wz.dsCode||(ds&&ds.code)||'';
-  var t=(wz.tables||[]).filter(function(x){return String(x.id)===wz.tableId;})[0]||null;
+  var t=(wz.tables||[]).filter(function(x){return x.code===wz.tableCode;})[0]||null;
   return t?{id:t.id,datasource_id:t.datasource_id,datasource_code:t.datasource_code,target_table:t.target_table,table_code:t.code}:
     {id:null,datasource_id:Number(wz.dsId),datasource_code:datasourceCode,target_table:wz.newTable,
       table_code:datasourceCode?datasourceCode+'.'+wz.newTable:''};
@@ -126,7 +126,7 @@ function wzSaveBinding(){
     }).then(function(j){if(!j.id)throw new Error('目标表配置保存失败');wz.target.id=j.id;});
   }
   return chain.then(function(){
-    var body={extract_result_id:wz.resultId,load_table_id:Number(wz.target.id),field_map:wz.fieldMap,write_mode:wz.writeMode,business_keys:wz.businessKeys};
+    var body={extract_result_id:wz.resultId,table_code:wz.target.table_code,field_map:wz.fieldMap,write_mode:wz.writeMode,business_keys:wz.businessKeys};
     var request=wz.binding&&wz.binding.id?wzApi('PATCH','/api/load/bindings/'+wz.binding.id,body):wzApi('POST','/api/load/bindings',body);
     return request.then(function(j){
       var id=wz.binding&&wz.binding.id?wz.binding.id:(j.id||j.load_binding_id);
@@ -253,7 +253,7 @@ function wzExecute(){
   if(pending)chain=chain.then(function(){return wzApi('POST','/api/extract-results/'+wz.resultId+'/approve-all',{}).then(function(){if(wz.gate){wz.gate.pending=0;wz.gate.edited=0;}});});
   chain=chain.then(function(){
     if(wz.binding&&wz.binding.status==='confirmed')return;
-    var body={load_table_id:Number(wz.target.id),field_map:wz.fieldMap,write_mode:wz.writeMode,business_keys:wz.businessKeys};
+    var body={table_code:wz.target.table_code,field_map:wz.fieldMap,write_mode:wz.writeMode,business_keys:wz.businessKeys};
     return wzApi('PATCH','/api/load/bindings/'+wz.binding.id,body);
   }).then(function(){
     if(wz.binding&&wz.binding.status==='confirmed')return;

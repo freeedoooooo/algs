@@ -522,6 +522,7 @@ def api_sources_stage_results(file_id: int):
     _file_or_404(file_id)
     summary = _load('stage_summary')
     content = _load('store.content')
+    content_db = _load('store.content_db')
     catalog = _load('store.catalog')
     artifacts = [a['name'] for a in _load('store.artifact').list(file_id)]
     extracts = []
@@ -1094,18 +1095,18 @@ async def api_load_binding_add(request: Request):
     body = await _json_body(request)
     try:
         result_id = int(body.get('extract_result_id'))
-        table_id = int(body.get('load_table_id'))
     except (TypeError, ValueError):
         raise store_errors.BadRequest('须选择抽取结果与入库表配置')
-    if result_id <= 0 or table_id <= 0:
-        raise store_errors.BadRequest('须选择抽取结果与入库表配置')
+    table_code = str(body.get('table_code') or '').strip()
+    if result_id <= 0 or not table_code:
+        raise store_errors.BadRequest('须选择抽取结果与业务表')
     business_keys = body.get('business_keys')
     if business_keys is None:
         business_keys = body.get('business_key')
     if isinstance(business_keys, str) and business_keys.strip():
         business_keys = [business_keys.strip()]
     binding_id = _load('store.catalog').create_binding(
-        result_id, table_id, body.get('field_map') or {},
+        result_id, table_code, body.get('field_map') or {},
         body.get('write_mode') or 'insert', business_keys)
     return {'ok': True, 'load_binding_id': binding_id}
 
@@ -1122,7 +1123,7 @@ async def api_load_binding_patch(binding_id: int, request: Request):
         if isinstance(business_keys, str) and business_keys.strip():
             business_keys = [business_keys.strip()]
         _load('store.catalog').update_binding(
-            binding_id, load_table_id=body.get('load_table_id'),
+            binding_id, table_code=body.get('table_code'),
             field_map=body.get('field_map'), write_mode=body.get('write_mode'),
             business_keys=business_keys)
     return {'ok': True}
@@ -1359,22 +1360,11 @@ async def api_extract_result_load_preview(extract_result_id: int,
     body = await _json_body(request)
     draft = body.get('draft')
     if not isinstance(draft, dict):
-        table_id = body.get('load_table_id')
         keys = ('datasource_id', 'datasource_code', 'table_code',
                 'target_table', 'field_map', 'write_mode', 'business_keys',
                 'business_key')
-        if table_id is None and not any(key in body for key in keys):
-            draft = None
-        elif table_id is None:
-            draft = {key: body[key] for key in keys if key in body}
-        else:
-            lt = _load('store.catalog').get_load_table(int(table_id))
-            if lt is None:
-                raise store_errors.NotFound('入库表配置不存在')
-            draft = {'datasource_id': lt['datasource_id'],
-                     'datasource_code': lt['datasource_code'],
-                     'table_code': lt['code'],
-                     'target_table': lt['target_table']}
+        draft = ({key: body[key] for key in keys if key in body}
+                 if any(key in body for key in keys) else None)
     return service.preview_load(extract_result_id, draft=draft)
 
 

@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from c1_structure import service
-from c1_structure.store import content_db, errors, loader as loader_mod
+from c1_structure.store import catalog, content_db, errors, loader as loader_mod
 from c1_structure.store.catalog import results as result_repo
 from c1_structure.store.loader import LoadRecordError
 
@@ -61,6 +61,10 @@ class _Conn:
 
 
 class ResultRepositoryIsolationTest(unittest.TestCase):
+    def test_catalog_exports_code_based_runtime_lookups(self):
+        self.assertTrue(callable(catalog.get_datasource_by_code))
+        self.assertTrue(callable(catalog.get_load_table_by_code))
+
     def test_record_id_map_is_keyed_by_result_and_index(self):
         cur = _Cursor()
         cur.rows = [(910, 0), (911, 1)]
@@ -144,12 +148,12 @@ class _Catalog:
         self.results = {31: {'id': 31, 'doc_id': 1}, 32: {'id': 32, 'doc_id': 1}}
         self.bindings = {
             31: {'id': 501, 'doc_id': 1, 'extract_result_id': 31,
-                 'datasource_id': 2, 'datasource_code': 'biz', 'load_table_id': 55,
+                 'datasource_id': 2, 'datasource_code': 'biz', 'table_code': 'biz.inspection',
                  'field_map_json': {'设备名称': 'device_name'},
                  'write_mode': 'insert', 'business_keys_json': [],
                  'status': 'confirmed'},
             32: {'id': 502, 'doc_id': 1, 'extract_result_id': 32,
-                 'datasource_id': 2, 'datasource_code': 'biz', 'load_table_id': 55,
+                 'datasource_id': 2, 'datasource_code': 'biz', 'table_code': 'biz.inspection',
                  'field_map_json': {'设备名称': 'device_name'},
                  'write_mode': 'insert', 'business_keys_json': [],
                  'status': 'confirmed'},
@@ -172,8 +176,9 @@ class _Catalog:
             return next((b for b in self.bindings.values() if b['id'] == binding_id), None)
         return self.bindings.get(extract_result_id)
 
-    def get_load_table(self, table_id):
-        return {'id': table_id, 'target_table': 'inspection'}
+    def get_load_table_by_code(self, table_code):
+        return {'id': 55, 'code': table_code, 'datasource_code': 'biz',
+                'target_table': 'inspection'}
 
     def get_datasource(self, datasource_id):
         return {'id': datasource_id, 'db_name': 'fake'}
@@ -341,6 +346,27 @@ class BindingReceiptIsolationTest(unittest.TestCase):
         self.assertEqual(service.run_load, thread.call_args.kwargs['target'])
         self.assertEqual((31, self.catalog.bindings[31]),
                          thread.call_args.kwargs['args'][:2])
+        self.assertEqual([], self.loader.calls)
+
+    def test_preview_uses_draft_code_without_creating_binding(self):
+        self.catalog.bindings.pop(31)
+        result = service.preview_load(31, {
+            'datasource_code': 'biz', 'target_table': 'inspection',
+            'table_code': 'biz.inspection',
+            'field_map': {'设备名称': 'device_name'}, 'write_mode': 'insert'})
+        self.assertEqual({'insert': 2, 'update': 0, 'skip': 0,
+                          'quarantine': 0, 'total': 2,
+                          'write_mode': 'insert', 'ok': True}, result)
+        self.assertNotIn(31, self.catalog.bindings)
+        self.assertEqual([], self.loader.calls)
+
+    def test_preview_uses_saved_binding_code_and_skips_receipts(self):
+        self.catalog.receipts[501] = [
+            {'load_binding_id': 501, 'record_index': 0, 'record_id': 910}]
+        result = service.preview_load(31)
+        self.assertEqual(1, result['insert'])
+        self.assertEqual(1, result['skip'])
+        self.assertEqual([501], self.catalog.receipt_queries)
         self.assertEqual([], self.loader.calls)
 
     def test_launch_rejects_unconfirmed_binding_before_preflight_or_write(self):

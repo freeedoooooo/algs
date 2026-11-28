@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>业务库与入库绑定 · 结构化工具</title>
+<title>业务库与入库映射 · 结构化工具</title>
 <link rel="stylesheet" href="/static/shell.css">
 <link rel="stylesheet" href="/static/extract.css">
 <link rel="stylesheet" href="/static/rules.css">
@@ -22,12 +22,12 @@
   <a href="/governance">治理</a>
   <a href="/compute">计算</a>
   <span class="spacer"></span>
-  <span class="navnote">业务库、可复用目标表与逐结果绑定</span>
+  <span class="navnote">业务库、可复用业务表与逐结果入库映射</span>
 </nav>
 <div class="pagebody">
   <div class="pagehead">
-    <h1>业务库与入库绑定</h1>
-    <span class="hint" tabindex="0" data-tip="目标表配置可复用；每个抽取结果独立绑定一张表与字段映射。&#10;本页只保存待确认绑定，业务数据库写入必须在结果向导中显式确认。">?</span>
+    <h1>业务库与入库映射</h1>
+    <span class="hint" tabindex="0" data-tip="业务表可复用；每个抽取结果独立绑定一张表与字段映射。&#10;本页只保存待确认绑定，业务数据库写入必须在结果向导中显式确认。">?</span>
   </div>
   <div class="banner err" id="err" hidden></div>
   <div class="banner info" id="ok" hidden></div>
@@ -45,22 +45,22 @@
       <div class="dshead">
         <b id="maptitle">业务表</b>
         <span class="spacer"></span>
-        <button type="button" class="btn mini" id="newmap" disabled>＋ 登记目标表</button>
+        <button type="button" class="btn mini" id="newmap" disabled>＋ 登记业务表</button>
       </div>
       <table class="list" id="maptable" hidden>
         <thead><tr>
-          <th class="seq">序号</th><th>配置ID</th><th>目标表</th>
+          <th class="seq">序号</th><th>配置ID</th><th>表名</th><th>编码</th>
           <th>列数</th><th>绑定引用</th><th>操作</th>
         </tr></thead>
         <tbody id="maprows"></tbody>
       </table>
       <div class="empty" id="mapempty" hidden>
-        <b>该业务库还没有目标表配置</b>
+        <b>该业务库还没有业务表</b>
         选择已有物理表并读取列元数据。这里不会创建或删除物理表，也不保存抽取规则或字段映射。
       </div>
       <div class="empty" id="mapnone">
         <b>请先在左侧选择一个业务库</b>
-        点击业务库，查看其下可复用的目标表配置与独立结果绑定。
+        点击业务库，查看其下可复用的业务表与独立结果绑定。
       </div>
       <div class="pager" id="mappager" hidden>
         <span class="pginfo"></span>
@@ -68,14 +68,14 @@
         <button type="button" class="pgnext">下一页</button>
       </div>
       <div class="dshead" style="margin-top:18px">
-        <b>抽取结果独立绑定</b><span class="spacer"></span>
-        <button type="button" class="btn mini" id="newbinding" disabled>＋ 新建绑定</button>
+        <b>入库映射</b><span class="spacer"></span>
+        <button type="button" class="btn mini" id="newbinding" disabled>＋ 新建映射</button>
       </div>
       <table class="list" id="bindingtable" hidden>
-        <thead><tr><th>绑定ID</th><th>抽取结果</th><th>目标表</th><th>写入方式</th><th>去重依据</th><th>状态</th><th>操作</th></tr></thead>
+        <thead><tr><th>映射ID</th><th>抽取结果</th><th>业务表</th><th>表编码</th><th>写入方式</th><th>去重依据</th><th>状态</th><th>操作</th></tr></thead>
         <tbody id="bindingrows"></tbody>
       </table>
-      <div class="empty" id="bindingempty" hidden><b>暂无结果绑定</b>选择已完成抽取结果与目标表，建立独立映射；保存后仍需显式确认才能写入。</div>
+      <div class="empty" id="bindingempty" hidden><b>暂无入库映射</b>选择已完成抽取结果与业务表，建立独立映射；保存后仍需显式确认才能写入。</div>
       <div class="pager" id="bindingpager" hidden>
         <span class="pginfo"></span>
         <button type="button" class="pgprev">上一页</button>
@@ -99,7 +99,7 @@
       <div class="fsec">
         <label class="flab" for="dscode">编码</label>
         <input type="text" class="tin" id="dscode" placeholder="默认使用库名">
-        <div class="sthint">入库表通过该编码关联数据源；已被目标表引用后不可修改。</div>
+        <div class="sthint">入库表通过该编码关联数据源；已被业务表引用后不可修改。</div>
       </div>
       <div class="fsec">
         <label class="flab" for="dshost">主机</label>
@@ -149,7 +149,7 @@
         <input type="text" class="tin" id="mpds" disabled>
       </div>
       <div class="fsec">
-        <label class="flab" for="mptable">目标表（仅支持已有表）</label>
+        <label class="flab" for="mptable">业务表（仅支持已有表）</label>
         <select class="tin" id="mptable" disabled><option value="">加载中…</option></select>
         <div class="sthint" id="mpthint"></div>
       </div>
@@ -163,14 +163,14 @@
     <div class="dfoot">
       <span class="msg" id="mpmsg"></span>
       <span class="spacer"></span>
-      <button type="button" class="btn" id="mpsave">保存目标表配置</button>
+      <button type="button" class="btn" id="mpsave">保存业务表</button>
     </div>
   </div>
 </div>
 <div class="drawer wide" id="bdrawer" hidden>
   <div class="dpanel">
     <div class="dhead">
-      <h2 id="bdtitle">新建结果绑定</h2><span class="spacer"></span>
+      <h2 id="bdtitle">新建入库映射</h2><span class="spacer"></span>
       <button type="button" class="dclose" id="bdclose">关闭 (Esc)</button>
     </div>
     <div class="dbody">
@@ -180,7 +180,7 @@
         <div class="sthint">只列出已完成的抽取结果；每个结果最多绑定一张目标表。</div>
       </div>
       <div class="fsec">
-        <label class="flab" for="bdtable">目标表配置</label>
+        <label class="flab" for="bdtable">业务表</label>
         <select class="tin" id="bdtable"></select>
       </div>
       <div class="fsec">
@@ -194,11 +194,11 @@
         <div id="bdrows"></div>
         <div class="sthint">至少映射一个字段；update / upsert 须选择去重依据列。保存不会执行业务写入。</div>
       </div>
-      <div class="sthint" id="bdlock" hidden>已确认、入库中或已入库的绑定只读；如需调整，请先在结果流程中按后端允许的状态处理。</div>
+      <div class="sthint" id="bdlock" hidden>已确认、入库中或已入库的映射只读；如需调整，请先在结果流程中按后端允许的状态处理。</div>
     </div>
     <div class="dfoot">
       <span class="msg" id="bdmsg"></span><span class="spacer"></span>
-      <button type="button" class="btn" id="bdsave">保存待确认绑定</button>
+      <button type="button" class="btn" id="bdsave">保存待确认映射</button>
     </div>
   </div>
 </div>

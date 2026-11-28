@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from fastapi.testclient import TestClient
-from c1_structure import app as app_mod
+from c1_structure import app as app_mod, stage_summary
 
 
 class _Catalog:
@@ -52,7 +52,10 @@ class ExtractResultApiTest(unittest.TestCase):
         self.content_db.get_records.side_effect = lambda result_id: {
             'doc_id': 1, 'extract_result_id': result_id,
             'records': [{'index': 0,
-                         'values': {'设备名称': '泵机' if result_id == 31 else '风机'}}]}
+                         'values': {'设备名称': '泵机' if result_id == 31 else '风机'}}],
+            'files': [{'records': [{
+                'index': 0, 'values': {'设备名称': '泵机'}
+                if result_id == 31 else {'客户': '风机'}}]}]}
         self.content_db.record_id_map.side_effect = lambda result_id: {
             (result_id, 0): 910 if result_id == 31 else 911}
         self.content_db.gate_counts.side_effect = lambda result_id: {
@@ -67,7 +70,11 @@ class ExtractResultApiTest(unittest.TestCase):
         self.modules = {'store.catalog': self.catalog,
                         'store.content_db': self.content_db,
                         'store.load_planner': self.planner,
-                        'auto_service': self.auto}
+                        'auto_service': self.auto,
+                        'stage_summary': stage_summary,
+                        'store.content': Mock(get_extract=Mock(return_value={
+                            'file': {'name': 'a.pdf'}, 'pages': []})),
+                        'store.artifact': Mock(list=Mock(return_value=[]))}
         self.load = patch.object(app_mod, '_load', side_effect=lambda n: self.modules[n])
         self.load.start()
         self.addCleanup(self.load.stop)
@@ -78,6 +85,16 @@ class ExtractResultApiTest(unittest.TestCase):
         response = self.client.get('/process?file=1&node=extract&result=31')
         self.assertEqual(200, response.status_code)
         self.assertIn('/static/process.js', response.text)
+
+    def test_stage_results_loads_parse_and_record_dependencies(self):
+        response = self.client.get('/api/sources/1/stage-results')
+        self.assertEqual(200, response.status_code)
+        data = response.json()
+        self.assertEqual('ready', data['parse']['status'])
+        self.assertEqual([31, 32], [r['extract_result_id']
+                                    for r in data['extract']])
+        self.assertEqual(['设备名称'], data['extract'][0]['fields'])
+        self.assertEqual(['客户'], data['extract'][1]['fields'])
 
     def test_result_list_and_detail_keep_independent_bindings(self):
         response = self.client.get('/api/sources/1/extract-results')

@@ -211,13 +211,14 @@ def ensure_default_datasource():
 
 # ---- 目标表配置：datasource_code/target_table 与字段元数据 ----
 
-def _table_row(cur, lt_id):
+def _table_row(cur, lt_id=None, table_code=None):
+    column, value = ('lt.id', lt_id) if table_code is None else ('lt.code', table_code)
     cur.execute(
         'SELECT lt.id, lt.code, lt.datasource_code, lt.target_table,'
         ' lt.created_at, lt.updated_at, d.name AS datasource_name,'
         ' d.db_name, d.id AS datasource_id'
         ' FROM c1_load_table lt JOIN c1_load_datasource d'
-        ' ON d.code=lt.datasource_code WHERE lt.id=%s', (lt_id,))
+        ' ON d.code=lt.datasource_code WHERE ' + column + '=%s', (value,))
     return cur.fetchone()
 
 
@@ -264,7 +265,31 @@ def get_load_table(lt_id):
                 return None
             row = _attach_fields(cur, rows[0])
             cur.execute('SELECT COUNT(*) FROM c1_load_binding'
-                        ' WHERE load_table_id=%s', (lt_id,))
+                        ' WHERE table_code=%s', (row['code'],))
+            row['binding_refs'] = cur.fetchone()[0]
+        row['created_at'] = str(row['created_at'])
+        row['updated_at'] = str(row['updated_at'])
+        return row
+    finally:
+        conn.close()
+
+
+def get_load_table_by_code(table_code):
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT lt.id, lt.code, lt.datasource_code, lt.target_table,'
+                ' lt.created_at, lt.updated_at, d.name AS datasource_name,'
+                ' d.db_name, d.id AS datasource_id'
+                ' FROM c1_load_table lt JOIN c1_load_datasource d'
+                ' ON d.code=lt.datasource_code WHERE lt.code=%s', (table_code,))
+            rows = _rows(cur)
+            if not rows:
+                return None
+            row = _attach_fields(cur, rows[0])
+            cur.execute('SELECT COUNT(*) FROM c1_load_binding'
+                        ' WHERE table_code=%s', (table_code,))
             row['binding_refs'] = cur.fetchone()[0]
         row['created_at'] = str(row['created_at'])
         row['updated_at'] = str(row['updated_at'])
@@ -367,7 +392,7 @@ def update_load_table(lt_id, target_table=None, fields=None):
                 if not loader.is_business_table(target_table):
                     raise BadRequest('只能选择现有业务表，不能写入平台 c1_ 表')
                 cur.execute('SELECT COUNT(*) FROM c1_load_binding'
-                            ' WHERE load_table_id=%s', (lt_id,))
+                            ' WHERE table_code=%s', (old_code,))
                 if cur.fetchone()[0]:
                     raise Conflict('该表配置已有绑定，不可更换目标表')
                 table_code = datasource_code + '.' + target_table
@@ -387,7 +412,7 @@ def update_load_table(lt_id, target_table=None, fields=None):
             if fields is not None:
                 allowed = {field['field_name'] for field in metadata}
                 cur.execute('SELECT field_map_json FROM c1_load_binding'
-                            ' WHERE load_table_id=%s', (lt_id,))
+                            ' WHERE table_code=%s', (old_code,))
                 for (raw,) in cur.fetchall():
                     missing = set((_j(raw) or {}).values()) - allowed
                     if missing:
@@ -410,7 +435,7 @@ def delete_load_table(lt_id):
             if not row:
                 raise NotFound('入库表配置不存在')
             cur.execute('SELECT COUNT(*) FROM c1_load_binding'
-                        ' WHERE load_table_id=%s', (lt_id,))
+                        ' WHERE table_code=%s', (row[1],))
             if cur.fetchone()[0]:
                 raise Conflict('该入库表配置已被绑定引用，禁止删除')
             _replace_fields(cur, row[1], [])
@@ -424,17 +449,17 @@ def delete_load_table(lt_id):
 
 def _binding_row(cur, binding_id):
     cur.execute(
-        'SELECT b.id, b.doc_id, b.extract_result_id, b.load_table_id,'
+        'SELECT b.id, b.doc_id, b.extract_result_id, b.table_code,'
         ' b.field_map_json, b.write_mode, b.business_keys_json, b.status,'
         ' b.confirmed_at, b.error, b.created_at, b.updated_at,'
         ' r.rule_id, t.name AS rule_name, d.name AS doc_name,'
-        ' lt.target_table, lt.code AS load_table_code, lt.datasource_code,'
+        ' lt.target_table, lt.datasource_code,'
         ' ds.id AS datasource_id, ds.code AS datasource_code,'
         ' ds.name AS datasource_name, ds.db_name FROM c1_load_binding b'
         ' JOIN c1_extract_result r ON r.id=b.extract_result_id'
         ' JOIN c1_extract_rule t ON t.id=r.rule_id'
         ' JOIN c1_doc d ON d.id=b.doc_id'
-        ' JOIN c1_load_table lt ON lt.id=b.load_table_id'
+        ' JOIN c1_load_table lt ON lt.code=b.table_code'
         ' JOIN c1_load_datasource ds ON ds.code=lt.datasource_code'
         ' WHERE b.id=%s', (binding_id,))
     row = cur.fetchone()
@@ -472,14 +497,14 @@ def _result_fields(cur, extract_result_id):
     return fields or names
 
 
-def _validate_binding(cur, extract_result_id, load_table_id, field_map,
+def _validate_binding(cur, extract_result_id, table_code, field_map,
                       write_mode, business_keys):
     cur.execute('SELECT doc_id FROM c1_extract_result WHERE id=%s',
                 (extract_result_id,))
     row = cur.fetchone()
     if not row:
         raise NotFound('抽取结果不存在')
-    table = _table_row(cur, load_table_id)
+    table = _table_row(cur, table_code=table_code)
     if not table:
         raise NotFound('入库表配置不存在')
     cur.execute('SELECT field_name FROM c1_load_table_field'
@@ -497,7 +522,7 @@ def _binding_params(field_map, write_mode, business_keys):
             json.dumps(list(business_keys or []), ensure_ascii=False))
 
 
-def create_binding(extract_result_id, load_table_id, field_map,
+def create_binding(extract_result_id, table_code, field_map,
                   write_mode='insert', business_keys=None):
     """创建待确认绑定；返回 load_binding_id。不会写业务库。"""
     if write_mode not in ('insert', 'upsert', 'update'):
@@ -509,14 +534,14 @@ def create_binding(extract_result_id, load_table_id, field_map,
                         ' WHERE extract_result_id=%s', (extract_result_id,))
             if cur.fetchone():
                 raise Conflict('该抽取结果已有入库绑定')
-            doc_id = _validate_binding(cur, extract_result_id, load_table_id,
+            doc_id = _validate_binding(cur, extract_result_id, table_code,
                                        field_map, write_mode, business_keys)
             fm, wm, bk = _binding_params(field_map, write_mode, business_keys)
             cur.execute(
                 'INSERT INTO c1_load_binding (doc_id, extract_result_id,'
-                ' load_table_id, field_map_json, write_mode, business_keys_json,'
+                ' table_code, field_map_json, write_mode, business_keys_json,'
                 " status) VALUES (%s,%s,%s,%s,%s,%s,'pending')",
-                (doc_id, extract_result_id, load_table_id, fm, wm, bk))
+                (doc_id, extract_result_id, table_code, fm, wm, bk))
             binding_id = cur.lastrowid
             conn.commit()
             return binding_id
@@ -524,7 +549,7 @@ def create_binding(extract_result_id, load_table_id, field_map,
         conn.close()
 
 
-def update_binding(binding_id, load_table_id=None, field_map=None,
+def update_binding(binding_id, table_code=None, field_map=None,
                    write_mode=None, business_keys=None):
     """修改待确认/失败绑定；修改后回到 pending，旧回执与入库隔离清空。"""
     conn = db.connect()
@@ -540,14 +565,15 @@ def update_binding(binding_id, load_table_id=None, field_map=None,
             wm = write_mode or old['write_mode']
             bk = business_keys if business_keys is not None else \
                 (_j(old['business_keys_json']) or [])
-            lt_id = load_table_id or old['load_table_id']
-            _validate_binding(cur, old['extract_result_id'], lt_id, fm, wm, bk)
+            selected_table_code = table_code or old['table_code']
+            _validate_binding(cur, old['extract_result_id'],
+                              selected_table_code, fm, wm, bk)
             fmj, wmj, bkj = _binding_params(fm, wm, bk)
             cur.execute(
-                'UPDATE c1_load_binding SET load_table_id=%s, field_map_json=%s,'
+                'UPDATE c1_load_binding SET table_code=%s, field_map_json=%s,'
                 ' write_mode=%s, business_keys_json=%s, status=%s,'
                 ' confirmed_at=NULL, error=NULL, updated_at=NOW() WHERE id=%s',
-                (lt_id, fmj, wmj, bkj, 'pending', binding_id))
+                (selected_table_code, fmj, wmj, bkj, 'pending', binding_id))
             cur.execute('DELETE FROM c1_load_receipt WHERE load_binding_id=%s',
                         (binding_id,))
             cur.execute('DELETE FROM c1_quarantine_record'
@@ -575,11 +601,11 @@ def get_binding(binding_id=None, extract_result_id=None):
         conn.close()
 
 
-def list_bindings(doc_id=None, extract_result_id=None, load_table_id=None):
+def list_bindings(doc_id=None, extract_result_id=None, table_code=None):
     where, args = [], []
     for key, value in (('b.doc_id', doc_id),
                        ('b.extract_result_id', extract_result_id),
-                       ('b.load_table_id', load_table_id)):
+                       ('b.table_code', table_code)):
         if value is not None:
             where.append(key + '=%s')
             args.append(value)
@@ -588,18 +614,18 @@ def list_bindings(doc_id=None, extract_result_id=None, load_table_id=None):
     try:
         with conn.cursor() as cur:
             cur.execute(
-                'SELECT b.id, b.doc_id, b.extract_result_id, b.load_table_id,'
+                'SELECT b.id, b.doc_id, b.extract_result_id, b.table_code,'
                 ' b.field_map_json, b.write_mode, b.business_keys_json, b.status,'
                 ' b.confirmed_at, b.error, b.created_at, b.updated_at,'
                 ' r.rule_id, t.name AS rule_name, d.name AS doc_name,'
-                ' lt.target_table, lt.code AS load_table_code, lt.datasource_code,'
+                ' lt.target_table, lt.datasource_code,'
                 ' ds.id AS datasource_id, ds.code AS datasource_code,'
                 ' ds.name AS datasource_name, ds.db_name'
                 ' FROM c1_load_binding b'
                 ' JOIN c1_extract_result r ON r.id=b.extract_result_id'
                 ' JOIN c1_extract_rule t ON t.id=r.rule_id'
                 ' JOIN c1_doc d ON d.id=b.doc_id'
-                ' JOIN c1_load_table lt ON lt.id=b.load_table_id'
+                ' JOIN c1_load_table lt ON lt.code=b.table_code'
                 ' JOIN c1_load_datasource ds ON ds.code=lt.datasource_code' + w +
                 ' ORDER BY b.doc_id, b.id', args)
             return [_decode_binding(row) for row in _rows(cur)]
@@ -622,7 +648,7 @@ def confirm_binding(binding_id):
                         (old['extract_result_id'],))
             if cur.fetchone()[0] != 'ready':
                 raise Conflict('抽取结果尚未完成，不能确认入库')
-            _validate_binding(cur, old['extract_result_id'], old['load_table_id'],
+            _validate_binding(cur, old['extract_result_id'], old['table_code'],
                               _j(old['field_map_json']) or {}, old['write_mode'],
                               _j(old['business_keys_json']) or [])
             cur.execute("UPDATE c1_load_binding SET status='confirmed',"
@@ -687,7 +713,7 @@ def add_receipt(load_binding_id, record_index, target_pk, action):
                 ' record_index, datasource_id, target_table, target_pk, action)'
                 ' SELECT b.id, b.doc_id, %s, ds.id, lt.target_table,'
                 ' %s, %s FROM c1_load_binding b'
-                ' JOIN c1_load_table lt ON lt.id=b.load_table_id'
+                ' JOIN c1_load_table lt ON lt.code=b.table_code'
                 ' JOIN c1_load_datasource ds ON ds.code=lt.datasource_code'
                 ' WHERE b.id=%s',
                 (record_index, str(target_pk)[:255], action, load_binding_id))

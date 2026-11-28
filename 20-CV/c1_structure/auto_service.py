@@ -267,11 +267,11 @@ def apply_plan(extract_result_id, intent):
     binding = catalog.get_binding(extract_result_id=extract_result_id)
     if binding is None:
         binding_id = catalog.create_binding(
-            extract_result_id, lt['id'], field_map, write_mode, business_keys)
+            extract_result_id, lt['code'], field_map, write_mode, business_keys)
     else:
         if binding['status'] in ('confirmed', 'running', 'ready'):
             raise Conflict('该结果已有确认或执行中的入库绑定')
-        catalog.update_binding(binding['id'], load_table_id=lt['id'],
+        catalog.update_binding(binding['id'], table_code=lt['code'],
                                field_map=field_map, write_mode=write_mode,
                                business_keys=business_keys)
         binding_id = binding['id']

@@ -72,7 +72,8 @@ function loadFiles(){
   sel.onchange=function(){ fileId=this.value; page=1; syncTag(); load(); };
   fetch('/api/sources/state').then(function(r){return r.json();}).then(function(j){
     var items=(j.items||[]).filter(function(f){
-      return !!f.load_table_id && (!lt||String(f.load_table_id)===String(lt));
+      var codes=(f.load_bindings||[]).map(function(b){return b.table_code;}).filter(Boolean);
+      return codes.length&&(!lt||codes.indexOf(lt)>=0);
     });
     var html='<option value="">全部资料</option>'+items.map(function(f){
       return '<option value="'+escHtml(String(f.id))+'">#'+escHtml(String(f.id))+

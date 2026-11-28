@@ -97,7 +97,7 @@ flowchart TD
 | `c1_load_log` | `c1_load_receipt` | 明确是入库回执，不是普通日志 |
 | `c1_load_quarantine` | `c1_quarantine_record` | 抽取和入库阶段都可能产生问题 |
 
-`c1_load_table` 保留表名，但语义调整为平台侧的“目标表配置”，不是业务库中的实际表。元数据之间统一使用编码关联：数据源编码 → 入库表编码 → 目标字段；只有运行时实体（如 `c1_load_binding.load_table_id`）仍使用数字 ID。
+`c1_load_table` 保留表名，但语义调整为平台侧的“业务表配置”，不是业务库中的实际表。元数据统一使用编码关联：数据源编码 → 入库表编码 → 目标字段；`c1_load_binding.table_code` 也引用入库表编码，不再保存数字表 ID。
 
 字段命名也同步统一：
 
@@ -380,13 +380,14 @@ flowchart LR
 flowchart LR
     DS["c1_load_datasource<br/>code = c1_structure_dev"] -->|"datasource_code"| LT["c1_load_table<br/>code = c1_structure_dev.biz_demo_2"]
     LT -->|"table_code"| F["c1_load_table_field<br/>field_name = account_1"]
+    LT -->|"table_code"| B["c1_load_binding<br/>按抽取结果独立映射"]
 ```
 
 - `c1_load_datasource.code` 唯一，默认等于数据库名 `db_name`；创建数据源时可显式指定。
 - `c1_load_table.datasource_code` 引用数据源编码，不再保存 `datasource_id`。
 - `c1_load_table.code` 唯一，固定为 `<datasource_code>.<target_table>`，例如 `c1_structure_dev.biz_demo_2`。
 - `c1_load_table_field.table_code` 引用入库表编码，不再保存 `load_table_id`。
-- 运行时连接仍通过数据源编码找到数据源记录，再使用其 `id/host/port/db_name`；`c1_load_binding.load_table_id` 保留，用于关联已配置的入库表。
+- 运行时连接仍通过数据源编码找到数据源记录，再使用其 `id/host/port/db_name`；`c1_load_binding.table_code` 引用已配置的业务表编码。
 
 `c1_load_table` 只描述“目标表是什么”，不描述“抽取结果怎么写入”。
 
@@ -457,7 +458,7 @@ flowchart LR
 | `id` | bigint | PK | 入库绑定 ID |
 | `doc_id` | bigint | NOT NULL | 所属文档 |
 | `extract_result_id` | bigint | NOT NULL，UNIQUE | 输入抽取结果；保证最多一个目标 |
-| `load_table_id` | bigint | NOT NULL | 目标库、目标表和目标列定义 |
+| `table_code` | varchar(255) | NOT NULL | 目标业务表编码，引用 `c1_load_table.code` |
 | `field_map_json` | json | NOT NULL | 中文字段到目标列的映射 |
 | `write_mode` | varchar(16) | NOT NULL | `insert/upsert/update` |
 | `business_keys_json` | json | NULL | upsert/update 的业务键 |
@@ -722,7 +723,7 @@ flowchart LR
 | 规则当前版本 | 合并到 `c1_extract_rule` |
 | 文档绑定的规则版本 | 创建一条 `c1_extract_result`，并复制版本快照 |
 | 当前暂存记录（旧表） | 补 `extract_result_id` |
-| `c1_load_table` | 先按 `(datasource_id, target_table)` 去重，再由 009 迁移器转换为数据源编码和入库表编码 |
+| `c1_load_table` | 先按 `(datasource_id, target_table)` 去重，再由 009 迁移器转换为数据源编码和入库表编码；绑定关联再由 010 迁移器转换为 `table_code` |
 | `c1_load_table_field.target_column` | 去重后写入 `c1_load_table_field.field_name`，作为目标字段元数据 |
 | `c1_load_table_field.rule_field` | 与 `target_column` 组成来源到目标映射，写入对应 `c1_load_binding.field_map_json` |
 | `c1_load_table_field.is_business_key` | 汇总为目标字段列表，写入对应 `c1_load_binding.business_keys_json` |

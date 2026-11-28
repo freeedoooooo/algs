@@ -165,7 +165,7 @@ CREATE TABLE IF NOT EXISTS `c1_load_binding` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '入库绑定 ID',
   `doc_id` bigint NOT NULL COMMENT '所属文档 ID',
   `extract_result_id` bigint NOT NULL COMMENT '输入抽取结果 ID',
-  `load_table_id` bigint NOT NULL COMMENT '目标入库表配置 ID',
+  `table_code` varchar(255) NOT NULL COMMENT '目标业务表编码',
   `field_map_json` json NOT NULL COMMENT '来源字段→目标列映射',
   `write_mode` varchar(16) NOT NULL COMMENT 'insert/upsert/update',
   `business_keys_json` json DEFAULT NULL COMMENT 'upsert/update 的目标业务键列表',
@@ -177,7 +177,7 @@ CREATE TABLE IF NOT EXISTS `c1_load_binding` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_extract_result_binding` (`extract_result_id`),
   KEY `idx_binding_doc` (`doc_id`),
-  KEY `idx_binding_load_table` (`load_table_id`)
+  KEY `idx_binding_table_code` (`table_code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='入库绑定：单个抽取结果如何写入单个目标表';
 
 CREATE TABLE IF NOT EXISTS `c1_load_receipt` (

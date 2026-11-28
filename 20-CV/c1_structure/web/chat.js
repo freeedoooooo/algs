@@ -52,17 +52,12 @@
   }
   function setComposerExpanded(value){
     expanded=!!value;var wrap=$('composerWrap'),button=$('expandComposer');
-    wrap.classList.toggle('expanded',expanded);$('composerBackdrop').hidden=!expanded;
+    wrap.classList.toggle('editor-expanded',expanded);
     button.setAttribute('aria-expanded',expanded?'true':'false');
-    button.setAttribute('aria-label',expanded?'还原聊天输入框':'放大聊天输入框');
-    button.title=expanded?'还原输入框':'放大输入框';
-    if(expanded){
-      wrap.setAttribute('role','dialog');wrap.setAttribute('aria-modal','true');
-      wrap.setAttribute('aria-labelledby','composerTitle');$('prompt').focus();
-    }else{
-      wrap.removeAttribute('role');wrap.removeAttribute('aria-modal');wrap.removeAttribute('aria-labelledby');
-      button.focus();
-    }
+    button.setAttribute('aria-label',expanded?'收起编辑输入框':'展开编辑输入框');
+    button.title=expanded?'收起编辑':'展开编辑';
+    button.querySelector('span').textContent=expanded?'收起编辑':'展开编辑';
+    if(expanded)$('prompt').focus();
   }
   function setBusy(v){
     busy=v;$('pickFile').disabled=v;$('newChat').disabled=v;updateSend();
@@ -126,7 +121,7 @@
     }
     resultNode.innerHTML='<div class="stage-head"><span class="badge green">抽取结果</span><b>选择一个结果继续</b></div>'+
       '<div class="rec-list">'+results.map(function(r){
-        var b=r.load_binding,status=b?('入库：'+stateBadgeText(b.status)):('抽取：'+stateBadgeText(r.status));
+        var b=r.load_binding,status=b?('入库：'+stateBadgeText(b.status)):('抽取：'+extractStatusText(r.status));
         return '<div class="rec-item"><div class="rec-info"><b>'+escHtml(resultName(r))+' · 结果 #'+escHtml(r.id)+'</b>'+
           '<span>'+escHtml(r.record_count||0)+' 条记录 · '+escHtml(status)+'</span></div>'+
           '<button type="button" class="btn ghost mini" data-result="'+escHtml(r.id)+'">规划此结果</button></div>';
@@ -135,6 +130,9 @@
       button.onclick=function(){selectResult(Number(button.getAttribute('data-result')));};
     });
     scrollBottom();
+  }
+  function extractStatusText(value){
+    return {ready:'可入库',running:'抽取中',failed:'抽取失败',empty:'无记录'}[value]||value||'未知';
   }
   function stateBadgeText(value){
     return {pending:'待确认',confirmed:'已确认',running:'入库中',ready:'已入库',failed:'失败',loading:'入库中',loaded:'已入库'}[value]||value||'未知';
@@ -282,7 +280,10 @@
     var target=plan.target||{},mapping=plan.mapping||{};
     if(target.table)html+='<dl class="kv-grid"><dt>目标表</dt><dd>'+escHtml(target.table)+
       ' <span class="muted">'+escHtml(target.table_code||target.datasource_code||('数据源 #'+target.datasource_id))+'</span></dd>'+
-      '<dt>写入方式</dt><dd>'+escHtml(mapping.write_mode||'—')+'</dd></dl>';
+      '<dt>写入方式</dt><dd><select data-write-mode>'+
+      [{value:'insert',label:'仅新增'},{value:'upsert',label:'更新或新增'},{value:'update',label:'仅更新'}].map(function(mode){
+        return '<option value="'+mode.value+'"'+(mode.value===(mapping.write_mode||'insert')?' selected':'')+'>'+mode.label+'</option>';
+      }).join('')+'</select></dd></dl>';
     var fields=(mapping.fields||[]);
     if(fields.length){
       html+='<div class="plan-section"><h3>抽取字段（'+fields.length+'）</h3><div class="field-chips">'+
@@ -382,6 +383,12 @@
       replan({target_table:table,datasource_id:null,datasource_code:ds,
         table_code:ds+'.'+table,field_map:null,field_aliases:null},chooseOther);
     };
+    var writeMode=planNode.querySelector('[data-write-mode]');
+    if(writeMode)writeMode.onchange=function(){
+      var mapped=Object.keys(mapping.field_map||{}).map(function(name){return mapping.field_map[name];});
+      var keys=(mapping.business_key||[]).filter(function(key){return mapped.indexOf(key)>=0;});
+      replan({write_mode:writeMode.value,business_keys:writeMode.value==='insert'?[]:keys},writeMode);
+    };
     var save=planNode.querySelector('[data-save-map]');
     if(save)save.onclick=function(){
       var patch={field_map:{}};
@@ -427,6 +434,20 @@
       return loadSourceResults(false).then(function(){renderResults(results);});
     }).catch(function(err){addMessage('assistant','<div class="result-box err">'+escHtml(err.message)+'</div>');});
   }
+  function openExistingSource(id){
+    fileId=Number(id);descriptionIntent={file_id:fileId};currentIntent=baseIntent();
+    setBusy(true);stateBadge('正在读取已有资料','blue');
+    addMessage('user','继续处理资料 #'+fileId);
+    api('/api/sources/'+fileId+'/stage-results').then(function(result){
+      renderStageResult('parse',result.parse||result);
+      return loadSourceResults(true);
+    }).then(function(){
+      setBusy(false);stateBadge('已读取资料，请选择结果','green');scrollBottom();
+    }).catch(function(err){
+      setBusy(false);stateBadge('资料读取失败','red');
+      addMessage('assistant','<div class="result-box err">'+escHtml(err.message)+'</div>');
+    });
+  }
   function newChat(){
     if(busy)return;
     if(expanded)setComposerExpanded(false);
@@ -434,20 +455,14 @@
     stageNodes={};stagePending={};tableOptions=null;results=[];resultNode=null;selectedResultId=null;resultIntents={};setFiles(null);
     $('prompt').value='';$('messages').querySelectorAll('.msg').forEach(function(n){n.remove();});
     $('welcome').hidden=false;stateBadge('准备就绪','blue');updateSend();
+    if(new URLSearchParams(location.search).has('file'))history.replaceState(null,'',location.pathname);
   }
   $('pickFile').onclick=function(){$('fileInput').click();};
   $('fileInput').onchange=function(){chooseFiles(this.files);};
   $('removeFile').onclick=function(){setFiles(null);};
   $('expandComposer').onclick=function(){setComposerExpanded(!expanded);};
-  $('collapseComposer').onclick=function(){setComposerExpanded(false);};
-  $('composerBackdrop').onclick=function(){setComposerExpanded(false);};
   document.addEventListener('keydown',function(e){
-    if(e.key==='Escape'&&expanded){e.preventDefault();setComposerExpanded(false);return;}
-    if(e.key!=='Tab'||!expanded)return;
-    var nodes=Array.prototype.filter.call($('composerWrap').querySelectorAll('button:not([disabled]),textarea:not([disabled]),input:not([disabled])'),function(node){return node.getClientRects().length>0;});
-    if(!nodes.length)return;var first=nodes[0],last=nodes[nodes.length-1];
-    if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
-    else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
+    if(e.key==='Escape'&&expanded){e.preventDefault();setComposerExpanded(false);$('expandComposer').focus();}
   });
   $('send').onclick=send;
   $('newChat').onclick=newChat;
@@ -459,5 +474,8 @@
   ['dragenter','dragover'].forEach(function(ev){$('dropZone').addEventListener(ev,function(e){e.preventDefault();if(!busy)$('dropZone').classList.add('on');});});
   ['dragleave','drop'].forEach(function(ev){$('dropZone').addEventListener(ev,function(e){e.preventDefault();$('dropZone').classList.remove('on');});});
   $('dropZone').addEventListener('drop',function(e){var files=e.dataTransfer.files;if(files.length&&!busy)chooseFiles(files);});
-  stateBadge('准备就绪','blue');updateSend();
+  var initialSource=new URLSearchParams(location.search).get('file');
+  if(initialSource)openExistingSource(initialSource);
+  else stateBadge('准备就绪','blue');
+  updateSend();
 })();
