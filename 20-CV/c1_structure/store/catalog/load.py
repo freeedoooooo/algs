@@ -345,7 +345,7 @@ def _replace_fields(cur, table_code, fields):
 
 
 def create_load_table(datasource_code, target_table, fields=None):
-    """创建可跨抽取结果复用的目标表配置，返回 load_table_id。"""
+    """创建可跨抽取结果复用的业务表元数据，返回编码 table_code。"""
     datasource_code = str(datasource_code or '').strip()
     target_table = str(target_table or '').strip()
     if not datasource_code:

@@ -273,14 +273,19 @@
   function renderPlan(plan){
     var old=planNode;planNode=addMessage('assistant','','plan-card');
     if(old)old.remove();
-    var status=statusNames[plan.status]||plan.status;
+    var currentResult=results.filter(function(r){return Number(r.id)===selectedResultId;})[0]||{};
+    var binding=currentResult.load_binding||{},bindingStatus=binding.status;
+    var alreadyLoaded=bindingStatus==='ready'||bindingStatus==='loaded';
+    var loadActive=bindingStatus==='confirmed'||bindingStatus==='running'||bindingStatus==='loading';
+    var locked=alreadyLoaded||loadActive;
+    var status=alreadyLoaded?'已入库':loadActive?'入库中':(statusNames[plan.status]||plan.status);
     var html='<div class="plan-head"><b>结果 #'+escHtml(selectedResultId)+' · 入库方案</b><span class="spacer"></span>'+
       '<span class="badge '+(plan.status==='ready'?'green':'yellow')+'">'+escHtml(status)+'</span></div><div class="plan-body">'+
       '<p>'+escHtml(plan.message||'')+'</p>';
     var target=plan.target||{},mapping=plan.mapping||{};
     if(target.table)html+='<dl class="kv-grid"><dt>目标表</dt><dd>'+escHtml(target.table)+
       ' <span class="muted">'+escHtml(target.table_code||target.datasource_code||('数据源 #'+target.datasource_id))+'</span></dd>'+
-      '<dt>写入方式</dt><dd><select data-write-mode>'+
+      '<dt>写入方式</dt><dd><select data-write-mode'+(locked?' disabled':'')+'>'+
       [{value:'insert',label:'仅新增'},{value:'upsert',label:'更新或新增'},{value:'update',label:'仅更新'}].map(function(mode){
         return '<option value="'+mode.value+'"'+(mode.value===(mapping.write_mode||'insert')?' selected':'')+'>'+mode.label+'</option>';
       }).join('')+'</select></dd></dl>';
@@ -314,21 +319,24 @@
       var fmap=mapping.field_map||{},conf=mapping.confidence||{},amb=mapping.ambiguous_fields||{};
       var names=Object.keys(fmap);(mapping.unmapped_fields||[]).forEach(function(n){if(names.indexOf(n)<0)names.push(n);});
       html+='<div class="plan-section"><h3>字段映射</h3>'+
-        '<p class="muted">已预填高置信度建议；勾选需要入库的字段，至少选择一个。</p>'+
+        '<p class="muted">'+(locked?'该结果的入库配置已锁定，可查看回执与血缘。':'已预填高置信度建议；勾选需要入库的字段，至少选择一个。')+'</p>'+
         '<table class="mapping-table"><thead><tr><th>入库</th><th>中文字段</th><th>数据库列</th><th>置信度</th></tr></thead><tbody>'+
         names.map(function(name){
           var selected=!!fmap[name];
-          return '<tr><td><input type="checkbox" data-load-field="'+escHtml(name)+'"'+(selected?' checked':'')+' aria-label="入库字段 '+escHtml(name)+'"></td>'+
-            '<td>'+escHtml(name)+'</td><td><select data-field="'+escHtml(name)+'"'+(selected?'':' disabled')+'></select></td>'+
+          return '<tr><td><input type="checkbox" data-load-field="'+escHtml(name)+'"'+(selected?' checked':'')+(locked?' disabled':'')+' aria-label="入库字段 '+escHtml(name)+'"></td>'+
+            '<td>'+escHtml(name)+'</td><td><select data-field="'+escHtml(name)+'"'+(selected?'':' disabled')+(locked?' disabled':'')+'></select></td>'+
             '<td data-confidence="'+escHtml(name)+'" class="muted">'+(selected?escHtml(amb[name]?'建议候选，请确认':Math.round(Number(conf[name]||0)*100)+'%'):'')+'</td></tr>';
         }).join('')+'</tbody></table>';
-      html+='<div class="plan-actions"><button type="button" class="btn ghost mini" data-save-map>保存并重新检查</button>'+
-        '<span class="muted">仅所选字段会在确认后写入</span></div></div>';
+      if(!locked)html+='<div class="plan-actions"><button type="button" class="btn ghost mini" data-save-map>保存并重新检查</button>'+
+        '<span class="muted">仅所选字段会在确认后写入</span></div>';
+      html+='</div>';
     }
     if(plan.warnings&&plan.warnings.length)html+='<div class="plan-section"><h3>提示</h3>'+
       plan.warnings.map(function(w){return '<p>· '+escHtml(w)+'</p>';}).join('')+'</div>';
-    if(plan.status==='ready')html+='<div class="plan-actions"><button type="button" class="btn" data-confirm>确认并写入数据库</button>'+
+    if(plan.status==='ready'&&!locked)html+='<div class="plan-actions"><button type="button" class="btn" data-confirm>确认并写入数据库</button>'+
       '<span class="muted">将向 '+escHtml(target.table)+' 执行 '+escHtml(mapping.write_mode||'insert')+'</span></div>';
+    if(alreadyLoaded)html+='<div class="plan-actions"><button type="button" class="btn ghost mini" data-plan-receipts>查看回执与隔离记录</button>'+
+      '<a href="/preview?file='+fileId+'&amp;result='+selectedResultId+'" target="_blank">查看记录与入库血缘 →</a></div>';
     html+='</div>';planNode.innerHTML=html;
     if(mapping.field_map){
       var fmap=mapping.field_map||{},amb=mapping.ambiguous_fields||{};

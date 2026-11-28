@@ -202,6 +202,16 @@ def plan_for_extract_result(extract_result_id, datasource_id=None,
         intent['datasource_id'] = datasource_id
     if datasource_code not in (None, ''):
         intent['datasource_code'] = datasource_code
+    binding = catalog.get_binding(extract_result_id=extract_result_id)
+    if binding and not intent.get('target_table') and not intent.get('table_code'):
+        intent.update({
+            'target_table': binding['target_table'],
+            'table_code': binding['table_code'],
+            'datasource_code': binding['datasource_code'],
+            'field_map': binding['field_map_json'],
+            'write_mode': binding['write_mode'],
+            'business_keys': binding['business_keys_json'],
+        })
     warnings, schemas = [], []
     requested_ds_code = str(intent.get('datasource_code') or '').strip() or None
     requested_ds_id = intent.get('datasource_id')

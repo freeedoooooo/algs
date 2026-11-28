@@ -162,8 +162,8 @@ c1_structure/
 │   ├── catalog/               目录元数据 repo，按业务域拆分（__init__ 全量重导出，
 │   │   │                      调用方 catalog.xxx() 不感知边界）
 │   │   ├── files.py           资料域（c1_doc_file ＝ 原件字节 ＋ 运行状态 ＋ 隔离区）
-│   │   ├── rules.py           抽取规则域（c1_extract_rule / c1_extract_rule_version）
-│   │   └── load.py            入库域（c1_load_datasource / c1_load_table(+field) / c1_load_log）
+│   │   ├── rules.py           抽取规则域（c1_extract_rule，一条规则一个版本）
+│   │   └── load.py            入库域（c1_load_datasource / c1_load_table(+field) / c1_load_binding / 回执）
 │   ├── content.py             内容门面（parse 经 artifact，records 直委托 content_db）
 │   ├── content_db.py          staging 三表：get/save/patch/set_review/query_fields
 │   ├── loader.py              入库引擎接缝：数据源直连 / introspection / 字段契约
@@ -209,8 +209,9 @@ c1_structure/
 一次上传 = 一条**资料记录**（`c1_doc_file` 行）= 一次运行（单文件）。
 没有 task 层、没有批次时间戳、没有持久 input/output 目录：
 
-- `c1_doc_file` 既是资料登记（原件字节 `content`）也是运行态载体
-  （`state` / `error` / `rule_version_id` / `params_json` / 入库绑定）。
+- `c1_doc_file` 既是资料登记（原件字节 `content`）也是解析运行态载体
+  （`state` / `error` / `params_json`）；抽取结果、规则快照、入库绑定和回执按
+  `extract_result_id` 独立保存在结果中心。
 - **sha256 不去重**：每次上传插新行，同一字节允许多条独立运行；`sha256` 仅作检索/ETag
   （普通索引 `idx_file_sha`，无唯一约束）。重复上传产生新资料行，不覆盖历史。
 - 产物附件进 `c1_parse_artifact`（键＝file_id + 相对名，LONGBLOB，应用层级联删）。
@@ -222,10 +223,14 @@ c1_structure/
 - 解析期间的工作目录与输入副本都是 tempfile scratch（`tmp/input/in_*` / `tmp/work/case_*`），跑完即清。
 - URL 全用 file_id：`/preview?file=<file_id>&index=<记录序>`、`/files/<file_id>/<产物>`、
   `/srcfiles/<file_id>`。`GET /parse-report` 重定向到最新资料的报告真实地址。
-- 流程 API 全收敛在 `/api/sources/{file_id}/...`（gate / staging / extract / reparse /
-  load / load-preview / load-log / quarantine / parse / pipeline）。
-- **重放解析**：原地覆盖该资料行——暂存、产物、回执、隔离与规则绑定全清（D4 裁决），
-  state 回 pending 后重跑；与"重新上传同文件 = 新建一行"语义不同。
+- 单结果 API 使用 `/api/extract-results/{extract_result_id}/...`（load-plan /
+  load-preview / load / load-log / quarantine / staging），资料级接口保留在
+  `/api/sources/{file_id}/...`。
+- 每个抽取结果最多绑定一张业务表；同一张表可接收不同规则的结果。元数据通过
+  `c1_load_datasource.code`、`c1_load_table.code/datasource_code`、目标字段
+  `table_code` 和绑定 `table_code` 关联，不使用数值表 ID。
+- **重放解析**：原地覆盖该资料行——暂存、解析产物、全部抽取结果、绑定、回执与隔离全清，
+  state 回 pending 后重跑；与“重新上传同文件 = 新建一行”语义不同。
 - **无外键约束**：引用完整性归应用层（运行中/已入库资料禁删；重跑覆盖显式先删子表）。
 
 ### 入库链路（数据源 × 入库规则）

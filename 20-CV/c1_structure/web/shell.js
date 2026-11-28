@@ -244,39 +244,46 @@ function closeReceiptDrawer(){
   var r=document.getElementById('receipt');
   if(r) animDrawerClose(r);
 }
-function openReceiptDrawer(fileId){
+var receiptRequest=0;
+function openReceiptDrawer(fileId,resultId){
   var drawer=document.getElementById('receipt');
   if(!drawer) return;
-  document.getElementById('rctitle').textContent='资料 #'+fileId+' · 入库回执';
+  var single=resultId!=null, request=++receiptRequest;
+  var base=single?'/api/extract-results/'+encodeURIComponent(resultId):
+    '/api/sources/'+encodeURIComponent(fileId);
+  document.getElementById('rctitle').textContent=single?
+    '抽取结果 #'+resultId+' · 入库回执 / 隔离':'资料 #'+fileId+' · 入库回执';
   document.getElementById('rcbody').innerHTML='<div class="empty">加载中…</div>';
   animDrawerOpen(drawer);
   Promise.all([
-    fetch('/api/sources/'+fileId+'/load-log').then(function(r){return r.json();}),
-    fetch('/api/sources/'+fileId+'/quarantine').then(function(r){return r.json();})
+    fetch(base+'/load-log').then(function(r){return r.json();}),
+    fetch(base+'/quarantine').then(function(r){return r.json();})
   ]).then(function(res){
+    if(request!==receiptRequest) return;
     var logs=(res[0].items||[]), qs=(res[1].items||[]).filter(function(q){
       return q.stage==='load';
     });
-    var html='<div class="msg" style="margin-bottom:6px">回执 '+logs.length+
+    var docHead=single?'':'<th>资料ID</th>';
+    var html='<div class="msg" style="margin-bottom:6px">'+(single?'当前结果回执 ':'回执 ')+logs.length+
       ' 条（重新入库时，已有回执的记录将自动跳过）</div>';
     html+=logs.length?
-      '<table class="list"><thead><tr><th>资料ID</th><th>记录</th><th>动作</th>'+
+      '<table class="list"><thead><tr>'+docHead+'<th>记录</th><th>动作</th>'+
       '<th>目标主键</th><th>时间</th></tr></thead><tbody>'+
       logs.map(function(l){
-        return '<tr><td class="mono">'+l.file_id+'</td>'+
+        return '<tr>'+(single?'':'<td class="mono">'+escHtml(l.file_id)+'</td>')+
           '<td class="num">'+(l.record_index+1)+'</td>'+
           '<td>'+escHtml({insert:'新增',update:'覆盖'}[l.action]||l.action)+'</td>'+
           '<td><code class="mono">'+escHtml(l.target_pk)+'</code></td>'+
           '<td class="num">'+fmtTime(l.loaded_at)+'</td></tr>';
       }).join('')+'</tbody></table>':
       '<div class="empty">暂无回执记录</div>';
-    html+='<div class="msg" style="margin:12px 0 6px">隔离 '+qs.length+
+    html+='<div class="msg" style="margin:12px 0 6px">'+(single?'当前结果隔离 ':'隔离 ')+qs.length+
       ' 条（当前为只读；重新入库将重试未写入的记录）</div>';
     html+=qs.length?
-      '<table class="list"><thead><tr><th>资料ID</th><th>记录</th><th>原因</th>'+
+      '<table class="list"><thead><tr>'+docHead+'<th>记录</th><th>原因</th>'+
       '<th>时间</th></tr></thead><tbody>'+
       qs.map(function(q){
-        return '<tr><td class="mono">'+q.file_id+'</td>'+
+        return '<tr>'+(single?'':'<td class="mono">'+escHtml(q.file_id)+'</td>')+
           '<td class="num">'+(q.record_index+1)+'</td>'+
           '<td>'+escHtml(q.reason)+'</td>'+
           '<td class="num">'+fmtTime(q.created_at)+'</td></tr>';
@@ -284,7 +291,7 @@ function openReceiptDrawer(fileId){
       '<div class="empty">暂无隔离记录</div>';
     document.getElementById('rcbody').innerHTML=html;
   }).catch(function(){
-    document.getElementById('rcbody').innerHTML=
+    if(request===receiptRequest) document.getElementById('rcbody').innerHTML=
       '<div class="empty">读取失败：平台库不可用</div>';
   });
 }

@@ -735,7 +735,7 @@ flowchart LR
 
 迁移期间旧字段只读，不再写入。确认单规则旧流程和多规则新流程都通过后，再删除 `c1_extract_rule_version`。
 
-元数据编码关联由 `store/migrations/009_load_metadata_codes.py` 单独升级：默认只读预演，`--confirm` 先备份全库，再回填 `c1_load_datasource.code`、`c1_load_table.code/datasource_code`，将 `c1_load_mapping_field` 改名为 `c1_load_table_field` 并回填 `table_code`。迁移保留全部数据，可断点重跑。
+元数据编码关联由 `store/migrations/009_load_metadata_codes.py` 单独升级：默认只读预演，`--confirm` 先备份全库，再回填 `c1_load_datasource.code`、`c1_load_table.code/datasource_code`，将 `c1_load_mapping_field` 改名为 `c1_load_table_field` 并回填 `table_code`。绑定关联再由 `store/migrations/010_binding_table_code.py` 升级：从旧 `load_table_id` 回填 `c1_load_binding.table_code`，拒绝空值、孤立绑定和编码不一致，再设置 NOT NULL、替换索引并删除旧列。两个迁移都保留全部数据，可断点重跑。
 
 ---
 
